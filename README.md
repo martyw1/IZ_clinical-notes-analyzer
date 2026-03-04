@@ -43,6 +43,30 @@ docker compose up --build
 4. Put Nginx/Caddy in front for TLS and domain routing.
 5. Persist Postgres volume and schedule `pg_dump` backups.
 
+## One-command startup scripts (with dependency checks + logging)
+Use the platform-specific script from the repo root. Each script:
+- verifies core dependencies,
+- installs missing packages where supported,
+- creates `.env` from `.env.example` when missing,
+- prepares backend/frontend runtime dependencies,
+- starts the stack with Docker Compose,
+- writes detailed logs to `logs/`.
+
+### Windows (PowerShell)
+```powershell
+./scripts/startup-windows.ps1
+```
+
+### macOS
+```bash
+./scripts/startup-macos.sh
+```
+
+### Ubuntu 24.04 (local or VPS)
+```bash
+./scripts/startup-ubuntu-24.04.sh
+```
+
 ## Configurable listening ports
 - Backend listens using `PORT` env var.
 - Docker maps `${BACKEND_PORT}` to backend `PORT`.
