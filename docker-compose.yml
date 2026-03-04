@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chartreview
+      POSTGRES_USER: chart
+      POSTGRES_PASSWORD: chart
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://chart:chart@db:5432/chartreview
+      SECRET_KEY: dev-only-change-me
+      FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-5173}
+      PORT: ${BACKEND_PORT:-8000}
+    depends_on:
+      - db
+    ports:
+      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}/api
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  pgdata:
