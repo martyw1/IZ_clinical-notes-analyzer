@@ -150,6 +150,11 @@ Use the platform-specific script from the repo root. Each script:
 ./scripts/startup-ubuntu-24.04.sh
 ```
 
+Run the same script under the lower-privilege `demo-run` Linux account:
+```bash
+sudo -iu demo-run bash -lc 'cd /home/iz-admin/app/demo/iz/IZ_clinical-notes-analyzer && ./scripts/startup-ubuntu-24.04.sh'
+```
+
 ## Configurable listening ports
 - Backend listens using `PORT` env var.
 - Docker maps `${BACKEND_PORT}` to backend `PORT`.
