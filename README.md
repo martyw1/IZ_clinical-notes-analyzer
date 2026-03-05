@@ -30,11 +30,94 @@ npm install
 VITE_API_URL=http://localhost:8000/api npm run dev
 ```
 
+Then open the app in your browser at `http://localhost:5173`.
+
 ## Docker local run
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
+
+Then open the app in your browser at `http://localhost:${FRONTEND_PORT:-5173}` (default is usually `5173`).
+
+---
+
+## Non-technical quick start (recommended)
+If you are not a developer, follow this exact checklist:
+
+1. **Start the app**
+   - Use one of the startup scripts in this README (`startup-windows.ps1`, `startup-macos.sh`, or `startup-ubuntu-24.04.sh`).
+   - Wait until you see messages that backend/frontend are running.
+2. **Open the sign-in page**
+   - In a browser, go to `http://localhost:5173`.
+3. **Log in as the admin user**
+   - Username: `admin`
+   - Password: `r3`
+   - If prompted, complete password reset.
+4. **Confirm the app loaded**
+   - You should see a status banner and dashboard heading.
+5. **Stop the app when done**
+   - In the terminal running the app, press `Ctrl + C`.
+
+---
+
+## Running as **iz-admin** while testing with **demo-run** (lower privileges)
+
+This workflow lets a supervisor stay logged in as admin while separately validating what a lower-privilege user can do.
+
+### Why this matters
+- Admin accounts can do more than standard users.
+- For realistic testing/training, use a reduced-permission account (`demo-run`) for normal operations.
+- Keeping both sessions open helps compare “what admin can do” vs “what standard staff can do.”
+
+### Step 1: Prepare accounts
+By default, the seeded admin account is:
+- Username: `admin` (treat this as your **iz-admin** session)
+- Password: `r3`
+
+Create the `demo-run` account once (admin-only action):
+
+1. Log in to the app as `admin`.
+2. In a second terminal, run:
+
+```bash
+curl -X POST http://localhost:8000/api/users \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo-run","password":"demo-run-pass","role":"counselor"}'
+```
+
+How to get `<ADMIN_TOKEN>` quickly:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"r3"}'
+```
+
+Copy the `access_token` value from the response and paste it into the create-user command above.
+
+> If `demo-run` already exists, you may receive a `409 Username exists` response; that is expected.
+
+### Step 2: Keep admin logged in, open a separate lower-privilege session
+Use **two browser sessions**:
+
+- **Window A (normal browser profile):** log in as `admin` (**iz-admin** session).
+- **Window B (Incognito/Private window):** log in as `demo-run` (lower privilege).
+
+This prevents one login from replacing the other and is the easiest method for non-technical users.
+
+### Step 3: Validate lower-privilege behavior in the `demo-run` session
+In the `demo-run` window, verify:
+
+- You can create/view only your own charts.
+- You cannot access admin-only capabilities (for example, admin audit log endpoint).
+- Workflow actions are limited by the counselor role.
+
+### Step 4: Keep credentials safe
+- Do not share admin credentials in screenshots, chat, or email.
+- For demos, use temporary passwords and rotate them after sessions.
+- Avoid using real patient data in demo environments.
 
 ## VPS deployment notes
 1. Install Docker and Docker Compose plugin.
