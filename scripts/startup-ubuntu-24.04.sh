@@ -15,9 +15,39 @@ else
   SUDO="sudo"
 fi
 
+RUN_USER="${SUDO_USER:-${USER}}"
+DOCKER_COMPOSE_CMD=(docker compose)
+
 info() { echo "[$(date +'%F %T')] [INFO] $*"; }
 warn() { echo "[$(date +'%F %T')] [WARN] $*"; }
 pass() { echo "[$(date +'%F %T')] [PASS] $*"; }
+
+pick_open_port() {
+  local candidate
+  for candidate in 55432 55433 55434 55435 55436; do
+    if ! ss -ltn "( sport = :${candidate} )" | grep -q LISTEN; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+configure_docker_invocation() {
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ -n "${SUDO}" ]] && ${SUDO} docker info >/dev/null 2>&1; then
+    warn "Current shell cannot access /var/run/docker.sock directly; using sudo for Docker commands in this run."
+    DOCKER_COMPOSE_CMD=(${SUDO} docker compose)
+    return 0
+  fi
+
+  warn "Docker is installed but not reachable by this user yet. If you were just added to the docker group, re-login and rerun."
+  return 1
+}
 
 need_cmd() {
   local cmd="$1"
@@ -73,14 +103,16 @@ pass "Docker compose version: $(docker compose version | head -n1)"
 if ! getent group docker >/dev/null; then
   ${SUDO} groupadd docker
 fi
-if ! groups "${USER}" | grep -q '\bdocker\b'; then
-  warn "User ${USER} is not in docker group; adding now. You may need to re-login for group changes to apply."
-  ${SUDO} usermod -aG docker "${USER}"
+if ! groups "${RUN_USER}" | grep -q '\bdocker\b'; then
+  warn "User ${RUN_USER} is not in docker group; adding now. You may need to re-login for group changes to apply."
+  ${SUDO} usermod -aG docker "${RUN_USER}"
 fi
 
 info "Ensuring Docker service is running"
 ${SUDO} systemctl enable docker
 ${SUDO} systemctl start docker
+
+configure_docker_invocation
 
 info "Running backend Python environment setup"
 python3 -m venv backend/.venv
@@ -95,10 +127,19 @@ npm install
 cd "${ROOT_DIR}"
 
 info "Starting application stack with Docker Compose"
-docker compose pull || warn "docker compose pull had issues; proceeding with local build"
-docker compose up -d --build
+if [[ -z "${POSTGRES_PORT:-}" ]] && ss -ltn '( sport = :5432 )' | grep -q LISTEN; then
+  if suggested_port="$(pick_open_port)"; then
+    export POSTGRES_PORT="${suggested_port}"
+    warn "Host port 5432 is already in use; remapping Postgres to ${POSTGRES_PORT} for this run."
+  else
+    warn "Host port 5432 is in use and no fallback Postgres port was found automatically."
+  fi
+fi
+
+"${DOCKER_COMPOSE_CMD[@]}" pull || warn "docker compose pull had issues; proceeding with local build"
+"${DOCKER_COMPOSE_CMD[@]}" up -d --build
 
 info "Current service status"
-docker compose ps
+"${DOCKER_COMPOSE_CMD[@]}" ps
 
 pass "Startup complete. Logs are in ${LOG_FILE}"
