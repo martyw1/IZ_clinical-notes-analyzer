@@ -35,14 +35,26 @@ Then open the app in your browser at `http://localhost:5173`.
 ## Docker local run
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
+./scripts/smoke.sh
 ```
 
-Then open the app in your browser at `http://localhost:${FRONTEND_PORT:-5173}` (default is usually `5173`).
+Then open the app in your browser at `http://localhost:${FRONTEND_PORT:-5173}`. Always trust smoke/health checks over container status alone.
 
-In Docker mode, the frontend now proxies `/api` requests to the backend container, so login works even when you open the site from another machine using the server's IP/hostname.
+In Docker mode, the frontend proxies `/api` requests to the backend container, so login works when using localhost or server IP/hostname.
+
+To expose PostgreSQL to the host (optional, for admin/debug tools only):
+```bash
+docker compose -f docker-compose.yml -f docker-compose.db-expose.yml up -d
+```
 
 ---
+
+
+## First-login password reset behavior
+- The seeded `admin` user starts with a forced reset requirement.
+- After successful login, the UI immediately enters a password-reset screen (not the dashboard) until reset is completed.
+- Dashboard data only loads after profile load succeeds and reset is no longer required.
 
 ## Non-technical quick start (recommended)
 If you are not a developer, follow this exact checklist:
@@ -51,7 +63,7 @@ If you are not a developer, follow this exact checklist:
    - Use one of the startup scripts in this README (`startup-windows.ps1`, `startup-macos.sh`, or `startup-ubuntu-24.04.sh`).
    - Wait until you see messages that backend/frontend are running.
 2. **Open the sign-in page**
-   - In a browser, go to `http://localhost:5173`.
+   - In a browser, go to the exact URL printed by the startup script (for example `http://localhost:5177` if remapped).
 3. **Log in as the admin user**
    - Username: `admin`
    - Password: `r3`
@@ -154,8 +166,10 @@ Use the platform-specific script from the repo root. Each script:
 
 Run the same script under the lower-privilege `demo-run` Linux account:
 ```bash
-sudo -u demo-run -g demoapps /bin/bash -lc "cd /home/iz-admin/app/demo/iz/IZ_clinical-notes-analyzer && ./scripts/startup-ubuntu-24.04.sh"
+sudo -u demo-run -g demoapps /bin/bash -lc "cd /home/iz-admin/app/demo/iz/IZ_clinical-notes-analyzer && ./scripts/startup-ubuntu-24.04.sh --non-interactive"
 ```
+
+The Ubuntu script defaults to Docker-only startup and automatically picks open backend/frontend ports in non-interactive mode.
 
 If the command asks for a password for `demo-run`, that prompt is coming from internal `sudo` calls in the script (for package/service tasks), **not** from logging in as `demo-run`.
 For non-interactive runs as `demo-run`, pre-install dependencies and Docker access once as an admin user, or grant narrowly-scoped passwordless sudo for the required commands.
