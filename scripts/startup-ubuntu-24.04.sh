@@ -124,10 +124,26 @@ prepare_host_venv_if_enabled
 
 info 'Starting Docker Compose stack'
 docker compose pull || warn 'docker compose pull failed; continuing with local build cache'
-docker compose up -d --build
+if ! docker compose up -d --build; then
+  warn 'docker compose up failed; collecting diagnostics.'
+  docker compose ps || true
+  docker compose logs --tail=200 db backend frontend || true
+  exit 1
+fi
 
 echo '[INFO] Service status:'
 docker compose ps
+
+if docker compose ps --format json >/tmp/compose-ps.json 2>/dev/null; then
+  if grep -q '"Health":"unhealthy"' /tmp/compose-ps.json; then
+    warn 'Detected unhealthy containers after startup; collecting diagnostics.'
+    docker compose logs --tail=200 db backend frontend || true
+    exit 1
+  fi
+  info 'No unhealthy containers detected immediately after startup.'
+else
+  warn 'docker compose ps --format json not supported; skipping immediate health scan.'
+fi
 
 info 'Running smoke test'
 if FRONTEND_PORT="$FRONTEND_PORT" ./scripts/smoke.sh; then

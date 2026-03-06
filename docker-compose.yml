@@ -27,10 +27,11 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=2)"']
+      test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5)"']
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 8s
+      start_period: 45s
+      retries: 18
     ports:
       - '${BACKEND_PORT:-8000}:8000'
 
