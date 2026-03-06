@@ -16,17 +16,17 @@ services:
       DATABASE_URL: postgresql+psycopg2://chart:chart@db:5432/chartreview
       SECRET_KEY: dev-only-change-me
       FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-5173}
-      PORT: ${BACKEND_PORT:-8000}
+      PORT: 8000
     depends_on:
       - db
     ports:
-      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+      - "${BACKEND_PORT:-8000}:8000"
 
   frontend:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}/api
+        VITE_API_URL: /api
     depends_on:
       - backend
     ports:
