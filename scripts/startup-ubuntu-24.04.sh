@@ -99,13 +99,38 @@ prepare_backend_venv_path() {
   fi
 
   if [[ -w "${preferred_path}" ]]; then
-    echo "${preferred_path}"
-    return 0
+    # venv can fail even when the directory itself is writable if files inside
+    # are owned by another account (for example from a previous root/admin run).
+    local unwritable_entry
+    unwritable_entry="$(find "${preferred_path}" -mindepth 1 \( -type f -o -type d \) ! -w -print -quit 2>/dev/null || true)"
+    if [[ -z "${unwritable_entry}" ]]; then
+      echo "${preferred_path}"
+      return 0
+    fi
+
+    warn "${preferred_path} contains entries not writable by user ${RUN_USER}: ${unwritable_entry}"
   fi
 
   local fallback_path="backend/.venv-${RUN_USER}"
   warn "${preferred_path} exists but is not writable by user ${RUN_USER}."
   warn "Using fallback virtualenv path ${fallback_path}."
+  echo "${fallback_path}"
+}
+
+create_backend_venv() {
+  local venv_path="$1"
+
+  if python3 -m venv "${venv_path}"; then
+    return 0
+  fi
+
+  local fallback_path="backend/.venv-${RUN_USER}"
+  if [[ "${venv_path}" == "${fallback_path}" ]]; then
+    return 1
+  fi
+
+  warn "Failed to create ${venv_path}. Retrying with fallback ${fallback_path}."
+  python3 -m venv "${fallback_path}"
   echo "${fallback_path}"
 }
 
@@ -243,7 +268,16 @@ configure_docker_invocation
 
 info "Running backend Python environment setup"
 BACKEND_VENV_PATH="$(prepare_backend_venv_path)"
-python3 -m venv "${BACKEND_VENV_PATH}"
+if remapped_path="$(create_backend_venv "${BACKEND_VENV_PATH}")"; then
+  if [[ -n "${remapped_path}" ]]; then
+    BACKEND_VENV_PATH="${remapped_path}"
+  fi
+else
+  warn "Unable to create Python virtual environment at ${BACKEND_VENV_PATH}."
+  warn "If this path was created by another account, fix ownership: sudo chown -R ${RUN_USER}:${RUN_USER} backend/.venv"
+  exit 1
+fi
+
 source "${BACKEND_VENV_PATH}/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r backend/requirements.txt
