@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 
@@ -10,11 +11,14 @@ from app.api.routes import router
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
+from app.db.bootstrap import ensure_schema_compatibility
 from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 
 os.makedirs(settings.upload_dir, exist_ok=True)
 app = FastAPI(title=settings.app_name)
+
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +36,8 @@ def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None
             with engine.connect() as connection:
                 connection.execute(text('SELECT 1'))
             return
-        except SQLAlchemyError:
+        except SQLAlchemyError as exc:
+            logger.warning('Database not ready (attempt %s/%s): %s', attempt, max_attempts, exc)
             if attempt == max_attempts:
                 raise
             time.sleep(delay)
@@ -42,6 +47,7 @@ def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None
 @app.on_event('startup')
 def startup() -> None:
     wait_for_database()
+    ensure_schema_compatibility(engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
