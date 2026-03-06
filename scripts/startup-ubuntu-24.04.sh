@@ -15,7 +15,15 @@ else
   SUDO="sudo"
 fi
 
-RUN_USER="${SUDO_USER:-${USER}}"
+# Use the effective runtime user for non-root executions.
+# When the script is launched with `sudo -u <user>`, SUDO_USER points at the
+# original admin account, but docker/group checks must be done for the target
+# account that is actually running this script.
+if [[ "${EUID}" -eq 0 ]]; then
+  RUN_USER="${SUDO_USER:-${USER}}"
+else
+  RUN_USER="${USER}"
+fi
 DOCKER_COMPOSE_CMD=(docker compose)
 
 info() { echo "[$(date +'%F %T')] [INFO] $*"; }
