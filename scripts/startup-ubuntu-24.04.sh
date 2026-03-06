@@ -27,6 +27,22 @@ info() { echo "[$(date +'%F %T')] [INFO] $*" >&2; }
 warn() { echo "[$(date +'%F %T')] [WARN] $*" >&2; }
 pass() { echo "[$(date +'%F %T')] [PASS] $*" >&2; }
 
+print_db_auth_diagnostics() {
+  local db_logs
+  db_logs="$(docker compose logs --tail=200 db 2>/dev/null || true)"
+
+  if [[ "$db_logs" == *"password authentication failed for user"* ]]; then
+    warn 'Detected PostgreSQL password authentication failures.'
+    warn 'Likely cause: existing Postgres volume initialized with different credentials than current .env/DATABASE_URL.'
+    warn 'Postgres only applies POSTGRES_USER/POSTGRES_PASSWORD on first initialization of the data volume.'
+    echo '[DIAG] Suggested fixes (choose one):' >&2
+    echo '[DIAG]  1) Keep existing DB data: set DATABASE_URL / POSTGRES_PASSWORD in .env to match current DB credentials.' >&2
+    echo '[DIAG]  2) Reset demo DB data and reinitialize with current .env credentials:' >&2
+    echo '[DIAG]     docker compose down -v' >&2
+    echo '[DIAG]     docker compose up -d --build' >&2
+  fi
+}
+
 is_port_busy() {
   local port="$1"
   ss -ltn "( sport = :${port} )" | grep -q LISTEN
@@ -128,6 +144,7 @@ if ! docker compose up -d --build; then
   warn 'docker compose up failed; collecting diagnostics.'
   docker compose ps || true
   docker compose logs --tail=200 db backend frontend || true
+  print_db_auth_diagnostics
   exit 1
 fi
 
@@ -138,6 +155,7 @@ if docker compose ps --format json >/tmp/compose-ps.json 2>/dev/null; then
   if grep -q '"Health":"unhealthy"' /tmp/compose-ps.json; then
     warn 'Detected unhealthy containers after startup; collecting diagnostics.'
     docker compose logs --tail=200 db backend frontend || true
+    print_db_auth_diagnostics
     exit 1
   fi
   info 'No unhealthy containers detected immediately after startup.'
