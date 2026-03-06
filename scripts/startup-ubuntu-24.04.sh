@@ -43,6 +43,39 @@ print_db_auth_diagnostics() {
   fi
 }
 
+rebuild_database_url() {
+  local user="$1"
+  local password="$2"
+  local db_name="$3"
+  echo "postgresql+psycopg2://${user}:${password}@db:5432/${db_name}"
+}
+
+apply_option1_db_credential_fix() {
+  local db_logs="$1"
+  local current_db_url
+  current_db_url="$(awk -F= '$1=="DATABASE_URL"{print substr($0, index($0,$2))}' .env | tail -n1)"
+
+  # Option 1 from diagnostics: keep existing DB volume and align app credentials.
+  # The most common drift is POSTGRES_USER/DATABASE_URL changed to "chart" while the
+  # existing volume was initialized with default postgres/postgres credentials.
+  if [[ "$db_logs" == *'Role "chart" does not exist'* ]] || [[ "$current_db_url" == *'://chart:'* ]]; then
+    local db_name
+    db_name="${POSTGRES_DB:-$(awk -F= '$1=="POSTGRES_DB"{print $2}' .env | tail -n1)}"
+    db_name="${db_name:-optiflow}"
+
+    warn 'Applying Option 1 auto-fix: aligning .env database credentials to existing default postgres role.'
+    set_env_value POSTGRES_USER postgres
+    set_env_value POSTGRES_PASSWORD postgres
+    set_env_value DATABASE_URL "$(rebuild_database_url postgres postgres "$db_name")"
+    export POSTGRES_USER=postgres
+    export POSTGRES_PASSWORD=postgres
+    export DATABASE_URL="$(rebuild_database_url postgres postgres "$db_name")"
+    return 0
+  fi
+
+  return 1
+}
+
 is_port_busy() {
   local port="$1"
   ss -ltn "( sport = :${port} )" | grep -q LISTEN
@@ -151,8 +184,21 @@ if ! docker compose up -d --build; then
   warn 'docker compose up failed; collecting diagnostics.'
   docker compose ps || true
   docker compose logs --tail=200 db backend frontend || true
+  db_logs="$(docker compose logs --tail=200 db 2>/dev/null || true)"
+  if apply_option1_db_credential_fix "$db_logs"; then
+    info 'Retrying docker compose up after applying Option 1 credential correction.'
+    if ! docker compose up -d --build; then
+      warn 'Retry failed after Option 1 correction; collecting diagnostics.'
+      docker compose ps || true
+      docker compose logs --tail=200 db backend frontend || true
+      print_db_auth_diagnostics
+      exit 1
+    fi
+  fi
   print_db_auth_diagnostics
-  exit 1
+  if ! docker compose ps --format json >/tmp/compose-ps.json 2>/dev/null || grep -q '"Health":"unhealthy"' /tmp/compose-ps.json; then
+    exit 1
+  fi
 fi
 
 echo '[INFO] Service status:'
