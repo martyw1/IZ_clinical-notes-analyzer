@@ -17,6 +17,16 @@ Behavior inside Docker backend container:
 - `host`: localhost DB host rewrites to `host.docker.internal` (shared PostgreSQL on Docker host/VPS).
 - `external`: explicit non-local DB hosts are used as-is.
 
+
+## Default login credentials
+- Username: `admin`
+- Password: `r3`
+
+Bootstrap credential settings (backend env vars):
+- `BOOTSTRAP_ADMIN_USERNAME` (default: `admin`)
+- `BOOTSTRAP_ADMIN_PASSWORD` (default: `r3`)
+- `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` (default: `true` in non-production to keep demo credentials working and unlock the bootstrap account)
+
 ## Docker run
 ```bash
 cp .env.example .env

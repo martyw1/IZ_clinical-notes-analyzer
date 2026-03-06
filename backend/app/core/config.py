@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     frontend_origin: str = 'http://localhost:5173'
     frontend_origins: str = 'http://localhost:5173'
     upload_dir: str = 'uploads'
+    bootstrap_admin_username: str = 'admin'
+    bootstrap_admin_password: str = 'r3'
+    reset_bootstrap_admin_on_startup: bool = True
 
     @property
     def frontend_origins_list(self) -> list[str]:

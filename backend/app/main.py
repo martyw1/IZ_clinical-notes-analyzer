@@ -39,16 +39,22 @@ def initialize_database() -> None:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        admin = db.execute(select(User).where(User.username == 'admin')).scalar_one_or_none()
+        admin = db.execute(select(User).where(User.username == settings.bootstrap_admin_username)).scalar_one_or_none()
         if not admin:
             db.add(
                 User(
-                    username='admin',
-                    password_hash=hash_password('r3'),
+                    username=settings.bootstrap_admin_username,
+                    password_hash=hash_password(settings.bootstrap_admin_password),
                     role=Role.admin,
                     must_reset_password=True,
                 )
             )
+            db.commit()
+        elif settings.reset_bootstrap_admin_on_startup and settings.environment != 'production':
+            admin.password_hash = hash_password(settings.bootstrap_admin_password)
+            admin.failed_login_attempts = 0
+            admin.is_locked = False
+            admin.must_reset_password = True
             db.commit()
     finally:
         db.close()
