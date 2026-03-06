@@ -90,6 +90,25 @@ pick_open_port() {
   return 1
 }
 
+prepare_backend_venv_path() {
+  local preferred_path="backend/.venv"
+
+  if [[ ! -e "${preferred_path}" ]]; then
+    echo "${preferred_path}"
+    return 0
+  fi
+
+  if [[ -w "${preferred_path}" ]]; then
+    echo "${preferred_path}"
+    return 0
+  fi
+
+  local fallback_path="backend/.venv-${RUN_USER}"
+  warn "${preferred_path} exists but is not writable by user ${RUN_USER}."
+  warn "Using fallback virtualenv path ${fallback_path}."
+  echo "${fallback_path}"
+}
+
 configure_docker_invocation() {
   if docker info >/dev/null 2>&1; then
     return 0
@@ -223,8 +242,9 @@ info "Using BACKEND_PORT=${BACKEND_PORT}, FRONTEND_PORT=${FRONTEND_PORT}"
 configure_docker_invocation
 
 info "Running backend Python environment setup"
-python3 -m venv backend/.venv
-source backend/.venv/bin/activate
+BACKEND_VENV_PATH="$(prepare_backend_venv_path)"
+python3 -m venv "${BACKEND_VENV_PATH}"
+source "${BACKEND_VENV_PATH}/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r backend/requirements.txt
 deactivate
