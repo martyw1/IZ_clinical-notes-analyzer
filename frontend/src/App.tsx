@@ -23,9 +23,15 @@ function readErrorMessage(status: number, payload: ApiError | null) {
   return `HTTP ${status}: request failed`
 }
 
+function statusTone(authState: AuthState): { background: string; border: string } {
+  if (authState === 'error') return { background: '#ffecec', border: '#f1a3a3' }
+  if (authState === 'authenticated_ready') return { background: '#e8f8eb', border: '#9fdbab' }
+  return { background: '#e6f0ff', border: '#b8c7e6' }
+}
+
 export function App() {
   const [token, setToken] = useState<string>('')
-  const [status, setStatus] = useState<string>('Ready')
+  const [status, setStatus] = useState<string>('Ready to sign in. Enter your username and password to begin authentication.')
   const [authState, setAuthState] = useState<AuthState>('anonymous')
   const [mustResetPassword, setMustResetPassword] = useState<boolean>(false)
   const [user, setUser] = useState<User | null>(null)
@@ -35,7 +41,7 @@ export function App() {
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token])
 
-  function resetSession(message = 'Signed out.') {
+  function resetSession(message = 'Signed out. Session data cleared. Ready for a new login attempt.') {
     setToken('')
     setUser(null)
     setCharts([])
@@ -46,7 +52,7 @@ export function App() {
 
   async function loadProfileAndCharts(currentToken: string, expectsReset: boolean) {
     setAuthState('authenticated_loading_profile')
-    setStatus('Loading your profile...')
+    setStatus('Authentication succeeded. Loading user profile and role permissions...')
 
     const headers = { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' }
 
@@ -54,37 +60,40 @@ export function App() {
     const mePayload = (await me.json().catch(() => null)) as ApiError | User | null
     if (!me.ok) {
       setAuthState('error')
-      setStatus(`Unable to load current user. ${readErrorMessage(me.status, mePayload as ApiError | null)}`)
+      setStatus(`Authentication token was issued, but profile load failed. ${readErrorMessage(me.status, mePayload as ApiError | null)}`)
       return
     }
 
     const currentUser = mePayload as User
     setUser(currentUser)
+    setStatus(`Profile loaded for ${currentUser.username} (${currentUser.role}). Verifying password reset requirements...`)
 
     if (expectsReset || currentUser.must_reset_password) {
       setMustResetPassword(true)
       setAuthState('password_reset_required')
-      setStatus('Password reset required before continuing.')
+      setStatus('Login verified. A password reset is required before dashboard access is granted.')
       return
     }
 
+    setStatus(`Profile verified for ${currentUser.username}. Loading chart dashboard data...`)
     const chartRes = await fetch(`${API}/charts`, { headers })
     const chartPayload = (await chartRes.json().catch(() => null)) as ApiError | Chart[] | null
     if (!chartRes.ok) {
       setAuthState('error')
-      setStatus(`Logged in, but charts failed to load. ${readErrorMessage(chartRes.status, chartPayload as ApiError | null)}`)
+      setStatus(`Login completed, but dashboard data failed to load. ${readErrorMessage(chartRes.status, chartPayload as ApiError | null)}`)
       return
     }
 
     setCharts((chartPayload as Chart[]) || [])
     setMustResetPassword(false)
     setAuthState('authenticated_ready')
-    setStatus('Dashboard loaded.')
+    setStatus(`Authentication complete. Dashboard ready with ${((chartPayload as Chart[]) || []).length} chart(s).`)
   }
 
   async function login(e: FormEvent) {
     e.preventDefault()
     setAuthState('logging_in')
+    setStatus(`Submitting credentials for user \"${form.username}\". Waiting for authentication response...`)
     try {
       const response = await fetch(`${API}/auth/login`, {
         method: 'POST',
@@ -94,22 +103,23 @@ export function App() {
       const payload = (await response.json().catch(() => null)) as ApiError | null
       if (!response.ok) {
         setAuthState('error')
-        setStatus(`Login failed. ${readErrorMessage(response.status, payload)}`)
+        setStatus(`Login rejected for user \"${form.username}\". ${readErrorMessage(response.status, payload)}`)
         return
       }
       const data = payload as { access_token: string; must_reset_password: boolean }
+      setStatus('Credentials accepted. Token issued; preparing authenticated session...')
       setToken(data.access_token)
       setMustResetPassword(data.must_reset_password)
       await loadProfileAndCharts(data.access_token, data.must_reset_password)
     } catch {
       setAuthState('error')
-      setStatus('Login failed: backend unreachable. Verify API URL or port mapping.')
+      setStatus('Login failed before authentication could complete: backend unreachable. Verify API URL, container status, and port mapping.')
     }
   }
 
   async function resetPassword(e: FormEvent) {
     e.preventDefault()
-    setStatus('Resetting password...')
+    setStatus('Password reset request submitted. Validating new password and updating credentials...')
     try {
       const response = await fetch(`${API}/auth/reset-password`, {
         method: 'POST',
@@ -119,15 +129,16 @@ export function App() {
       const payload = (await response.json().catch(() => null)) as ApiError | null
       if (!response.ok) {
         setAuthState('error')
-        setStatus(`Password reset failed. ${readErrorMessage(response.status, payload)}`)
+        setStatus(`Password reset failed after authentication. ${readErrorMessage(response.status, payload)}`)
         return
       }
       setResetForm({ newPassword: '' })
       setMustResetPassword(false)
+      setStatus('Password reset successful. Reloading profile and dashboard...')
       await loadProfileAndCharts(token, false)
     } catch {
       setAuthState('error')
-      setStatus('Password reset failed: backend unreachable.')
+      setStatus('Password reset failed: backend unreachable or session expired. Please sign in again.')
     }
   }
 
@@ -138,14 +149,17 @@ export function App() {
       primary_clinician: user?.username || 'Unknown',
       notes: 'Initial chart generated from UI',
     }
+    setStatus('Submitting request to create a sample chart...')
     const response = await fetch(`${API}/charts`, { method: 'POST', headers: authHeaders, body: JSON.stringify(payload) })
     if (!response.ok) {
-      setStatus(`Unable to create chart (HTTP ${response.status}).`)
+      setStatus(`Sample chart creation failed. HTTP ${response.status}.`)
       return
     }
-    setStatus('Chart created.')
+    setStatus('Sample chart created successfully. Refreshing dashboard data...')
     await loadProfileAndCharts(token, false)
   }
+
+  const tone = statusTone(authState)
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', margin: '0 auto', maxWidth: 1000, padding: 16 }}>
@@ -156,23 +170,29 @@ export function App() {
           {token ? <button onClick={() => resetSession()}>Logout</button> : null}
         </div>
       </header>
-      <div style={{ background: '#e6f0ff', padding: 8, borderRadius: 6, marginBottom: 16 }}>Status: {status}</div>
+      <div style={{ background: tone.background, border: `1px solid ${tone.border}`, padding: 10, borderRadius: 6, marginBottom: 16 }}>
+        <strong>Status:</strong> {status}
+      </div>
 
       {(authState === 'anonymous' || authState === 'error') && !token ? (
-        <form onSubmit={login} style={{ display: 'grid', gap: 8, maxWidth: 320 }}>
+        <form onSubmit={login} style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
+          <h2>Login</h2>
+          <p style={{ marginTop: 0, color: '#444' }}>
+            Enter credentials, then watch the status panel for step-by-step authentication progress and error details.
+          </p>
           <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder='Username' />
           <input type='password' value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder='Password' />
           <button type='submit' disabled={authState === 'logging_in'}>Sign in</button>
         </form>
       ) : authState === 'logging_in' || authState === 'authenticated_loading_profile' ? (
         <section style={{ padding: 12, border: '1px solid #d0d7e2', borderRadius: 6 }}>
-          <h2>Signing you in...</h2>
-          <p>Please wait while we load your account profile.</p>
+          <h2>Authentication In Progress</h2>
+          <p>The system is validating credentials and loading account context. Follow the status banner above for details.</p>
         </section>
       ) : authState === 'password_reset_required' || (mustResetPassword && token) ? (
         <form onSubmit={resetPassword} style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
           <h2>Password Reset Required</h2>
-          <p>For security, your first login requires a new password (minimum 12 characters).</p>
+          <p>Authentication succeeded, but policy requires a new password before any chart data can be accessed.</p>
           <input
             type='password'
             value={resetForm.newPassword}
@@ -186,6 +206,7 @@ export function App() {
         <>
           <section>
             <h2>{user.role === 'admin' ? 'Admin Dashboard' : 'Counselor Dashboard'}</h2>
+            <p style={{ marginTop: 0, color: '#444' }}>You are signed in as {user.username}. Use controls below; each action will post detailed status updates.</p>
             <button onClick={createSampleChart}>Create sample chart</button>
           </section>
           <section>
@@ -217,8 +238,8 @@ export function App() {
       ) : (
         <section style={{ padding: 12, border: '1px solid #d0d7e2', borderRadius: 6 }}>
           <h2>Session issue detected</h2>
-          <p>We could not finish loading your session.</p>
-          <button onClick={() => resetSession('Session cleared. Please sign in again.')}>Clear session</button>
+          <p>We could not finish loading your session. Check the status panel for details, then clear and retry.</p>
+          <button onClick={() => resetSession('Session cleared after error. You can now attempt login again.')}>Clear session</button>
         </section>
       )}
     </div>

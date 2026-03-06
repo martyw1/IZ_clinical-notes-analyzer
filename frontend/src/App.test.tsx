@@ -60,7 +60,7 @@ describe('App auth flow', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByText(/Unable to load current user/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/profile load failed/)).toBeInTheDocument())
     expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument()
   })
 
