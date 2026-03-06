@@ -3,11 +3,11 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-chartreview}
-      POSTGRES_USER: ${POSTGRES_USER:-chart}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chart}
+      POSTGRES_DB: ${POSTGRES_DB:-optiflow}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-chart} -d ${POSTGRES_DB:-chartreview}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-optiflow}']
       interval: 5s
       timeout: 5s
       retries: 12
@@ -18,7 +18,7 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://chart:chart@db:5432/chartreview}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/optiflow}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT:-5173}}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173}}

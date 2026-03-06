@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     environment: str = 'development'
     secret_key: str = 'change-me-in-production'
     access_token_expire_minutes: int = 60
-    database_url: str = 'sqlite:///./chart_review.db'
+    database_url: str = 'postgresql://postgres:postgres@127.0.0.1:5432/optiflow'
     backend_port: int = 8000
     frontend_origin: str = 'http://localhost:5173'
     frontend_origins: str = 'http://localhost:5173'
