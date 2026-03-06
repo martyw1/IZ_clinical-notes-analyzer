@@ -11,7 +11,15 @@ class Settings(BaseSettings):
     database_url: str = 'sqlite:///./chart_review.db'
     backend_port: int = 8000
     frontend_origin: str = 'http://localhost:5173'
+    frontend_origins: str = 'http://localhost:5173'
     upload_dir: str = 'uploads'
+
+    @property
+    def frontend_origins_list(self) -> list[str]:
+        origins = [origin.strip() for origin in self.frontend_origins.split(',') if origin.strip()]
+        if not origins and self.frontend_origin:
+            return [self.frontend_origin]
+        return origins
 
 
 settings = Settings()

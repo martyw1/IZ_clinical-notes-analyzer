@@ -1,8 +1,10 @@
 import os
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import router
 from app.core.config import settings
@@ -16,15 +18,30 @@ app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin, '*'],
+    allow_origins=settings.frontend_origins_list,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
 )
 
 
+def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None:
+    delay = initial_delay
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with engine.connect() as connection:
+                connection.execute(text('SELECT 1'))
+            return
+        except SQLAlchemyError:
+            if attempt == max_attempts:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+
 @app.on_event('startup')
 def startup() -> None:
+    wait_for_database()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
