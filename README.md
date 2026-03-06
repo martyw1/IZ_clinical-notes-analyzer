@@ -152,8 +152,11 @@ Use the platform-specific script from the repo root. Each script:
 
 Run the same script under the lower-privilege `demo-run` Linux account:
 ```bash
-sudo -iu demo-run bash -lc 'cd /home/iz-admin/app/demo/iz/IZ_clinical-notes-analyzer && ./scripts/startup-ubuntu-24.04.sh'
+sudo -u demo-run -g demoapps /bin/bash -lc "cd /home/iz-admin/app/demo/iz/IZ_clinical-notes-analyzer && ./scripts/startup-ubuntu-24.04.sh"
 ```
+
+If the command asks for a password for `demo-run`, that prompt is coming from internal `sudo` calls in the script (for package/service tasks), **not** from logging in as `demo-run`.
+For non-interactive runs as `demo-run`, pre-install dependencies and Docker access once as an admin user, or grant narrowly-scoped passwordless sudo for the required commands.
 
 ## Configurable listening ports
 - Backend listens using `PORT` env var.
