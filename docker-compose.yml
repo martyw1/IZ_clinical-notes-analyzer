@@ -54,3 +54,4 @@ services:
 
 volumes:
   pgdata:
+    name: ${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_pgdata_app}
