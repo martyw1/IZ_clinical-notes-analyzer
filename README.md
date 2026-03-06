@@ -40,6 +40,8 @@ docker compose up --build
 
 Then open the app in your browser at `http://localhost:${FRONTEND_PORT:-5173}` (default is usually `5173`).
 
+In Docker mode, the frontend now proxies `/api` requests to the backend container, so login works even when you open the site from another machine using the server's IP/hostname.
+
 ---
 
 ## Non-technical quick start (recommended)

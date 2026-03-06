@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 type User = { username: string; role: 'admin' | 'counselor' | 'manager'; must_reset_password: boolean }
 type Chart = { id: number; client_name: string; level_of_care: string; primary_clinician: string; state: string }
@@ -16,14 +16,18 @@ export function App() {
 
   async function login(e: FormEvent) {
     e.preventDefault()
-    const response = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-    if (!response.ok) {
-      setStatus('Login failed')
-      return
+    try {
+      const response = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!response.ok) {
+        setStatus('Login failed')
+        return
+      }
+      const data = await response.json()
+      setToken(data.access_token)
+      setStatus(data.must_reset_password ? 'Password reset required on first login.' : 'Login successful.')
+    } catch {
+      setStatus('Login failed: backend unreachable. Verify API URL or port mapping.')
     }
-    const data = await response.json()
-    setToken(data.access_token)
-    setStatus(data.must_reset_password ? 'Password reset required on first login.' : 'Login successful.')
   }
 
   async function loadMeAndCharts() {
