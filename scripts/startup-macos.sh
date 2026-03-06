@@ -149,9 +149,14 @@ cd "${ROOT_DIR}"
 
 info "Starting Docker Compose stack"
 docker compose pull || warn "docker compose pull had issues; proceeding with local build"
-docker compose up -d --build
+COMPOSE_ARGS=()
+if [[ "${USE_INTERNAL_POSTGRES:-1}" == "1" ]]; then
+  COMPOSE_ARGS+=(--profile internal-db)
+fi
+info "DB mode: ${DATABASE_HOST_MODE:-internal} (USE_INTERNAL_POSTGRES=${USE_INTERNAL_POSTGRES:-1})"
+docker compose "${COMPOSE_ARGS[@]}" up -d --build
 
 info "Current service status"
-docker compose ps
+docker compose "${COMPOSE_ARGS[@]}" ps
 
 pass "Startup complete. Logs are in ${LOG_FILE}"

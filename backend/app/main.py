@@ -15,18 +15,7 @@ from app.db.bootstrap import ensure_schema_compatibility
 from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 
-os.makedirs(settings.upload_dir, exist_ok=True)
-app = FastAPI(title=settings.app_name)
-
 logger = logging.getLogger(__name__)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.frontend_origins_list,
-    allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
-)
 
 
 def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None:
@@ -44,8 +33,7 @@ def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None
             delay *= 2
 
 
-@app.on_event('startup')
-def startup() -> None:
+def initialize_database() -> None:
     wait_for_database()
     ensure_schema_compatibility(engine)
     Base.metadata.create_all(bind=engine)
@@ -66,9 +54,32 @@ def startup() -> None:
         db.close()
 
 
-@app.get('/health')
-def health():
-    return {'status': 'ok'}
+def create_app() -> FastAPI:
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    api = FastAPI(title=settings.app_name)
+
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.frontend_origins_list,
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],
+    )
+
+    @api.on_event('startup')
+    def startup() -> None:
+        initialize_database()
+
+    @api.get('/health')
+    def health():
+        return {'status': 'ok'}
+
+    @api.get('/api/health')
+    def api_health():
+        return {'status': 'ok'}
+
+    api.include_router(router)
+    return api
 
 
-app.include_router(router)
+app = create_app()

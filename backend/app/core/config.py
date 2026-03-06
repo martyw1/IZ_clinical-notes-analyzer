@@ -1,14 +1,17 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
 
-    app_name: str = 'Chart Review Workflow'
+    app_name: str = 'IZ Clinical Notes Analyzer'
     environment: str = 'development'
     secret_key: str = 'change-me-in-production'
     access_token_expire_minutes: int = 60
-    database_url: str = 'postgresql://postgres:postgres@127.0.0.1:5432/optiflow'
+    database_url: str = 'postgresql+psycopg2://iz_clinical_notes:change-me@127.0.0.1:5432/iz_clinical_notes_analyzer'
+    database_host_mode: str = Field(default='internal')  # internal | host | external
+    use_internal_postgres: bool = True
     backend_port: int = 8000
     frontend_origin: str = 'http://localhost:5173'
     frontend_origins: str = 'http://localhost:5173'

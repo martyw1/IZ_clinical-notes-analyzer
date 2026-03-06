@@ -11,6 +11,7 @@ trap 'echo "[ERROR] Startup failed on line $LINENO. Review log: ${LOG_FILE}"' ER
 
 NON_INTERACTIVE="${NON_INTERACTIVE:-1}"
 ENABLE_HOST_VENV="${ENABLE_HOST_VENV:-0}"
+RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH="${RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,63 +28,10 @@ info() { echo "[$(date +'%F %T')] [INFO] $*" >&2; }
 warn() { echo "[$(date +'%F %T')] [WARN] $*" >&2; }
 pass() { echo "[$(date +'%F %T')] [PASS] $*" >&2; }
 
-print_db_auth_diagnostics() {
-  local db_logs
-  db_logs="$(docker compose logs --tail=200 db 2>/dev/null || true)"
-
-  if [[ "$db_logs" == *"password authentication failed for user"* ]]; then
-    warn 'Detected PostgreSQL password authentication failures.'
-    warn 'Likely cause: existing Postgres volume initialized with different credentials than current .env/DATABASE_URL.'
-    warn 'Postgres only applies POSTGRES_USER/POSTGRES_PASSWORD on first initialization of the data volume.'
-    echo '[DIAG] Suggested fixes (choose one):' >&2
-    echo '[DIAG]  1) Keep existing DB data: set DATABASE_URL / POSTGRES_PASSWORD in .env to match current DB credentials.' >&2
-    echo '[DIAG]  2) Reset demo DB data and reinitialize with current .env credentials:' >&2
-    echo '[DIAG]     docker compose down -v' >&2
-    echo '[DIAG]     docker compose up -d --build' >&2
-  fi
-}
-
-rebuild_database_url() {
-  local user="$1"
-  local password="$2"
-  local db_name="$3"
-  echo "postgresql+psycopg2://${user}:${password}@db:5432/${db_name}"
-}
-
-apply_option1_db_credential_fix() {
-  local db_logs="$1"
-  local current_db_url
-  current_db_url="$(awk -F= '$1=="DATABASE_URL"{print substr($0, index($0,$2))}' .env | tail -n1)"
-
-  # Option 1 from diagnostics: keep existing DB volume and align app credentials.
-  # The most common drift is POSTGRES_USER/DATABASE_URL changed to "chart" while the
-  # existing volume was initialized with default postgres/postgres credentials.
-  if [[ "$db_logs" == *'Role "chart" does not exist'* ]] || [[ "$current_db_url" == *'://chart:'* ]]; then
-    local db_name
-    db_name="${POSTGRES_DB:-$(awk -F= '$1=="POSTGRES_DB"{print $2}' .env | tail -n1)}"
-    db_name="${db_name:-optiflow}"
-
-    warn 'Applying Option 1 auto-fix: aligning .env database credentials to existing default postgres role.'
-    set_env_value POSTGRES_USER postgres
-    set_env_value POSTGRES_PASSWORD postgres
-    set_env_value DATABASE_URL "$(rebuild_database_url postgres postgres "$db_name")"
-    export POSTGRES_USER=postgres
-    export POSTGRES_PASSWORD=postgres
-    export DATABASE_URL="$(rebuild_database_url postgres postgres "$db_name")"
-    return 0
-  fi
-
-  return 1
-}
-
-is_port_busy() {
-  local port="$1"
-  ss -ltn "( sport = :${port} )" | grep -q LISTEN
-}
+is_port_busy() { ss -ltn "( sport = :$1 )" | grep -q LISTEN; }
 
 pick_next_open_port() {
-  local start="$1"
-  local candidate
+  local start="$1" candidate
   for candidate in $(seq "$start" $((start + 40))); do
     if ! is_port_busy "$candidate"; then
       echo "$candidate"
@@ -94,8 +42,7 @@ pick_next_open_port() {
 }
 
 set_env_value() {
-  local key="$1"
-  local value="$2"
+  local key="$1" value="$2"
   if grep -q "^${key}=" .env; then
     sed -i "s#^${key}=.*#${key}=${value}#" .env
   else
@@ -103,55 +50,89 @@ set_env_value() {
   fi
 }
 
+env_value() {
+  awk -F= -v k="$1" '$1==k{print substr($0, index($0,$2))}' .env | tail -n1
+}
+
 resolve_port() {
-  local key="$1"
-  local default="$2"
-  local requested="${!key:-}"
-  requested="${requested:-$(awk -F= -v k="$key" '$1==k{print $2}' .env | tail -n1)}"
+  local key="$1" default="$2" requested
+  requested="${!key:-}"
+  requested="${requested:-$(env_value "$key")}"
   requested="${requested:-$default}"
-
   if is_port_busy "$requested"; then
-    if [[ "$NON_INTERACTIVE" == "1" ]]; then
-      local fallback
-      fallback="$(pick_next_open_port $((requested + 1)))"
-      warn "${key} ${requested} busy; auto-selected ${fallback}."
-      echo "$fallback"
-      return 0
-    fi
-
-    read -r -p "${key} ${requested} busy. Enter another port: " requested
+    local fallback
+    fallback="$(pick_next_open_port $((requested + 1)))"
+    warn "${key} ${requested} busy; auto-selected ${fallback}."
+    echo "$fallback"
+    return 0
   fi
-
   echo "$requested"
 }
 
 prepare_host_venv_if_enabled() {
   [[ "$ENABLE_HOST_VENV" == "1" ]] || return 0
-
-  local run_user
-  run_user="$(id -un)"
-  local venv_path="backend/.venv"
-
-  if [[ -e "$venv_path" ]] && [[ ! -w "$venv_path" ]]; then
-    warn "${venv_path} is not writable by ${run_user}; skipping host venv setup."
-    return 0
-  fi
-
-  info "Preparing optional backend host virtualenv"
-  python3 -m venv "$venv_path"
-  source "${venv_path}/bin/activate"
+  info 'Preparing optional backend host virtualenv'
+  python3 -m venv backend/.venv
+  source backend/.venv/bin/activate
   python -m pip install --upgrade pip
   python -m pip install -r backend/requirements.txt
   deactivate
 }
 
+print_db_mode_summary() {
+  local db_mode db_host db_name db_user
+  db_mode="$(env_value DATABASE_HOST_MODE)"
+  db_mode="${db_mode:-internal}"
+  db_host="$(python3 - <<'PY'
+from urllib.parse import urlsplit
+import os
+url = os.environ.get("DATABASE_URL", "")
+if not url:
+    print("<unset>")
+else:
+    try:
+        print(urlsplit(url).hostname or "<unset>")
+    except Exception:
+        print("<invalid>")
+PY
+)"
+  db_name="$(env_value POSTGRES_DB)"
+  db_user="$(env_value POSTGRES_USER)"
+  info "DB mode: ${db_mode} (USE_INTERNAL_POSTGRES=${USE_INTERNAL_POSTGRES})"
+  info "Expected DB target host: ${db_host}"
+  info "Configured DB name/user: ${db_name:-<unset>}/${db_user:-<unset>}"
+}
+
+maybe_reset_internal_db_on_credential_mismatch() {
+  local backend_logs="$1"
+  if [[ "$backend_logs" == *"password authentication failed for user"* ]] && [[ "$RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH" == "1" ]]; then
+    warn 'Credential mismatch detected and RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH=1; resetting internal DB volume.'
+    docker compose --profile internal-db down -v
+  fi
+}
+
+print_db_failure_diagnostics() {
+  local backend_logs="$1" db_logs="$2"
+  if [[ "$backend_logs" == *"password authentication failed for user"* ]]; then
+    warn 'Detected DB credential mismatch.'
+    echo '[DIAG] Internal DB volumes apply POSTGRES_USER/POSTGRES_PASSWORD only on first initialization.' >&2
+    echo '[DIAG] Option A (safe): update DATABASE_URL/.env credentials to match existing DB role/password.' >&2
+    echo '[DIAG] Option B (destructive): export RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH=1 and rerun to recreate DB volume.' >&2
+  elif [[ "$backend_logs" == *"could not translate host name"* ]] || [[ "$backend_logs" == *"Name or service not known"* ]]; then
+    warn 'Detected DB host resolution/connectivity failure. Check DATABASE_URL host and DATABASE_HOST_MODE.'
+  elif [[ "$backend_logs" == *"does not exist"* ]]; then
+    warn 'Detected missing role or database. Ensure target PostgreSQL has the configured user/database.'
+  fi
+
+  if [[ -n "$db_logs" ]] && [[ "$db_logs" == *"database system is ready to accept connections"* ]]; then
+    info 'Internal Postgres container is reachable; failure is likely credentials/database/role mismatch.'
+  fi
+}
+
 cd "$ROOT_DIR"
 info "Starting Ubuntu 24.04 bootstrap from ${ROOT_DIR}"
 
-if [[ ! -f .env ]]; then
-  cp .env.example .env
-  info "Created .env from .env.example"
-fi
+[[ -f .env ]] || { cp .env.example .env; info 'Created .env from .env.example'; }
 
 BACKEND_PORT="$(resolve_port BACKEND_PORT 8000)"
 FRONTEND_PORT="$(resolve_port FRONTEND_PORT 5173)"
@@ -160,16 +141,16 @@ if [[ "$BACKEND_PORT" == "$FRONTEND_PORT" ]]; then
   warn "Frontend port matched backend; switched to ${FRONTEND_PORT}."
 fi
 
-export BACKEND_PORT FRONTEND_PORT
 set_env_value BACKEND_PORT "$BACKEND_PORT"
 set_env_value FRONTEND_PORT "$FRONTEND_PORT"
-
-# Force this app to use a dedicated Postgres data volume so it never reuses credentials
-# from unrelated stacks or previous initializations.
+POSTGRES_VOLUME_NAME="${POSTGRES_VOLUME_NAME:-$(env_value POSTGRES_VOLUME_NAME)}"
 POSTGRES_VOLUME_NAME="${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_pgdata_app}"
-export POSTGRES_VOLUME_NAME
 set_env_value POSTGRES_VOLUME_NAME "$POSTGRES_VOLUME_NAME"
-info "Using dedicated Postgres volume: ${POSTGRES_VOLUME_NAME}"
+
+USE_INTERNAL_POSTGRES="${USE_INTERNAL_POSTGRES:-$(env_value USE_INTERNAL_POSTGRES)}"
+USE_INTERNAL_POSTGRES="${USE_INTERNAL_POSTGRES:-1}"
+DATABASE_URL="${DATABASE_URL:-$(env_value DATABASE_URL)}"
+export USE_INTERNAL_POSTGRES DATABASE_URL FRONTEND_PORT BACKEND_PORT
 
 if ! command -v docker >/dev/null 2>&1; then
   warn 'Docker is required but not installed.'
@@ -177,51 +158,38 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 prepare_host_venv_if_enabled
+print_db_mode_summary
+
+compose_cmd=(docker compose)
+if [[ "$USE_INTERNAL_POSTGRES" == "1" ]]; then
+  compose_cmd+=(--profile internal-db)
+fi
 
 info 'Starting Docker Compose stack'
-docker compose pull || warn 'docker compose pull failed; continuing with local build cache'
-if ! docker compose up -d --build; then
+"${compose_cmd[@]}" pull || warn 'docker compose pull failed; continuing with local cache'
+if ! "${compose_cmd[@]}" up -d --build; then
   warn 'docker compose up failed; collecting diagnostics.'
-  docker compose ps || true
-  docker compose logs --tail=200 db backend frontend || true
-  db_logs="$(docker compose logs --tail=200 db 2>/dev/null || true)"
-  if apply_option1_db_credential_fix "$db_logs"; then
-    info 'Retrying docker compose up after applying Option 1 credential correction.'
-    if ! docker compose up -d --build; then
-      warn 'Retry failed after Option 1 correction; collecting diagnostics.'
-      docker compose ps || true
-      docker compose logs --tail=200 db backend frontend || true
-      print_db_auth_diagnostics
-      exit 1
-    fi
+  backend_logs="$("${compose_cmd[@]}" logs --tail=200 backend 2>/dev/null || true)"
+  db_logs="$(docker compose --profile internal-db logs --tail=200 db 2>/dev/null || true)"
+  maybe_reset_internal_db_on_credential_mismatch "$backend_logs"
+  if [[ "$RESET_INTERNAL_DB_ON_CREDENTIAL_MISMATCH" == "1" && "$USE_INTERNAL_POSTGRES" == "1" ]]; then
+    "${compose_cmd[@]}" up -d --build || true
+    backend_logs="$("${compose_cmd[@]}" logs --tail=200 backend 2>/dev/null || true)"
+    db_logs="$(docker compose --profile internal-db logs --tail=200 db 2>/dev/null || true)"
   fi
-  print_db_auth_diagnostics
-  if ! docker compose ps --format json >/tmp/compose-ps.json 2>/dev/null || grep -q '"Health":"unhealthy"' /tmp/compose-ps.json; then
-    exit 1
-  fi
+  print_db_failure_diagnostics "$backend_logs" "$db_logs"
+  "${compose_cmd[@]}" logs --tail=200 || true
+  exit 1
 fi
 
-echo '[INFO] Service status:'
-docker compose ps
-
-if docker compose ps --format json >/tmp/compose-ps.json 2>/dev/null; then
-  if grep -q '"Health":"unhealthy"' /tmp/compose-ps.json; then
-    warn 'Detected unhealthy containers after startup; collecting diagnostics.'
-    docker compose logs --tail=200 db backend frontend || true
-    print_db_auth_diagnostics
-    exit 1
-  fi
-  info 'No unhealthy containers detected immediately after startup.'
-else
-  warn 'docker compose ps --format json not supported; skipping immediate health scan.'
-fi
+"${compose_cmd[@]}" ps
 
 info 'Running smoke test'
 if FRONTEND_PORT="$FRONTEND_PORT" ./scripts/smoke.sh; then
   pass 'Smoke test passed.'
 else
   warn 'Smoke failed; collecting recent logs.'
-  docker compose logs --tail=200 db backend frontend || true
+  "${compose_cmd[@]}" logs --tail=200 || true
   exit 1
 fi
 
