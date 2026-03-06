@@ -131,6 +131,13 @@ export BACKEND_PORT FRONTEND_PORT
 set_env_value BACKEND_PORT "$BACKEND_PORT"
 set_env_value FRONTEND_PORT "$FRONTEND_PORT"
 
+# Force this app to use a dedicated Postgres data volume so it never reuses credentials
+# from unrelated stacks or previous initializations.
+POSTGRES_VOLUME_NAME="${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_pgdata_app}"
+export POSTGRES_VOLUME_NAME
+set_env_value POSTGRES_VOLUME_NAME "$POSTGRES_VOLUME_NAME"
+info "Using dedicated Postgres volume: ${POSTGRES_VOLUME_NAME}"
+
 if ! command -v docker >/dev/null 2>&1; then
   warn 'Docker is required but not installed.'
   exit 1
