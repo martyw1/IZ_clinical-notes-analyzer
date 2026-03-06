@@ -26,9 +26,9 @@ else
 fi
 DOCKER_COMPOSE_CMD=(docker compose)
 
-info() { echo "[$(date +'%F %T')] [INFO] $*"; }
-warn() { echo "[$(date +'%F %T')] [WARN] $*"; }
-pass() { echo "[$(date +'%F %T')] [PASS] $*"; }
+info() { echo "[$(date +'%F %T')] [INFO] $*" >&2; }
+warn() { echo "[$(date +'%F %T')] [WARN] $*" >&2; }
+pass() { echo "[$(date +'%F %T')] [PASS] $*" >&2; }
 
 can_run_sudo_non_interactive() {
   [[ -n "${SUDO}" ]] && ${SUDO} -n true >/dev/null 2>&1
