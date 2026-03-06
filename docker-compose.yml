@@ -1,13 +1,14 @@
 services:
   db:
+    profiles: ["internal-db"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-optiflow}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-iz_clinical_notes_analyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-iz_clinical_notes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-optiflow}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-iz_clinical_notes} -d ${POSTGRES_DB:-iz_clinical_notes_analyzer}']
       interval: 5s
       timeout: 5s
       retries: 12
@@ -18,14 +19,15 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/optiflow}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://iz_clinical_notes:change-me@127.0.0.1:5432/iz_clinical_notes_analyzer}
+      DATABASE_HOST_MODE: ${DATABASE_HOST_MODE:-internal}
+      USE_INTERNAL_POSTGRES: ${USE_INTERNAL_POSTGRES:-1}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT:-5173}}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173}}
       PORT: 8000
-    depends_on:
-      db:
-        condition: service_healthy
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     healthcheck:
       test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5)"']
       interval: 10s

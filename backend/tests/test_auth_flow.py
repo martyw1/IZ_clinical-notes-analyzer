@@ -4,18 +4,20 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.security import hash_password
-from app.db.session import SessionLocal
-from app.main import app
 from app.models.models import Role, User
 
 
-def test_health():
+def test_health(app_with_sqlite):
+    app, _ = app_with_sqlite
     with TestClient(app) as client:
         response = client.get('/health')
         assert response.status_code == 200
+        api_response = client.get('/api/health')
+        assert api_response.status_code == 200
 
 
-def test_login_and_me_flow():
+def test_login_and_me_flow(app_with_sqlite):
+    app, _ = app_with_sqlite
     with TestClient(app) as client:
         response = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3'})
         assert response.status_code == 200
@@ -26,28 +28,29 @@ def test_login_and_me_flow():
         assert me.json()['username'] == 'admin'
 
 
-def test_reset_password_flow_for_first_login_user():
+def test_reset_password_flow_for_first_login_user(app_with_sqlite):
+    app, session_local = app_with_sqlite
     username = f'test-user-{uuid.uuid4().hex[:8]}'
     original_password = 'original-pass-1234'
     replacement_password = 'replacement-pass-1234'
 
-    db = SessionLocal()
-    try:
-        existing = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
-        if not existing:
-            db.add(
-                User(
-                    username=username,
-                    password_hash=hash_password(original_password),
-                    role=Role.counselor,
-                    must_reset_password=True,
-                )
-            )
-            db.commit()
-    finally:
-        db.close()
-
     with TestClient(app) as client:
+        db = session_local()
+        try:
+            existing = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+            if not existing:
+                db.add(
+                    User(
+                        username=username,
+                        password_hash=hash_password(original_password),
+                        role=Role.counselor,
+                        must_reset_password=True,
+                    )
+                )
+                db.commit()
+        finally:
+            db.close()
+
         login = client.post('/api/auth/login', json={'username': username, 'password': original_password})
         assert login.status_code == 200
         token = login.json()['access_token']

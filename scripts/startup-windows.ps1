@@ -75,10 +75,15 @@ try {
 
     Write-Info 'Starting Docker Compose stack'
     docker compose pull
-    docker compose up -d --build
+    $composeArgs = @()
+    $useInternal = if ($env:USE_INTERNAL_POSTGRES) { $env:USE_INTERNAL_POSTGRES } else { '1' }
+    $dbMode = if ($env:DATABASE_HOST_MODE) { $env:DATABASE_HOST_MODE } else { 'internal' }
+    if ($useInternal -eq '1') { $composeArgs += '--profile'; $composeArgs += 'internal-db' }
+    Write-Info "DB mode: $dbMode (USE_INTERNAL_POSTGRES=$useInternal)"
+    docker compose @composeArgs up -d --build
 
     Write-Info 'Current service status'
-    docker compose ps
+    docker compose @composeArgs ps
 
     Write-Pass "Startup complete. Logs are in $LogFile"
 }

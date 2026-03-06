@@ -18,7 +18,7 @@ jobs:
       - run: pip install -r requirements.txt
       - run: PYTHONPATH=$(pwd) pytest
 
-  frontend-build:
+  frontend-build-test:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,4 +29,15 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
+      - run: npm test -- --run
       - run: npm run build
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose --profile internal-db up -d --build
+      - run: FRONTEND_PORT=5173 ./scripts/smoke.sh
+      - if: always()
+        run: docker compose --profile internal-db down -v

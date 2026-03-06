@@ -1,19 +1,16 @@
-# SRE Runbook
+# Operations Runbook
 
-## Health checks
-- Backend: `GET /health`
-- Database: `pg_isready`
+## Health endpoints
+- Backend direct: `GET /health`
+- Backend API alias: `GET /api/health`
+- Through frontend proxy: `GET /api/health`
 
-## Logging
-- Application-level forensic logs persisted in `audit_logs` table.
-- Include actor, IP, request ID, action, status, and hash chain references.
+## Database modes
+- `USE_INTERNAL_POSTGRES=1` + `DATABASE_HOST_MODE=internal`: run app with internal Docker Postgres (`db` service profile `internal-db`).
+- `USE_INTERNAL_POSTGRES=0` + `DATABASE_HOST_MODE=host`: app container connects to PostgreSQL on Docker host via `host.docker.internal`.
+- `USE_INTERNAL_POSTGRES=0` + `DATABASE_HOST_MODE=external`: app container uses explicit remote DB host from `DATABASE_URL` without rewrite.
 
-## Backup/Restore
-- Backup: `pg_dump -Fc chartreview > backup.dump`
-- Restore: `pg_restore -d chartreview backup.dump`
-
-## Incident response
-1. Validate service health endpoint.
-2. Review recent `audit_logs` with severity `warning/error`.
-3. Roll back deployment to previous image if required.
-4. File post-incident report with root cause and corrective actions.
+## Backup/restore
+Use the app DB name consistently:
+- Backup: `pg_dump -Fc iz_clinical_notes_analyzer > backup.dump`
+- Restore: `pg_restore -d iz_clinical_notes_analyzer backup.dump`
