@@ -43,6 +43,12 @@ Then open the app in your browser at `http://localhost:${FRONTEND_PORT:-5173}`. 
 
 In Docker mode, the frontend proxies `/api` requests to the backend container, so login works when using localhost or server IP/hostname.
 
+In local fallback mode (when env vars are not set), the backend defaults to
+`postgresql://postgres:postgres@127.0.0.1:5432/optiflow`.
+
+For deployment, use a dedicated least-privilege DB user (for example `optiflow_app`)
+with a generated secret password stored outside this repository.
+
 To expose PostgreSQL to the host (optional, for admin/debug tools only):
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.db-expose.yml up -d
