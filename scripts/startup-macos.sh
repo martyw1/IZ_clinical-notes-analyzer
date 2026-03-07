@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${ROOT_DIR}/.env"
 LOG_DIR="${ROOT_DIR}/logs"
 mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/startup-macos-$(date +%Y%m%d-%H%M%S).log"
@@ -9,28 +10,14 @@ exec > >(tee -a "${LOG_FILE}") 2>&1
 
 trap 'echo "[ERROR] Startup failed on line $LINENO. Review log: ${LOG_FILE}"' ERR
 
+source "${ROOT_DIR}/scripts/lib/dedicated-postgres.sh"
+
 info() { echo "[$(date +'%F %T')] [INFO] $*"; }
 warn() { echo "[$(date +'%F %T')] [WARN] $*"; }
 pass() { echo "[$(date +'%F %T')] [PASS] $*"; }
 
 busy_ports_csv() {
   lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {split($9, parts, ":"); print parts[length(parts)]}' | awk '/^[0-9]+$/' | sort -n -u | paste -sd ', ' -
-}
-
-is_port_busy() {
-  local port="$1"
-  lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
-}
-
-set_env_value() {
-  local key="$1"
-  local value="$2"
-
-  if grep -q "^${key}=" .env; then
-    sed -i '' "s/^${key}=.*/${key}=${value}/" .env
-  else
-    echo "${key}=${value}" >> .env
-  fi
 }
 
 prompt_for_port() {
@@ -47,7 +34,7 @@ prompt_for_port() {
       continue
     fi
 
-    if is_port_busy "${chosen_port}"; then
+    if startup_db_is_port_busy "${chosen_port}"; then
       warn "Port ${chosen_port} is busy. These are the ports already busy: ${BUSY_PORTS_DISPLAY}"
       continue
     fi
@@ -84,8 +71,10 @@ fi
 
 BACKEND_DEFAULT="${BACKEND_PORT:-$(awk -F= '/^BACKEND_PORT=/{print $2}' .env | tail -n1)}"
 FRONTEND_DEFAULT="${FRONTEND_PORT:-$(awk -F= '/^FRONTEND_PORT=/{print $2}' .env | tail -n1)}"
+POSTGRES_DEFAULT="${POSTGRES_PORT:-$(awk -F= '/^POSTGRES_PORT=/{print $2}' .env | tail -n1)}"
 BACKEND_DEFAULT="${BACKEND_DEFAULT:-8000}"
 FRONTEND_DEFAULT="${FRONTEND_DEFAULT:-5173}"
+POSTGRES_DEFAULT="${POSTGRES_DEFAULT:-5432}"
 
 BACKEND_PORT="$(prompt_for_port BACKEND_PORT "${BACKEND_DEFAULT}")"
 while [[ "${BACKEND_PORT}" == "${FRONTEND_PORT:-}" ]]; do
@@ -99,10 +88,17 @@ while [[ "${FRONTEND_PORT}" == "${BACKEND_PORT}" ]]; do
   FRONTEND_PORT="$(prompt_for_port FRONTEND_PORT "${FRONTEND_DEFAULT}")"
 done
 
-export BACKEND_PORT FRONTEND_PORT
-set_env_value BACKEND_PORT "${BACKEND_PORT}"
-set_env_value FRONTEND_PORT "${FRONTEND_PORT}"
-info "Using BACKEND_PORT=${BACKEND_PORT}, FRONTEND_PORT=${FRONTEND_PORT}"
+POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}")"
+while [[ "${POSTGRES_PORT}" == "${BACKEND_PORT}" || "${POSTGRES_PORT}" == "${FRONTEND_PORT}" ]]; do
+  warn "PostgreSQL port must be different from the frontend and backend ports."
+  POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}")"
+done
+
+export BACKEND_PORT FRONTEND_PORT POSTGRES_PORT
+startup_db_set_env_value "$ENV_FILE" BACKEND_PORT "${BACKEND_PORT}"
+startup_db_set_env_value "$ENV_FILE" FRONTEND_PORT "${FRONTEND_PORT}"
+startup_db_apply_env_defaults "$ENV_FILE" "${POSTGRES_PORT}"
+info "Using BACKEND_PORT=${BACKEND_PORT}, FRONTEND_PORT=${FRONTEND_PORT}, POSTGRES_PORT=${POSTGRES_PORT}"
 
 if ! command -v brew >/dev/null 2>&1; then
   warn "Homebrew is required but not installed. Install from https://brew.sh and rerun this script."
@@ -149,14 +145,20 @@ cd "${ROOT_DIR}"
 
 info "Starting Docker Compose stack"
 docker compose pull || warn "docker compose pull had issues; proceeding with local build"
-COMPOSE_ARGS=()
-if [[ "${USE_INTERNAL_POSTGRES:-1}" == "1" ]]; then
-  COMPOSE_ARGS+=(--profile internal-db)
-fi
-info "DB mode: ${DATABASE_HOST_MODE:-internal} (USE_INTERNAL_POSTGRES=${USE_INTERNAL_POSTGRES:-1})"
-docker compose "${COMPOSE_ARGS[@]}" up -d --build
+startup_db_bootstrap "$ROOT_DIR" "$ENV_FILE"
+info "DB mode: dedicated application-owned PostgreSQL container"
+docker compose up -d --build
 
 info "Current service status"
-docker compose "${COMPOSE_ARGS[@]}" ps
+docker compose ps
+
+info 'Running smoke test'
+if FRONTEND_PORT="$FRONTEND_PORT" ./scripts/smoke.sh; then
+  pass 'Smoke test passed.'
+else
+  warn 'Smoke failed; collecting recent logs.'
+  docker compose logs --tail=200 || true
+  exit 1
+fi
 
 pass "Startup complete. Logs are in ${LOG_FILE}"

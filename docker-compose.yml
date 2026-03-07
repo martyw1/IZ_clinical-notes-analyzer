@@ -1,33 +1,38 @@
 services:
-  db:
-    profiles: ["internal-db"]
+  postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-iz_clinical_notes_analyzer}
-      POSTGRES_USER: ${POSTGRES_USER:-iz_clinical_notes}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${DATABASE_NAME:-iz_clinical_notes_analyzer}
+      POSTGRES_USER: ${DATABASE_USER:-iz_clinical_notes_app}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change-me-app}
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-iz_clinical_notes} -d ${POSTGRES_DB:-iz_clinical_notes_analyzer}']
+      test: ['CMD-SHELL', 'PGPASSWORD=${DATABASE_PASSWORD:-change-me-app} pg_isready -U ${DATABASE_USER:-iz_clinical_notes_app} -d ${DATABASE_NAME:-iz_clinical_notes_analyzer}']
       interval: 5s
       timeout: 5s
       retries: 12
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   backend:
     build: ./backend
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://iz_clinical_notes:change-me@127.0.0.1:5432/iz_clinical_notes_analyzer}
-      DATABASE_HOST_MODE: ${DATABASE_HOST_MODE:-internal}
-      USE_INTERNAL_POSTGRES: ${USE_INTERNAL_POSTGRES:-1}
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-iz_clinical_notes_analyzer}
+      DATABASE_USER: ${DATABASE_USER:-iz_clinical_notes_app}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-change-me-app}
+      POSTGRES_SERVICE_HOST: ${POSTGRES_SERVICE_HOST:-postgres}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT:-5173}}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173}}
       PORT: 8000
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
     healthcheck:
       test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5)"']
       interval: 10s
@@ -56,4 +61,4 @@ services:
 
 volumes:
   pgdata:
-    name: ${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_pgdata_app}
+    name: ${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_postgres_data}

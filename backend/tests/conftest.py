@@ -8,7 +8,6 @@ import pytest
 def app_with_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_path = tmp_path / 'test.db'
     monkeypatch.setenv('DATABASE_URL', f'sqlite:///{db_path}')
-    monkeypatch.setenv('DATABASE_HOST_MODE', 'external')
     monkeypatch.setenv('SECRET_KEY', 'test-secret')
 
     import app.core.config as config_module

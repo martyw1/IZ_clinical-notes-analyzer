@@ -1,17 +1,26 @@
-from pydantic import Field
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
+
+
+REPO_ENV_FILE = Path(__file__).resolve().parents[3] / '.env'
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    model_config = SettingsConfigDict(env_file=(str(REPO_ENV_FILE), '.env'), env_file_encoding='utf-8', extra='ignore')
 
     app_name: str = 'IZ Clinical Notes Analyzer'
     environment: str = 'development'
     secret_key: str = 'change-me-in-production'
     access_token_expire_minutes: int = 60
-    database_url: str = 'postgresql+psycopg2://iz_clinical_notes:change-me@127.0.0.1:5432/iz_clinical_notes_analyzer'
-    database_host_mode: str = Field(default='internal')  # internal | host | external
-    use_internal_postgres: bool = True
+    database_url: str | None = None
+    database_host: str = '127.0.0.1'
+    database_port: int = 5432
+    database_name: str = 'iz_clinical_notes_analyzer'
+    database_user: str = 'iz_clinical_notes_app'
+    database_password: str = 'change-me-app'
+    postgres_service_host: str = 'postgres'
     backend_port: int = 8000
     frontend_origin: str = 'http://localhost:5173'
     frontend_origins: str = 'http://localhost:5173'
@@ -26,6 +35,19 @@ class Settings(BaseSettings):
         if not origins and self.frontend_origin:
             return [self.frontend_origin]
         return origins
+
+    @property
+    def database_url_value(self) -> str:
+        if self.database_url:
+            return self.database_url
+        return URL.create(
+            'postgresql+psycopg',
+            username=self.database_user,
+            password=self.database_password,
+            host=self.database_host,
+            port=self.database_port,
+            database=self.database_name,
+        ).render_as_string(hide_password=False)
 
 
 settings = Settings()

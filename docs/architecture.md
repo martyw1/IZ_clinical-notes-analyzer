@@ -5,18 +5,14 @@ IZ Clinical Notes Analyzer is a React + FastAPI + PostgreSQL application for ent
 ## Runtime components
 - **Frontend**: React/Vite app served via nginx in Docker.
 - **Backend**: FastAPI app with JWT auth, RBAC, workflow state controls, uploads, and audit logging.
-- **Database**: PostgreSQL (internal Docker service or external/shared PostgreSQL).
+- **Database**: Dedicated PostgreSQL service owned by this application and managed through Docker Compose.
 
 ## Database connectivity model
 Configuration is explicit and deterministic:
-- `DATABASE_URL`: canonical DSN (defaults to host-local `127.0.0.1` for non-Docker runs).
-- `USE_INTERNAL_POSTGRES`: enables/disables internal Compose Postgres profile.
-- `DATABASE_HOST_MODE`:
-  - `internal`: rewrite localhost DB host to `db` inside containers.
-  - `host`: rewrite localhost DB host to `host.docker.internal` inside containers.
-  - `external`: do not rewrite host.
-
-Linux containers resolve `host.docker.internal` via Compose `extra_hosts: host-gateway`.
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD` define the dedicated application database.
+- `DATABASE_URL` is optional; when omitted, the backend assembles the DSN from the component settings.
+- Backend containers automatically rewrite host-local Postgres URLs to the internal Compose `postgres` service.
+- Startup scripts provision the dedicated application database before the backend starts, so the VPS deployment does not depend on any shared PostgreSQL service.
 
 ## Health model
 - `/health` for direct infra probes.

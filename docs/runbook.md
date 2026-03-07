@@ -5,10 +5,15 @@
 - Backend API alias: `GET /api/health`
 - Through frontend proxy: `GET /api/health`
 
-## Database modes
-- `USE_INTERNAL_POSTGRES=1` + `DATABASE_HOST_MODE=internal`: run app with internal Docker Postgres (`db` service profile `internal-db`).
-- `USE_INTERNAL_POSTGRES=0` + `DATABASE_HOST_MODE=host`: app container connects to PostgreSQL on Docker host via `host.docker.internal`.
-- `USE_INTERNAL_POSTGRES=0` + `DATABASE_HOST_MODE=external`: app container uses explicit remote DB host from `DATABASE_URL` without rewrite.
+## Dedicated PostgreSQL runtime
+- The app always runs against its own Docker-managed `postgres` service.
+- Host-local backend runs connect through `DATABASE_HOST=127.0.0.1` and `DATABASE_PORT=$POSTGRES_PORT`.
+- Backend containers automatically rewrite host-local Postgres URLs to the Compose `postgres` service.
+- `scripts/startup-ubuntu-24.04.sh` and `scripts/startup-macos.sh` bring up the dedicated Postgres service first and create the application database if it is missing.
+
+## Recovery
+- If startup fails with a DB password mismatch after a previous initialization, restore the original `DATABASE_USER`/`DATABASE_PASSWORD` values in `.env`.
+- On Ubuntu, `RESET_DEDICATED_DB_VOLUME_ON_AUTH_FAILURE=1 ./scripts/startup-ubuntu-24.04.sh` will recreate the dedicated Postgres volume. This is destructive.
 
 ## Backup/restore
 Use the app DB name consistently:
