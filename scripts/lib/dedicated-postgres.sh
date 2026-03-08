@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+STARTUP_DB_DEFAULT_COMPOSE_PROJECT='iz_clinical_notes_analyzer'
+STARTUP_DB_DEFAULT_DATABASE_NAME='iz_clinical_notes_analyzer'
+STARTUP_DB_DEFAULT_DATABASE_USER='iz_clinical_notes_app'
+STARTUP_DB_DEFAULT_DATABASE_PASSWORD='change-me-app'
+STARTUP_DB_DEFAULT_VOLUME_NAME='iz_clinical_notes_analyzer_postgres_data'
+
 startup_db_info() {
   if declare -F info >/dev/null 2>&1; then
     info "$@"
@@ -107,25 +113,19 @@ startup_db_apply_env_defaults() {
   local postgres_port="$2"
   local database_name database_user database_password database_host database_url volume_name compose_project_name
 
-  database_name="$(startup_db_env_value "$env_file" DATABASE_NAME)"
-  database_name="${database_name:-$(startup_db_env_value "$env_file" POSTGRES_DB)}"
-  database_name="${database_name:-iz_clinical_notes_analyzer}"
+  compose_project_name="${COMPOSE_PROJECT_NAME:-$STARTUP_DB_DEFAULT_COMPOSE_PROJECT}"
 
-  database_user="$(startup_db_env_value "$env_file" DATABASE_USER)"
-  database_user="${database_user:-$(startup_db_env_value "$env_file" POSTGRES_USER)}"
-  database_user="${database_user:-iz_clinical_notes_app}"
+  database_name="${DATABASE_NAME:-$STARTUP_DB_DEFAULT_DATABASE_NAME}"
 
-  database_password="$(startup_db_env_value "$env_file" DATABASE_PASSWORD)"
+  database_user="${DATABASE_USER:-$STARTUP_DB_DEFAULT_DATABASE_USER}"
+
+  database_password="${DATABASE_PASSWORD:-$(startup_db_env_value "$env_file" DATABASE_PASSWORD)}"
   database_password="${database_password:-$(startup_db_env_value "$env_file" POSTGRES_PASSWORD)}"
-  database_password="${database_password:-change-me-app}"
+  database_password="${database_password:-$STARTUP_DB_DEFAULT_DATABASE_PASSWORD}"
 
   database_host='127.0.0.1'
 
-  volume_name="$(startup_db_env_value "$env_file" POSTGRES_VOLUME_NAME)"
-  volume_name="${volume_name:-iz_clinical_notes_analyzer_postgres_data}"
-
-  compose_project_name="$(startup_db_env_value "$env_file" COMPOSE_PROJECT_NAME)"
-  compose_project_name="${compose_project_name:-iz_clinical_notes_analyzer}"
+  volume_name="${POSTGRES_VOLUME_NAME:-$STARTUP_DB_DEFAULT_VOLUME_NAME}"
 
   database_url="$(startup_db_build_database_url "$database_user" "$database_password" "$database_host" "$postgres_port" "$database_name")"
 
@@ -219,9 +219,9 @@ startup_db_bootstrap() {
   database_password="$(startup_db_env_value "$env_file" DATABASE_PASSWORD)"
 
   startup_db_info 'Ensuring dedicated PostgreSQL service is running.'
-  startup_db_compose "$root_dir" up -d postgres
-  startup_db_wait_for_postgres "$root_dir" "$database_user" "$database_password"
+  startup_db_compose "$root_dir" up -d postgres || return 1
+  startup_db_wait_for_postgres "$root_dir" "$database_user" "$database_password" || return 1
   startup_db_info "Ensuring database \"${database_name}\" exists for user \"${database_user}\"."
-  startup_db_ensure_database "$root_dir" "$database_name" "$database_user" "$database_password"
+  startup_db_ensure_database "$root_dir" "$database_name" "$database_user" "$database_password" || return 1
   startup_db_pass "Dedicated PostgreSQL database \"${database_name}\" is ready."
 }
