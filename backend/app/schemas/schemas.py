@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.models import Role, WorkflowState
+from app.models.models import ComplianceStatus, Role, WorkflowState
 
 
 class Token(BaseModel):
@@ -35,23 +35,84 @@ class UserCreate(BaseModel):
     role: Role
 
 
+class AuditTemplateItemOut(BaseModel):
+    key: str
+    step: int
+    section: str
+    label: str
+    timeframe: str
+    instructions: str
+    evidence_hint: str
+    policy_note: str | None = None
+
+
+class AuditTemplateSectionOut(BaseModel):
+    section: str
+    items: list[AuditTemplateItemOut]
+
+
+class AuditItemUpdate(BaseModel):
+    item_key: str
+    status: ComplianceStatus = ComplianceStatus.pending
+    notes: str = ''
+    evidence_location: str = ''
+    evidence_date: str = ''
+    expiration_date: str = ''
+
+
+class AuditItemOut(AuditItemUpdate):
+    step: int
+    section: str
+    label: str
+    timeframe: str
+    instructions: str
+    evidence_hint: str
+    policy_note: str | None = None
+
+
 class ChartCreate(BaseModel):
     client_name: str
     level_of_care: str
+    admission_date: str = ''
+    discharge_date: str = ''
     primary_clinician: str
+    auditor_name: str = ''
+    other_details: str = ''
     notes: str = ''
 
 
-class ChartOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ChartSummaryOut(BaseModel):
     id: int
     client_name: str
     level_of_care: str
+    admission_date: str
+    discharge_date: str
     primary_clinician: str
+    auditor_name: str
+    other_details: str
     counselor_id: int
     state: WorkflowState
     notes: str
+    pending_items: int
+    passed_items: int
+    failed_items: int
+    not_applicable_items: int
+
+
+class ChartDetailOut(ChartSummaryOut):
+    checklist_items: list[AuditItemOut]
+
+
+class ChartUpdate(BaseModel):
+    client_name: str
+    level_of_care: str
+    admission_date: str = ''
+    discharge_date: str = ''
+    primary_clinician: str
+    auditor_name: str = ''
+    other_details: str = ''
+    notes: str = ''
+    checklist_items: list[AuditItemUpdate]
 
 
 class TransitionInput(BaseModel):

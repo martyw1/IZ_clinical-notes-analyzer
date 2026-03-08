@@ -23,54 +23,133 @@ function mockFetchSequence(responses: MockResponse[]) {
   return fn
 }
 
-describe('App auth flow', () => {
-  it('renders dashboard only after login and profile+charts load', async () => {
+function templatePayload() {
+  return [
+    {
+      section: 'Header Verification',
+      items: [
+        {
+          key: 'client_overview_episode_metadata',
+          step: 1,
+          section: 'Header Verification',
+          label: 'Client overview episode metadata',
+          timeframe: 'Audit setup',
+          instructions: 'Confirm episode dates and LOC.',
+          evidence_hint: 'Record where the evidence was found.',
+          policy_note: null,
+        },
+      ],
+    },
+  ]
+}
+
+function chartSummary() {
+  return {
+    id: 1,
+    client_name: 'Aegis Test',
+    level_of_care: 'Residential',
+    admission_date: '04/01/2025',
+    discharge_date: '09/10/2025',
+    primary_clinician: 'Marleigh Johnson',
+    auditor_name: 'admin',
+    other_details: '',
+    counselor_id: 1,
+    state: 'Draft',
+    notes: '',
+    pending_items: 1,
+    passed_items: 0,
+    failed_items: 0,
+    not_applicable_items: 0,
+  }
+}
+
+function chartDetail() {
+  return {
+    ...chartSummary(),
+    checklist_items: [
+      {
+        item_key: 'client_overview_episode_metadata',
+        step: 1,
+        section: 'Header Verification',
+        label: 'Client overview episode metadata',
+        timeframe: 'Audit setup',
+        instructions: 'Confirm episode dates and LOC.',
+        evidence_hint: 'Record where the evidence was found.',
+        policy_note: null,
+        status: 'pending',
+        notes: '',
+        evidence_location: '',
+        evidence_date: '',
+        expiration_date: '',
+      },
+    ],
+  }
+}
+
+describe('App chart audit flow', () => {
+  it('renders dashboard, queue, and checklist after login', async () => {
     mockFetchSequence([
       makeResponse(200, { access_token: 'token-a', must_reset_password: false }),
       makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: false }),
-      makeResponse(200, []),
+      makeResponse(200, [chartSummary()]),
+      makeResponse(200, templatePayload()),
+      makeResponse(200, chartDetail()),
     ])
 
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.getByText('Admin Dashboard')).toBeInTheDocument())
-    expect(screen.queryByText('Session issue detected')).not.toBeInTheDocument()
+    expect(screen.getByText('Combined Audit Flow')).toBeInTheDocument()
+    expect(screen.getByText('Review Criteria')).toBeInTheDocument()
+    expect(screen.getAllByText('Aegis Test').length).toBeGreaterThan(0)
   })
 
-  it('shows password reset flow when login marks reset required', async () => {
+  it('shows the new audit form when the queue is empty', async () => {
     mockFetchSequence([
-      makeResponse(200, { access_token: 'token-b', must_reset_password: true }),
-      makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: true }),
+      makeResponse(200, { access_token: 'token-b', must_reset_password: false }),
+      makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: false }),
+      makeResponse(200, []),
+      makeResponse(200, templatePayload()),
     ])
 
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByText('Password Reset Required')).toBeInTheDocument())
-    expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('New Chart Audit')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Create audit and load checklist' })).toBeInTheDocument()
   })
 
-  it('does not render dashboard when profile load fails', async () => {
+  it('creates a new audit from the guided intake form', async () => {
     mockFetchSequence([
       makeResponse(200, { access_token: 'token-c', must_reset_password: false }),
-      makeResponse(500, { detail: 'boom' }),
+      makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: false }),
+      makeResponse(200, []),
+      makeResponse(200, templatePayload()),
+      makeResponse(200, chartDetail()),
     ])
 
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByText(/profile load failed/)).toBeInTheDocument())
-    expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('New Chart Audit')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Aegis Test' } })
+    fireEvent.change(screen.getByLabelText('Level of care'), { target: { value: 'Residential' } })
+    fireEvent.change(screen.getByLabelText('Primary clinician'), { target: { value: 'Marleigh Johnson' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create audit and load checklist' }))
+
+    await waitFor(() => expect(screen.getByText('Review Criteria')).toBeInTheDocument())
+    expect(screen.getAllByText('Aegis Test').length).toBeGreaterThan(0)
   })
 
-  it('completes reset and lands on dashboard after reload', async () => {
+  it('completes reset and lands in the audit workspace', async () => {
     mockFetchSequence([
       makeResponse(200, { access_token: 'token-d', must_reset_password: true }),
       makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: true }),
       makeResponse(200, { status: 'ok' }),
       makeResponse(200, { username: 'admin', role: 'admin', must_reset_password: false }),
-      makeResponse(200, [{ id: 1, client_name: 'A', level_of_care: 'Residential', primary_clinician: 'admin', state: 'created' }]),
+      makeResponse(200, []),
+      makeResponse(200, templatePayload()),
     ])
 
     render(<App />)
@@ -80,6 +159,6 @@ describe('App auth flow', () => {
     fireEvent.change(screen.getByPlaceholderText('New password (min 12 chars)'), { target: { value: 'new-password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
-    await waitFor(() => expect(screen.getByText('Admin Dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('New Chart Audit')).toBeInTheDocument())
   })
 })

@@ -1,15 +1,21 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
+from app.core.audit_template import AUDIT_TEMPLATE, AUDIT_TEMPLATE_BY_KEY, audit_sections
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models.models import Chart, Role, User, WorkflowState, WorkflowTransition, AuditLog
+from app.models.models import AuditItemResponse, AuditLog, Chart, ComplianceStatus, Role, User, WorkflowState, WorkflowTransition
 from app.schemas.schemas import (
     AuditLogOut,
+    AuditTemplateSectionOut,
     ChartCreate,
-    ChartOut,
+    ChartDetailOut,
+    ChartSummaryOut,
+    ChartUpdate,
     LoginInput,
     PasswordResetInput,
     Token,
@@ -39,6 +45,129 @@ def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowStat
         },
     }
     return target in allowed.get(role, {}).get(current, [])
+
+
+def _chart_stmt():
+    return select(Chart).options(selectinload(Chart.audit_responses), selectinload(Chart.counselor))
+
+
+def _ensure_chart_access(chart: Chart | None, user: User) -> Chart:
+    if not chart:
+        raise HTTPException(status_code=404, detail='Chart not found')
+    if user.role == Role.counselor and chart.counselor_id != user.id:
+        raise HTTPException(status_code=403, detail='Cannot access this chart')
+    return chart
+
+
+def _find_chart(chart_id: int, user: User, db: Session) -> Chart:
+    chart = db.execute(_chart_stmt().where(Chart.id == chart_id)).scalar_one_or_none()
+    return _ensure_chart_access(chart, user)
+
+
+def _ensure_all_responses(chart: Chart) -> None:
+    existing = {response.item_key for response in chart.audit_responses}
+    for template_item in AUDIT_TEMPLATE:
+        if template_item['key'] in existing:
+            continue
+        chart.audit_responses.append(AuditItemResponse(item_key=template_item['key']))
+
+
+def _status_counts(chart: Chart) -> dict[ComplianceStatus, int]:
+    counts = {
+        ComplianceStatus.pending: 0,
+        ComplianceStatus.yes: 0,
+        ComplianceStatus.no: 0,
+        ComplianceStatus.na: 0,
+    }
+    for response in chart.audit_responses:
+        counts[response.status] += 1
+    return counts
+
+
+def _chart_summary(chart: Chart) -> dict[str, object]:
+    _ensure_all_responses(chart)
+    counts = _status_counts(chart)
+    return {
+        'id': chart.id,
+        'client_name': chart.client_name,
+        'level_of_care': chart.level_of_care,
+        'admission_date': chart.admission_date,
+        'discharge_date': chart.discharge_date,
+        'primary_clinician': chart.primary_clinician,
+        'auditor_name': chart.auditor_name,
+        'other_details': chart.other_details,
+        'counselor_id': chart.counselor_id,
+        'state': chart.state,
+        'notes': chart.notes,
+        'pending_items': counts[ComplianceStatus.pending],
+        'passed_items': counts[ComplianceStatus.yes],
+        'failed_items': counts[ComplianceStatus.no],
+        'not_applicable_items': counts[ComplianceStatus.na],
+    }
+
+
+def _chart_detail(chart: Chart) -> dict[str, object]:
+    summary = _chart_summary(chart)
+    responses_by_key = {response.item_key: response for response in chart.audit_responses}
+    checklist_items = []
+
+    for template_item in AUDIT_TEMPLATE:
+        response = responses_by_key.get(template_item['key'])
+        checklist_items.append(
+            {
+                'item_key': template_item['key'],
+                'step': template_item['step'],
+                'section': template_item['section'],
+                'label': template_item['label'],
+                'timeframe': template_item['timeframe'],
+                'instructions': template_item['instructions'],
+                'evidence_hint': template_item['evidence_hint'],
+                'policy_note': template_item['policy_note'],
+                'status': response.status if response else ComplianceStatus.pending,
+                'notes': response.notes if response else '',
+                'evidence_location': response.evidence_location if response else '',
+                'evidence_date': response.evidence_date if response else '',
+                'expiration_date': response.expiration_date if response else '',
+            }
+        )
+
+    return {**summary, 'checklist_items': checklist_items}
+
+
+def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate, db: Session) -> None:
+    chart.client_name = payload.client_name.strip()
+    chart.level_of_care = payload.level_of_care.strip()
+    chart.admission_date = payload.admission_date.strip()
+    chart.discharge_date = payload.discharge_date.strip()
+    chart.primary_clinician = payload.primary_clinician.strip()
+    chart.auditor_name = payload.auditor_name.strip()
+    chart.other_details = payload.other_details.strip()
+    chart.notes = payload.notes.strip()
+
+    if not isinstance(payload, ChartUpdate):
+        return
+
+    existing = {response.item_key: response for response in chart.audit_responses}
+    seen_keys: set[str] = set()
+    for item in payload.checklist_items:
+        if item.item_key not in AUDIT_TEMPLATE_BY_KEY:
+            raise HTTPException(status_code=400, detail=f'Unknown checklist item: {item.item_key}')
+        response = existing.get(item.item_key)
+        if not response:
+            response = AuditItemResponse(item_key=item.item_key)
+            chart.audit_responses.append(response)
+            existing[item.item_key] = response
+        response.status = item.status
+        response.notes = item.notes.strip()
+        response.evidence_location = item.evidence_location.strip()
+        response.evidence_date = item.evidence_date.strip()
+        response.expiration_date = item.expiration_date.strip()
+        response.updated_at = datetime.now(timezone.utc)
+        seen_keys.add(item.item_key)
+
+    missing_keys = [template_item['key'] for template_item in AUDIT_TEMPLATE if template_item['key'] not in seen_keys]
+    if missing_keys:
+        raise HTTPException(status_code=400, detail=f'Missing checklist items: {", ".join(missing_keys)}')
 
 
 @router.post('/auth/login', response_model=Token)
@@ -88,37 +217,76 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
     return user
 
 
-@router.get('/charts', response_model=list[ChartOut])
+@router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
+def get_audit_template(_: User = Depends(get_current_user)):
+    return audit_sections()
+
+
+@router.get('/charts', response_model=list[ChartSummaryOut])
 def list_charts(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    stmt = select(Chart)
+    stmt = _chart_stmt()
     if user.role == Role.counselor:
         stmt = stmt.where(Chart.counselor_id == user.id)
-    return list(db.execute(stmt.order_by(Chart.id.desc())).scalars().all())
+    charts = list(db.execute(stmt.order_by(Chart.id.desc())).scalars().unique().all())
+    return [_chart_summary(chart) for chart in charts]
 
 
-@router.post('/charts', response_model=ChartOut)
+@router.post('/charts', response_model=ChartDetailOut)
 def create_chart(payload: ChartCreate, request: Request, user: User = Depends(require_roles(Role.counselor, Role.admin)), db: Session = Depends(get_db)):
     chart = Chart(
-        client_name=payload.client_name,
-        level_of_care=payload.level_of_care,
-        primary_clinician=payload.primary_clinician,
+        client_name='',
+        level_of_care='',
+        admission_date='',
+        discharge_date='',
+        primary_clinician='',
+        auditor_name=payload.auditor_name.strip() or user.username,
+        other_details='',
         counselor_id=user.id,
-        notes=payload.notes,
+        notes='',
     )
+    _apply_chart_updates(chart, payload, db)
+    chart.auditor_name = chart.auditor_name or user.username
+    _ensure_all_responses(chart)
     db.add(chart)
     db.commit()
-    db.refresh(chart)
-    log_event(db, request, 'chart.create', actor=user, target_entity=f'chart:{chart.id}', details={'state': chart.state.value})
-    return chart
+    chart = _find_chart(chart.id, user, db)
+    log_event(
+        db,
+        request,
+        'chart.create',
+        actor=user,
+        target_entity=f'chart:{chart.id}',
+        details={'state': chart.state.value, 'client_name': chart.client_name},
+    )
+    return _chart_detail(chart)
 
 
-@router.post('/charts/{chart_id}/transition', response_model=ChartOut)
+@router.get('/charts/{chart_id}', response_model=ChartDetailOut)
+def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    chart = _find_chart(chart_id, user, db)
+    return _chart_detail(chart)
+
+
+@router.put('/charts/{chart_id}', response_model=ChartDetailOut)
+def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    chart = _find_chart(chart_id, user, db)
+    _apply_chart_updates(chart, payload, db)
+    db.commit()
+    chart = _find_chart(chart_id, user, db)
+    log_event(
+        db,
+        request,
+        'chart.update',
+        actor=user,
+        target_entity=f'chart:{chart.id}',
+        details={'state': chart.state.value, 'client_name': chart.client_name},
+    )
+    return _chart_detail(chart)
+
+
+@router.post('/charts/{chart_id}/transition', response_model=ChartDetailOut)
 def transition_chart(chart_id: int, payload: TransitionInput, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    chart = db.get(Chart, chart_id)
-    if not chart:
-        raise HTTPException(status_code=404, detail='Chart not found')
-    if user.role == Role.counselor and chart.counselor_id != user.id:
-        raise HTTPException(status_code=403, detail='Cannot transition this chart')
+    chart = _find_chart(chart_id, user, db)
     if not _allowed_transition(user.role, chart.state, payload.to_state):
         raise HTTPException(status_code=400, detail='Invalid transition for role/state')
     if payload.to_state == WorkflowState.returned and not payload.comment.strip():
@@ -127,9 +295,9 @@ def transition_chart(chart_id: int, payload: TransitionInput, request: Request, 
     chart.state = payload.to_state
     db.add(WorkflowTransition(chart_id=chart.id, actor_id=user.id, from_state=old.value, to_state=payload.to_state.value, comment=payload.comment))
     db.commit()
-    db.refresh(chart)
+    chart = _find_chart(chart_id, user, db)
     log_event(db, request, 'chart.transition', actor=user, target_entity=f'chart:{chart.id}', details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment})
-    return chart
+    return _chart_detail(chart)
 
 
 @router.post('/uploads')
