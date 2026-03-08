@@ -179,14 +179,54 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             if user.failed_login_attempts >= 5:
                 user.is_locked = True
             db.commit()
-        log_event(db, request, 'auth.login.failed', target_entity='user', details={'username': payload.username}, outcome_status='failure', severity='warning')
+        log_event(
+            db,
+            request,
+            'auth.login.failed',
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=payload.username,
+            details={'username': payload.username},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=401,
+            message=f'Login failed for username {payload.username}.',
+        )
         raise HTTPException(status_code=401, detail='Invalid credentials')
     if user.is_locked:
+        log_event(
+            db,
+            request,
+            'auth.login.blocked',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=403,
+            message=f'Login blocked for locked account {user.username}.',
+        )
         raise HTTPException(status_code=403, detail='Account locked')
     user.failed_login_attempts = 0
     db.commit()
     token = create_access_token(user.username)
-    log_event(db, request, 'auth.login.success', actor=user, target_entity='user', details={'username': user.username})
+    log_event(
+        db,
+        request,
+        'auth.login.success',
+        actor=user,
+        event_category='authentication',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username},
+        http_status_code=200,
+        message=f'Login succeeded for {user.username}.',
+    )
     return Token(access_token=token, must_reset_password=user.must_reset_password)
 
 
@@ -195,12 +235,33 @@ def reset_password(payload: PasswordResetInput, request: Request, user: User = D
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
     db.commit()
-    log_event(db, request, 'auth.password.reset', actor=user, target_entity='user', details={'username': user.username})
+    log_event(
+        db,
+        request,
+        'auth.password.reset',
+        actor=user,
+        event_category='authentication',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username},
+        message=f'Password reset completed for {user.username}.',
+    )
     return {'status': 'ok'}
 
 
 @router.get('/users/me', response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
+    log_event(
+        action='user.profile.read',
+        actor=user,
+        event_category='data_access',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username},
+        message=f'Profile viewed for {user.username}.',
+    )
     return user
 
 
@@ -213,12 +274,30 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
     db.add(user)
     db.commit()
     db.refresh(user)
-    log_event(db, request, 'user.create', target_entity='user', details={'username': user.username, 'role': user.role.value})
+    log_event(
+        db,
+        request,
+        'user.create',
+        event_category='user_management',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username, 'role': user.role.value},
+        message=f'User {user.username} created with role {user.role.value}.',
+    )
     return user
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
 def get_audit_template(_: User = Depends(get_current_user)):
+    log_event(
+        action='audit.template.read',
+        event_category='data_access',
+        target_entity='audit_template',
+        target_entity_type='template',
+        details={'section_count': len(audit_sections())},
+        message='Audit checklist template viewed.',
+    )
     return audit_sections()
 
 
@@ -228,6 +307,15 @@ def list_charts(user: User = Depends(get_current_user), db: Session = Depends(ge
     if user.role == Role.counselor:
         stmt = stmt.where(Chart.counselor_id == user.id)
     charts = list(db.execute(stmt.order_by(Chart.id.desc())).scalars().unique().all())
+    log_event(
+        action='chart.list.read',
+        actor=user,
+        event_category='data_access',
+        target_entity='chart_queue',
+        target_entity_type='chart_queue',
+        details={'count': len(charts)},
+        message=f'Chart queue viewed by {user.username}.',
+    )
     return [_chart_summary(chart) for chart in charts]
 
 
@@ -255,8 +343,12 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
         request,
         'chart.create',
         actor=user,
+        event_category='workflow',
         target_entity=f'chart:{chart.id}',
+        target_entity_type='chart',
+        target_entity_id=str(chart.id),
         details={'state': chart.state.value, 'client_name': chart.client_name},
+        message=f'Chart audit {chart.id} created by {user.username}.',
     )
     return _chart_detail(chart)
 
@@ -264,6 +356,16 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
 @router.get('/charts/{chart_id}', response_model=ChartDetailOut)
 def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     chart = _find_chart(chart_id, user, db)
+    log_event(
+        action='chart.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'chart:{chart.id}',
+        target_entity_type='chart',
+        target_entity_id=str(chart.id),
+        details={'state': chart.state.value},
+        message=f'Chart audit {chart.id} viewed by {user.username}.',
+    )
     return _chart_detail(chart)
 
 
@@ -278,8 +380,12 @@ def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: Us
         request,
         'chart.update',
         actor=user,
+        event_category='workflow',
         target_entity=f'chart:{chart.id}',
+        target_entity_type='chart',
+        target_entity_id=str(chart.id),
         details={'state': chart.state.value, 'client_name': chart.client_name},
+        message=f'Chart audit {chart.id} updated by {user.username}.',
     )
     return _chart_detail(chart)
 
@@ -296,7 +402,18 @@ def transition_chart(chart_id: int, payload: TransitionInput, request: Request, 
     db.add(WorkflowTransition(chart_id=chart.id, actor_id=user.id, from_state=old.value, to_state=payload.to_state.value, comment=payload.comment))
     db.commit()
     chart = _find_chart(chart_id, user, db)
-    log_event(db, request, 'chart.transition', actor=user, target_entity=f'chart:{chart.id}', details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment})
+    log_event(
+        db,
+        request,
+        'chart.transition',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'chart:{chart.id}',
+        target_entity_type='chart',
+        target_entity_id=str(chart.id),
+        details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment},
+        message=f'Chart audit {chart.id} transitioned from {old.value} to {payload.to_state.value}.',
+    )
     return _chart_detail(chart)
 
 
@@ -305,10 +422,29 @@ def upload_files(request: Request, files: list[UploadFile] = File(...), user: Us
     accepted = []
     for f in files:
         accepted.append({'filename': f.filename, 'content_type': f.content_type})
-    log_event(db, request, 'file.upload', actor=user, target_entity='batch-upload', details={'count': len(accepted), 'files': accepted})
+    log_event(
+        db,
+        request,
+        'file.upload',
+        actor=user,
+        event_category='file_activity',
+        target_entity='batch-upload',
+        target_entity_type='upload_batch',
+        details={'count': len(accepted), 'files': accepted},
+        message=f'{len(accepted)} file(s) uploaded by {user.username}.',
+    )
     return {'uploaded': accepted}
 
 
 @router.get('/audit/logs', response_model=list[AuditLogOut])
 def audit_logs(_: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
-    return list(db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(500)).scalars().all())
+    logs = list(db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(500)).scalars().all())
+    log_event(
+        action='audit.logs.read',
+        event_category='forensic_access',
+        target_entity='audit_logs',
+        target_entity_type='audit_log',
+        details={'count': len(logs)},
+        message='Forensic audit log list viewed.',
+    )
+    return logs

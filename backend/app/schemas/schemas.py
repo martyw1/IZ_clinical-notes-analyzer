@@ -121,13 +121,40 @@ class TransitionInput(BaseModel):
 
 
 class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    event_id: str
     timestamp_utc: datetime
     actor_username: str | None
     actor_role: str | None
+    actor_type: str
     source_ip: str | None
+    forwarded_for: str | None
+    source_host: str | None
+    source_port: int | None
     request_id: str
+    correlation_id: str
+    session_id: str | None
+    http_method: str | None
+    request_path: str | None
+    route_template: str | None
+    query_string: str | None
+    http_status_code: int | None
+    event_category: str
     action: str
     target_entity: str | None
+    target_entity_type: str | None
+    target_entity_id: str | None
+    patient_id: str | None
+    message: str
     details: str
+    before_state: str | None
+    after_state: str | None
+    diff_state: str | None
+    cef_extension: str
+    cef_payload: str
+    fhir_audit_event: str
     outcome_status: str
     severity: str
+    prev_hash: str | None
+    hash: str

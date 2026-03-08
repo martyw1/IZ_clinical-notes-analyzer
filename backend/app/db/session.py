@@ -3,8 +3,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
+from fastapi import Request
 
 from app.core.config import settings
+from app.services.audit import attach_audit_context, refresh_request_context, register_session_audit_events
 
 
 LOCALHOST_ALIASES = {'localhost', '127.0.0.1', '::1'}
@@ -52,10 +54,13 @@ resolved_database_url = resolve_database_url(settings.database_url_value, postgr
 connect_args = {'check_same_thread': False} if resolved_database_url.startswith('sqlite') else {}
 engine = create_engine(resolved_database_url, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+register_session_audit_events(SessionLocal)
 
 
-def get_db():
+def get_db(request: Request):
     db = SessionLocal()
+    refresh_request_context(request)
+    attach_audit_context(db)
     try:
         yield db
     finally:

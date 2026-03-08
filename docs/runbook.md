@@ -5,6 +5,13 @@
 - Backend API alias: `GET /api/health`
 - Through frontend proxy: `GET /api/health`
 
+## Forensic log handling
+- Primary forensic logs are stored in the `audit_logs` table.
+- Each record includes request metadata, actor identity, source IP, event category, CEF payload, FHIR AuditEvent JSON, and a tamper-evident hash chain.
+- If database persistence fails during logging, the app writes JSONL fallback records to `logs/forensic-audit-fallback.jsonl`.
+- Admin access to forensic logs is available through `GET /api/audit/logs`.
+- Preserve UTC timestamps during exports and correlate events using `request_id` and `correlation_id`.
+
 ## Dedicated PostgreSQL runtime
 - The app always runs against its own Docker-managed `postgres` service.
 - Host-local backend runs connect through `DATABASE_HOST=127.0.0.1` and `DATABASE_PORT=$POSTGRES_PORT`.

@@ -52,16 +52,46 @@ CREATE TABLE IF NOT EXISTS workflow_transitions (
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id SERIAL PRIMARY KEY,
+  event_id VARCHAR(64) UNIQUE NOT NULL,
   timestamp_utc TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   actor_id INTEGER REFERENCES users(id),
   actor_username VARCHAR(80),
   actor_role VARCHAR(40),
+  actor_type VARCHAR(20) NOT NULL DEFAULT 'human',
   source_ip VARCHAR(64),
+  forwarded_for VARCHAR(255),
+  source_host VARCHAR(255),
+  source_port INTEGER,
   user_agent VARCHAR(255),
   request_id VARCHAR(64) NOT NULL,
+  correlation_id VARCHAR(64) NOT NULL,
+  session_id VARCHAR(128),
+  http_method VARCHAR(16),
+  request_path VARCHAR(255),
+  route_template VARCHAR(255),
+  query_string TEXT,
+  http_status_code INTEGER,
+  event_category VARCHAR(40) NOT NULL,
   action VARCHAR(120) NOT NULL,
   target_entity VARCHAR(120),
+  target_entity_type VARCHAR(80),
+  target_entity_id VARCHAR(80),
+  patient_id VARCHAR(120),
+  message TEXT NOT NULL DEFAULT '',
   details TEXT NOT NULL DEFAULT '',
+  before_state TEXT,
+  after_state TEXT,
+  diff_state TEXT,
+  cef_version INTEGER NOT NULL DEFAULT 0,
+  cef_device_vendor VARCHAR(80) NOT NULL DEFAULT 'OpenAI',
+  cef_device_product VARCHAR(120) NOT NULL DEFAULT 'IZ Clinical Notes Analyzer',
+  cef_device_version VARCHAR(40) NOT NULL DEFAULT '1',
+  cef_signature_id VARCHAR(120) NOT NULL DEFAULT '',
+  cef_name VARCHAR(255) NOT NULL DEFAULT '',
+  cef_severity INTEGER NOT NULL DEFAULT 5,
+  cef_extension TEXT NOT NULL DEFAULT '',
+  cef_payload TEXT NOT NULL DEFAULT '',
+  fhir_audit_event TEXT NOT NULL DEFAULT '',
   outcome_status VARCHAR(20) NOT NULL DEFAULT 'success',
   severity VARCHAR(20) NOT NULL DEFAULT 'info',
   prev_hash VARCHAR(128),
@@ -72,5 +102,9 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_charts_state ON charts(state);
 CREATE INDEX IF NOT EXISTS idx_audit_item_responses_chart_id ON audit_item_responses(chart_id);
 CREATE INDEX IF NOT EXISTS idx_audit_item_responses_item_key ON audit_item_responses(item_key);
+CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_logs(event_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_request_id ON audit_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category);
+CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id);

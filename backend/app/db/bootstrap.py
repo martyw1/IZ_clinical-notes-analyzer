@@ -38,6 +38,36 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
     },
     'audit_logs': {
+        'event_id': "VARCHAR(64) NOT NULL DEFAULT ''",
+        'actor_type': "VARCHAR(20) NOT NULL DEFAULT 'human'",
+        'forwarded_for': 'VARCHAR(255)',
+        'source_host': 'VARCHAR(255)',
+        'source_port': 'INTEGER',
+        'correlation_id': "VARCHAR(64) NOT NULL DEFAULT 'no-correlation-id'",
+        'session_id': 'VARCHAR(128)',
+        'http_method': 'VARCHAR(16)',
+        'request_path': 'VARCHAR(255)',
+        'route_template': 'VARCHAR(255)',
+        'query_string': 'TEXT',
+        'http_status_code': 'INTEGER',
+        'event_category': "VARCHAR(40) NOT NULL DEFAULT 'application'",
+        'target_entity_type': 'VARCHAR(80)',
+        'target_entity_id': 'VARCHAR(80)',
+        'patient_id': 'VARCHAR(120)',
+        'message': "TEXT NOT NULL DEFAULT ''",
+        'before_state': 'TEXT',
+        'after_state': 'TEXT',
+        'diff_state': 'TEXT',
+        'cef_version': 'INTEGER NOT NULL DEFAULT 0',
+        'cef_device_vendor': "VARCHAR(80) NOT NULL DEFAULT 'OpenAI'",
+        'cef_device_product': "VARCHAR(120) NOT NULL DEFAULT 'IZ Clinical Notes Analyzer'",
+        'cef_device_version': "VARCHAR(40) NOT NULL DEFAULT '1'",
+        'cef_signature_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'cef_name': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'cef_severity': 'INTEGER NOT NULL DEFAULT 5',
+        'cef_extension': "TEXT NOT NULL DEFAULT ''",
+        'cef_payload': "TEXT NOT NULL DEFAULT ''",
+        'fhir_audit_event': "TEXT NOT NULL DEFAULT ''",
         'outcome_status': "VARCHAR(20) NOT NULL DEFAULT 'success'",
         'severity': "VARCHAR(20) NOT NULL DEFAULT 'info'",
         'prev_hash': 'VARCHAR(128)',
@@ -59,6 +89,36 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'expiration_date': "TEXT NOT NULL DEFAULT ''",
     'updated_at': 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
     'comment': "TEXT NOT NULL DEFAULT ''",
+    'event_id': "TEXT NOT NULL DEFAULT ''",
+    'actor_type': "TEXT NOT NULL DEFAULT 'human'",
+    'forwarded_for': 'TEXT',
+    'source_host': 'TEXT',
+    'source_port': 'INTEGER',
+    'correlation_id': "TEXT NOT NULL DEFAULT 'no-correlation-id'",
+    'session_id': 'TEXT',
+    'http_method': 'TEXT',
+    'request_path': 'TEXT',
+    'route_template': 'TEXT',
+    'query_string': 'TEXT',
+    'http_status_code': 'INTEGER',
+    'event_category': "TEXT NOT NULL DEFAULT 'application'",
+    'target_entity_type': 'TEXT',
+    'target_entity_id': 'TEXT',
+    'patient_id': 'TEXT',
+    'message': "TEXT NOT NULL DEFAULT ''",
+    'before_state': 'TEXT',
+    'after_state': 'TEXT',
+    'diff_state': 'TEXT',
+    'cef_version': 'INTEGER NOT NULL DEFAULT 0',
+    'cef_device_vendor': "TEXT NOT NULL DEFAULT 'OpenAI'",
+    'cef_device_product': "TEXT NOT NULL DEFAULT 'IZ Clinical Notes Analyzer'",
+    'cef_device_version': "TEXT NOT NULL DEFAULT '1'",
+    'cef_signature_id': "TEXT NOT NULL DEFAULT ''",
+    'cef_name': "TEXT NOT NULL DEFAULT ''",
+    'cef_severity': 'INTEGER NOT NULL DEFAULT 5',
+    'cef_extension': "TEXT NOT NULL DEFAULT ''",
+    'cef_payload': "TEXT NOT NULL DEFAULT ''",
+    'fhir_audit_event': "TEXT NOT NULL DEFAULT ''",
     'outcome_status': "TEXT NOT NULL DEFAULT 'success'",
     'severity': "TEXT NOT NULL DEFAULT 'info'",
     'prev_hash': 'TEXT',
@@ -71,9 +131,10 @@ def _column_ddl(column_name: str, postgres_ddl: str, dialect_name: str) -> str:
     return postgres_ddl
 
 
-def ensure_schema_compatibility(engine: Engine) -> None:
+def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
     inspector = inspect(engine)
     dialect_name = engine.dialect.name
+    added_columns: list[dict[str, str]] = []
 
     with engine.begin() as connection:
         for table_name, columns in REQUIRED_COLUMNS.items():
@@ -88,3 +149,18 @@ def ensure_schema_compatibility(engine: Engine) -> None:
                 column_ddl = _column_ddl(column_name, postgres_ddl, dialect_name)
                 logger.warning('Detected legacy schema: adding missing %s.%s column.', table_name, column_name)
                 connection.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}'))
+                added_columns.append({'table': table_name, 'column': column_name})
+
+        if inspector.has_table('audit_logs'):
+            if dialect_name == 'postgresql':
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_logs(event_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id)'))
+            elif dialect_name == 'sqlite':
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_logs(event_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id)'))
+
+    return added_columns
