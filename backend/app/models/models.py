@@ -20,6 +20,9 @@ class WorkflowState(str, enum.Enum):
     in_progress = 'In Progress Review'
     completed = 'Completed'
     verified = 'Verified'
+    awaiting_manager_review = 'Awaiting Office Manager Review'
+    manager_rejected = 'Returned to Counselor'
+    manager_approved = 'Approved by Office Manager'
 
 
 class ComplianceStatus(str, enum.Enum):
@@ -60,11 +63,14 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(120), default='')
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_reset_password: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
@@ -72,6 +78,7 @@ class Chart(Base):
     __tablename__ = 'charts'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True, index=True)
     patient_id: Mapped[str] = mapped_column(String(120), default='', index=True)
     client_name: Mapped[str] = mapped_column(String(120), index=True)
     level_of_care: Mapped[str] = mapped_column(String(120))
@@ -82,10 +89,18 @@ class Chart(Base):
     other_details: Mapped[str] = mapped_column(Text, default='')
     counselor_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
     state: Mapped[WorkflowState] = mapped_column(Enum(WorkflowState), default=WorkflowState.draft, index=True)
+    system_score: Mapped[int] = mapped_column(Integer, default=0)
+    system_summary: Mapped[str] = mapped_column(Text, default='')
+    manager_comment: Mapped[str] = mapped_column(Text, default='')
+    reviewed_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    system_generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    counselor: Mapped[User] = relationship()
+    counselor: Mapped[User] = relationship(foreign_keys=[counselor_id])
+    source_note_set: Mapped['PatientNoteSet'] = relationship(back_populates='review_charts')
+    reviewed_by: Mapped[User] = relationship(foreign_keys=[reviewed_by_id])
     audit_responses: Mapped[list['AuditItemResponse']] = relationship(cascade='all, delete-orphan', back_populates='chart')
 
 
@@ -110,6 +125,7 @@ class PatientNoteSet(Base):
 
     uploaded_by: Mapped[User] = relationship()
     documents: Mapped[list['PatientNoteDocument']] = relationship(cascade='all, delete-orphan', back_populates='note_set')
+    review_charts: Mapped[list[Chart]] = relationship(back_populates='source_note_set')
 
 
 class PatientNoteDocument(Base):

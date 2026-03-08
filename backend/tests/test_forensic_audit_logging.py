@@ -5,9 +5,11 @@ from sqlalchemy import select
 
 from app.models.models import AuditLog
 
+BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
+
 
 def _auth_headers(client: TestClient) -> dict[str, str]:
-    login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3'})
+    login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
     assert login.status_code == 200
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 

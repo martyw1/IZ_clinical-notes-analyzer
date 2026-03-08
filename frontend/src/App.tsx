@@ -1,28 +1,33 @@
-import { ChangeEvent, FormEvent, useMemo, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
 
 type Role = 'admin' | 'counselor' | 'manager'
-type WorkflowState = 'Draft' | 'Submitted to Admin' | 'Returned for Update' | 'In Progress Review' | 'Completed' | 'Verified'
+type WorkflowState =
+  | 'Draft'
+  | 'Awaiting Office Manager Review'
+  | 'Returned to Counselor'
+  | 'Approved by Office Manager'
 type ComplianceStatus = 'pending' | 'yes' | 'no' | 'na'
 type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
+type AppView = 'reviews' | 'uploads' | 'users' | 'logs'
 
-type User = { username: string; role: Role; must_reset_password: boolean }
-type AuditTemplateItem = {
-  key: string
-  step: number
-  section: string
-  label: string
-  timeframe: string
-  instructions: string
-  evidence_hint: string
-  policy_note: string | null
+type User = {
+  id: number
+  username: string
+  full_name: string
+  role: Role
+  is_active: boolean
+  is_locked: boolean
+  must_reset_password: boolean
+  last_login_at: string | null
+  created_at: string | null
 }
-type AuditTemplateSection = { section: string; items: AuditTemplateItem[] }
+
 type AuditItem = {
   item_key: string
   step: number
@@ -38,8 +43,10 @@ type AuditItem = {
   evidence_date: string
   expiration_date: string
 }
+
 type ChartSummary = {
   id: number
+  source_note_set_id: number | null
   patient_id: string
   client_name: string
   level_of_care: string
@@ -50,13 +57,23 @@ type ChartSummary = {
   other_details: string
   counselor_id: number
   state: WorkflowState
+  system_score: number
+  system_summary: string
+  manager_comment: string
+  reviewed_by_id: number | null
+  system_generated_at: string | null
+  reviewed_at: string | null
   notes: string
   pending_items: number
   passed_items: number
   failed_items: number
   not_applicable_items: number
 }
-type ChartDetail = ChartSummary & { checklist_items: AuditItem[] }
+
+type ChartDetail = ChartSummary & {
+  checklist_items: AuditItem[]
+}
+
 type PatientNoteDocument = {
   id: number
   document_label: string
@@ -73,9 +90,11 @@ type PatientNoteDocument = {
   description: string
   created_at: string
 }
+
 type PatientNoteSetSummary = {
   id: number
   patient_id: string
+  review_chart_id: number | null
   version: number
   status: NoteSetStatus
   upload_mode: NoteSetUploadMode
@@ -88,8 +107,28 @@ type PatientNoteSetSummary = {
   created_at: string
   file_count: number
 }
-type PatientNoteSetDetail = PatientNoteSetSummary & { documents: PatientNoteDocument[] }
-type NoteUploadEntry = {
+
+type PatientNoteSetDetail = PatientNoteSetSummary & {
+  documents: PatientNoteDocument[]
+}
+
+type AuditLogRecord = {
+  event_id: string
+  timestamp_utc: string
+  actor_username: string | null
+  actor_role: string | null
+  actor_type: string
+  source_ip: string | null
+  request_id: string
+  event_category: string
+  action: string
+  patient_id: string | null
+  message: string
+  outcome_status: string
+  severity: string
+}
+
+type UploadEntry = {
   file: File
   document_label: string
   alleva_bucket: AllevaBucket
@@ -100,78 +139,51 @@ type NoteUploadEntry = {
   document_date: string
   description: string
 }
-type NoteUploadForm = {
-  patient_id: string
-  upload_mode: NoteSetUploadMode
-  level_of_care: string
-  admission_date: string
-  discharge_date: string
-  primary_clinician: string
-  upload_notes: string
-  entries: NoteUploadEntry[]
+
+type TransitionAction = {
+  toState: WorkflowState
+  label: string
+  commentLabel: string
+  requiresComment?: boolean
 }
-type AuthState =
-  | 'anonymous'
-  | 'logging_in'
-  | 'authenticated_loading_profile'
-  | 'password_reset_required'
-  | 'authenticated_ready'
-  | 'error'
 
 type ApiError = {
   detail?: string | { msg?: string }
 }
 
-type TransitionAction = {
-  toState: WorkflowState
-  label: string
-  requiresComment?: boolean
-}
-
 const STATUS_LABELS: Record<ComplianceStatus, string> = {
-  pending: 'Pending',
-  yes: 'Yes',
-  no: 'No',
-  na: 'N/A',
+  pending: 'Needs manual confirmation',
+  yes: 'Confirmed',
+  no: 'Missing or incorrect',
+  na: 'Not applicable',
 }
 
-const STATUS_ORDER: ComplianceStatus[] = ['pending', 'yes', 'no', 'na']
-const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = { active: 'Active', superseded: 'Superseded' }
-const ALLEVA_BUCKET_LABELS: Record<AllevaBucket, string> = {
-  custom_forms: 'Custom Forms',
-  uploaded_documents: 'Uploaded Documents',
-  portal_documents: 'Portal Documents',
-  labs: 'Labs',
-  medications: 'Medication',
-  notes: 'Notes',
-  other: 'Other',
-}
-const DOCUMENT_STATUS_LABELS: Record<DocumentCompletionStatus, string> = {
-  completed: 'Completed',
-  incomplete: 'Incomplete',
-  draft: 'Draft',
+const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
+  active: 'Current binder',
+  superseded: 'Superseded',
 }
 
-const TRANSITION_MAP: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
-  counselor: {
-    Draft: [{ toState: 'Submitted to Admin', label: 'Submit to admin' }],
-    'Returned for Update': [{ toState: 'Submitted to Admin', label: 'Resubmit to admin' }],
-  },
+const VIEW_LABELS: Record<AppView, string> = {
+  reviews: 'Review queue',
+  uploads: 'Upload clinical notes',
+  users: 'Users',
+  logs: 'Forensic logs',
+}
+
+const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
-    'Submitted to Admin': [
-      { toState: 'In Progress Review', label: 'Start review' },
-      { toState: 'Returned for Update', label: 'Return for update', requiresComment: true },
+    'Awaiting Office Manager Review': [
+      { toState: 'Approved by Office Manager', label: 'Approve', commentLabel: 'Approval note' },
+      { toState: 'Returned to Counselor', label: 'Return to counselor', commentLabel: 'What needs to be fixed', requiresComment: true },
     ],
-    'In Progress Review': [
-      { toState: 'Completed', label: 'Mark completed' },
-      { toState: 'Returned for Update', label: 'Return for update', requiresComment: true },
-    ],
-    Completed: [{ toState: 'Verified', label: 'Verify audit' }],
   },
   manager: {
-    'Submitted to Admin': [{ toState: 'In Progress Review', label: 'Start review' }],
-    Completed: [{ toState: 'Verified', label: 'Verify audit' }],
+    'Awaiting Office Manager Review': [
+      { toState: 'Approved by Office Manager', label: 'Approve', commentLabel: 'Approval note' },
+      { toState: 'Returned to Counselor', label: 'Return to counselor', commentLabel: 'What needs to be fixed', requiresComment: true },
+    ],
   },
+  counselor: {},
 }
 
 function readErrorMessage(status: number, payload: ApiError | null) {
@@ -181,43 +193,31 @@ function readErrorMessage(status: number, payload: ApiError | null) {
   return `HTTP ${status}: request failed`
 }
 
-function statusTone(authState: AuthState): { background: string; border: string } {
-  if (authState === 'error') return { background: '#fbe5df', border: '#d77862' }
-  if (authState === 'authenticated_ready') return { background: '#e5f0ea', border: '#6f927f' }
-  return { background: '#f0ede2', border: '#c7b99d' }
+function groupedChecklist(items: AuditItem[]) {
+  const groups = new Map<string, AuditItem[]>()
+  items.forEach((item) => {
+    const existing = groups.get(item.section) || []
+    existing.push(item)
+    groups.set(item.section, existing)
+  })
+  return Array.from(groups.entries())
 }
 
-function stateClassName(state: WorkflowState) {
-  return `state-chip state-chip--${state.toLowerCase().replaceAll(' ', '-').replaceAll('/', '-')}`
-}
-
-function noteSetStatusClassName(status: NoteSetStatus) {
-  return `note-set-chip note-set-chip--${status}`
-}
-
-function complianceClassName(status: ComplianceStatus) {
-  return `segmented-choice segmented-choice--${status}`
-}
-
-function chartLabel(chart: Pick<ChartSummary, 'patient_id' | 'client_name'>) {
-  return chart.patient_id || chart.client_name || 'Unassigned patient'
-}
-
-function createNewChartForm(auditorName = '', patientId = '') {
+function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>) {
   return {
-    patient_id: patientId,
-    client_name: '',
+    patient_id: '',
+    upload_mode: 'initial' as NoteSetUploadMode,
     level_of_care: '',
     admission_date: '',
     discharge_date: '',
     primary_clinician: '',
-    auditor_name: auditorName,
-    other_details: '',
-    notes: '',
+    upload_notes: '',
+    entries: [],
+    ...overrides,
   }
 }
 
-function buildUploadEntry(file: File): NoteUploadEntry {
+function buildUploadEntry(file: File): UploadEntry {
   const label = file.name.replace(/\.[^.]+$/, '')
   return {
     file,
@@ -232,584 +232,269 @@ function buildUploadEntry(file: File): NoteUploadEntry {
   }
 }
 
-function createUploadForm(overrides?: Partial<Omit<NoteUploadForm, 'entries'>>) {
-  return {
-    patient_id: '',
-    upload_mode: 'initial' as NoteSetUploadMode,
-    level_of_care: '',
-    admission_date: '',
-    discharge_date: '',
-    primary_clinician: '',
-    upload_notes: '',
-    entries: [],
-    ...overrides,
-  }
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return 'Not recorded'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
-function copyChartDetail(detail: ChartDetail): ChartDetail {
-  return {
-    ...detail,
-    checklist_items: detail.checklist_items.map((item) => ({ ...item })),
-  }
+function shortHash(value: string) {
+  return value.length > 12 ? `${value.slice(0, 12)}...` : value
 }
 
-function toChartSummary(detail: ChartDetail): ChartSummary {
-  return {
-    id: detail.id,
-    patient_id: detail.patient_id,
-    client_name: detail.client_name,
-    level_of_care: detail.level_of_care,
-    admission_date: detail.admission_date,
-    discharge_date: detail.discharge_date,
-    primary_clinician: detail.primary_clinician,
-    auditor_name: detail.auditor_name,
-    other_details: detail.other_details,
-    counselor_id: detail.counselor_id,
-    state: detail.state,
-    notes: detail.notes,
-    pending_items: detail.pending_items,
-    passed_items: detail.passed_items,
-    failed_items: detail.failed_items,
-    not_applicable_items: detail.not_applicable_items,
-  }
+function workflowTone(state: string) {
+  if (state === 'Approved by Office Manager') return 'success'
+  if (state === 'Returned to Counselor') return 'danger'
+  return 'neutral'
 }
 
-function upsertChartSummary(charts: ChartSummary[], nextSummary: ChartSummary) {
-  const exists = charts.some((chart) => chart.id === nextSummary.id)
-  const nextCharts = exists
-    ? charts.map((chart) => (chart.id === nextSummary.id ? nextSummary : chart))
-    : [nextSummary, ...charts]
-  return nextCharts.sort((left, right) => right.id - left.id)
+function checklistTone(status: ComplianceStatus) {
+  if (status === 'yes') return 'success'
+  if (status === 'no') return 'danger'
+  if (status === 'na') return 'muted'
+  return 'warning'
 }
 
-function progressPercent(chart: Pick<ChartSummary, 'pending_items' | 'passed_items' | 'failed_items' | 'not_applicable_items'>) {
-  const total = chart.pending_items + chart.passed_items + chart.failed_items + chart.not_applicable_items
-  if (total === 0) return 0
-  return Math.round(((total - chart.pending_items) / total) * 100)
+type UploadFormState = {
+  patient_id: string
+  upload_mode: NoteSetUploadMode
+  level_of_care: string
+  admission_date: string
+  discharge_date: string
+  primary_clinician: string
+  upload_notes: string
+  entries: UploadEntry[]
 }
 
-function groupedChecklist(items: AuditItem[]) {
-  const grouped = new Map<string, AuditItem[]>()
-  items.forEach((item) => {
-    const existing = grouped.get(item.section) || []
-    existing.push(item)
-    grouped.set(item.section, existing)
-  })
-  return Array.from(grouped.entries())
+type ManagedUserForm = {
+  full_name: string
+  role: Role
+  is_active: boolean
+  is_locked: boolean
+  must_reset_password: boolean
 }
 
-function availableTransitions(role: Role, state: WorkflowState) {
-  return TRANSITION_MAP[role][state] || []
+type CreateUserForm = {
+  username: string
+  full_name: string
+  password: string
+  role: Role
 }
 
-function flattenPlaybook(sections: AuditTemplateSection[]) {
-  return sections.flatMap((section) => section.items)
+type LogFilters = {
+  patient_id: string
+  action: string
 }
 
-function bytesLabel(sizeBytes: number) {
-  if (sizeBytes >= 1024 * 1024) return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
-  if (sizeBytes >= 1024) return `${Math.round(sizeBytes / 1024)} KB`
-  return `${sizeBytes} B`
-}
-
-function findLinkedNoteSet(noteSets: PatientNoteSetSummary[], patientId: string) {
-  if (!patientId) return null
-  return noteSets.find((item) => item.patient_id === patientId && item.status === 'active')
-    || noteSets.find((item) => item.patient_id === patientId)
-    || null
+async function readJson(response: Response) {
+  const text = await response.text()
+  if (!text) return null
+  return JSON.parse(text)
 }
 
 export function App() {
   const [token, setToken] = useState('')
-  const [status, setStatus] = useState('Ready to sign in. Enter your username and password to begin the chart audit workflow.')
-  const [authState, setAuthState] = useState<AuthState>('anonymous')
-  const [mustResetPassword, setMustResetPassword] = useState(false)
   const [user, setUser] = useState<User | null>(null)
-  const [chartSummaries, setChartSummaries] = useState<ChartSummary[]>([])
-  const [templateSections, setTemplateSections] = useState<AuditTemplateSection[]>([])
-  const [noteSetSummaries, setNoteSetSummaries] = useState<PatientNoteSetSummary[]>([])
-  const [selectedChartId, setSelectedChartId] = useState<number | null>(null)
-  const [selectedNoteSetId, setSelectedNoteSetId] = useState<number | null>(null)
-  const [chartDetail, setChartDetail] = useState<ChartDetail | null>(null)
-  const [chartDraft, setChartDraft] = useState<ChartDetail | null>(null)
-  const [selectedNoteSetDetail, setSelectedNoteSetDetail] = useState<PatientNoteSetDetail | null>(null)
-  const [showCreateAudit, setShowCreateAudit] = useState(false)
-  const [showUploadWorkspace, setShowUploadWorkspace] = useState(false)
-  const [transitionComment, setTransitionComment] = useState('')
-  const [form, setForm] = useState({ username: 'admin', password: 'r3' })
+  const [status, setStatus] = useState('Sign in to upload notes, review findings, and manage approvals.')
+  const [error, setError] = useState('')
+  const [isBusy, setIsBusy] = useState(false)
+  const [mustResetPassword, setMustResetPassword] = useState(false)
+  const [activeView, setActiveView] = useState<AppView>('reviews')
+
+  const [loginForm, setLoginForm] = useState({ username: 'admin', password: 'r3!@analyzer#123' })
   const [resetForm, setResetForm] = useState({ newPassword: '' })
-  const [newChartForm, setNewChartForm] = useState(createNewChartForm())
-  const [uploadForm, setUploadForm] = useState<NoteUploadForm>(createUploadForm())
+  const [decisionComment, setDecisionComment] = useState('')
 
-  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token])
-  const playbookItems = useMemo(() => flattenPlaybook(templateSections), [templateSections])
-  const groupedDraftItems = useMemo(() => groupedChecklist(chartDraft?.checklist_items || []), [chartDraft])
+  const [charts, setCharts] = useState<ChartSummary[]>([])
+  const [selectedChartId, setSelectedChartId] = useState<number | null>(null)
+  const [selectedChart, setSelectedChart] = useState<ChartDetail | null>(null)
 
-  function resetSession(message = 'Signed out. Session data cleared. Ready for a new login attempt.') {
-    setToken('')
-    setUser(null)
-    setChartSummaries([])
-    setTemplateSections([])
-    setNoteSetSummaries([])
-    setSelectedChartId(null)
-    setSelectedNoteSetId(null)
-    setChartDetail(null)
-    setChartDraft(null)
-    setSelectedNoteSetDetail(null)
-    setShowCreateAudit(false)
-    setShowUploadWorkspace(false)
-    setTransitionComment('')
-    setMustResetPassword(false)
-    setAuthState('anonymous')
-    setNewChartForm(createNewChartForm())
-    setUploadForm(createUploadForm())
-    setStatus(message)
-  }
+  const [noteSets, setNoteSets] = useState<PatientNoteSetSummary[]>([])
+  const [selectedNoteSetId, setSelectedNoteSetId] = useState<number | null>(null)
+  const [selectedNoteSet, setSelectedNoteSet] = useState<PatientNoteSetDetail | null>(null)
+  const [uploadForm, setUploadForm] = useState<UploadFormState>(createUploadForm())
 
-  async function fetchChartDetail(currentToken: string, chartId: number) {
-    const response = await fetch(`${API}/charts/${chartId}`, {
-      headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-    })
-    const payload = (await response.json().catch(() => null)) as ApiError | ChartDetail | null
+  const [users, setUsers] = useState<User[]>([])
+  const [selectedManagedUserId, setSelectedManagedUserId] = useState<number | null>(null)
+  const [managedUserForm, setManagedUserForm] = useState<ManagedUserForm | null>(null)
+  const [newUserForm, setNewUserForm] = useState<CreateUserForm>({
+    username: '',
+    full_name: '',
+    password: '',
+    role: 'counselor',
+  })
+  const [adminPasswordReset, setAdminPasswordReset] = useState('')
+
+  const [logs, setLogs] = useState<AuditLogRecord[]>([])
+  const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '' })
+
+  const selectedManagedUser = useMemo(
+    () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
+    [users, selectedManagedUserId],
+  )
+
+  const groupedFindings = useMemo(() => groupedChecklist(selectedChart?.checklist_items || []), [selectedChart])
+  const openItems = useMemo(
+    () => (selectedChart?.checklist_items || []).filter((item) => item.status === 'no' || item.status === 'pending'),
+    [selectedChart],
+  )
+  const pendingManagerQueue = useMemo(
+    () => charts.filter((chart) => chart.state === 'Awaiting Office Manager Review'),
+    [charts],
+  )
+  const transitionActions = useMemo(() => {
+    if (!user || !selectedChart) return []
+    return TRANSITIONS[user.role]?.[selectedChart.state] || []
+  }, [selectedChart, user])
+
+  async function apiRequest<T>(path: string, init?: RequestInit, includeAuth = true): Promise<T> {
+    const headers = new Headers(init?.headers)
+    if (includeAuth && token) headers.set('Authorization', `Bearer ${token}`)
+    const response = await fetch(`${API}${path}`, { ...init, headers })
+    const payload = (await readJson(response)) as ApiError | T | null
     if (!response.ok) {
       throw new Error(readErrorMessage(response.status, payload as ApiError | null))
     }
-    return payload as ChartDetail
+    return payload as T
   }
 
-  async function fetchNoteSetDetail(currentToken: string, noteSetId: number) {
-    const response = await fetch(`${API}/patient-note-sets/${noteSetId}`, {
-      headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-    })
-    const payload = (await response.json().catch(() => null)) as ApiError | PatientNoteSetDetail | null
-    if (!response.ok) {
-      throw new Error(readErrorMessage(response.status, payload as ApiError | null))
-    }
-    return payload as PatientNoteSetDetail
-  }
-
-  function linkedNoteSetForPatient(patientId: string) {
-    if (!patientId) return null
-    return noteSetSummaries.find((item) => item.patient_id === patientId && item.status === 'active')
-      || noteSetSummaries.find((item) => item.patient_id === patientId)
-      || null
-  }
-
-  async function loadWorkspace(currentToken: string, currentUser: User, initialMessage?: string) {
-    setAuthState('authenticated_loading_profile')
-    setStatus(initialMessage || `Welcome ${currentUser.username}. Loading your audit queue, note sets, playbook, and review workspace...`)
-
-    const headers = { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' }
-    const [chartsResponse, templateResponse, noteSetsResponse] = await Promise.all([
-      fetch(`${API}/charts`, { headers }),
-      fetch(`${API}/audit-template`, { headers }),
-      fetch(`${API}/patient-note-sets`, { headers }),
-    ])
-
-    const chartsPayload = (await chartsResponse.json().catch(() => null)) as ApiError | ChartSummary[] | null
-    const templatePayload = (await templateResponse.json().catch(() => null)) as ApiError | AuditTemplateSection[] | null
-    const noteSetsPayload = (await noteSetsResponse.json().catch(() => null)) as ApiError | PatientNoteSetSummary[] | null
-
-    if (!chartsResponse.ok) {
-      setAuthState('error')
-      setStatus(`Audit queue failed to load. ${readErrorMessage(chartsResponse.status, chartsPayload as ApiError | null)}`)
-      return
-    }
-    if (!templateResponse.ok) {
-      setAuthState('error')
-      setStatus(`Audit playbook failed to load. ${readErrorMessage(templateResponse.status, templatePayload as ApiError | null)}`)
-      return
-    }
-    if (!noteSetsResponse.ok) {
-      setAuthState('error')
-      setStatus(`Patient note sets failed to load. ${readErrorMessage(noteSetsResponse.status, noteSetsPayload as ApiError | null)}`)
-      return
-    }
-
-    const charts = (chartsPayload as ChartSummary[]) || []
-    const sections = (templatePayload as AuditTemplateSection[]) || []
-    const noteSets = (noteSetsPayload as PatientNoteSetSummary[]) || []
-
-    setChartSummaries(charts)
-    setTemplateSections(sections)
-    setNoteSetSummaries(noteSets)
-    setNewChartForm(createNewChartForm(currentUser.username))
-    setUploadForm(createUploadForm())
-
-    let initialChart: ChartDetail | null = null
-    if (charts.length > 0) {
-      initialChart = await fetchChartDetail(currentToken, charts[0].id)
-      setSelectedChartId(initialChart.id)
-      setChartDetail(initialChart)
-      setChartDraft(copyChartDetail(initialChart))
-      setShowCreateAudit(false)
-      setShowUploadWorkspace(false)
-      setTransitionComment('')
-    } else {
-      setSelectedChartId(null)
-      setChartDetail(null)
-      setChartDraft(null)
-    }
-
-    const preferredNoteSet = initialChart
-      ? findLinkedNoteSet(noteSets, initialChart.patient_id)
-      : noteSets[0] || null
-
-    if (preferredNoteSet) {
-      const detail = await fetchNoteSetDetail(currentToken, preferredNoteSet.id)
-      setSelectedNoteSetId(detail.id)
-      setSelectedNoteSetDetail(detail)
-    } else {
-      setSelectedNoteSetId(null)
-      setSelectedNoteSetDetail(null)
-    }
-
-    if (charts.length > 0) {
-      const playbookCount = sections.flatMap((section) => section.items).length
-      setStatus(
-        `Workspace ready. ${charts.length} audit${charts.length === 1 ? '' : 's'} in queue, ${noteSets.length} patient note set${noteSets.length === 1 ? '' : 's'} loaded, and ${playbookCount} checklist step${playbookCount === 1 ? '' : 's'} ready.`
-      )
-    } else if (preferredNoteSet) {
-      setShowUploadWorkspace(true)
-      setStatus('Workspace ready. No audits are open yet, but patient note sets are loaded. Review the latest note binder or start a chart audit from a patient ID.')
-    } else {
-      setShowCreateAudit(true)
-      setStatus('Workspace ready. No chart audits or patient note sets are loaded yet, so start with a patient ID and create the first audit or upload a note set.')
-    }
-
-    setAuthState('authenticated_ready')
-  }
-
-  async function loadProfileAndWorkspace(currentToken: string, expectsReset: boolean) {
-    setAuthState('authenticated_loading_profile')
-    setStatus('Authentication succeeded. Loading profile, role permissions, and audit workspace...')
-
-    const me = await fetch(`${API}/users/me`, {
-      headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-    })
-    const mePayload = (await me.json().catch(() => null)) as ApiError | User | null
-    if (!me.ok) {
-      setAuthState('error')
-      setStatus(`Authentication token was issued, but profile load failed. ${readErrorMessage(me.status, mePayload as ApiError | null)}`)
-      return
-    }
-
-    const currentUser = mePayload as User
-    setUser(currentUser)
-
-    if (expectsReset || currentUser.must_reset_password) {
-      setMustResetPassword(true)
-      setAuthState('password_reset_required')
-      setStatus('Login verified. A password reset is required before chart audit tools are available.')
-      return
-    }
-
-    await loadWorkspace(currentToken, currentUser)
-  }
-
-  async function refreshNoteSetQueue(currentToken: string, preferredNoteSetId?: number) {
-    const response = await fetch(`${API}/patient-note-sets`, {
-      headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-    })
-    const payload = (await response.json().catch(() => null)) as ApiError | PatientNoteSetSummary[] | null
-    if (!response.ok) {
-      throw new Error(readErrorMessage(response.status, payload as ApiError | null))
-    }
-    const summaries = (payload as PatientNoteSetSummary[]) || []
-    setNoteSetSummaries(summaries)
-
-    const targetId = preferredNoteSetId ?? selectedNoteSetId ?? null
-    if (targetId) {
-      const detail = await fetchNoteSetDetail(currentToken, targetId)
-      setSelectedNoteSetId(detail.id)
-      setSelectedNoteSetDetail(detail)
-    } else if (summaries.length === 0) {
-      setSelectedNoteSetId(null)
-      setSelectedNoteSetDetail(null)
-    }
-  }
-
-  async function login(e: FormEvent) {
-    e.preventDefault()
-    setAuthState('logging_in')
-    setStatus(`Submitting credentials for "${form.username}". Waiting for authentication response...`)
-    try {
-      const response = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`Login rejected for "${form.username}". ${readErrorMessage(response.status, payload)}`)
-        return
+  async function loadChartDetail(chartId: number) {
+    const detail = await apiRequest<ChartDetail>(`/charts/${chartId}`)
+    setSelectedChart(detail)
+    setSelectedChartId(detail.id)
+    if (detail.source_note_set_id) {
+      setSelectedNoteSetId(detail.source_note_set_id)
+      try {
+        const noteSetDetail = await apiRequest<PatientNoteSetDetail>(`/patient-note-sets/${detail.source_note_set_id}`)
+        setSelectedNoteSet(noteSetDetail)
+      } catch {
+        setSelectedNoteSet(null)
       }
-
-      const data = payload as { access_token: string; must_reset_password: boolean }
-      setToken(data.access_token)
-      setMustResetPassword(data.must_reset_password)
-      await loadProfileAndWorkspace(data.access_token, data.must_reset_password)
-    } catch {
-      setAuthState('error')
-      setStatus('Login failed before authentication could complete: backend unreachable. Verify API URL, container status, and port mapping.')
     }
   }
 
-  async function resetPassword(e: FormEvent) {
-    e.preventDefault()
-    setStatus('Password reset request submitted. Validating new password and updating credentials...')
-    try {
-      const response = await fetch(`${API}/auth/reset-password`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({ new_password: resetForm.newPassword }),
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`Password reset failed after authentication. ${readErrorMessage(response.status, payload)}`)
-        return
-      }
-      setResetForm({ newPassword: '' })
-      setMustResetPassword(false)
-      setStatus('Password reset successful. Reloading your audit workspace...')
-      await loadProfileAndWorkspace(token, false)
-    } catch {
-      setAuthState('error')
-      setStatus('Password reset failed: backend unreachable or session expired. Please sign in again.')
-    }
-  }
-
-  async function loadLinkedNoteSet(currentToken: string, patientId: string, openWorkspace = false) {
-    const linked = noteSetSummaries.find((item) => item.patient_id === patientId && item.status === 'active')
-      || noteSetSummaries.find((item) => item.patient_id === patientId)
-    if (!linked) {
-      if (openWorkspace) {
-        setSelectedNoteSetId(null)
-        setSelectedNoteSetDetail(null)
-      }
-      return
-    }
-
-    const detail = await fetchNoteSetDetail(currentToken, linked.id)
+  async function loadNoteSetDetail(noteSetId: number) {
+    const detail = await apiRequest<PatientNoteSetDetail>(`/patient-note-sets/${noteSetId}`)
+    setSelectedNoteSet(detail)
     setSelectedNoteSetId(detail.id)
-    setSelectedNoteSetDetail(detail)
-    if (openWorkspace) setShowUploadWorkspace(true)
   }
 
-  async function selectChart(chartId: number) {
-    if (!token) return
-    setStatus('Loading selected chart audit...')
-    try {
-      const detail = await fetchChartDetail(token, chartId)
-      setSelectedChartId(detail.id)
-      setChartDetail(detail)
-      setChartDraft(copyChartDetail(detail))
-      setShowCreateAudit(false)
-      setShowUploadWorkspace(false)
-      setTransitionComment('')
-      await loadLinkedNoteSet(token, detail.patient_id, false)
-      setStatus(`Loaded chart audit for patient ${chartLabel(detail)}. Review the checklist and the linked clinical note binder together.`)
-    } catch (error) {
-      setAuthState('error')
-      setStatus(`Unable to load chart audit. ${error instanceof Error ? error.message : 'Unexpected error.'}`)
-    }
-  }
-
-  async function selectNoteSet(noteSetId: number) {
-    if (!token) return
-    setStatus('Loading patient note set...')
-    try {
-      const detail = await fetchNoteSetDetail(token, noteSetId)
-      setSelectedNoteSetId(detail.id)
-      setSelectedNoteSetDetail(detail)
-      setShowCreateAudit(false)
-      setShowUploadWorkspace(true)
-      setUploadForm(
-        createUploadForm({
-          patient_id: detail.patient_id,
-          upload_mode: 'update',
-          level_of_care: detail.level_of_care,
-          admission_date: detail.admission_date,
-          discharge_date: detail.discharge_date,
-          primary_clinician: detail.primary_clinician,
-          upload_notes: `Updating version ${detail.version} for patient ${detail.patient_id}.`,
-        })
-      )
-      setStatus(`Loaded patient note set version ${detail.version} for patient ${detail.patient_id}.`)
-    } catch (error) {
-      setAuthState('error')
-      setStatus(`Unable to load patient note set. ${error instanceof Error ? error.message : 'Unexpected error.'}`)
-    }
-  }
-
-  function openUploadWorkspace(prefillPatientId = '', linkedNoteSet?: PatientNoteSetSummary | PatientNoteSetDetail | null) {
-    const sourceChart = chartDraft || chartDetail
-    setShowCreateAudit(false)
-    setShowUploadWorkspace(true)
-    setUploadForm(
-      createUploadForm({
-        patient_id: prefillPatientId || sourceChart?.patient_id || linkedNoteSet?.patient_id || '',
-        upload_mode: linkedNoteSet ? 'update' : 'initial',
-        level_of_care: sourceChart?.level_of_care || linkedNoteSet?.level_of_care || '',
-        admission_date: sourceChart?.admission_date || linkedNoteSet?.admission_date || '',
-        discharge_date: sourceChart?.discharge_date || linkedNoteSet?.discharge_date || '',
-        primary_clinician: sourceChart?.primary_clinician || linkedNoteSet?.primary_clinician || '',
-        upload_notes: linkedNoteSet
-          ? `Update patient ${linkedNoteSet.patient_id} after note set version ${linkedNoteSet.version}.`
-          : '',
-      })
+  async function loadUsers() {
+    if (user?.role !== 'admin') return
+    const nextUsers = await apiRequest<User[]>('/users')
+    setUsers(nextUsers)
+    const selectedId = selectedManagedUserId ?? nextUsers[0]?.id ?? null
+    setSelectedManagedUserId(selectedId)
+    const selected = nextUsers.find((candidate) => candidate.id === selectedId) || null
+    setManagedUserForm(
+      selected
+        ? {
+            full_name: selected.full_name,
+            role: selected.role,
+            is_active: selected.is_active,
+            is_locked: selected.is_locked,
+            must_reset_password: selected.must_reset_password,
+          }
+        : null,
     )
-    setStatus('Patient note intake opened. Upload the Alleva clinical note binder as a first-time set or as a new immutable version.')
   }
 
-  function startAuditFromNoteSet(noteSet: PatientNoteSetSummary | PatientNoteSetDetail) {
-    if (!user) return
-    setNewChartForm({
-      patient_id: noteSet.patient_id,
-      client_name: '',
-      level_of_care: noteSet.level_of_care,
-      admission_date: noteSet.admission_date,
-      discharge_date: noteSet.discharge_date,
-      primary_clinician: noteSet.primary_clinician,
-      auditor_name: user.username,
-      other_details: `Linked note set version ${noteSet.version} from ${noteSet.source_system}.`,
-      notes: '',
-    })
-    setShowUploadWorkspace(false)
-    setShowCreateAudit(true)
-    setStatus(`New chart audit form opened for patient ${noteSet.patient_id}, prefilled from note set version ${noteSet.version}.`)
+  async function loadLogs() {
+    if (user?.role !== 'admin') return
+    const params = new URLSearchParams()
+    params.set('limit', '200')
+    if (logFilters.patient_id.trim()) params.set('patient_id', logFilters.patient_id.trim())
+    if (logFilters.action.trim()) params.set('action', logFilters.action.trim())
+    const payload = await apiRequest<AuditLogRecord[]>(`/audit/logs?${params.toString()}`)
+    setLogs(payload)
   }
 
-  async function createChart(e: FormEvent) {
-    e.preventDefault()
-    setStatus('Creating a new chart audit and loading the checklist template...')
+  async function loadWorkspace() {
+    if (!token) return
+    setIsBusy(true)
+    setError('')
     try {
-      const response = await fetch(`${API}/charts`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify(newChartForm),
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | ChartDetail | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`Unable to create chart audit. ${readErrorMessage(response.status, payload as ApiError | null)}`)
-        return
+      const [profile, chartList, noteSetList] = await Promise.all([
+        apiRequest<User>('/users/me'),
+        apiRequest<ChartSummary[]>('/charts'),
+        apiRequest<PatientNoteSetSummary[]>('/patient-note-sets'),
+      ])
+
+      setUser(profile)
+      setCharts(chartList)
+      setNoteSets(noteSetList)
+      if (profile.role === 'admin') {
+        const directory = await apiRequest<User[]>('/users')
+        setUsers(directory)
+        const selected = directory[0] || null
+        setSelectedManagedUserId(selected?.id ?? null)
+        setManagedUserForm(
+          selected
+            ? {
+                full_name: selected.full_name,
+                role: selected.role,
+                is_active: selected.is_active,
+                is_locked: selected.is_locked,
+                must_reset_password: selected.must_reset_password,
+              }
+            : null,
+        )
+      } else {
+        setUsers([])
+        setSelectedManagedUserId(null)
+        setManagedUserForm(null)
       }
 
-      const detail = payload as ChartDetail
-      setChartSummaries((existing) => upsertChartSummary(existing, toChartSummary(detail)))
-      setSelectedChartId(detail.id)
-      setChartDetail(detail)
-      setChartDraft(copyChartDetail(detail))
-      setShowCreateAudit(false)
-      setShowUploadWorkspace(false)
-      setTransitionComment('')
-      setNewChartForm(createNewChartForm(user?.username || detail.auditor_name))
-      setAuthState('authenticated_ready')
-      await loadLinkedNoteSet(token, detail.patient_id, false)
-      setStatus(`Chart audit created for patient ${chartLabel(detail)}. Work top to bottom through the checklist before submitting it for review.`)
-    } catch {
-      setAuthState('error')
-      setStatus('Chart creation failed: backend unreachable or request interrupted.')
-    }
-  }
+      const firstChartId = selectedChartId && chartList.some((chart) => chart.id === selectedChartId) ? selectedChartId : chartList[0]?.id ?? null
+      const firstNoteSetId =
+        selectedNoteSetId && noteSetList.some((noteSet) => noteSet.id === selectedNoteSetId) ? selectedNoteSetId : noteSetList[0]?.id ?? null
 
-  async function saveChart() {
-    if (!chartDraft) return
+      if (firstChartId) {
+        await loadChartDetail(firstChartId)
+      } else {
+        setSelectedChart(null)
+        setSelectedChartId(null)
+      }
 
-    setStatus(`Saving audit for patient ${chartLabel(chartDraft)}...`)
-    try {
-      const response = await fetch(`${API}/charts/${chartDraft.id}`, {
-        method: 'PUT',
-        headers: authHeaders,
-        body: JSON.stringify({
-          patient_id: chartDraft.patient_id,
-          client_name: chartDraft.client_name,
-          level_of_care: chartDraft.level_of_care,
-          admission_date: chartDraft.admission_date,
-          discharge_date: chartDraft.discharge_date,
-          primary_clinician: chartDraft.primary_clinician,
-          auditor_name: chartDraft.auditor_name,
-          other_details: chartDraft.other_details,
-          notes: chartDraft.notes,
-          checklist_items: chartDraft.checklist_items.map((item) => ({
-            item_key: item.item_key,
-            status: item.status,
-            notes: item.notes,
-            evidence_location: item.evidence_location,
-            evidence_date: item.evidence_date,
-            expiration_date: item.expiration_date,
-          })),
+      if (!firstChartId && firstNoteSetId) {
+        await loadNoteSetDetail(firstNoteSetId)
+      } else if (!firstNoteSetId) {
+        setSelectedNoteSet(null)
+        setSelectedNoteSetId(null)
+      }
+
+      setUploadForm((current) =>
+        createUploadForm({
+          patient_id: current.patient_id,
+          upload_mode: current.upload_mode,
+          level_of_care: current.level_of_care,
+          admission_date: current.admission_date,
+          discharge_date: current.discharge_date,
+          primary_clinician: current.primary_clinician,
+          upload_notes: current.upload_notes,
         }),
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | ChartDetail | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`Save failed. ${readErrorMessage(response.status, payload as ApiError | null)}`)
-        return
-      }
-
-      const detail = payload as ChartDetail
-      setChartDetail(detail)
-      setChartDraft(copyChartDetail(detail))
-      setChartSummaries((existing) => upsertChartSummary(existing, toChartSummary(detail)))
-      setStatus(`Saved audit for patient ${chartLabel(detail)}. ${detail.failed_items} failed item(s) and ${detail.pending_items} pending item(s) remain.`)
-    } catch {
-      setAuthState('error')
-      setStatus('Save failed: backend unreachable or request interrupted.')
+      )
+      setStatus(`Workspace ready for ${profile.full_name || profile.username}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to load workspace')
+    } finally {
+      setIsBusy(false)
     }
   }
 
-  async function applyTransition(action: TransitionAction) {
-    if (!chartDraft) return
-    if (action.requiresComment && !transitionComment.trim()) {
-      setStatus('A return comment is required before sending an audit back for update.')
-      return
+  useEffect(() => {
+    if (!token || mustResetPassword) return
+    void loadWorkspace()
+  }, [token, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'logs' && token && user?.role === 'admin' && !mustResetPassword) {
+      void loadLogs()
     }
+  }, [activeView, token, user, mustResetPassword])
 
-    setStatus(`${action.label} in progress for patient ${chartLabel(chartDraft)}...`)
-    try {
-      const response = await fetch(`${API}/charts/${chartDraft.id}/transition`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({ to_state: action.toState, comment: transitionComment }),
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | ChartDetail | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`State transition failed. ${readErrorMessage(response.status, payload as ApiError | null)}`)
-        return
-      }
-
-      const detail = payload as ChartDetail
-      setChartDetail(detail)
-      setChartDraft(copyChartDetail(detail))
-      setChartSummaries((existing) => upsertChartSummary(existing, toChartSummary(detail)))
-      setTransitionComment('')
-      setStatus(`Workflow updated. Patient ${chartLabel(detail)} is now "${detail.state}".`)
-    } catch {
-      setAuthState('error')
-      setStatus('Workflow transition failed: backend unreachable or request interrupted.')
-    }
-  }
-
-  function updateDraftField(field: keyof ChartDetail, value: string) {
-    setChartDraft((current) => (current ? { ...current, [field]: value } : current))
-  }
-
-  function updateChecklistItem(itemKey: string, patch: Partial<AuditItem>) {
-    setChartDraft((current) => {
-      if (!current) return current
-      return {
-        ...current,
-        checklist_items: current.checklist_items.map((item) => (item.item_key === itemKey ? { ...item, ...patch } : item)),
-      }
-    })
-  }
-
-  function handleUploadFiles(event: ChangeEvent<HTMLInputElement>) {
+  function handleFilesSelected(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || [])
     setUploadForm((current) => ({
       ...current,
@@ -817,839 +502,988 @@ export function App() {
     }))
   }
 
-  function updateUploadField(field: keyof Omit<NoteUploadForm, 'entries'>, value: string) {
-    setUploadForm((current) => ({ ...current, [field]: value }))
-  }
-
-  function updateUploadEntry(index: number, patch: Partial<Omit<NoteUploadEntry, 'file'>>) {
+  function updateUploadEntry(index: number, field: keyof UploadEntry, value: string | boolean) {
     setUploadForm((current) => ({
       ...current,
-      entries: current.entries.map((entry, entryIndex) => (entryIndex === index ? { ...entry, ...patch } : entry)),
+      entries: current.entries.map((entry, entryIndex) => {
+        if (entryIndex !== index) return entry
+        return { ...entry, [field]: value }
+      }),
     }))
   }
 
-  async function uploadPatientNotes(e: FormEvent) {
-    e.preventDefault()
-    if (!token) return
-    if (!uploadForm.patient_id.trim()) {
-      setStatus('Patient ID is required before uploading notes.')
-      return
-    }
-    if (uploadForm.entries.length === 0) {
-      setStatus('Select at least one clinical note or document before uploading.')
-      return
-    }
-
-    const formData = new FormData()
-    formData.append('patient_id', uploadForm.patient_id.trim())
-    formData.append('upload_mode', uploadForm.upload_mode)
-    formData.append('level_of_care', uploadForm.level_of_care)
-    formData.append('admission_date', uploadForm.admission_date)
-    formData.append('discharge_date', uploadForm.discharge_date)
-    formData.append('primary_clinician', uploadForm.primary_clinician)
-    formData.append('upload_notes', uploadForm.upload_notes)
-    formData.append(
-      'file_manifest',
-      JSON.stringify(
-        uploadForm.entries.map((entry) => ({
-          client_file_name: entry.file.name,
-          document_label: entry.document_label,
-          alleva_bucket: entry.alleva_bucket,
-          document_type: entry.document_type,
-          completion_status: entry.completion_status,
-          client_signed: entry.client_signed,
-          staff_signed: entry.staff_signed,
-          document_date: entry.document_date,
-          description: entry.description,
-        }))
-      )
-    )
-    uploadForm.entries.forEach((entry) => formData.append('files', entry.file))
-
-    setStatus(`Uploading patient note set for ${uploadForm.patient_id.trim()}...`)
+  async function handleLogin(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    setStatus(`Signing in as ${loginForm.username}...`)
     try {
-      const response = await fetch(`${API}/patient-note-sets`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      })
-      const payload = (await response.json().catch(() => null)) as ApiError | PatientNoteSetDetail | null
-      if (!response.ok) {
-        setAuthState('error')
-        setStatus(`Patient note upload failed. ${readErrorMessage(response.status, payload as ApiError | null)}`)
-        return
+      const login = await apiRequest<{ access_token: string; must_reset_password: boolean }>(
+        '/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(loginForm),
+        },
+        false,
+      )
+      setToken(login.access_token)
+      setMustResetPassword(login.must_reset_password)
+      const profile = await apiRequest<User>('/users/me', { headers: { Authorization: `Bearer ${login.access_token}` } }, false)
+      setUser(profile)
+      if (login.must_reset_password) {
+        setStatus('Password reset required before continuing.')
+      } else {
+        setStatus(`Signed in as ${profile.full_name || profile.username}. Loading workspace...`)
       }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Login failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
 
-      const detail = payload as PatientNoteSetDetail
-      await refreshNoteSetQueue(token, detail.id)
-      setSelectedNoteSetId(detail.id)
-      setSelectedNoteSetDetail(detail)
+  async function handlePasswordReset(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest(
+        '/auth/reset-password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_password: resetForm.newPassword }),
+        },
+      )
+      setMustResetPassword(false)
+      setResetForm({ newPassword: '' })
+      setStatus('Password reset complete. Loading workspace...')
+      await loadWorkspace()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Password reset failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleUpload(event: FormEvent) {
+    event.preventDefault()
+    if (!uploadForm.entries.length) {
+      setError('Add at least one clinical note file before uploading.')
+      return
+    }
+
+    setIsBusy(true)
+    setError('')
+    setStatus(`Uploading clinical notes for patient ${uploadForm.patient_id || 'pending'}...`)
+
+    try {
+      const body = new FormData()
+      body.set('patient_id', uploadForm.patient_id)
+      body.set('upload_mode', uploadForm.upload_mode)
+      body.set('level_of_care', uploadForm.level_of_care)
+      body.set('admission_date', uploadForm.admission_date)
+      body.set('discharge_date', uploadForm.discharge_date)
+      body.set('primary_clinician', uploadForm.primary_clinician)
+      body.set('upload_notes', uploadForm.upload_notes)
+      body.set(
+        'file_manifest',
+        JSON.stringify(
+          uploadForm.entries.map((entry) => ({
+            client_file_name: entry.file.name,
+            document_label: entry.document_label,
+            alleva_bucket: entry.alleva_bucket,
+            document_type: entry.document_type,
+            completion_status: entry.completion_status,
+            client_signed: entry.client_signed,
+            staff_signed: entry.staff_signed,
+            document_date: entry.document_date,
+            description: entry.description,
+          })),
+        ),
+      )
+      uploadForm.entries.forEach((entry) => body.append('files', entry.file))
+
+      const uploaded = await apiRequest<PatientNoteSetDetail>('/patient-note-sets', {
+        method: 'POST',
+        body,
+      })
+
       setUploadForm(
         createUploadForm({
-          patient_id: detail.patient_id,
+          patient_id: uploaded.patient_id,
           upload_mode: 'update',
-          level_of_care: detail.level_of_care,
-          admission_date: detail.admission_date,
-          discharge_date: detail.discharge_date,
-          primary_clinician: detail.primary_clinician,
-          upload_notes: `Update patient ${detail.patient_id} after version ${detail.version}.`,
-        })
+          level_of_care: uploaded.level_of_care,
+          admission_date: uploaded.admission_date,
+          discharge_date: uploaded.discharge_date,
+          primary_clinician: uploaded.primary_clinician,
+          upload_notes: '',
+        }),
       )
-      setShowUploadWorkspace(true)
-      setStatus(`Patient note set version ${detail.version} uploaded for patient ${detail.patient_id}. Files are preserved as a new immutable binder revision.`)
-    } catch {
-      setAuthState('error')
-      setStatus('Patient note upload failed: backend unreachable or request interrupted.')
-    }
-  }
-
-  async function downloadDocument(noteSetId: number, noteDocument: PatientNoteDocument) {
-    if (!token) return
-    setStatus(`Downloading ${noteDocument.document_label} for patient note set ${noteSetId}...`)
-    try {
-      const response = await fetch(`${API}/patient-note-sets/${noteSetId}/documents/${noteDocument.id}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as ApiError | null
-        setAuthState('error')
-        setStatus(`Download failed. ${readErrorMessage(response.status, payload)}`)
-        return
+      setSelectedNoteSet(uploaded)
+      setSelectedNoteSetId(uploaded.id)
+      setActiveView('reviews')
+      await loadWorkspace()
+      if (uploaded.review_chart_id) {
+        await loadChartDetail(uploaded.review_chart_id)
       }
-      const blob = await response.blob()
-      const href = URL.createObjectURL(blob)
-      const anchor = window.document.createElement('a')
-      anchor.href = href
-      anchor.download = noteDocument.original_filename
-      anchor.click()
-      URL.revokeObjectURL(href)
-      setStatus(`Downloaded ${noteDocument.original_filename}.`)
-    } catch {
-      setAuthState('error')
-      setStatus('Download failed: backend unreachable or request interrupted.')
+      setStatus(`Clinical notes uploaded for patient ${uploaded.patient_id}. The system review is ready for office-manager disposition.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Upload failed')
+    } finally {
+      setIsBusy(false)
     }
   }
 
-  const tone = statusTone(authState)
-  const transitionActions = user && chartDraft ? availableTransitions(user.role, chartDraft.state) : []
-  const activeSummary = chartDraft || chartDetail
-  const openIssues = (chartDraft?.checklist_items || []).filter((item) => item.status === 'no' || item.status === 'pending')
-  const linkedNoteSet = chartDraft ? linkedNoteSetForPatient(chartDraft.patient_id) : null
-  const activePatientNoteCount = noteSetSummaries.filter((item) => item.status === 'active').length
+  async function handleTransition(action: TransitionAction) {
+    if (!selectedChart) return
+    if (action.requiresComment && !decisionComment.trim()) {
+      setError('Enter a manager comment before returning a chart to the counselor.')
+      return
+    }
+
+    setIsBusy(true)
+    setError('')
+    setStatus(`${action.label} in progress for patient ${selectedChart.patient_id}...`)
+    try {
+      const updated = await apiRequest<ChartDetail>(`/charts/${selectedChart.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to_state: action.toState, comment: decisionComment }),
+      })
+      setSelectedChart(updated)
+      setDecisionComment('')
+      await loadWorkspace()
+      setStatus(`Office-manager decision recorded for patient ${updated.patient_id}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Transition failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleCreateUser(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<User>('/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserForm),
+      })
+      setNewUserForm({ username: '', full_name: '', password: '', role: 'counselor' })
+      await loadUsers()
+      setStatus('User created successfully.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to create user')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleSaveManagedUser(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedManagedUser || !managedUserForm) return
+    setIsBusy(true)
+    setError('')
+    try {
+      const updated = await apiRequest<User>(`/users/${selectedManagedUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(managedUserForm),
+      })
+      await loadUsers()
+      setSelectedManagedUserId(updated.id)
+      setManagedUserForm({
+        full_name: updated.full_name,
+        role: updated.role,
+        is_active: updated.is_active,
+        is_locked: updated.is_locked,
+        must_reset_password: updated.must_reset_password,
+      })
+      setStatus(`Updated user ${updated.username}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to update user')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleAdminPasswordReset(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedManagedUser || !adminPasswordReset.trim()) return
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<User>(`/users/${selectedManagedUser.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: adminPasswordReset, require_reset_on_login: true }),
+      })
+      setAdminPasswordReset('')
+      await loadUsers()
+      setStatus(`Password reset staged for ${selectedManagedUser.username}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to reset password')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  function openRejectedPatientUpload(chart: ChartDetail) {
+    setActiveView('uploads')
+    setUploadForm(
+      createUploadForm({
+        patient_id: chart.patient_id,
+        upload_mode: 'update',
+        level_of_care: chart.level_of_care,
+        admission_date: chart.admission_date,
+        discharge_date: chart.discharge_date,
+        primary_clinician: chart.primary_clinician,
+        upload_notes: chart.manager_comment ? `Manager follow-up: ${chart.manager_comment}` : '',
+      }),
+    )
+  }
+
+  function handleSelectManagedUser(nextId: number) {
+    setSelectedManagedUserId(nextId)
+    const next = users.find((candidate) => candidate.id === nextId) || null
+    setManagedUserForm(
+      next
+        ? {
+            full_name: next.full_name,
+            role: next.role,
+            is_active: next.is_active,
+            is_locked: next.is_locked,
+            must_reset_password: next.must_reset_password,
+          }
+        : null,
+    )
+    setAdminPasswordReset('')
+  }
+
+  const totalPending = pendingManagerQueue.length
+  const totalRejected = charts.filter((chart) => chart.state === 'Returned to Counselor').length
+  const totalApproved = charts.filter((chart) => chart.state === 'Approved by Office Manager').length
+
+  const linkedNoteSet =
+    selectedChart?.source_note_set_id != null ? noteSets.find((noteSet) => noteSet.id === selectedChart.source_note_set_id) || null : null
 
   return (
-    <div className='app-shell'>
-      <header className='topbar'>
+    <main className='shell'>
+      <section className='hero'>
         <div>
-          <p className='eyebrow'>Clinical Audit Workflow</p>
-          <h1>Chart Review Workflow</h1>
-          <p className='subtitle'>Checklist-driven audits with patient-ID-linked note binders, versioned uploads, and guided clinical review.</p>
+          <p className='eyebrow'>Clinical note analyzer</p>
+          <h1>Upload notes, let the system audit them, then route the result to office-manager approval.</h1>
+          <p className='hero-copy'>
+            Counselors upload the latest clinical binder. The system evaluates the content against the audit rules, records every event in the
+            forensic log, and places the result into a final approval queue for the office manager.
+          </p>
         </div>
-        <div className='topbar-actions'>
-          <div className='brand-lockup'>
-            <span className='brand-dot' />
-            <div>
-              <strong>r3recoveryservices.com</strong>
-              <p>Alleva chart audit workspace</p>
+        <div className='status-card'>
+          <h2>Current status</h2>
+          <p>{status}</p>
+          {error ? <p className='error-text'>{error}</p> : null}
+          {user ? (
+            <div className='status-meta'>
+              <span>{user.full_name || user.username}</span>
+              <span>{user.role}</span>
             </div>
-          </div>
-          {user ? <span className='role-chip'>{user.role}</span> : null}
-          {token ? <button className='ghost-button' onClick={() => resetSession()}>Logout</button> : null}
+          ) : null}
         </div>
-      </header>
+      </section>
 
-      <div className='status-banner' style={{ background: tone.background, borderColor: tone.border }}>
-        <strong>Status</strong>
-        <span>{status}</span>
-      </div>
-
-      {(authState === 'anonymous' || authState === 'error') && !token ? (
-        <section className='panel auth-panel'>
-          <h2>Sign In</h2>
-          <p className='panel-lead'>Use your chart audit account to open the guided review queue, patient note binders, and checklist workspace.</p>
-          <form className='stack-form' onSubmit={login}>
+      {!token ? (
+        <section className='auth-grid'>
+          <form className='panel form-panel' onSubmit={handleLogin}>
+            <h2>Sign in</h2>
             <label>
               Username
-              <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder='Username' />
+              <input value={loginForm.username} onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))} />
             </label>
             <label>
               Password
-              <input type='password' value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder='Password' />
+              <input
+                type='password'
+                value={loginForm.password}
+                onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+              />
             </label>
-            <button type='submit' disabled={authState === 'logging_in'}>Sign in</button>
+            <button type='submit' disabled={isBusy}>
+              {isBusy ? 'Signing in...' : 'Sign in'}
+            </button>
           </form>
+          <div className='panel info-panel'>
+            <h2>Workflow</h2>
+            <ol>
+              <li>Counselor uploads a patient note binder using patient ID.</li>
+              <li>The app runs an automatic clinical-note checklist evaluation.</li>
+              <li>The office manager approves or returns the chart for correction.</li>
+              <li>Every read, write, approval, and change is written to the forensic log.</li>
+            </ol>
+          </div>
         </section>
-      ) : authState === 'logging_in' || authState === 'authenticated_loading_profile' ? (
-        <section className='panel auth-panel'>
-          <h2>Preparing Workspace</h2>
-          <p className='panel-lead'>The system is validating credentials, loading role permissions, syncing patient note binders, and preparing the chart audit queue.</p>
-        </section>
-      ) : authState === 'password_reset_required' || (mustResetPassword && token) ? (
-        <section className='panel auth-panel'>
-          <h2>Password Reset Required</h2>
-          <p className='panel-lead'>Authentication succeeded, but policy requires a new password before any chart audit data can be accessed.</p>
-          <form className='stack-form' onSubmit={resetPassword}>
+      ) : mustResetPassword ? (
+        <section className='panel form-panel narrow'>
+          <h2>Password reset required</h2>
+          <p>This applies to managed user accounts. The bootstrap admin password is fixed outside the app.</p>
+          <form onSubmit={handlePasswordReset}>
             <label>
               New password
               <input
                 type='password'
-                value={resetForm.newPassword}
-                minLength={12}
-                onChange={(event) => setResetForm({ newPassword: event.target.value })}
                 placeholder='New password (min 12 chars)'
+                value={resetForm.newPassword}
+                onChange={(event) => setResetForm({ newPassword: event.target.value })}
               />
             </label>
-            <button type='submit' disabled={resetForm.newPassword.length < 12}>Reset password</button>
+            <button type='submit' disabled={isBusy}>
+              {isBusy ? 'Saving...' : 'Reset password'}
+            </button>
           </form>
         </section>
-      ) : authState === 'authenticated_ready' && token && user ? (
-        <div className='workspace-grid'>
-          <aside className='sidebar'>
-            <section className='panel'>
-              <div className='panel-heading'>
-                <div>
-                  <p className='eyebrow'>Queue</p>
-                  <h2>{user.role === 'admin' ? 'Admin Dashboard' : user.role === 'manager' ? 'Manager Dashboard' : 'Counselor Dashboard'}</h2>
-                </div>
-                <button className='secondary-button' onClick={() => {
-                  setShowCreateAudit(true)
-                  setShowUploadWorkspace(false)
-                  setSelectedChartId(null)
-                  setChartDetail(null)
-                  setChartDraft(null)
-                  setTransitionComment('')
-                  setNewChartForm(createNewChartForm(user.username))
-                  setStatus('New chart audit form opened. Enter the patient ID and episode header before working through the checklist.')
-                }}>
-                  New chart audit
-                </button>
-              </div>
-              <div className='queue-summary'>
-                <div>
-                  <span className='metric-value'>{chartSummaries.length}</span>
-                  <span className='metric-label'>Active audits</span>
-                </div>
-                <div>
-                  <span className='metric-value'>{chartSummaries.reduce((sum, chart) => sum + chart.failed_items, 0)}</span>
-                  <span className='metric-label'>Failed items</span>
-                </div>
-                <div>
-                  <span className='metric-value'>{chartSummaries.reduce((sum, chart) => sum + chart.pending_items, 0)}</span>
-                  <span className='metric-label'>Pending items</span>
-                </div>
-              </div>
-              <div className='queue-list'>
-                {chartSummaries.length === 0 ? (
-                  <div className='empty-queue'>
-                    <strong>No audits in queue.</strong>
-                    <p>Create a chart audit to start the guided review workflow.</p>
-                  </div>
-                ) : (
-                  chartSummaries.map((chart) => (
-                    <button
-                      key={chart.id}
-                      type='button'
-                      className={`queue-card ${selectedChartId === chart.id && !showUploadWorkspace ? 'queue-card--active' : ''}`}
-                      onClick={() => void selectChart(chart.id)}
-                    >
-                      <div className='queue-card__header'>
-                        <strong>{chartLabel(chart)}</strong>
-                        <span className={stateClassName(chart.state)}>{chart.state}</span>
-                      </div>
-                      <p>{chart.level_of_care || 'Level of care not entered yet'}</p>
-                      <div className='queue-card__meta'>
-                        <span>{chart.primary_clinician || 'No clinician listed'}</span>
-                        <span>{progressPercent(chart)}% reviewed</span>
-                      </div>
-                      <div className='queue-card__counts'>
-                        <span>Passed {chart.passed_items}</span>
-                        <span>Failed {chart.failed_items}</span>
-                        <span>Pending {chart.pending_items}</span>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
+      ) : (
+        <>
+          <section className='metrics'>
+            <article className='metric-card'>
+              <span>Awaiting manager</span>
+              <strong>{totalPending}</strong>
+            </article>
+            <article className='metric-card'>
+              <span>Returned</span>
+              <strong>{totalRejected}</strong>
+            </article>
+            <article className='metric-card'>
+              <span>Approved</span>
+              <strong>{totalApproved}</strong>
+            </article>
+            <article className='metric-card'>
+              <span>Binders</span>
+              <strong>{noteSets.length}</strong>
+            </article>
+          </section>
 
-            <section className='panel'>
-              <div className='panel-heading'>
-                <div>
-                  <p className='eyebrow'>Patient Notes</p>
-                  <h2>Clinical Note Sets</h2>
-                </div>
-                <button className='secondary-button' onClick={() => openUploadWorkspace()}>Upload notes</button>
-              </div>
-              <div className='queue-summary'>
-                <div>
-                  <span className='metric-value'>{noteSetSummaries.length}</span>
-                  <span className='metric-label'>Binder versions</span>
-                </div>
-                <div>
-                  <span className='metric-value'>{activePatientNoteCount}</span>
-                  <span className='metric-label'>Active binders</span>
-                </div>
-                <div>
-                  <span className='metric-value'>{noteSetSummaries.reduce((sum, item) => sum + item.file_count, 0)}</span>
-                  <span className='metric-label'>Stored files</span>
-                </div>
-              </div>
-              <div className='queue-list'>
-                {noteSetSummaries.length === 0 ? (
-                  <div className='empty-queue'>
-                    <strong>No patient note sets yet.</strong>
-                    <p>Upload the first Alleva clinical note binder by patient ID to create an immutable review set.</p>
-                  </div>
-                ) : (
-                  noteSetSummaries.map((noteSet) => (
-                    <button
-                      key={noteSet.id}
-                      type='button'
-                      className={`queue-card ${selectedNoteSetId === noteSet.id && showUploadWorkspace ? 'queue-card--active' : ''}`}
-                      onClick={() => void selectNoteSet(noteSet.id)}
-                    >
-                      <div className='queue-card__header'>
-                        <strong>{noteSet.patient_id}</strong>
-                        <span className={noteSetStatusClassName(noteSet.status)}>{NOTE_SET_STATUS_LABELS[noteSet.status]}</span>
-                      </div>
-                      <p>{noteSet.level_of_care || 'Level of care not entered yet'}</p>
-                      <div className='queue-card__meta'>
-                        <span>Version {noteSet.version}</span>
-                        <span>{noteSet.file_count} file{noteSet.file_count === 1 ? '' : 's'}</span>
-                      </div>
-                      <div className='queue-card__counts'>
-                        <span>{noteSet.primary_clinician || 'No clinician listed'}</span>
-                        <span>{ALLEVA_BUCKET_LABELS.custom_forms} workflow</span>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
+          <nav className='view-tabs'>
+            {(['reviews', 'uploads'] as AppView[]).map((view) => (
+              <button
+                key={view}
+                className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
+                onClick={() => setActiveView(view)}
+                type='button'
+              >
+                {VIEW_LABELS[view]}
+              </button>
+            ))}
+            {user?.role === 'admin'
+              ? (['users', 'logs'] as AppView[]).map((view) => (
+                  <button
+                    key={view}
+                    className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
+                    onClick={() => setActiveView(view)}
+                    type='button'
+                  >
+                    {VIEW_LABELS[view]}
+                  </button>
+                ))
+              : null}
+          </nav>
 
-            <section className='panel'>
-              <div className='panel-heading'>
-                <div>
-                  <p className='eyebrow'>Playbook</p>
-                  <h2>Combined Audit Flow</h2>
-                </div>
-              </div>
-              <ol className='playbook-list'>
-                {playbookItems.map((item) => (
-                  <li key={item.key}>
-                    <strong>Step {item.step}: {item.label}</strong>
-                    <span>{item.section}</span>
-                    <p>{item.instructions}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          </aside>
-
-          <main className='main-column'>
-            {showCreateAudit ? (
-              <section className='panel'>
+          {activeView === 'reviews' ? (
+            <section className='workspace-grid'>
+              <aside className='panel queue-panel'>
                 <div className='panel-heading'>
-                  <div>
-                    <p className='eyebrow'>Start</p>
-                    <h2>New Chart Audit</h2>
-                  </div>
+                  <h2>Automated review queue</h2>
+                  <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
+                    Refresh
+                  </button>
                 </div>
-                <p className='panel-lead'>Capture the patient ID and episode header first. The full checklist will load immediately after creation.</p>
-                <form className='editor-grid' onSubmit={createChart}>
+                {charts.length ? (
+                  <ul className='queue-list'>
+                    {charts.map((chart) => (
+                      <li key={chart.id}>
+                        <button
+                          type='button'
+                          className={selectedChartId === chart.id ? 'queue-item queue-item--active' : 'queue-item'}
+                          onClick={() => void loadChartDetail(chart.id)}
+                        >
+                          <div>
+                            <strong>{chart.patient_id}</strong>
+                            <span>{chart.primary_clinician || 'Clinician pending'}</span>
+                          </div>
+                          <div className='queue-item-meta'>
+                            <span className={`pill pill--${workflowTone(chart.state)}`}>{chart.state}</span>
+                            <span>{chart.system_score}% ready</span>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='empty-state'>No review charts yet. Upload a clinical note binder to generate the first automated review.</p>
+                )}
+              </aside>
+
+              <section className='panel detail-panel'>
+                {selectedChart ? (
+                  <>
+                    <div className='panel-heading'>
+                      <div>
+                        <h2>Patient {selectedChart.patient_id}</h2>
+                        <p>{selectedChart.system_summary}</p>
+                      </div>
+                      <span className={`pill pill--${workflowTone(selectedChart.state)}`}>{selectedChart.state}</span>
+                    </div>
+
+                    <div className='detail-grid'>
+                      <article className='mini-card'>
+                        <span>Primary clinician</span>
+                        <strong>{selectedChart.primary_clinician || 'Missing'}</strong>
+                      </article>
+                      <article className='mini-card'>
+                        <span>Level of care</span>
+                        <strong>{selectedChart.level_of_care || 'Missing'}</strong>
+                      </article>
+                      <article className='mini-card'>
+                        <span>Admission</span>
+                        <strong>{selectedChart.admission_date || 'Missing'}</strong>
+                      </article>
+                      <article className='mini-card'>
+                        <span>System score</span>
+                        <strong>{selectedChart.system_score}%</strong>
+                      </article>
+                    </div>
+
+                    <section className='panel-subsection'>
+                      <h3>Open issues</h3>
+                      {openItems.length ? (
+                        <ul className='issue-list'>
+                          {openItems.map((item) => (
+                            <li key={item.item_key} className={`issue issue--${checklistTone(item.status)}`}>
+                              <div>
+                                <strong>{item.label}</strong>
+                                <p>{item.notes || item.instructions}</p>
+                              </div>
+                              <span>{STATUS_LABELS[item.status]}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className='empty-state'>No open issues detected in the current automated review.</p>
+                      )}
+                    </section>
+
+                    <section className='panel-subsection'>
+                      <h3>Checklist findings</h3>
+                      {groupedFindings.map(([section, items]) => (
+                        <div key={section} className='finding-group'>
+                          <h4>{section}</h4>
+                          <div className='finding-list'>
+                            {items.map((item) => (
+                              <article key={item.item_key} className='finding-card'>
+                                <div className='finding-card__header'>
+                                  <strong>
+                                    Step {item.step}. {item.label}
+                                  </strong>
+                                  <span className={`pill pill--${checklistTone(item.status)}`}>{STATUS_LABELS[item.status]}</span>
+                                </div>
+                                <p>{item.notes || item.instructions}</p>
+                                <dl>
+                                  <div>
+                                    <dt>Evidence</dt>
+                                    <dd>{item.evidence_location || 'System could not pin a precise location.'}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>Date</dt>
+                                    <dd>{item.evidence_date || 'Not detected'}</dd>
+                                  </div>
+                                  <div>
+                                    <dt>Policy note</dt>
+                                    <dd>{item.policy_note || 'No extra policy note for this rule.'}</dd>
+                                  </div>
+                                </dl>
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+
+                    <section className='panel-subsection'>
+                      <h3>Office manager disposition</h3>
+                      {selectedChart.manager_comment ? <p className='manager-comment'>{selectedChart.manager_comment}</p> : null}
+                      {transitionActions.length ? (
+                        <div className='decision-box'>
+                          <label>
+                            Manager comment
+                            <textarea
+                              value={decisionComment}
+                              placeholder='Record final approval context or describe what the counselor needs to fix.'
+                              onChange={(event) => setDecisionComment(event.target.value)}
+                            />
+                          </label>
+                          <div className='decision-actions'>
+                            {transitionActions.map((action) => (
+                              <button key={action.toState} type='button' onClick={() => void handleTransition(action)} disabled={isBusy}>
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : user?.role === 'counselor' && selectedChart.state === 'Returned to Counselor' ? (
+                        <div className='decision-box'>
+                          <p>The office manager returned this chart. Upload a corrected binder version to generate a fresh automated review.</p>
+                          <button type='button' onClick={() => openRejectedPatientUpload(selectedChart)}>
+                            Upload corrected notes
+                          </button>
+                        </div>
+                      ) : (
+                        <p className='empty-state'>No approval action is available for this chart in your current role.</p>
+                      )}
+                    </section>
+
+                    <section className='panel-subsection'>
+                      <h3>Linked note binder</h3>
+                      {linkedNoteSet ? (
+                        <div className='linked-note'>
+                          <p>
+                            Version {linkedNoteSet.version} from {formatDateTime(linkedNoteSet.created_at)} with {linkedNoteSet.file_count} file(s).
+                          </p>
+                          <button type='button' className='ghost-button' onClick={() => void loadNoteSetDetail(linkedNoteSet.id)}>
+                            Open binder details
+                          </button>
+                        </div>
+                      ) : (
+                        <p className='empty-state'>No uploaded binder is linked to this chart.</p>
+                      )}
+                    </section>
+                  </>
+                ) : (
+                  <div className='empty-state-block'>
+                    <h2>No automated review selected</h2>
+                    <p>Upload a binder or choose a chart from the queue to inspect the system findings.</p>
+                  </div>
+                )}
+              </section>
+            </section>
+          ) : null}
+
+          {activeView === 'uploads' ? (
+            <section className='workspace-grid'>
+              <section className='panel detail-panel'>
+                <h2>Upload clinical notes</h2>
+                <p>
+                  Use the patient ID as the source-of-truth key. Each upload creates a new immutable binder version and a new automated review record.
+                </p>
+                <form className='form-grid' onSubmit={handleUpload}>
                   <label>
                     Patient ID
-                    <input value={newChartForm.patient_id} onChange={(event) => setNewChartForm({ ...newChartForm, patient_id: event.target.value })} placeholder='PAT-001' />
+                    <input value={uploadForm.patient_id} onChange={(event) => setUploadForm((current) => ({ ...current, patient_id: event.target.value }))} />
+                  </label>
+                  <label>
+                    Upload mode
+                    <select
+                      value={uploadForm.upload_mode}
+                      onChange={(event) =>
+                        setUploadForm((current) => ({ ...current, upload_mode: event.target.value as NoteSetUploadMode }))
+                      }
+                    >
+                      <option value='initial'>Initial binder</option>
+                      <option value='update'>Updated binder</option>
+                    </select>
                   </label>
                   <label>
                     Level of care
-                    <input value={newChartForm.level_of_care} onChange={(event) => setNewChartForm({ ...newChartForm, level_of_care: event.target.value })} placeholder='IOP, PHP, Residential...' />
-                  </label>
-                  <label>
-                    Admission date
-                    <input value={newChartForm.admission_date} onChange={(event) => setNewChartForm({ ...newChartForm, admission_date: event.target.value })} placeholder='MM/DD/YYYY' />
-                  </label>
-                  <label>
-                    Discharge date
-                    <input value={newChartForm.discharge_date} onChange={(event) => setNewChartForm({ ...newChartForm, discharge_date: event.target.value })} placeholder='MM/DD/YYYY' />
+                    <input value={uploadForm.level_of_care} onChange={(event) => setUploadForm((current) => ({ ...current, level_of_care: event.target.value }))} />
                   </label>
                   <label>
                     Primary clinician
-                    <input value={newChartForm.primary_clinician} onChange={(event) => setNewChartForm({ ...newChartForm, primary_clinician: event.target.value })} placeholder='Primary clinician' />
+                    <input
+                      value={uploadForm.primary_clinician}
+                      onChange={(event) => setUploadForm((current) => ({ ...current, primary_clinician: event.target.value }))}
+                    />
                   </label>
                   <label>
-                    Auditor name
-                    <input value={newChartForm.auditor_name} onChange={(event) => setNewChartForm({ ...newChartForm, auditor_name: event.target.value })} placeholder='Auditor name' />
+                    Admission date
+                    <input
+                      value={uploadForm.admission_date}
+                      onChange={(event) => setUploadForm((current) => ({ ...current, admission_date: event.target.value }))}
+                    />
                   </label>
-                  <label className='editor-grid__full'>
-                    Episode / other notes
-                    <textarea value={newChartForm.other_details} onChange={(event) => setNewChartForm({ ...newChartForm, other_details: event.target.value })} placeholder='Use this field for multi-LOC notes, note-set linkage, or episode-level context.' />
+                  <label>
+                    Discharge date
+                    <input
+                      value={uploadForm.discharge_date}
+                      onChange={(event) => setUploadForm((current) => ({ ...current, discharge_date: event.target.value }))}
+                    />
                   </label>
-                  <label className='editor-grid__full'>
-                    Initial audit summary
-                    <textarea value={newChartForm.notes} onChange={(event) => setNewChartForm({ ...newChartForm, notes: event.target.value })} placeholder='Optional handoff summary or opening notes for the reviewer.' />
+                  <label className='full-width'>
+                    Upload notes
+                    <textarea
+                      value={uploadForm.upload_notes}
+                      onChange={(event) => setUploadForm((current) => ({ ...current, upload_notes: event.target.value }))}
+                    />
                   </label>
-                  <div className='editor-actions editor-grid__full'>
-                    <button type='submit'>Create audit and load checklist</button>
-                    <button type='button' className='ghost-button' onClick={() => openUploadWorkspace(newChartForm.patient_id)}>Upload patient notes first</button>
-                    {chartSummaries.length > 0 ? (
-                      <button
-                        type='button'
-                        className='ghost-button'
-                        onClick={() => {
-                          setShowCreateAudit(false)
-                          void selectChart(chartSummaries[0].id)
-                        }}
-                      >
-                        Cancel and return to queue
-                      </button>
-                    ) : null}
+                  <label className='full-width'>
+                    Clinical note files
+                    <input multiple type='file' onChange={handleFilesSelected} />
+                  </label>
+                  {uploadForm.entries.length ? (
+                    <div className='full-width file-editor'>
+                      <h3>Binder file metadata</h3>
+                      {uploadForm.entries.map((entry, index) => (
+                        <article key={`${entry.file.name}-${index}`} className='file-editor-row'>
+                          <div className='file-editor-row__title'>
+                            <strong>{entry.file.name}</strong>
+                            <span>{Math.round(entry.file.size / 1024)} KB</span>
+                          </div>
+                          <div className='file-editor-row__fields'>
+                            <label>
+                              Label
+                              <input value={entry.document_label} onChange={(event) => updateUploadEntry(index, 'document_label', event.target.value)} />
+                            </label>
+                            <label>
+                              Bucket
+                              <select
+                                value={entry.alleva_bucket}
+                                onChange={(event) => updateUploadEntry(index, 'alleva_bucket', event.target.value as AllevaBucket)}
+                              >
+                                <option value='custom_forms'>Custom Forms</option>
+                                <option value='uploaded_documents'>Uploaded Documents</option>
+                                <option value='portal_documents'>Portal Documents</option>
+                                <option value='labs'>Labs</option>
+                                <option value='medications'>Medications</option>
+                                <option value='notes'>Notes</option>
+                                <option value='other'>Other</option>
+                              </select>
+                            </label>
+                            <label>
+                              Completion
+                              <select
+                                value={entry.completion_status}
+                                onChange={(event) => updateUploadEntry(index, 'completion_status', event.target.value as DocumentCompletionStatus)}
+                              >
+                                <option value='completed'>Completed</option>
+                                <option value='incomplete'>Incomplete</option>
+                                <option value='draft'>Draft</option>
+                              </select>
+                            </label>
+                            <label>
+                              Document date
+                              <input value={entry.document_date} onChange={(event) => updateUploadEntry(index, 'document_date', event.target.value)} />
+                            </label>
+                            <label className='checkbox-row'>
+                              <input
+                                type='checkbox'
+                                checked={entry.client_signed}
+                                onChange={(event) => updateUploadEntry(index, 'client_signed', event.target.checked)}
+                              />
+                              Client signed
+                            </label>
+                            <label className='checkbox-row'>
+                              <input
+                                type='checkbox'
+                                checked={entry.staff_signed}
+                                onChange={(event) => updateUploadEntry(index, 'staff_signed', event.target.checked)}
+                              />
+                              Staff signed
+                            </label>
+                            <label className='full-width'>
+                              Description
+                              <input value={entry.description} onChange={(event) => updateUploadEntry(index, 'description', event.target.value)} />
+                            </label>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className='full-width form-actions'>
+                    <button type='submit' disabled={isBusy}>
+                      {isBusy ? 'Uploading...' : 'Upload and run automated evaluation'}
+                    </button>
                   </div>
                 </form>
               </section>
-            ) : showUploadWorkspace ? (
-              <>
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Intake</p>
-                      <h2>Patient Note Intake</h2>
-                    </div>
-                    {selectedNoteSetDetail ? (
-                      <button className='ghost-button' onClick={() => startAuditFromNoteSet(selectedNoteSetDetail)}>Start audit from note set</button>
-                    ) : null}
-                  </div>
-                  <p className='panel-lead'>Upload the clinical note binder by patient ID. Updates create a new immutable version instead of overwriting the prior binder.</p>
-                  <form className='section-stack' onSubmit={uploadPatientNotes}>
-                    <div className='editor-grid'>
-                      <label>
-                        Patient ID
-                        <input value={uploadForm.patient_id} onChange={(event) => updateUploadField('patient_id', event.target.value)} placeholder='PAT-001' />
-                      </label>
-                      <label>
-                        Upload mode
-                        <select value={uploadForm.upload_mode} onChange={(event) => updateUploadField('upload_mode', event.target.value)}>
-                          <option value='initial'>First upload</option>
-                          <option value='update'>Update existing set</option>
-                        </select>
-                      </label>
-                      <label>
-                        Level of care
-                        <input value={uploadForm.level_of_care} onChange={(event) => updateUploadField('level_of_care', event.target.value)} placeholder='IOP, PHP, Residential...' />
-                      </label>
-                      <label>
-                        Admission date
-                        <input value={uploadForm.admission_date} onChange={(event) => updateUploadField('admission_date', event.target.value)} placeholder='MM/DD/YYYY' />
-                      </label>
-                      <label>
-                        Discharge date
-                        <input value={uploadForm.discharge_date} onChange={(event) => updateUploadField('discharge_date', event.target.value)} placeholder='MM/DD/YYYY' />
-                      </label>
-                      <label>
-                        Primary clinician
-                        <input value={uploadForm.primary_clinician} onChange={(event) => updateUploadField('primary_clinician', event.target.value)} placeholder='Primary clinician' />
-                      </label>
-                      <label className='editor-grid__full'>
-                        Binder handoff notes
-                        <textarea value={uploadForm.upload_notes} onChange={(event) => updateUploadField('upload_notes', event.target.value)} placeholder='Explain what was imported, what changed, or why this version is being uploaded.' />
-                      </label>
-                      <label className='editor-grid__full file-input-field'>
-                        Files
-                        <input type='file' multiple onChange={handleUploadFiles} />
-                      </label>
-                    </div>
 
-                    {uploadForm.entries.length > 0 ? (
-                      <div className='section-stack'>
-                        {uploadForm.entries.map((entry, index) => (
-                          <article key={`${entry.file.name}-${index}`} className='upload-card'>
-                            <div className='checklist-card__header'>
-                              <div>
-                                <p className='eyebrow'>File {index + 1}</p>
-                                <h3>{entry.file.name}</h3>
-                                <p className='timeframe'>{bytesLabel(entry.file.size)}</p>
-                              </div>
-                              <span className={noteSetStatusClassName(uploadForm.upload_mode === 'initial' ? 'active' : 'superseded')}>
-                                {uploadForm.upload_mode === 'initial' ? 'Initial' : 'Update'}
-                              </span>
-                            </div>
-                            <div className='editor-grid editor-grid--compact'>
-                              <label>
-                                Document label
-                                <input value={entry.document_label} onChange={(event) => updateUploadEntry(index, { document_label: event.target.value })} />
-                              </label>
-                              <label>
-                                Alleva bucket
-                                <select value={entry.alleva_bucket} onChange={(event) => updateUploadEntry(index, { alleva_bucket: event.target.value as AllevaBucket })}>
-                                  {Object.entries(ALLEVA_BUCKET_LABELS).map(([value, label]) => (
-                                    <option key={value} value={value}>{label}</option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label>
-                                Document type
-                                <input value={entry.document_type} onChange={(event) => updateUploadEntry(index, { document_type: event.target.value })} placeholder='clinical_note, ROI, lab_result...' />
-                              </label>
-                              <label>
-                                Completion status
-                                <select value={entry.completion_status} onChange={(event) => updateUploadEntry(index, { completion_status: event.target.value as DocumentCompletionStatus })}>
-                                  {Object.entries(DOCUMENT_STATUS_LABELS).map(([value, label]) => (
-                                    <option key={value} value={value}>{label}</option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label>
-                                Document date
-                                <input value={entry.document_date} onChange={(event) => updateUploadEntry(index, { document_date: event.target.value })} placeholder='MM/DD/YYYY' />
-                              </label>
-                              <label className='editor-grid__full'>
-                                Description / evidence note
-                                <textarea value={entry.description} onChange={(event) => updateUploadEntry(index, { description: event.target.value })} placeholder='Describe the document, its role in the audit, or any Alleva-specific context.' />
-                              </label>
-                            </div>
-                            <div className='checkbox-row'>
-                              <label className='checkbox-field'>
-                                <input type='checkbox' checked={entry.client_signed} onChange={(event) => updateUploadEntry(index, { client_signed: event.target.checked })} />
-                                <span>Client signature present</span>
-                              </label>
-                              <label className='checkbox-field'>
-                                <input type='checkbox' checked={entry.staff_signed} onChange={(event) => updateUploadEntry(index, { staff_signed: event.target.checked })} />
-                                <span>Staff signature present</span>
-                              </label>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className='empty-queue'>
-                        <strong>No files selected yet.</strong>
-                        <p>Choose one or more documents from the Alleva export, then tag them with the bucket, status, signatures, and date.</p>
-                      </div>
-                    )}
-
-                    <div className='editor-actions'>
-                      <button type='submit'>Upload patient note set</button>
-                      <button type='button' className='ghost-button' onClick={() => setUploadForm(createUploadForm({ patient_id: uploadForm.patient_id }))}>Clear files</button>
-                      {selectedNoteSetDetail ? (
-                        <button type='button' className='ghost-button' onClick={() => startAuditFromNoteSet(selectedNoteSetDetail)}>Create audit from this patient</button>
-                      ) : null}
-                    </div>
-                  </form>
-                </section>
-
-                {selectedNoteSetDetail ? (
-                  <section className='panel'>
-                    <div className='panel-heading'>
-                      <div>
-                        <p className='eyebrow'>Binder Detail</p>
-                        <h2>Patient {selectedNoteSetDetail.patient_id}</h2>
-                      </div>
-                      <div className='panel-heading__actions'>
-                        <span className={noteSetStatusClassName(selectedNoteSetDetail.status)}>{NOTE_SET_STATUS_LABELS[selectedNoteSetDetail.status]}</span>
-                        <button className='secondary-button' onClick={() => startAuditFromNoteSet(selectedNoteSetDetail)}>Start audit from binder</button>
-                      </div>
-                    </div>
-                    <div className='queue-summary'>
-                      <div>
-                        <span className='metric-value'>v{selectedNoteSetDetail.version}</span>
-                        <span className='metric-label'>Current version</span>
-                      </div>
-                      <div>
-                        <span className='metric-value'>{selectedNoteSetDetail.file_count}</span>
-                        <span className='metric-label'>Files in binder</span>
-                      </div>
-                      <div>
-                        <span className='metric-value'>{selectedNoteSetDetail.primary_clinician || 'Unset'}</span>
-                        <span className='metric-label'>Primary clinician</span>
-                      </div>
-                    </div>
-                    {selectedNoteSetDetail.upload_notes ? (
-                      <div className='hint-box'>
-                        <strong>Version note</strong>
-                        <p>{selectedNoteSetDetail.upload_notes}</p>
-                      </div>
-                    ) : null}
-                    <div className='document-table-wrap'>
-                      <table className='document-table'>
-                        <thead>
-                          <tr>
-                            <th>Document</th>
-                            <th>Bucket</th>
-                            <th>Status</th>
-                            <th>Date</th>
-                            <th>Signatures</th>
-                            <th>File</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedNoteSetDetail.documents.map((document) => (
-                            <tr key={document.id}>
-                              <td>
-                                <strong>{document.document_label}</strong>
-                                <p>{document.description || document.document_type}</p>
-                              </td>
-                              <td>{ALLEVA_BUCKET_LABELS[document.alleva_bucket]}</td>
-                              <td>{DOCUMENT_STATUS_LABELS[document.completion_status]}</td>
-                              <td>{document.document_date || 'Not entered'}</td>
-                              <td>
-                                {document.client_signed ? 'Client' : 'No client'}
-                                {' / '}
-                                {document.staff_signed ? 'Staff' : 'No staff'}
-                              </td>
-                              <td>
-                                <strong>{document.original_filename}</strong>
-                                <p>{bytesLabel(document.size_bytes)} • {document.sha256.slice(0, 10)}...</p>
-                              </td>
-                              <td>
-                                <button type='button' className='ghost-button' onClick={() => void downloadDocument(selectedNoteSetDetail.id, document)}>
-                                  Download
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
+              <aside className='panel queue-panel'>
+                <div className='panel-heading'>
+                  <h2>Uploaded binders</h2>
+                  <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                </div>
+                {noteSets.length ? (
+                  <ul className='queue-list'>
+                    {noteSets.map((noteSet) => (
+                      <li key={noteSet.id}>
+                        <button
+                          type='button'
+                          className={selectedNoteSetId === noteSet.id ? 'queue-item queue-item--active' : 'queue-item'}
+                          onClick={() => void loadNoteSetDetail(noteSet.id)}
+                        >
+                          <div>
+                            <strong>{noteSet.patient_id}</strong>
+                            <span>Version {noteSet.version}</span>
+                          </div>
+                          <div className='queue-item-meta'>
+                            <span className='pill pill--neutral'>{NOTE_SET_STATUS_LABELS[noteSet.status]}</span>
+                            <span>{noteSet.file_count} files</span>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
-                  <section className='panel'>
-                    <h2>Choose a Patient Note Set</h2>
-                    <p className='panel-lead'>Select an existing binder from the sidebar or upload a new set to begin the patient note workflow.</p>
-                  </section>
+                  <p className='empty-state'>No clinical note binders have been uploaded yet.</p>
                 )}
-              </>
-            ) : chartDraft && activeSummary ? (
-              <>
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Active Audit</p>
-                      <h2>Patient {chartLabel(chartDraft)}</h2>
-                    </div>
-                    <div className='panel-heading__actions'>
-                      <span className={stateClassName(chartDraft.state)}>{chartDraft.state}</span>
-                      <button onClick={() => void saveChart()}>Save audit</button>
-                    </div>
-                  </div>
-                  <div className='queue-summary'>
-                    <div>
-                      <span className='metric-value'>{progressPercent(activeSummary)}%</span>
-                      <span className='metric-label'>Checklist reviewed</span>
-                    </div>
-                    <div>
-                      <span className='metric-value'>{activeSummary.failed_items}</span>
-                      <span className='metric-label'>Failed items</span>
-                    </div>
-                    <div>
-                      <span className='metric-value'>{activeSummary.pending_items}</span>
-                      <span className='metric-label'>Pending items</span>
-                    </div>
-                  </div>
 
-                  <div className='editor-grid'>
-                    <label>
-                      Patient ID
-                      <input value={chartDraft.patient_id} onChange={(event) => updateDraftField('patient_id', event.target.value)} />
-                    </label>
-                    <label>
-                      Level of care
-                      <input value={chartDraft.level_of_care} onChange={(event) => updateDraftField('level_of_care', event.target.value)} />
-                    </label>
-                    <label>
-                      Admission date
-                      <input value={chartDraft.admission_date} onChange={(event) => updateDraftField('admission_date', event.target.value)} />
-                    </label>
-                    <label>
-                      Discharge date
-                      <input value={chartDraft.discharge_date} onChange={(event) => updateDraftField('discharge_date', event.target.value)} />
-                    </label>
-                    <label>
-                      Primary clinician
-                      <input value={chartDraft.primary_clinician} onChange={(event) => updateDraftField('primary_clinician', event.target.value)} />
-                    </label>
-                    <label>
-                      Auditor name
-                      <input value={chartDraft.auditor_name} onChange={(event) => updateDraftField('auditor_name', event.target.value)} />
-                    </label>
-                    <label className='editor-grid__full'>
-                      Episode / other notes
-                      <textarea value={chartDraft.other_details} onChange={(event) => updateDraftField('other_details', event.target.value)} />
-                    </label>
-                    <label className='editor-grid__full'>
-                      Audit summary / handoff notes
-                      <textarea value={chartDraft.notes} onChange={(event) => updateDraftField('notes', event.target.value)} />
-                    </label>
-                  </div>
-                </section>
-
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Clinical Notes</p>
-                      <h2>Linked Note Binder</h2>
-                    </div>
-                    <div className='panel-heading__actions'>
-                      <button className='ghost-button' onClick={() => openUploadWorkspace(chartDraft.patient_id, linkedNoteSet || selectedNoteSetDetail)}>
-                        {linkedNoteSet ? 'Update note set' : 'Upload note set'}
+                {selectedNoteSet ? (
+                  <section className='panel-subsection'>
+                    <h3>Binder details</h3>
+                    <p>
+                      Patient {selectedNoteSet.patient_id}, version {selectedNoteSet.version}, uploaded {formatDateTime(selectedNoteSet.created_at)}.
+                    </p>
+                    <p>{selectedNoteSet.upload_notes || 'No binder notes were entered.'}</p>
+                    {selectedNoteSet.review_chart_id ? (
+                      <button type='button' onClick={() => void loadChartDetail(selectedNoteSet.review_chart_id!)}>
+                        Open automated review
                       </button>
-                      {linkedNoteSet ? <button className='secondary-button' onClick={() => void selectNoteSet(linkedNoteSet.id)}>Open binder</button> : null}
-                    </div>
-                  </div>
-                  {linkedNoteSet ? (
-                    <div className='hint-box'>
-                      <strong>Linked binder available</strong>
-                      <p>
-                        Patient {linkedNoteSet.patient_id} has note set version {linkedNoteSet.version} with {linkedNoteSet.file_count} file{linkedNoteSet.file_count === 1 ? '' : 's'}.
-                        Use it while verifying releases, biopsychosocial documents, labs, medication entries, and signatures.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className='empty-queue'>
-                      <strong>No note binder linked to this patient yet.</strong>
-                      <p>Upload the Alleva document set by patient ID so reviewers can cross-check the audit checklist against the source material.</p>
-                    </div>
-                  )}
-                </section>
-
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Focus</p>
-                      <h2>Open Issues</h2>
-                    </div>
-                  </div>
-                  {openIssues.length === 0 ? (
-                    <p className='panel-lead'>No failed or pending items right now. This audit is ready for the next workflow step.</p>
-                  ) : (
-                    <div className='open-issue-list'>
-                      {openIssues.slice(0, 5).map((item) => (
-                        <div className='open-issue' key={item.item_key}>
-                          <strong>Step {item.step}: {item.label}</strong>
-                          <span>{STATUS_LABELS[item.status]}</span>
-                          <p>{item.evidence_hint}</p>
-                        </div>
+                    ) : null}
+                    <div className='document-list'>
+                      {selectedNoteSet.documents.map((document) => (
+                        <article key={document.id} className='document-card'>
+                          <strong>{document.document_label}</strong>
+                          <p>{document.original_filename}</p>
+                          <p>{document.document_date || 'Date not supplied'}</p>
+                          <span>{shortHash(document.sha256)}</span>
+                        </article>
                       ))}
                     </div>
-                  )}
-                </section>
+                  </section>
+                ) : null}
+              </aside>
+            </section>
+          ) : null}
 
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Checklist</p>
-                      <h2>Review Criteria</h2>
-                    </div>
-                  </div>
-                  <div className='section-stack'>
-                    {groupedDraftItems.map(([sectionName, items]) => (
-                      <section key={sectionName} className='checklist-section'>
-                        <div className='checklist-section__header'>
-                          <h3>{sectionName}</h3>
-                          <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
-                        </div>
-                        <div className='checklist-grid'>
-                          {items.map((item) => (
-                            <article key={item.item_key} className='checklist-card'>
-                              <div className='checklist-card__header'>
-                                <div>
-                                  <p className='eyebrow'>Step {item.step}</p>
-                                  <h4>{item.label}</h4>
-                                  <p className='timeframe'>{item.timeframe}</p>
-                                </div>
-                                <div className='segmented-control' role='group' aria-label={`${item.label} status`}>
-                                  {STATUS_ORDER.map((choice) => (
-                                    <button
-                                      key={choice}
-                                      type='button'
-                                      className={item.status === choice ? complianceClassName(choice) + ' segmented-choice--active' : complianceClassName(choice)}
-                                      onClick={() => updateChecklistItem(item.item_key, { status: choice })}
-                                    >
-                                      {STATUS_LABELS[choice]}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              <p>{item.instructions}</p>
-                              <div className='hint-box'>
-                                <strong>Proof standard</strong>
-                                <p>{item.evidence_hint}</p>
-                              </div>
-                              {item.policy_note ? (
-                                <div className='policy-box'>
-                                  <strong>Policy still to define</strong>
-                                  <p>{item.policy_note}</p>
-                                </div>
-                              ) : null}
-                              <div className='editor-grid editor-grid--compact'>
-                                <label>
-                                  Location / tab
-                                  <input value={item.evidence_location} onChange={(event) => updateChecklistItem(item.item_key, { evidence_location: event.target.value })} placeholder='Client Overview, Lab tab, Document Manager...' />
-                                </label>
-                                <label>
-                                  Completed / signed date
-                                  <input value={item.evidence_date} onChange={(event) => updateChecklistItem(item.item_key, { evidence_date: event.target.value })} placeholder='MM/DD/YYYY' />
-                                </label>
-                                <label>
-                                  Expiry / renewal date
-                                  <input value={item.expiration_date} onChange={(event) => updateChecklistItem(item.item_key, { expiration_date: event.target.value })} placeholder='Optional when applicable' />
-                                </label>
-                                <label className='editor-grid__full'>
-                                  Reviewer notes
-                                  <textarea value={item.notes} onChange={(event) => updateChecklistItem(item.item_key, { notes: event.target.value })} placeholder='Capture what was verified, what failed, or what follow-up is needed.' />
-                                </label>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                </section>
-
-                <section className='panel'>
-                  <div className='panel-heading'>
-                    <div>
-                      <p className='eyebrow'>Workflow</p>
-                      <h2>Move Audit Forward</h2>
-                    </div>
-                  </div>
-                  <p className='panel-lead'>Use the workflow controls after saving. Returning an audit requires a comment so counselors know exactly what to fix.</p>
-                  <label className='editor-grid__full'>
-                    Transition comment
-                    <textarea value={transitionComment} onChange={(event) => setTransitionComment(event.target.value)} placeholder='Required for returns; optional for other transitions.' />
-                  </label>
-                  <div className='editor-actions'>
-                    <button onClick={() => void saveChart()}>Save before transition</button>
-                    {transitionActions.length === 0 ? <span className='empty-hint'>No workflow transition is available for your role in the current state.</span> : null}
-                    {transitionActions.map((action) => (
+          {activeView === 'users' && user?.role === 'admin' ? (
+            <section className='workspace-grid'>
+              <aside className='panel queue-panel'>
+                <div className='panel-heading'>
+                  <h2>User management</h2>
+                  <button type='button' className='ghost-button' onClick={() => void loadUsers()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                </div>
+                <ul className='queue-list'>
+                  {users.map((managedUser) => (
+                    <li key={managedUser.id}>
                       <button
-                        key={action.toState}
                         type='button'
-                        className={action.requiresComment ? 'danger-button' : 'secondary-button'}
-                        onClick={() => void applyTransition(action)}
+                        className={selectedManagedUserId === managedUser.id ? 'queue-item queue-item--active' : 'queue-item'}
+                        onClick={() => handleSelectManagedUser(managedUser.id)}
                       >
-                        {action.label}
+                        <div>
+                          <strong>{managedUser.full_name || managedUser.username}</strong>
+                          <span>{managedUser.username}</span>
+                        </div>
+                        <div className='queue-item-meta'>
+                          <span className='pill pill--neutral'>{managedUser.role}</span>
+                          <span>{managedUser.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
                       </button>
-                    ))}
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+
+              <section className='panel detail-panel'>
+                <h2>Create user</h2>
+                <form className='form-grid' onSubmit={handleCreateUser}>
+                  <label>
+                    Username
+                    <input
+                      value={newUserForm.username}
+                      onChange={(event) => setNewUserForm((current) => ({ ...current, username: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Full name
+                    <input
+                      value={newUserForm.full_name}
+                      onChange={(event) => setNewUserForm((current) => ({ ...current, full_name: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Role
+                    <select value={newUserForm.role} onChange={(event) => setNewUserForm((current) => ({ ...current, role: event.target.value as Role }))}>
+                      <option value='counselor'>Counselor</option>
+                      <option value='manager'>Office manager</option>
+                      <option value='admin'>Admin</option>
+                    </select>
+                  </label>
+                  <label>
+                    Temporary password
+                    <input
+                      type='password'
+                      value={newUserForm.password}
+                      onChange={(event) => setNewUserForm((current) => ({ ...current, password: event.target.value }))}
+                    />
+                  </label>
+                  <div className='full-width form-actions'>
+                    <button type='submit' disabled={isBusy}>
+                      Create user
+                    </button>
                   </div>
-                </section>
-              </>
-            ) : (
-              <section className='panel'>
-                <h2>Choose a Chart Audit or Patient Note Set</h2>
-                <p className='panel-lead'>Select an audit from the queue, open a patient note binder, or start a new workflow using a patient ID.</p>
+                </form>
+
+                {selectedManagedUser && managedUserForm ? (
+                  <>
+                    <section className='panel-subsection'>
+                      <h3>Edit selected user</h3>
+                      <form className='form-grid' onSubmit={handleSaveManagedUser}>
+                        <label>
+                          Full name
+                          <input
+                            value={managedUserForm.full_name}
+                            onChange={(event) => setManagedUserForm((current) => (current ? { ...current, full_name: event.target.value } : current))}
+                          />
+                        </label>
+                        <label>
+                          Role
+                          <select
+                            value={managedUserForm.role}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, role: event.target.value as Role } : current))
+                            }
+                          >
+                            <option value='counselor'>Counselor</option>
+                            <option value='manager'>Office manager</option>
+                            <option value='admin'>Admin</option>
+                          </select>
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.is_active}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, is_active: event.target.checked } : current))
+                            }
+                          />
+                          Active
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.is_locked}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, is_locked: event.target.checked } : current))
+                            }
+                          />
+                          Locked
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.must_reset_password}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, must_reset_password: event.target.checked } : current))
+                            }
+                          />
+                          Force password reset at next login
+                        </label>
+                        <div className='full-width form-actions'>
+                          <button type='submit' disabled={isBusy}>
+                            Save changes
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+
+                    <section className='panel-subsection'>
+                      <h3>Admin password reset</h3>
+                      <form className='form-grid' onSubmit={handleAdminPasswordReset}>
+                        <label className='full-width'>
+                          New temporary password
+                          <input type='password' value={adminPasswordReset} onChange={(event) => setAdminPasswordReset(event.target.value)} />
+                        </label>
+                        <div className='full-width form-actions'>
+                          <button type='submit' disabled={isBusy}>
+                            Reset password and require login reset
+                          </button>
+                        </div>
+                      </form>
+                      <p className='muted-text'>Last login: {formatDateTime(selectedManagedUser.last_login_at)}</p>
+                    </section>
+                  </>
+                ) : (
+                  <p className='empty-state'>Select a user to manage account status, role, and password recovery.</p>
+                )}
               </section>
-            )}
-          </main>
-        </div>
-      ) : (
-        <section className='panel auth-panel'>
-          <h2>Session issue detected</h2>
-          <p className='panel-lead'>We could not finish loading your session. Check the status banner for details, then clear the session and try again.</p>
-          <button onClick={() => resetSession('Session cleared after error. You can now attempt login again.')}>Clear session</button>
-        </section>
+            </section>
+          ) : null}
+
+          {activeView === 'logs' && user?.role === 'admin' ? (
+            <section className='panel detail-panel'>
+              <div className='panel-heading'>
+                <div>
+                  <h2>Forensic audit logs</h2>
+                  <p>Admin-only access to request, data-change, authentication, workflow, and upload events.</p>
+                </div>
+                <button type='button' className='ghost-button' onClick={() => void loadLogs()} disabled={isBusy}>
+                  Refresh
+                </button>
+              </div>
+
+              <form
+                className='filter-row'
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void loadLogs()
+                }}
+              >
+                <label>
+                  Patient ID
+                  <input value={logFilters.patient_id} onChange={(event) => setLogFilters((current) => ({ ...current, patient_id: event.target.value }))} />
+                </label>
+                <label>
+                  Action
+                  <input value={logFilters.action} onChange={(event) => setLogFilters((current) => ({ ...current, action: event.target.value }))} />
+                </label>
+                <button type='submit' disabled={isBusy}>
+                  Filter logs
+                </button>
+              </form>
+
+              {logs.length ? (
+                <div className='log-table'>
+                  {logs.map((log) => (
+                    <article key={log.event_id} className='log-row'>
+                      <div className='log-row__meta'>
+                        <strong>{log.action}</strong>
+                        <span>{formatDateTime(log.timestamp_utc)}</span>
+                      </div>
+                      <p>{log.message}</p>
+                      <div className='log-row__details'>
+                        <span>Actor: {log.actor_username || log.actor_type}</span>
+                        <span>Patient: {log.patient_id || 'n/a'}</span>
+                        <span>IP: {log.source_ip || 'n/a'}</span>
+                        <span>Request: {log.request_id}</span>
+                        <span>{log.event_category}</span>
+                        <span className={`pill pill--${log.outcome_status === 'success' ? 'success' : 'danger'}`}>{log.outcome_status}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className='empty-state'>No audit logs matched the current filters.</p>
+              )}
+            </section>
+          ) : null}
+        </>
       )}
-    </div>
+    </main>
   )
 }
+
+export default App

@@ -49,9 +49,11 @@ def initialize_database() -> None:
                 db.add(
                     User(
                         username=settings.bootstrap_admin_username,
+                        full_name='System Administrator',
                         password_hash=hash_password(settings.bootstrap_admin_password),
                         role=Role.admin,
-                        must_reset_password=True,
+                        is_active=True,
+                        must_reset_password=False,
                     )
                 )
                 db.commit()
@@ -64,11 +66,13 @@ def initialize_database() -> None:
                     details={'username': settings.bootstrap_admin_username},
                     message='Bootstrap admin account created during startup.',
                 )
-            elif settings.reset_bootstrap_admin_on_startup and settings.environment != 'production':
+            elif settings.reset_bootstrap_admin_on_startup:
                 admin.password_hash = hash_password(settings.bootstrap_admin_password)
+                admin.full_name = admin.full_name or 'System Administrator'
+                admin.is_active = True
                 admin.failed_login_attempts = 0
                 admin.is_locked = False
-                admin.must_reset_password = True
+                admin.must_reset_password = False
                 db.commit()
                 log_event(
                     action='system.bootstrap.admin.reset',

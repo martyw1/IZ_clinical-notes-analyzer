@@ -23,8 +23,8 @@ The app must support:
 ### 2.1 Security, identity, and access
 - Implement robust authentication and authorization with RBAC.
 - Roles at minimum: `admin`, `counselor`, `manager`.
-- Seed initial admin account: username `admin`, password `r3`.
-  - On first login, force password reset and require strong password policy.
+- Seed initial admin account: username `admin`, password `r3!@analyzer#123`.
+  - Treat this bootstrap admin password as static and managed outside normal in-app reset flows.
 - Secure session management, CSRF protection, password hashing (Argon2id or bcrypt with strong work factor), account lockout/rate limiting, optional MFA-ready architecture.
 - Admin-only screens for user management, rule management, and deep logs.
 
@@ -213,4 +213,3 @@ If any requirement is unclear, propose a default, document it, and proceed witho
 
 When running this prompt with ChatGPT 5.3-Codex, ask it to output results as:
 1) architecture docs, 2) implementation PR-sized chunks, 3) test evidence after each chunk, and 4) final hardening checklist.
-

@@ -27,11 +27,11 @@ Behavior inside the Docker backend container:
 
 ## Default login credentials
 - Username: `admin`
-- Password: `r3`
+- Password: `r3!@analyzer#123`
 
 Bootstrap credential settings (backend env vars):
 - `BOOTSTRAP_ADMIN_USERNAME` (default: `admin`)
-- `BOOTSTRAP_ADMIN_PASSWORD` (default: `r3`)
+- `BOOTSTRAP_ADMIN_PASSWORD` (default: `r3!@analyzer#123`)
 - `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` (default: `true` in non-production to keep demo credentials working and unlock the bootstrap account)
 
 ## Docker run

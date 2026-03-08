@@ -4,16 +4,20 @@
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(80) UNIQUE NOT NULL,
+  full_name VARCHAR(120) NOT NULL DEFAULT '',
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   must_reset_password BOOLEAN NOT NULL DEFAULT TRUE,
   failed_login_attempts INTEGER NOT NULL DEFAULT 0,
   is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  last_login_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS charts (
   id SERIAL PRIMARY KEY,
+  source_note_set_id INTEGER,
   patient_id VARCHAR(120) NOT NULL DEFAULT '',
   client_name VARCHAR(120) NOT NULL,
   level_of_care VARCHAR(120) NOT NULL,
@@ -24,6 +28,12 @@ CREATE TABLE IF NOT EXISTS charts (
   other_details TEXT NOT NULL DEFAULT '',
   counselor_id INTEGER NOT NULL REFERENCES users(id),
   state VARCHAR(40) NOT NULL DEFAULT 'Draft',
+  system_score INTEGER NOT NULL DEFAULT 0,
+  system_summary TEXT NOT NULL DEFAULT '',
+  manager_comment TEXT NOT NULL DEFAULT '',
+  reviewed_by_id INTEGER REFERENCES users(id),
+  system_generated_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
   notes TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -138,6 +148,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id);
+CREATE INDEX IF NOT EXISTS idx_charts_source_note_set_id ON charts(source_note_set_id);
 CREATE INDEX IF NOT EXISTS idx_charts_state ON charts(state);
 CREATE INDEX IF NOT EXISTS idx_audit_item_responses_chart_id ON audit_item_responses(chart_id);
 CREATE INDEX IF NOT EXISTS idx_audit_item_responses_item_key ON audit_item_responses(item_key);

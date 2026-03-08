@@ -4,7 +4,7 @@ set -euo pipefail
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 BASE_URL="${BASE_URL:-http://localhost:${FRONTEND_PORT}}"
 USERNAME="${SMOKE_USERNAME:-admin}"
-PASSWORD="${SMOKE_PASSWORD:-r3}"
+PASSWORD="${SMOKE_PASSWORD:-r3!@analyzer#123}"
 RESETTED_ACCOUNT='false'
 
 smoke_should_reset_password() {

@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.security import ALGORITHM
 from app.db.session import get_db
 from app.models.models import Role, User
-from app.services.audit import refresh_session_audit_context, set_actor_context
+from app.services.audit import log_event, refresh_session_audit_context, set_actor_context
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/auth/login')
 
@@ -29,6 +29,40 @@ def get_current_user(request: Request, db: Session = Depends(get_db), token: str
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if not user:
         raise credentials_exception
+    if not user.is_active:
+        log_event(
+            db,
+            request,
+            'auth.token.blocked',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'inactive'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=403,
+            message=f'Inactive account {user.username} attempted API access.',
+        )
+        raise HTTPException(status_code=403, detail='Account inactive')
+    if user.is_locked:
+        log_event(
+            db,
+            request,
+            'auth.token.blocked',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'locked'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=403,
+            message=f'Locked account {user.username} attempted API access.',
+        )
+        raise HTTPException(status_code=403, detail='Account locked')
     set_actor_context(user, request)
     refresh_session_audit_context(db)
     return user

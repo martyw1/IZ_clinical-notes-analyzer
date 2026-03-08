@@ -33,14 +33,33 @@ class UserOut(BaseModel):
 
     id: int
     username: str
+    full_name: str
     role: Role
+    is_active: bool
+    is_locked: bool
     must_reset_password: bool
+    last_login_at: datetime | None = None
+    created_at: datetime | None = None
 
 
 class UserCreate(BaseModel):
     username: str
+    full_name: str = ''
     password: str = Field(min_length=12)
     role: Role
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    role: Role | None = None
+    is_active: bool | None = None
+    is_locked: bool | None = None
+    must_reset_password: bool | None = None
+
+
+class UserPasswordResetAdmin(BaseModel):
+    new_password: str = Field(min_length=12)
+    require_reset_on_login: bool = True
 
 
 class AuditTemplateItemOut(BaseModel):
@@ -92,6 +111,7 @@ class ChartCreate(BaseModel):
 
 class ChartSummaryOut(BaseModel):
     id: int
+    source_note_set_id: int | None = None
     patient_id: str
     client_name: str
     level_of_care: str
@@ -102,6 +122,12 @@ class ChartSummaryOut(BaseModel):
     other_details: str
     counselor_id: int
     state: WorkflowState
+    system_score: int
+    system_summary: str
+    manager_comment: str
+    reviewed_by_id: int | None = None
+    system_generated_at: datetime | None = None
+    reviewed_at: datetime | None = None
     notes: str
     pending_items: int
     passed_items: int
@@ -165,6 +191,7 @@ class PatientNoteDocumentOut(BaseModel):
 class PatientNoteSetSummaryOut(BaseModel):
     id: int
     patient_id: str
+    review_chart_id: int | None = None
     version: int
     status: NoteSetStatus
     upload_mode: NoteSetUploadMode

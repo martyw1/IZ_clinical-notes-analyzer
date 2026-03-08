@@ -5,9 +5,11 @@ from sqlalchemy import select
 
 from app.models.models import AuditLog, PatientNoteSet
 
+BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
+
 
 def _auth_headers(client: TestClient) -> dict[str, str]:
-    login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3'})
+    login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
     assert login.status_code == 200
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 
@@ -37,7 +39,7 @@ def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label:
             ]
         ),
     }
-    files = [('files', (file_name, b'patient note payload', 'application/pdf'))]
+    files = [('files', (file_name, b'Intake packet completed and signed.\nPrimary clinician assigned.\n', 'text/plain'))]
     return data, files
 
 
@@ -56,6 +58,7 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         assert payload['status'] == 'active'
         assert payload['upload_mode'] == 'initial'
         assert payload['file_count'] == 1
+        assert payload['review_chart_id'] is not None
         assert payload['documents'][0]['document_label'] == 'Intake Packet'
         assert payload['documents'][0]['client_signed'] is True
         assert len(payload['documents'][0]['sha256']) == 64
@@ -69,7 +72,13 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
             headers=headers,
         )
         assert download.status_code == 200
-        assert download.content == b'patient note payload'
+        assert download.content == b'Intake packet completed and signed.\nPrimary clinician assigned.\n'
+
+        chart = client.get(f"/api/charts/{payload['review_chart_id']}", headers=headers)
+        assert chart.status_code == 200
+        assert chart.json()['source_note_set_id'] == payload['id']
+        assert chart.json()['state'] == 'Awaiting Office Manager Review'
+        assert chart.json()['system_summary']
 
     db = session_local()
     try:
@@ -80,6 +89,10 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         document_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note.document.download')).scalar_one_or_none()
         assert document_log is not None
         assert document_log.patient_id == 'PAT-100'
+
+        eval_log = db.execute(select(AuditLog).where(AuditLog.action == 'chart.system_evaluated')).scalar_one_or_none()
+        assert eval_log is not None
+        assert eval_log.patient_id == 'PAT-100'
     finally:
         db.close()
 
@@ -99,6 +112,7 @@ def test_patient_note_update_creates_new_version_and_supersedes_previous_set(app
         assert second_response.status_code == 200
         assert second_response.json()['version'] == 2
         assert second_response.json()['status'] == 'active'
+        assert second_response.json()['review_chart_id'] != first_response.json()['review_chart_id']
 
         listing = client.get('/api/patient-note-sets?patient_id=PAT-101', headers=headers)
         assert listing.status_code == 200

@@ -13,17 +13,27 @@ logger = logging.getLogger(__name__)
 # models expect newer columns that are not present yet.
 REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
     'users': {
+        'full_name': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'is_active': 'BOOLEAN NOT NULL DEFAULT TRUE',
         'must_reset_password': 'BOOLEAN NOT NULL DEFAULT TRUE',
         'failed_login_attempts': 'INTEGER NOT NULL DEFAULT 0',
         'is_locked': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'last_login_at': 'TIMESTAMP WITH TIME ZONE',
         'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
     },
     'charts': {
+        'source_note_set_id': 'INTEGER',
         'patient_id': "VARCHAR(120) NOT NULL DEFAULT ''",
         'admission_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'discharge_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'auditor_name': "VARCHAR(120) NOT NULL DEFAULT ''",
         'other_details': "TEXT NOT NULL DEFAULT ''",
+        'system_score': 'INTEGER NOT NULL DEFAULT 0',
+        'system_summary': "TEXT NOT NULL DEFAULT ''",
+        'manager_comment': "TEXT NOT NULL DEFAULT ''",
+        'reviewed_by_id': 'INTEGER',
+        'system_generated_at': 'TIMESTAMP WITH TIME ZONE',
+        'reviewed_at': 'TIMESTAMP WITH TIME ZONE',
         'notes': "TEXT NOT NULL DEFAULT ''",
         'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
     },
@@ -77,14 +87,24 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
 
 SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'must_reset_password': 'BOOLEAN NOT NULL DEFAULT 1',
+    'full_name': "TEXT NOT NULL DEFAULT ''",
+    'is_active': 'BOOLEAN NOT NULL DEFAULT 1',
     'failed_login_attempts': 'INTEGER NOT NULL DEFAULT 0',
     'is_locked': 'BOOLEAN NOT NULL DEFAULT 0',
+    'last_login_at': 'TEXT',
     'created_at': 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    'source_note_set_id': 'INTEGER',
     'admission_date': "TEXT NOT NULL DEFAULT ''",
     'discharge_date': "TEXT NOT NULL DEFAULT ''",
     'patient_id': "TEXT NOT NULL DEFAULT ''",
     'auditor_name': "TEXT NOT NULL DEFAULT ''",
     'other_details': "TEXT NOT NULL DEFAULT ''",
+    'system_score': 'INTEGER NOT NULL DEFAULT 0',
+    'system_summary': "TEXT NOT NULL DEFAULT ''",
+    'manager_comment': "TEXT NOT NULL DEFAULT ''",
+    'reviewed_by_id': 'INTEGER',
+    'system_generated_at': 'TEXT',
+    'reviewed_at': 'TEXT',
     'notes': "TEXT NOT NULL DEFAULT ''",
     'evidence_location': "TEXT NOT NULL DEFAULT ''",
     'evidence_date': "TEXT NOT NULL DEFAULT ''",
@@ -156,8 +176,10 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
         if inspector.has_table('charts'):
             if dialect_name == 'postgresql':
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_source_note_set_id ON charts(source_note_set_id)'))
             elif dialect_name == 'sqlite':
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_source_note_set_id ON charts(source_note_set_id)'))
 
         if inspector.has_table('audit_logs'):
             if dialect_name == 'postgresql':

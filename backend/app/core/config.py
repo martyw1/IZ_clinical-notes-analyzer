@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     frontend_origins: str = 'http://localhost:5173'
     upload_dir: str = 'uploads'
     bootstrap_admin_username: str = 'admin'
-    bootstrap_admin_password: str = 'r3'
+    bootstrap_admin_password: str = 'r3!@analyzer#123'
     reset_bootstrap_admin_on_startup: bool = True
 
     @property

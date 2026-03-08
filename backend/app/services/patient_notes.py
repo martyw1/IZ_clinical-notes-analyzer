@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import re
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover - exercised only in misconfigured runtime environments
+    PdfReader = None
 
 from app.core.config import settings
 
@@ -21,6 +28,12 @@ class StoredUpload:
     sha256: str
     size_bytes: int
     content_type: str
+
+
+@dataclass(frozen=True)
+class ExtractedText:
+    text: str
+    status: str
 
 
 def uploads_root() -> Path:
@@ -106,3 +119,57 @@ def remove_stored_paths(storage_paths: list[str]) -> None:
             continue
         if path.exists():
             path.unlink()
+
+
+def _decode_bytes(raw: bytes) -> str:
+    for encoding in ('utf-8', 'utf-16', 'latin-1'):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8', errors='ignore')
+
+
+def _strip_rtf(raw_text: str) -> str:
+    without_controls = re.sub(r'\\[a-z]+\d* ?', ' ', raw_text)
+    without_hex = re.sub(r"\\'[0-9a-fA-F]{2}", ' ', without_controls)
+    without_braces = without_hex.replace('{', ' ').replace('}', ' ')
+    return re.sub(r'\s+', ' ', without_braces).strip()
+
+
+def _extract_docx_text(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        document_xml = archive.read('word/document.xml')
+    text = _decode_bytes(document_xml)
+    text = re.sub(r'</w:p>', '\n', text)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    return re.sub(r'\s+', ' ', html.unescape(text)).strip()
+
+
+def _extract_pdf_text(path: Path) -> str:
+    if PdfReader is None:
+        raise RuntimeError('pypdf is not installed')
+    reader = PdfReader(str(path))
+    pages = [page.extract_text() or '' for page in reader.pages]
+    return '\n'.join(page for page in pages if page).strip()
+
+
+def extract_text_from_storage(storage_path: str) -> ExtractedText:
+    path = resolve_storage_path(storage_path)
+    suffix = path.suffix.lower()
+
+    try:
+        if suffix in {'.txt', '.csv'}:
+            return ExtractedText(text=_decode_bytes(path.read_bytes()).strip(), status='extracted')
+        if suffix == '.rtf':
+            return ExtractedText(text=_strip_rtf(_decode_bytes(path.read_bytes())), status='extracted')
+        if suffix == '.docx':
+            return ExtractedText(text=_extract_docx_text(path), status='extracted')
+        if suffix == '.pdf':
+            return ExtractedText(text=_extract_pdf_text(path), status='extracted')
+        if suffix in {'.doc', '.jpg', '.jpeg', '.png', '.zip'}:
+            return ExtractedText(text='', status='unsupported')
+    except Exception:
+        return ExtractedText(text='', status='failed')
+
+    return ExtractedText(text='', status='unsupported')

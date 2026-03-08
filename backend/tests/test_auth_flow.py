@@ -8,6 +8,8 @@ from sqlalchemy import select
 from app.core.security import hash_password
 from app.models.models import Role, User
 
+BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
+
 
 def reload_app_with_env(tmp_path: Path, monkeypatch, **env_overrides):
     db_path = tmp_path / 'test.db'
@@ -40,13 +42,15 @@ def test_health(app_with_sqlite):
 def test_login_and_me_flow(app_with_sqlite):
     app, _ = app_with_sqlite
     with TestClient(app) as client:
-        response = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3'})
+        response = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
         assert response.status_code == 200
+        assert response.json()['must_reset_password'] is False
         token = response.json()['access_token']
 
         me = client.get('/api/users/me', headers={'Authorization': f'Bearer {token}'})
         assert me.status_code == 200
         assert me.json()['username'] == 'admin'
+        assert me.json()['must_reset_password'] is False
 
 
 def test_reset_password_flow_for_first_login_user(app_with_sqlite):
@@ -90,7 +94,7 @@ def test_reset_password_flow_for_first_login_user(app_with_sqlite):
 
 
 def test_startup_restores_locked_bootstrap_admin(tmp_path: Path, monkeypatch):
-    bootstrap_password = 'bootstrap-pass-1234'
+    bootstrap_password = BOOTSTRAP_ADMIN_PASSWORD
     app, session_local = reload_app_with_env(
         tmp_path,
         monkeypatch,
@@ -126,13 +130,29 @@ def test_startup_restores_locked_bootstrap_admin(tmp_path: Path, monkeypatch):
     with TestClient(app) as client:
         login = client.post('/api/auth/login', json={'username': 'admin', 'password': bootstrap_password})
         assert login.status_code == 200
-        assert login.json()['must_reset_password'] is True
+        assert login.json()['must_reset_password'] is False
 
     db = session_local()
     try:
         admin = db.execute(select(User).where(User.username == 'admin')).scalar_one()
         assert admin.failed_login_attempts == 0
         assert admin.is_locked is False
-        assert admin.must_reset_password is True
+        assert admin.must_reset_password is False
     finally:
         db.close()
+
+
+def test_bootstrap_admin_password_is_static_in_app(app_with_sqlite):
+    app, _ = app_with_sqlite
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
+        assert login.status_code == 200
+
+        token = login.json()['access_token']
+        reset = client.post(
+            '/api/auth/reset-password',
+            json={'new_password': 'replacement-password-1234'},
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert reset.status_code == 400
+        assert 'fixed' in reset.json()['detail']

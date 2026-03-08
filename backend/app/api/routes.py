@@ -1,24 +1,25 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
 from app.core.audit_template import AUDIT_TEMPLATE, AUDIT_TEMPLATE_BY_KEY, audit_sections
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models.models import (
-    AllevaBucket,
     AuditItemResponse,
     AuditLog,
     Chart,
     ComplianceStatus,
-    DocumentCompletionStatus,
     NoteSetStatus,
     NoteSetUploadMode,
     PatientNoteDocument,
@@ -37,7 +38,6 @@ from app.schemas.schemas import (
     ChartUpdate,
     LoginInput,
     PasswordResetInput,
-    PatientNoteDocumentOut,
     PatientNoteDocumentUploadInput,
     PatientNoteSetDetailOut,
     PatientNoteSetSummaryOut,
@@ -45,39 +45,55 @@ from app.schemas.schemas import (
     TransitionInput,
     UserCreate,
     UserOut,
+    UserPasswordResetAdmin,
+    UserUpdate,
 )
 from app.services.audit import log_event
+from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import remove_stored_paths, resolve_storage_path, store_upload_file
 
 router = APIRouter(prefix='/api')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
+REVIEW_ROLES = (Role.admin, Role.manager)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _is_bootstrap_admin(user: User) -> bool:
+    return user.username == settings.bootstrap_admin_username
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:
     allowed = {
-        Role.counselor: {
-            WorkflowState.draft: [WorkflowState.submitted],
-            WorkflowState.returned: [WorkflowState.submitted],
-        },
         Role.admin: {
-            WorkflowState.submitted: [WorkflowState.in_progress, WorkflowState.returned],
-            WorkflowState.in_progress: [WorkflowState.completed, WorkflowState.returned],
-            WorkflowState.completed: [WorkflowState.verified],
+            WorkflowState.draft: [WorkflowState.awaiting_manager_review],
+            WorkflowState.awaiting_manager_review: [WorkflowState.manager_approved, WorkflowState.manager_rejected],
+            WorkflowState.manager_rejected: [WorkflowState.awaiting_manager_review],
         },
         Role.manager: {
-            WorkflowState.completed: [WorkflowState.verified],
-            WorkflowState.submitted: [WorkflowState.in_progress],
+            WorkflowState.awaiting_manager_review: [WorkflowState.manager_approved, WorkflowState.manager_rejected],
         },
     }
     return target in allowed.get(role, {}).get(current, [])
 
 
 def _chart_stmt():
-    return select(Chart).options(selectinload(Chart.audit_responses), selectinload(Chart.counselor))
+    return select(Chart).options(
+        selectinload(Chart.audit_responses),
+        selectinload(Chart.counselor),
+        selectinload(Chart.source_note_set),
+        selectinload(Chart.reviewed_by),
+    )
 
 
 def _note_set_stmt():
-    return select(PatientNoteSet).options(selectinload(PatientNoteSet.documents), selectinload(PatientNoteSet.uploaded_by))
+    return select(PatientNoteSet).options(
+        selectinload(PatientNoteSet.documents),
+        selectinload(PatientNoteSet.uploaded_by),
+        selectinload(PatientNoteSet.review_charts),
+    )
 
 
 def _ensure_chart_access(chart: Chart | None, user: User) -> Chart:
@@ -93,11 +109,17 @@ def _find_chart(chart_id: int, user: User, db: Session) -> Chart:
     return _ensure_chart_access(chart, user)
 
 
-def _find_note_set(note_set_id: int, db: Session) -> PatientNoteSet:
-    note_set = db.execute(_note_set_stmt().where(PatientNoteSet.id == note_set_id)).scalar_one_or_none()
+def _ensure_note_set_access(note_set: PatientNoteSet | None, user: User) -> PatientNoteSet:
     if not note_set:
         raise HTTPException(status_code=404, detail='Patient note set not found')
+    if user.role == Role.counselor and note_set.uploaded_by_id != user.id:
+        raise HTTPException(status_code=403, detail='Cannot access this patient note set')
     return note_set
+
+
+def _find_note_set(note_set_id: int, user: User, db: Session) -> PatientNoteSet:
+    note_set = db.execute(_note_set_stmt().where(PatientNoteSet.id == note_set_id)).scalar_one_or_none()
+    return _ensure_note_set_access(note_set, user)
 
 
 def _ensure_all_responses(chart: Chart) -> None:
@@ -120,14 +142,21 @@ def _status_counts(chart: Chart) -> dict[ComplianceStatus, int]:
     return counts
 
 
-def _chart_label(chart: Chart) -> str:
-    return chart.patient_id or chart.client_name or f'chart-{chart.id}'
+def _latest_review_chart_id(note_set: PatientNoteSet) -> int | None:
+    if not note_set.review_charts:
+        return None
+    latest_chart = max(
+        note_set.review_charts,
+        key=lambda chart: (chart.created_at or datetime.min.replace(tzinfo=timezone.utc), chart.id),
+    )
+    return latest_chart.id
 
 
 def _note_set_summary(note_set: PatientNoteSet) -> dict[str, object]:
     return {
         'id': note_set.id,
         'patient_id': note_set.patient_id,
+        'review_chart_id': _latest_review_chart_id(note_set),
         'version': note_set.version,
         'status': note_set.status,
         'upload_mode': note_set.upload_mode,
@@ -173,6 +202,7 @@ def _chart_summary(chart: Chart) -> dict[str, object]:
     counts = _status_counts(chart)
     return {
         'id': chart.id,
+        'source_note_set_id': chart.source_note_set_id,
         'patient_id': chart.patient_id,
         'client_name': chart.client_name,
         'level_of_care': chart.level_of_care,
@@ -183,6 +213,12 @@ def _chart_summary(chart: Chart) -> dict[str, object]:
         'other_details': chart.other_details,
         'counselor_id': chart.counselor_id,
         'state': chart.state,
+        'system_score': chart.system_score,
+        'system_summary': chart.system_summary,
+        'manager_comment': chart.manager_comment,
+        'reviewed_by_id': chart.reviewed_by_id,
+        'system_generated_at': chart.system_generated_at,
+        'reviewed_at': chart.reviewed_at,
         'notes': chart.notes,
         'pending_items': counts[ComplianceStatus.pending],
         'passed_items': counts[ComplianceStatus.yes],
@@ -254,7 +290,7 @@ def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate) -> No
         response.evidence_location = item.evidence_location.strip()
         response.evidence_date = item.evidence_date.strip()
         response.expiration_date = item.expiration_date.strip()
-        response.updated_at = datetime.now(timezone.utc)
+        response.updated_at = _utc_now()
         seen_keys.add(item.item_key)
 
     missing_keys = [template_item['key'] for template_item in AUDIT_TEMPLATE if template_item['key'] not in seen_keys]
@@ -297,9 +333,28 @@ def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[Patient
     return normalized
 
 
+def _active_admin_count(db: Session) -> int:
+    return int(
+        db.execute(
+            select(func.count()).select_from(User).where(User.role == Role.admin, User.is_active.is_(True), User.is_locked.is_(False))
+        ).scalar_one()
+    )
+
+
+def _assert_admin_safety(target: User, db: Session, *, new_role: Role | None = None, new_is_active: bool | None = None, new_is_locked: bool | None = None) -> None:
+    if target.role != Role.admin:
+        return
+
+    admin_would_be_removed = new_role == Role.counselor or new_role == Role.manager or new_is_active is False or new_is_locked is True
+    if admin_would_be_removed and _active_admin_count(db) <= 1:
+        raise HTTPException(status_code=400, detail='At least one active, unlocked admin account must remain')
+
+
 @router.post('/auth/login', response_model=Token)
 def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
-    user = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
+    username = payload.username.strip()
+    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+
     if not user or not verify_password(payload.password, user.password_hash):
         if user:
             user.failed_login_attempts += 1
@@ -313,14 +368,33 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             event_category='authentication',
             target_entity='user',
             target_entity_type='user',
-            target_entity_id=payload.username,
-            details={'username': payload.username},
+            target_entity_id=username,
+            details={'username': username},
             outcome_status='failure',
             severity='warning',
             http_status_code=401,
-            message=f'Login failed for username {payload.username}.',
+            message=f'Login failed for username {username}.',
         )
         raise HTTPException(status_code=401, detail='Invalid credentials')
+
+    if not user.is_active:
+        log_event(
+            db,
+            request,
+            'auth.login.blocked',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'inactive'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=403,
+            message=f'Login blocked for inactive account {user.username}.',
+        )
+        raise HTTPException(status_code=403, detail='Account inactive')
+
     if user.is_locked:
         log_event(
             db,
@@ -331,15 +405,20 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             target_entity='user',
             target_entity_type='user',
             target_entity_id=str(user.id),
-            details={'username': user.username},
+            details={'username': user.username, 'reason': 'locked'},
             outcome_status='failure',
             severity='warning',
             http_status_code=403,
             message=f'Login blocked for locked account {user.username}.',
         )
         raise HTTPException(status_code=403, detail='Account locked')
+
     user.failed_login_attempts = 0
+    user.last_login_at = _utc_now()
+    if _is_bootstrap_admin(user):
+        user.must_reset_password = False
     db.commit()
+
     token = create_access_token(user.username)
     log_event(
         db,
@@ -359,8 +438,28 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
 
 @router.post('/auth/reset-password')
 def reset_password(payload: PasswordResetInput, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if _is_bootstrap_admin(user):
+        log_event(
+            db,
+            request,
+            'auth.password.reset.blocked',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'bootstrap_admin_static_password'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=400,
+            message='Static bootstrap admin password change was blocked.',
+        )
+        raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
+
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
+    user.is_locked = False
+    user.failed_login_attempts = 0
     db.commit()
     log_event(
         db,
@@ -378,9 +477,11 @@ def reset_password(payload: PasswordResetInput, request: Request, user: User = D
 
 
 @router.get('/users/me', response_model=UserOut)
-def me(user: User = Depends(get_current_user)):
+def me(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     log_event(
-        action='user.profile.read',
+        db,
+        request,
+        'user.profile.read',
         actor=user,
         event_category='data_access',
         target_entity='user',
@@ -392,34 +493,153 @@ def me(user: User = Depends(get_current_user)):
     return user
 
 
+@router.get('/users', response_model=list[UserOut])
+def list_users(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    users = list(db.execute(select(User).order_by(User.role.asc(), User.username.asc())).scalars().all())
+    log_event(
+        db,
+        request,
+        'user.list.read',
+        actor=user,
+        event_category='user_management',
+        target_entity='user_directory',
+        target_entity_type='user',
+        details={'count': len(users)},
+        message=f'User directory viewed by {user.username}.',
+    )
+    return users
+
+
 @router.post('/users', response_model=UserOut)
-def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
-    exists = db.execute(select(User).where(User.username == payload.username)).scalar_one_or_none()
+def create_user(payload: UserCreate, request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail='Username is required')
+    exists = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=409, detail='Username exists')
-    user = User(username=payload.username, password_hash=hash_password(payload.password), role=payload.role, must_reset_password=True)
-    db.add(user)
+
+    created = User(
+        username=username,
+        full_name=payload.full_name.strip() or username,
+        password_hash=hash_password(payload.password),
+        role=payload.role,
+        is_active=True,
+        must_reset_password=True,
+    )
+    db.add(created)
     db.commit()
-    db.refresh(user)
+    db.refresh(created)
     log_event(
         db,
         request,
         'user.create',
+        actor=user,
         event_category='user_management',
         target_entity='user',
         target_entity_type='user',
-        target_entity_id=str(user.id),
-        details={'username': user.username, 'role': user.role.value},
-        message=f'User {user.username} created with role {user.role.value}.',
+        target_entity_id=str(created.id),
+        details={'username': created.username, 'role': created.role.value},
+        message=f'User {created.username} created with role {created.role.value}.',
     )
-    return user
+    return created
+
+
+@router.patch('/users/{user_id}', response_model=UserOut)
+def update_user(user_id: int, payload: UserUpdate, request: Request, actor: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail='User not found')
+
+    if _is_bootstrap_admin(target):
+        disallowed = any(
+            value is not None
+            for value in [payload.role, payload.is_active, payload.is_locked, payload.must_reset_password]
+        )
+        if disallowed:
+            raise HTTPException(status_code=400, detail='The bootstrap admin account cannot be deactivated, locked, or re-scoped')
+
+    _assert_admin_safety(target, db, new_role=payload.role, new_is_active=payload.is_active, new_is_locked=payload.is_locked)
+
+    if payload.full_name is not None:
+        target.full_name = payload.full_name.strip() or target.username
+    if payload.role is not None and not _is_bootstrap_admin(target):
+        target.role = payload.role
+    if payload.is_active is not None and not _is_bootstrap_admin(target):
+        target.is_active = payload.is_active
+    if payload.is_locked is not None and not _is_bootstrap_admin(target):
+        target.is_locked = payload.is_locked
+        if not target.is_locked:
+            target.failed_login_attempts = 0
+    if payload.must_reset_password is not None and not _is_bootstrap_admin(target):
+        target.must_reset_password = payload.must_reset_password
+
+    db.commit()
+    db.refresh(target)
+    log_event(
+        db,
+        request,
+        'user.update',
+        actor=actor,
+        event_category='user_management',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(target.id),
+        details={
+            'username': target.username,
+            'role': target.role.value,
+            'is_active': target.is_active,
+            'is_locked': target.is_locked,
+            'must_reset_password': target.must_reset_password,
+        },
+        message=f'User {target.username} updated by {actor.username}.',
+    )
+    return target
+
+
+@router.post('/users/{user_id}/reset-password', response_model=UserOut)
+def admin_reset_password(
+    user_id: int,
+    payload: UserPasswordResetAdmin,
+    request: Request,
+    actor: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail='User not found')
+    if _is_bootstrap_admin(target):
+        raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
+
+    target.password_hash = hash_password(payload.new_password)
+    target.must_reset_password = payload.require_reset_on_login
+    target.is_locked = False
+    target.failed_login_attempts = 0
+    db.commit()
+    db.refresh(target)
+    log_event(
+        db,
+        request,
+        'user.password.reset.admin',
+        actor=actor,
+        event_category='user_management',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(target.id),
+        details={'username': target.username, 'require_reset_on_login': payload.require_reset_on_login},
+        message=f'Password reset by admin for {target.username}.',
+    )
+    return target
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
-def get_audit_template(_: User = Depends(get_current_user)):
+def get_audit_template(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     sections = audit_sections()
     log_event(
-        action='audit.template.read',
+        db,
+        request,
+        'audit.template.read',
+        actor=user,
         event_category='data_access',
         target_entity='audit_template',
         target_entity_type='template',
@@ -430,25 +650,38 @@ def get_audit_template(_: User = Depends(get_current_user)):
 
 
 @router.get('/charts', response_model=list[ChartSummaryOut])
-def list_charts(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_charts(
+    request: Request,
+    patient_id: str | None = Query(default=None),
+    state: WorkflowState | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     stmt = _chart_stmt()
     if user.role == Role.counselor:
         stmt = stmt.where(Chart.counselor_id == user.id)
-    charts = list(db.execute(stmt.order_by(Chart.id.desc())).scalars().unique().all())
+    if patient_id and patient_id.strip():
+        stmt = stmt.where(Chart.patient_id == patient_id.strip())
+    if state:
+        stmt = stmt.where(Chart.state == state)
+    charts = list(db.execute(stmt.order_by(Chart.created_at.desc(), Chart.id.desc())).scalars().unique().all())
     log_event(
-        action='chart.list.read',
+        db,
+        request,
+        'chart.list.read',
         actor=user,
         event_category='data_access',
         target_entity='chart_queue',
         target_entity_type='chart_queue',
-        details={'count': len(charts)},
+        patient_id=patient_id.strip() if patient_id and patient_id.strip() else None,
+        details={'count': len(charts), 'state': state.value if state else None},
         message=f'Chart queue viewed by {user.username}.',
     )
     return [_chart_summary(chart) for chart in charts]
 
 
 @router.post('/charts', response_model=ChartDetailOut)
-def create_chart(payload: ChartCreate, request: Request, user: User = Depends(require_roles(Role.counselor, Role.admin)), db: Session = Depends(get_db)):
+def create_chart(payload: ChartCreate, request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
     chart = Chart(
         patient_id='',
         client_name='',
@@ -460,6 +693,7 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
         other_details='',
         counselor_id=user.id,
         notes='',
+        state=WorkflowState.draft,
     )
     _apply_chart_updates(chart, payload)
     chart.auditor_name = chart.auditor_name or user.username
@@ -478,16 +712,18 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
         target_entity_id=str(chart.id),
         patient_id=chart.patient_id,
         details={'state': chart.state.value, 'patient_id': chart.patient_id},
-        message=f'Chart audit {chart.id} created for patient {chart.patient_id or chart.id}.',
+        message=f'Manual chart audit {chart.id} created for patient {chart.patient_id or chart.id}.',
     )
     return _chart_detail(chart)
 
 
 @router.get('/charts/{chart_id}', response_model=ChartDetailOut)
-def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_chart(chart_id: int, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     chart = _find_chart(chart_id, user, db)
     log_event(
-        action='chart.read',
+        db,
+        request,
+        'chart.read',
         actor=user,
         event_category='data_access',
         target_entity=f'chart:{chart.id}',
@@ -501,9 +737,14 @@ def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session
 
 
 @router.put('/charts/{chart_id}', response_model=ChartDetailOut)
-def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: User = Depends(require_roles(*REVIEW_ROLES)), db: Session = Depends(get_db)):
     chart = _find_chart(chart_id, user, db)
     _apply_chart_updates(chart, payload)
+    if chart.source_note_set_id:
+        chart.state = WorkflowState.awaiting_manager_review
+        chart.reviewed_by_id = None
+        chart.reviewed_at = None
+        chart.manager_comment = ''
     db.commit()
     chart = _find_chart(chart_id, user, db)
     log_event(
@@ -523,15 +764,33 @@ def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: Us
 
 
 @router.post('/charts/{chart_id}/transition', response_model=ChartDetailOut)
-def transition_chart(chart_id: int, payload: TransitionInput, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def transition_chart(chart_id: int, payload: TransitionInput, request: Request, user: User = Depends(require_roles(*REVIEW_ROLES)), db: Session = Depends(get_db)):
     chart = _find_chart(chart_id, user, db)
     if not _allowed_transition(user.role, chart.state, payload.to_state):
         raise HTTPException(status_code=400, detail='Invalid transition for role/state')
-    if payload.to_state == WorkflowState.returned and not payload.comment.strip():
-        raise HTTPException(status_code=400, detail='Comment required for returns')
+    if payload.to_state == WorkflowState.manager_rejected and not payload.comment.strip():
+        raise HTTPException(status_code=400, detail='Comment required when returning a chart to the counselor')
+
     old = chart.state
     chart.state = payload.to_state
-    db.add(WorkflowTransition(chart_id=chart.id, actor_id=user.id, from_state=old.value, to_state=payload.to_state.value, comment=payload.comment))
+    chart.manager_comment = payload.comment.strip()
+    chart.reviewed_by_id = user.id
+    chart.reviewed_at = _utc_now()
+
+    if payload.to_state == WorkflowState.awaiting_manager_review:
+        chart.manager_comment = ''
+        chart.reviewed_by_id = None
+        chart.reviewed_at = None
+
+    db.add(
+        WorkflowTransition(
+            chart_id=chart.id,
+            actor_id=user.id,
+            from_state=old.value,
+            to_state=payload.to_state.value,
+            comment=payload.comment.strip(),
+        )
+    )
     db.commit()
     chart = _find_chart(chart_id, user, db)
     log_event(
@@ -544,7 +803,7 @@ def transition_chart(chart_id: int, payload: TransitionInput, request: Request, 
         target_entity_type='chart',
         target_entity_id=str(chart.id),
         patient_id=chart.patient_id,
-        details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment},
+        details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment.strip()},
         message=f'Chart audit {chart.id} transitioned from {old.value} to {payload.to_state.value}.',
     )
     return _chart_detail(chart)
@@ -552,32 +811,39 @@ def transition_chart(chart_id: int, payload: TransitionInput, request: Request, 
 
 @router.get('/patient-note-sets', response_model=list[PatientNoteSetSummaryOut])
 def list_patient_note_sets(
-    patient_id: str | None = None,
+    request: Request,
+    patient_id: str | None = Query(default=None),
     user: User = Depends(require_roles(*NOTE_SET_ROLES)),
     db: Session = Depends(get_db),
 ):
     stmt = _note_set_stmt().order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())
-    if patient_id:
+    if user.role == Role.counselor:
+        stmt = stmt.where(PatientNoteSet.uploaded_by_id == user.id)
+    if patient_id and patient_id.strip():
         stmt = stmt.where(PatientNoteSet.patient_id == patient_id.strip())
     note_sets = list(db.execute(stmt).scalars().unique().all())
     log_event(
-        action='patient_note_sets.list.read',
+        db,
+        request,
+        'patient_note_sets.list.read',
         actor=user,
         event_category='data_access',
         target_entity='patient_note_sets',
         target_entity_type='patient_note_set',
-        patient_id=patient_id.strip() if patient_id else None,
-        details={'count': len(note_sets), 'patient_id': patient_id.strip() if patient_id else None},
+        patient_id=patient_id.strip() if patient_id and patient_id.strip() else None,
+        details={'count': len(note_sets), 'patient_id': patient_id.strip() if patient_id and patient_id.strip() else None},
         message=f'Patient note set queue viewed by {user.username}.',
     )
     return [_note_set_summary(note_set) for note_set in note_sets]
 
 
 @router.get('/patient-note-sets/{note_set_id}', response_model=PatientNoteSetDetailOut)
-def get_patient_note_set(note_set_id: int, user: User = Depends(require_roles(*NOTE_SET_ROLES)), db: Session = Depends(get_db)):
-    note_set = _find_note_set(note_set_id, db)
+def get_patient_note_set(note_set_id: int, request: Request, user: User = Depends(require_roles(*NOTE_SET_ROLES)), db: Session = Depends(get_db)):
+    note_set = _find_note_set(note_set_id, user, db)
     log_event(
-        action='patient_note_set.read',
+        db,
+        request,
+        'patient_note_set.read',
         actor=user,
         event_category='data_access',
         target_entity=f'patient_note_set:{note_set.id}',
@@ -615,6 +881,8 @@ async def upload_patient_note_set(
     existing_active = db.execute(
         _note_set_stmt().where(PatientNoteSet.patient_id == normalized_patient_id, PatientNoteSet.status == NoteSetStatus.active)
     ).scalar_one_or_none()
+    if existing_active is not None:
+        _ensure_note_set_access(existing_active, user)
 
     if upload_mode == NoteSetUploadMode.initial and existing_active:
         raise HTTPException(status_code=409, detail='A patient note set already exists for this patient ID; use update mode instead')
@@ -675,6 +943,37 @@ async def upload_patient_note_set(
             document.sha256 = stored.sha256
             stored_paths.append(stored.storage_path)
 
+        chart = Chart(
+            source_note_set_id=note_set.id,
+            patient_id=normalized_patient_id,
+            client_name=normalized_patient_id,
+            level_of_care=note_set.level_of_care,
+            admission_date=note_set.admission_date,
+            discharge_date=note_set.discharge_date,
+            primary_clinician=note_set.primary_clinician,
+            auditor_name=user.full_name or user.username,
+            other_details='Auto-generated from uploaded clinical note binder.',
+            counselor_id=user.id,
+            notes=note_set.upload_notes,
+            state=WorkflowState.draft,
+        )
+        db.add(chart)
+        db.flush()
+
+        note_set.documents[:] = created_documents
+        report = generate_evaluation_report(note_set)
+        apply_report_to_chart(chart, report)
+        chart.notes = note_set.upload_notes
+        db.add(
+            WorkflowTransition(
+                chart_id=chart.id,
+                actor_id=user.id,
+                from_state=WorkflowState.draft.value,
+                to_state=chart.state.value,
+                comment='System evaluation generated automatically from uploaded clinical notes.',
+            )
+        )
+
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -698,7 +997,10 @@ async def upload_patient_note_set(
             raise
         raise
 
-    note_set = _find_note_set(note_set.id, db)
+    note_set = _find_note_set(note_set.id, user, db)
+    review_chart_id = _latest_review_chart_id(note_set)
+    review_chart = _find_chart(review_chart_id, user, db) if review_chart_id is not None else None
+
     log_event(
         db,
         request,
@@ -732,6 +1034,26 @@ async def upload_patient_note_set(
             },
             message=f'Clinical note document {document.id} stored for patient {note_set.patient_id}.',
         )
+    if review_chart is not None:
+        log_event(
+            db,
+            request,
+            'chart.system_evaluated',
+            actor=user,
+            event_category='workflow',
+            target_entity=f'chart:{review_chart.id}',
+            target_entity_type='chart',
+            target_entity_id=str(review_chart.id),
+            patient_id=review_chart.patient_id,
+            details={
+                'source_note_set_id': note_set.id,
+                'system_score': review_chart.system_score,
+                'state': review_chart.state.value,
+                'failed_items': _chart_summary(review_chart)['failed_items'],
+                'pending_items': _chart_summary(review_chart)['pending_items'],
+            },
+            message=f'Automated evaluation completed for chart {review_chart.id}.',
+        )
     return _note_set_detail(note_set)
 
 
@@ -743,7 +1065,7 @@ def download_patient_note_document(
     user: User = Depends(require_roles(*NOTE_SET_ROLES)),
     db: Session = Depends(get_db),
 ):
-    note_set = _find_note_set(note_set_id, db)
+    note_set = _find_note_set(note_set_id, user, db)
     document = next((item for item in note_set.documents if item.id == document_id), None)
     if not document:
         raise HTTPException(status_code=404, detail='Patient note document not found')
@@ -769,14 +1091,47 @@ def download_patient_note_document(
 
 
 @router.get('/audit/logs', response_model=list[AuditLogOut])
-def audit_logs(_: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
-    logs = list(db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(500)).scalars().all())
+def audit_logs(
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=2000),
+    action: str | None = Query(default=None),
+    event_category: str | None = Query(default=None),
+    patient_id: str | None = Query(default=None),
+    actor_username: str | None = Query(default=None),
+    request_id: str | None = Query(default=None),
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
+    if action and action.strip():
+        stmt = stmt.where(AuditLog.action == action.strip())
+    if event_category and event_category.strip():
+        stmt = stmt.where(AuditLog.event_category == event_category.strip())
+    if patient_id and patient_id.strip():
+        stmt = stmt.where(AuditLog.patient_id == patient_id.strip())
+    if actor_username and actor_username.strip():
+        stmt = stmt.where(AuditLog.actor_username == actor_username.strip())
+    if request_id and request_id.strip():
+        stmt = stmt.where(AuditLog.request_id == request_id.strip())
+
+    logs = list(db.execute(stmt).scalars().all())
     log_event(
-        action='audit.logs.read',
+        db,
+        request,
+        'audit.logs.read',
+        actor=user,
         event_category='forensic_access',
         target_entity='audit_logs',
         target_entity_type='audit_log',
-        details={'count': len(logs)},
+        details={
+            'count': len(logs),
+            'limit': limit,
+            'action': action.strip() if action and action.strip() else None,
+            'event_category': event_category.strip() if event_category and event_category.strip() else None,
+            'patient_id': patient_id.strip() if patient_id and patient_id.strip() else None,
+            'actor_username': actor_username.strip() if actor_username and actor_username.strip() else None,
+            'request_id': request_id.strip() if request_id and request_id.strip() else None,
+        },
         message='Forensic audit log list viewed.',
     )
     return logs

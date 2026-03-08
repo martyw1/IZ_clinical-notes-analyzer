@@ -235,7 +235,7 @@ try {
     docker compose ps
 
     $bootstrapUsername = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME' } else { 'admin' }
-    $bootstrapPassword = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD' } else { 'r3' }
+    $bootstrapPassword = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD' } else { 'r3!@analyzer#123' }
     Write-Info 'Running smoke test'
     $env:FRONTEND_PORT = if (Get-EnvValue $EnvFile 'FRONTEND_PORT') { Get-EnvValue $EnvFile 'FRONTEND_PORT' } else { '5173' }
     $env:SMOKE_RESET_PASSWORD = 'false'

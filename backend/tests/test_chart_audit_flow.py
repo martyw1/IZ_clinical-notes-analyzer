@@ -2,9 +2,11 @@ from fastapi.testclient import TestClient
 
 from app.core.audit_template import AUDIT_TEMPLATE
 
+BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
+
 
 def _auth_headers(client: TestClient) -> dict[str, str]:
-    login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3'})
+    login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
     assert login.status_code == 200
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 
@@ -112,3 +114,42 @@ def test_chart_update_persists_audit_results(app_with_sqlite):
         assert first_item['evidence_location'] == 'Client Overview'
         assert second_item['status'] == 'no'
         assert second_item['notes'] == 'Primary clinician still missing.'
+
+
+def test_manager_review_transition_requires_comment_for_rejection(app_with_sqlite):
+    app, _ = app_with_sqlite
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/charts',
+            headers=headers,
+            json={
+                'patient_id': 'PAT-REVIEW-1',
+                'client_name': '',
+                'level_of_care': 'Residential',
+                'admission_date': '04/01/2025',
+                'discharge_date': '09/10/2025',
+                'primary_clinician': 'Clinician A',
+                'auditor_name': 'admin',
+                'other_details': '',
+                'notes': '',
+            },
+        )
+        assert created.status_code == 200
+        chart_id = created.json()['id']
+
+        staged = client.post(
+            f'/api/charts/{chart_id}/transition',
+            headers=headers,
+            json={'to_state': 'Awaiting Office Manager Review', 'comment': ''},
+        )
+        assert staged.status_code == 200
+        assert staged.json()['state'] == 'Awaiting Office Manager Review'
+
+        rejected = client.post(
+            f'/api/charts/{chart_id}/transition',
+            headers=headers,
+            json={'to_state': 'Returned to Counselor', 'comment': ''},
+        )
+        assert rejected.status_code == 400
+        assert 'Comment required' in rejected.json()['detail']
