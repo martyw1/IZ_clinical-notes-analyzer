@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import io
 import re
 import zipfile
 from dataclasses import dataclass
@@ -19,7 +20,17 @@ from app.core.config import settings
 ALLOWED_EXTENSIONS = {'.csv', '.doc', '.docx', '.jpeg', '.jpg', '.pdf', '.png', '.rtf', '.txt', '.zip'}
 MAX_FILE_BYTES = 50 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
+DETECTION_MAX_FILE_BYTES = 8 * 1024 * 1024
 SAFE_NAME_PATTERN = re.compile(r'[^A-Za-z0-9._-]+')
+PATIENT_ID_LABEL_PATTERNS = (
+    re.compile(r'\b(?:patient|client)\s*(?:id|identifier|number|no\.?|#)\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9._/-]{2,31})', re.IGNORECASE),
+    re.compile(r'\b(?:mrn|medical\s+record\s+number)\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9._/-]{2,31})', re.IGNORECASE),
+)
+PATIENT_ID_TOKEN_PATTERNS = (
+    re.compile(r'\b(PAT[-_ ]?[A-Za-z0-9]{2,24})\b', re.IGNORECASE),
+    re.compile(r'\b(?:patient|client|mrn)[-_ ]?(?:id|number|no)?[-_ ]([A-Za-z0-9][A-Za-z0-9._-]{2,31})\b', re.IGNORECASE),
+)
+CONFIDENCE_RANK = {'none': 0, 'low': 1, 'medium': 2, 'high': 3}
 
 
 @dataclass(frozen=True)
@@ -34,6 +45,16 @@ class StoredUpload:
 class ExtractedText:
     text: str
     status: str
+
+
+@dataclass(frozen=True)
+class PatientIdDetection:
+    patient_id: str | None
+    confidence: str
+    source_filename: str | None
+    source_kind: str | None
+    match_text: str | None
+    reason: str
 
 
 def uploads_root() -> Path:
@@ -138,7 +159,11 @@ def _strip_rtf(raw_text: str) -> str:
 
 
 def _extract_docx_text(path: Path) -> str:
-    with zipfile.ZipFile(path) as archive:
+    return _extract_docx_text_from_bytes(path.read_bytes())
+
+
+def _extract_docx_text_from_bytes(raw: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         document_xml = archive.read('word/document.xml')
     text = _decode_bytes(document_xml)
     text = re.sub(r'</w:p>', '\n', text)
@@ -147,29 +172,185 @@ def _extract_docx_text(path: Path) -> str:
 
 
 def _extract_pdf_text(path: Path) -> str:
+    return _extract_pdf_text_from_bytes(path.read_bytes())
+
+
+def _extract_pdf_text_from_bytes(raw: bytes) -> str:
     if PdfReader is None:
         raise RuntimeError('pypdf is not installed')
-    reader = PdfReader(str(path))
+    reader = PdfReader(io.BytesIO(raw))
     pages = [page.extract_text() or '' for page in reader.pages]
     return '\n'.join(page for page in pages if page).strip()
 
 
-def extract_text_from_storage(storage_path: str) -> ExtractedText:
-    path = resolve_storage_path(storage_path)
-    suffix = path.suffix.lower()
-
+def _extract_text_from_bytes(raw: bytes, suffix: str) -> ExtractedText:
     try:
         if suffix in {'.txt', '.csv'}:
-            return ExtractedText(text=_decode_bytes(path.read_bytes()).strip(), status='extracted')
+            return ExtractedText(text=_decode_bytes(raw).strip(), status='extracted')
         if suffix == '.rtf':
-            return ExtractedText(text=_strip_rtf(_decode_bytes(path.read_bytes())), status='extracted')
+            return ExtractedText(text=_strip_rtf(_decode_bytes(raw)), status='extracted')
         if suffix == '.docx':
-            return ExtractedText(text=_extract_docx_text(path), status='extracted')
+            return ExtractedText(text=_extract_docx_text_from_bytes(raw), status='extracted')
         if suffix == '.pdf':
-            return ExtractedText(text=_extract_pdf_text(path), status='extracted')
+            return ExtractedText(text=_extract_pdf_text_from_bytes(raw), status='extracted')
         if suffix in {'.doc', '.jpg', '.jpeg', '.png', '.zip'}:
             return ExtractedText(text='', status='unsupported')
     except Exception:
         return ExtractedText(text='', status='failed')
 
     return ExtractedText(text='', status='unsupported')
+
+
+def extract_text_from_storage(storage_path: str) -> ExtractedText:
+    path = resolve_storage_path(storage_path)
+    return _extract_text_from_bytes(path.read_bytes(), path.suffix.lower())
+
+
+def _normalize_detected_patient_id(value: str, *, allow_numeric: bool) -> str | None:
+    candidate = value.strip().strip('.,;:()[]{}<>"\'')
+    candidate = re.sub(r'\s+', '-', candidate)
+    candidate = candidate.strip('-_/')
+    if len(candidate) < 3 or len(candidate) > 32:
+        return None
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/-]{2,31}', candidate):
+        return None
+    if re.fullmatch(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}', candidate):
+        return None
+    if not allow_numeric and not re.search(r'[A-Za-z]', candidate):
+        return None
+    return candidate
+
+
+def _detect_patient_id_in_text(text: str, *, source_filename: str) -> PatientIdDetection | None:
+    sample = text[:200_000]
+
+    for pattern in PATIENT_ID_LABEL_PATTERNS:
+        match = pattern.search(sample)
+        if not match:
+            continue
+        candidate = _normalize_detected_patient_id(match.group(1), allow_numeric=True)
+        if candidate:
+            return PatientIdDetection(
+                patient_id=candidate,
+                confidence='high',
+                source_filename=source_filename,
+                source_kind='text_label',
+                match_text=match.group(0),
+                reason=f'Detected patient ID from labeled content in {source_filename}.',
+            )
+
+    for pattern in PATIENT_ID_TOKEN_PATTERNS:
+        match = pattern.search(sample)
+        if not match:
+            continue
+        candidate = _normalize_detected_patient_id(match.group(1), allow_numeric=False)
+        if candidate:
+            return PatientIdDetection(
+                patient_id=candidate,
+                confidence='medium',
+                source_filename=source_filename,
+                source_kind='text_token',
+                match_text=match.group(0),
+                reason=f'Detected patient ID token in {source_filename}.',
+            )
+
+    return None
+
+
+def _detect_patient_id_in_filename(filename: str) -> PatientIdDetection | None:
+    sample = Path(filename).stem.replace('.', ' ')
+
+    for pattern in PATIENT_ID_LABEL_PATTERNS:
+        match = pattern.search(sample)
+        if not match:
+            continue
+        candidate = _normalize_detected_patient_id(match.group(1), allow_numeric=True)
+        if candidate:
+            return PatientIdDetection(
+                patient_id=candidate,
+                confidence='medium',
+                source_filename=filename,
+                source_kind='filename_label',
+                match_text=match.group(0),
+                reason=f'Detected patient ID from the filename {filename}.',
+            )
+
+    for pattern in PATIENT_ID_TOKEN_PATTERNS:
+        match = pattern.search(sample)
+        if not match:
+            continue
+        candidate = _normalize_detected_patient_id(match.group(1), allow_numeric=False)
+        if candidate:
+            return PatientIdDetection(
+                patient_id=candidate,
+                confidence='low',
+                source_filename=filename,
+                source_kind='filename_token',
+                match_text=match.group(0),
+                reason=f'Detected patient ID token from the filename {filename}.',
+            )
+
+    return None
+
+
+async def _detect_patient_id_for_upload(upload: UploadFile) -> PatientIdDetection | None:
+    filename = upload.filename or 'uploaded-file'
+    suffix = Path(filename).suffix.lower()
+    filename_detection = _detect_patient_id_in_filename(filename)
+
+    if suffix not in ALLOWED_EXTENSIONS:
+        return filename_detection
+
+    raw = await upload.read(DETECTION_MAX_FILE_BYTES + 1)
+    await upload.seek(0)
+    if len(raw) > DETECTION_MAX_FILE_BYTES:
+        return filename_detection
+
+    extracted = _extract_text_from_bytes(raw, suffix)
+    if extracted.text:
+        text_detection = _detect_patient_id_in_text(extracted.text, source_filename=filename)
+        if text_detection:
+            return text_detection
+
+    return filename_detection
+
+
+async def detect_patient_id_from_uploads(files: list[UploadFile]) -> PatientIdDetection:
+    matches: list[PatientIdDetection] = []
+    for upload in files:
+        detected = await _detect_patient_id_for_upload(upload)
+        if detected and detected.patient_id:
+            matches.append(detected)
+
+    if not matches:
+        return PatientIdDetection(
+            patient_id=None,
+            confidence='none',
+            source_filename=None,
+            source_kind=None,
+            match_text=None,
+            reason='No patient ID could be detected from the selected files.',
+        )
+
+    unique_ids = {match.patient_id for match in matches if match.patient_id}
+    if len(unique_ids) > 1:
+        return PatientIdDetection(
+            patient_id=None,
+            confidence='none',
+            source_filename=None,
+            source_kind='conflict',
+            match_text=', '.join(sorted(unique_ids)),
+            reason='Conflicting patient IDs were detected across the selected files.',
+        )
+
+    best = max(matches, key=lambda match: CONFIDENCE_RANK.get(match.confidence, 0))
+    if len(matches) > 1:
+        return PatientIdDetection(
+            patient_id=best.patient_id,
+            confidence=best.confidence,
+            source_filename=best.source_filename,
+            source_kind=best.source_kind,
+            match_text=best.match_text,
+            reason=f'Detected patient ID from {len(matches)} matching files.',
+        )
+    return best

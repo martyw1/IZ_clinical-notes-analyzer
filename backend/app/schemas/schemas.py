@@ -62,6 +62,15 @@ class UserPasswordResetAdmin(BaseModel):
     require_reset_on_login: bool = True
 
 
+class UserSelfUpdate(BaseModel):
+    full_name: str = Field(min_length=1, max_length=120)
+
+
+class UserPasswordChangeInput(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=12)
+
+
 class AuditTemplateItemOut(BaseModel):
     key: str
     step: int
@@ -128,6 +137,7 @@ class ChartSummaryOut(BaseModel):
     reviewed_by_id: int | None = None
     system_generated_at: datetime | None = None
     reviewed_at: datetime | None = None
+    created_at: datetime | None = None
     notes: str
     pending_items: int
     passed_items: int
@@ -207,6 +217,15 @@ class PatientNoteSetSummaryOut(BaseModel):
 
 class PatientNoteSetDetailOut(PatientNoteSetSummaryOut):
     documents: list[PatientNoteDocumentOut]
+
+
+class PatientIdDetectionOut(BaseModel):
+    patient_id: str | None = None
+    confidence: str
+    source_filename: str | None = None
+    source_kind: str | None = None
+    match_text: str | None = None
+    reason: str
 
 
 class AuditLogOut(BaseModel):

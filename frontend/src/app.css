@@ -154,6 +154,12 @@ label {
   grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.55fr);
 }
 
+.dashboard-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+}
+
 .narrow {
   max-width: 560px;
 }
@@ -317,6 +323,12 @@ label {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.dashboard-metrics {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .mini-card {
   padding: 0.95rem 1rem;
   border-radius: 20px;
@@ -426,6 +438,59 @@ label {
   color: #5f7067;
 }
 
+.criteria-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.criteria-list {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.criterion-chip {
+  width: 100%;
+  text-align: left;
+  border-radius: 18px;
+  padding: 0.95rem;
+  background: rgba(250, 250, 247, 0.95);
+  color: #18211e;
+  border: 1px solid rgba(24, 84, 59, 0.08);
+  display: grid;
+  gap: 0.18rem;
+}
+
+.criterion-chip span,
+.criterion-chip small {
+  color: #607169;
+}
+
+.criterion-chip strong {
+  font-size: 0.97rem;
+}
+
+.criterion-chip--active {
+  border-color: #18543b;
+  box-shadow: inset 0 0 0 1px #18543b;
+}
+
+.criterion-workbench {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border-radius: 22px;
+  background: rgba(248, 249, 244, 0.92);
+  border: 1px solid rgba(24, 33, 30, 0.08);
+}
+
+.segmented-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
 .decision-box {
   display: grid;
   gap: 0.8rem;
@@ -456,6 +521,122 @@ label {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+}
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.trend-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1.25rem;
+}
+
+.trend-card {
+  border-radius: 22px;
+  background: rgba(248, 249, 244, 0.92);
+  border: 1px solid rgba(24, 33, 30, 0.08);
+  padding: 1rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.trend-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trend-card__header span {
+  color: #607169;
+  font-size: 0.9rem;
+}
+
+.trend-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.trend-strip__point {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+}
+
+.trend-strip__count,
+.trend-strip__label {
+  font-size: 0.78rem;
+  color: #607169;
+}
+
+.trend-strip__bar {
+  width: 100%;
+  min-height: 86px;
+  border-radius: 999px;
+  background: rgba(24, 84, 59, 0.08);
+  display: flex;
+  align-items: flex-end;
+  padding: 0.15rem;
+}
+
+.trend-strip__fill {
+  width: 100%;
+  border-radius: 999px;
+  min-height: 0.35rem;
+  background: linear-gradient(180deg, #5f8d74 0%, #18543b 100%);
+}
+
+.fact-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.fact-list dt {
+  font-weight: 700;
+}
+
+.fact-list dd {
+  margin: 0.15rem 0 0;
+  color: #607169;
+}
+
+.admin-banner {
+  border-radius: 20px;
+  background: rgba(232, 238, 231, 0.95);
+  padding: 1rem;
+}
+
+.detection-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+}
+
+.detection-card p {
+  margin: 0.35rem 0 0;
+  color: #576961;
+}
+
+.detection-card--success {
+  background: rgba(226, 240, 232, 0.95);
+  border: 1px solid rgba(24, 84, 59, 0.12);
+}
+
+.detection-card--neutral {
+  background: rgba(245, 242, 234, 0.95);
+  border: 1px solid rgba(114, 123, 92, 0.12);
+}
+
+.detection-card__meta {
+  font-size: 0.92rem;
 }
 
 .file-editor {
@@ -515,12 +696,16 @@ ol {
 @media (max-width: 1100px) {
   .hero,
   .auth-grid,
-  .workspace-grid {
+  .workspace-grid,
+  .dashboard-grid {
     grid-template-columns: 1fr;
   }
 
   .metrics,
+  .dashboard-metrics,
   .detail-grid,
+  .trend-grid,
+  .criteria-grid,
   .file-editor-row__fields,
   .form-grid {
     grid-template-columns: 1fr 1fr;
@@ -533,7 +718,10 @@ ol {
   }
 
   .metrics,
+  .dashboard-metrics,
   .detail-grid,
+  .trend-grid,
+  .criteria-grid,
   .file-editor-row__fields,
   .form-grid {
     grid-template-columns: 1fr;
@@ -542,6 +730,7 @@ ol {
   .queue-item,
   .finding-card__header,
   .log-row__meta,
+  .detection-card,
   .file-editor-row__title {
     flex-direction: column;
     align-items: flex-start;

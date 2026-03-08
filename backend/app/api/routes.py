@@ -38,6 +38,7 @@ from app.schemas.schemas import (
     ChartUpdate,
     LoginInput,
     PasswordResetInput,
+    PatientIdDetectionOut,
     PatientNoteDocumentUploadInput,
     PatientNoteSetDetailOut,
     PatientNoteSetSummaryOut,
@@ -45,12 +46,14 @@ from app.schemas.schemas import (
     TransitionInput,
     UserCreate,
     UserOut,
+    UserPasswordChangeInput,
     UserPasswordResetAdmin,
+    UserSelfUpdate,
     UserUpdate,
 )
 from app.services.audit import log_event
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
-from app.services.patient_notes import remove_stored_paths, resolve_storage_path, store_upload_file
+from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, store_upload_file
 
 router = APIRouter(prefix='/api')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
@@ -197,6 +200,17 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
     }
 
 
+def _patient_id_detection_payload(patient_id: str | None, confidence: str, source_filename: str | None, source_kind: str | None, match_text: str | None, reason: str):
+    return {
+        'patient_id': patient_id,
+        'confidence': confidence,
+        'source_filename': source_filename,
+        'source_kind': source_kind,
+        'match_text': match_text,
+        'reason': reason,
+    }
+
+
 def _chart_summary(chart: Chart) -> dict[str, object]:
     _ensure_all_responses(chart)
     counts = _status_counts(chart)
@@ -219,6 +233,7 @@ def _chart_summary(chart: Chart) -> dict[str, object]:
         'reviewed_by_id': chart.reviewed_by_id,
         'system_generated_at': chart.system_generated_at,
         'reviewed_at': chart.reviewed_at,
+        'created_at': chart.created_at,
         'notes': chart.notes,
         'pending_items': counts[ComplianceStatus.pending],
         'passed_items': counts[ComplianceStatus.yes],
@@ -491,6 +506,73 @@ def me(request: Request, user: User = Depends(get_current_user), db: Session = D
         message=f'Profile viewed for {user.username}.',
     )
     return user
+
+
+@router.patch('/users/me', response_model=UserOut)
+def update_my_profile(payload: UserSelfUpdate, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user.full_name = payload.full_name.strip() or user.username
+    db.commit()
+    db.refresh(user)
+    log_event(
+        db,
+        request,
+        'user.profile.update',
+        actor=user,
+        event_category='user_management',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username, 'full_name': user.full_name},
+        message=f'Profile updated for {user.username}.',
+    )
+    return user
+
+
+@router.post('/users/me/change-password')
+def change_my_password(
+    payload: UserPasswordChangeInput,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if _is_bootstrap_admin(user):
+        raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
+    if not verify_password(payload.current_password, user.password_hash):
+        log_event(
+            db,
+            request,
+            'auth.password.change.failed',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'current_password_mismatch'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=400,
+            message=f'Password change failed for {user.username}: current password mismatch.',
+        )
+        raise HTTPException(status_code=400, detail='Current password is incorrect')
+
+    user.password_hash = hash_password(payload.new_password)
+    user.must_reset_password = False
+    user.is_locked = False
+    user.failed_login_attempts = 0
+    db.commit()
+    log_event(
+        db,
+        request,
+        'auth.password.change',
+        actor=user,
+        event_category='authentication',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(user.id),
+        details={'username': user.username},
+        message=f'Password changed for {user.username}.',
+    )
+    return {'status': 'ok'}
 
 
 @router.get('/users', response_model=list[UserOut])
@@ -856,10 +938,52 @@ def get_patient_note_set(note_set_id: int, request: Request, user: User = Depend
     return _note_set_detail(note_set)
 
 
+@router.post('/patient-note-sets/detect-patient-id', response_model=PatientIdDetectionOut)
+async def detect_patient_id_for_uploads(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+):
+    if not files:
+        raise HTTPException(status_code=400, detail='At least one clinical note file is required')
+
+    detection = await detect_patient_id_from_uploads(files)
+    action = 'patient_note_set.patient_id.detected' if detection.patient_id else 'patient_note_set.patient_id.not_detected'
+    log_event(
+        request=request,
+        actor=user,
+        action=action,
+        event_category='file_activity',
+        target_entity='patient_note_set_upload',
+        target_entity_type='patient_note_set',
+        patient_id=detection.patient_id,
+        details={
+            'file_count': len(files),
+            'confidence': detection.confidence,
+            'source_filename': detection.source_filename,
+            'source_kind': detection.source_kind,
+            'match_text': detection.match_text,
+            'reason': detection.reason,
+        },
+        outcome_status='success' if detection.patient_id else 'failure',
+        severity='info' if detection.patient_id else 'warning',
+        message=detection.reason,
+        http_status_code=200,
+    )
+    return _patient_id_detection_payload(
+        detection.patient_id,
+        detection.confidence,
+        detection.source_filename,
+        detection.source_kind,
+        detection.match_text,
+        detection.reason,
+    )
+
+
 @router.post('/patient-note-sets', response_model=PatientNoteSetDetailOut)
 async def upload_patient_note_set(
     request: Request,
-    patient_id: str = Form(...),
+    patient_id: str = Form(''),
     upload_mode: NoteSetUploadMode = Form(NoteSetUploadMode.initial),
     level_of_care: str = Form(''),
     admission_date: str = Form(''),
@@ -871,11 +995,46 @@ async def upload_patient_note_set(
     user: User = Depends(require_roles(*NOTE_SET_ROLES)),
     db: Session = Depends(get_db),
 ):
-    normalized_patient_id = patient_id.strip()
-    if not normalized_patient_id:
-        raise HTTPException(status_code=400, detail='Patient ID is required')
     if not files:
         raise HTTPException(status_code=400, detail='At least one clinical note file is required')
+
+    normalized_patient_id = patient_id.strip()
+    detection = await detect_patient_id_from_uploads(files) if not normalized_patient_id else None
+    if not normalized_patient_id and detection and detection.patient_id:
+        normalized_patient_id = detection.patient_id
+        log_event(
+            request=request,
+            actor=user,
+            action='patient_note_set.upload.patient_id_autofilled',
+            event_category='file_activity',
+            target_entity='patient_note_set_upload',
+            target_entity_type='patient_note_set',
+            patient_id=normalized_patient_id,
+            details={
+                'confidence': detection.confidence,
+                'source_filename': detection.source_filename,
+                'source_kind': detection.source_kind,
+                'match_text': detection.match_text,
+            },
+            message=f'Patient ID {normalized_patient_id} was auto-filled from the uploaded files during upload.',
+            http_status_code=200,
+        )
+    if not normalized_patient_id:
+        reason = detection.reason if detection is not None else 'Patient ID is required.'
+        log_event(
+            request=request,
+            actor=user,
+            action='patient_note_set.upload.patient_id_missing',
+            event_category='file_activity',
+            target_entity='patient_note_set_upload',
+            target_entity_type='patient_note_set',
+            details={'reason': reason, 'file_count': len(files)},
+            outcome_status='failure',
+            severity='warning',
+            message='Patient note upload was blocked because no patient ID was supplied or detected.',
+            http_status_code=400,
+        )
+        raise HTTPException(status_code=400, detail=f'Patient ID is required and could not be detected automatically. {reason}')
 
     manifest = _parse_manifest(file_manifest, files)
     existing_active = db.execute(

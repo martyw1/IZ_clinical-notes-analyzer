@@ -80,3 +80,40 @@ def test_bootstrap_admin_cannot_be_demoted_or_reset(app_with_sqlite):
             json={'new_password': 'replacement-pass-1234', 'require_reset_on_login': False},
         )
         assert blocked_reset.status_code == 400
+
+
+def test_user_can_manage_own_profile_and_password(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        admin_headers = _auth_headers(client)
+        created = client.post(
+            '/api/users',
+            headers=admin_headers,
+            json={
+                'username': 'counselor-01',
+                'full_name': 'Counselor One',
+                'password': 'temporary-pass-1234',
+                'role': 'counselor',
+            },
+        )
+        assert created.status_code == 200
+
+        login = client.post('/api/auth/login', json={'username': 'counselor-01', 'password': 'temporary-pass-1234'})
+        assert login.status_code == 200
+        token = login.json()['access_token']
+        headers = {'Authorization': f'Bearer {token}'}
+
+        updated = client.patch('/api/users/me', headers=headers, json={'full_name': 'Counselor One Updated'})
+        assert updated.status_code == 200
+        assert updated.json()['full_name'] == 'Counselor One Updated'
+
+        changed = client.post(
+            '/api/users/me/change-password',
+            headers=headers,
+            json={'current_password': 'temporary-pass-1234', 'new_password': 'replacement-pass-1234'},
+        )
+        assert changed.status_code == 200
+
+        relogin = client.post('/api/auth/login', json={'username': 'counselor-01', 'password': 'replacement-pass-1234'})
+        assert relogin.status_code == 200

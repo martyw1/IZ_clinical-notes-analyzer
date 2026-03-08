@@ -72,6 +72,7 @@ function chartSummary(state: string = 'Awaiting Office Manager Review') {
     reviewed_by_id: state === 'Awaiting Office Manager Review' ? null : 2,
     system_generated_at: '2026-03-08T12:00:00Z',
     reviewed_at: state === 'Awaiting Office Manager Review' ? null : '2026-03-08T13:00:00Z',
+    created_at: '2026-03-08T12:00:00Z',
     notes: 'Binder uploaded from Alleva.',
     pending_items: 2,
     passed_items: 13,
@@ -162,7 +163,7 @@ function noteSetDetail() {
 }
 
 describe('App turnkey workflow', () => {
-  it('renders the automated review workspace for admin users', async () => {
+  it('renders the summary dashboard and admin tools for administrators', async () => {
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-a', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
@@ -176,10 +177,10 @@ describe('App turnkey workflow', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByText('Automated review queue')).toBeInTheDocument())
-    expect(screen.getByText('Patient PAT-001')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Forensic logs' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
+    expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
   })
 
   it('uploads a note binder and opens the generated automated review', async () => {
@@ -189,6 +190,14 @@ describe('App turnkey workflow', () => {
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-b', must_reset_password: false },
       'GET /api/users/me': userPayload('counselor'),
+      'POST /api/patient-note-sets/detect-patient-id': {
+        patient_id: 'PAT-001',
+        confidence: 'high',
+        source_filename: 'intake-packet.txt',
+        source_kind: 'text_label',
+        match_text: 'Patient ID: PAT-001',
+        reason: 'Detected patient ID from labeled content in intake-packet.txt.',
+      },
       'GET /api/charts': () => {
         chartCalls += 1
         return { body: chartCalls === 1 ? [] : [chartSummary()] }
@@ -208,7 +217,6 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Upload clinical notes' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Upload clinical notes' }))
 
-    fireEvent.change(screen.getByLabelText('Patient ID'), { target: { value: 'PAT-001' } })
     fireEvent.change(screen.getByLabelText('Level of care'), { target: { value: 'Residential' } })
     fireEvent.change(screen.getByLabelText('Primary clinician'), { target: { value: 'Marleigh Johnson' } })
     fireEvent.change(screen.getByLabelText('Clinical note files'), {
@@ -216,13 +224,14 @@ describe('App turnkey workflow', () => {
         files: [new File(['Intake packet completed.'], 'intake-packet.txt', { type: 'text/plain' })],
       },
     })
+    await waitFor(() => expect(screen.getByLabelText('Patient ID')).toHaveValue('PAT-001'))
     fireEvent.click(screen.getByRole('button', { name: 'Upload and run automated evaluation' }))
 
-    await waitFor(() => expect(screen.getByText('Open issues')).toBeInTheDocument())
-    expect(screen.getByText('Attendance Policy Consent')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Criterion review workbench' })).toBeInTheDocument())
+    expect(screen.getAllByText('Attendance Policy Consent').length).toBeGreaterThan(0)
   })
 
-  it('lets an office manager return a chart to the counselor with a comment', async () => {
+  it('lets an office manager drill into a criterion and save a decision', async () => {
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-c', must_reset_password: false },
       'GET /api/users/me': userPayload('manager'),
@@ -230,22 +239,42 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets': [noteSetSummary()],
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
-      'POST /api/charts/8/transition': chartDetail('Returned to Counselor'),
+      'PUT /api/charts/8': (_, init) => {
+        const body = JSON.parse(String(init?.body || '{}'))
+        const savedItem = body.checklist_items.find((item: { item_key: string }) => item.item_key === 'attendance_policy_consent')
+        return {
+          body: {
+            ...chartDetail(),
+            checklist_items: [
+              {
+                ...chartDetail().checklist_items[0],
+                status: savedItem.status,
+                notes: savedItem.notes,
+              },
+              chartDetail().checklist_items[1],
+            ],
+          },
+        }
+      },
     })
 
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByText('Office manager disposition')).toBeInTheDocument())
-    fireEvent.change(screen.getByLabelText('Manager comment'), {
-      target: { value: 'Attendance consent is missing a clear selection.' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Return to counselor' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Criterion review workbench' })).toBeInTheDocument())
 
-    await waitFor(() => expect(screen.getAllByText('Returned to Counselor').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark OK' }))
+    fireEvent.change(screen.getByLabelText('Reviewer notes'), {
+      target: { value: 'Manager confirmed the consent page manually.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save criterion review changes' }))
+
+    await waitFor(() => expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0))
   })
 
-  it('loads admin user management and forensic log views', async () => {
+  it('shows profile management, admin user management, and forensic logs', async () => {
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-d', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
@@ -254,6 +283,7 @@ describe('App turnkey workflow', () => {
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': [userPayload('admin'), userPayload('manager')],
+      'PATCH /api/users/me': { ...userPayload('admin'), full_name: 'System Administrator Updated' },
       'GET /api/audit/logs': [
         {
           event_id: 'evt-1',
@@ -276,8 +306,14 @@ describe('App turnkey workflow', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Users' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Users' }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: 'My account' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'User profile' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'System Administrator Updated' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    await waitFor(() => expect(screen.getByText('Your profile has been updated.')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: 'User management' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Create user' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
@@ -306,6 +342,6 @@ describe('App turnkey workflow', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
-    await waitFor(() => expect(screen.getByText('Upload clinical notes')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Summary dashboard' })).toBeInTheDocument())
   })
 })

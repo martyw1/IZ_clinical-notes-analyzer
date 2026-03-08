@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -14,7 +14,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'reviews' | 'uploads' | 'users' | 'logs'
+type AppView = 'dashboard' | 'reviews' | 'uploads' | 'profile' | 'users' | 'logs'
 
 type User = {
   id: number
@@ -63,6 +63,7 @@ type ChartSummary = {
   reviewed_by_id: number | null
   system_generated_at: string | null
   reviewed_at: string | null
+  created_at: string | null
   notes: string
   pending_items: number
   passed_items: number
@@ -151,6 +152,66 @@ type ApiError = {
   detail?: string | { msg?: string }
 }
 
+type UploadFormState = {
+  patient_id: string
+  upload_mode: NoteSetUploadMode
+  level_of_care: string
+  admission_date: string
+  discharge_date: string
+  primary_clinician: string
+  upload_notes: string
+  entries: UploadEntry[]
+}
+
+type PatientIdDetection = {
+  patient_id: string | null
+  confidence: string
+  source_filename: string | null
+  source_kind: string | null
+  match_text: string | null
+  reason: string
+  was_autofilled: boolean
+}
+
+type ManagedUserForm = {
+  full_name: string
+  role: Role
+  is_active: boolean
+  is_locked: boolean
+  must_reset_password: boolean
+}
+
+type CreateUserForm = {
+  username: string
+  full_name: string
+  password: string
+  role: Role
+}
+
+type LogFilters = {
+  patient_id: string
+  action: string
+}
+
+type UserFilters = {
+  query: string
+  role: 'all' | Role
+}
+
+type ProfileForm = {
+  full_name: string
+}
+
+type PasswordChangeForm = {
+  current_password: string
+  new_password: string
+}
+
+type TrendPoint = {
+  label: string
+  count: number
+}
+
 const STATUS_LABELS: Record<ComplianceStatus, string> = {
   pending: 'Needs manual confirmation',
   yes: 'Confirmed',
@@ -164,9 +225,11 @@ const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
 }
 
 const VIEW_LABELS: Record<AppView, string> = {
+  dashboard: 'Summary dashboard',
   reviews: 'Review queue',
   uploads: 'Upload clinical notes',
-  users: 'Users',
+  profile: 'My account',
+  users: 'User management',
   logs: 'Forensic logs',
 }
 
@@ -256,35 +319,69 @@ function checklistTone(status: ComplianceStatus) {
   return 'warning'
 }
 
-type UploadFormState = {
-  patient_id: string
-  upload_mode: NoteSetUploadMode
-  level_of_care: string
-  admission_date: string
-  discharge_date: string
-  primary_clinician: string
-  upload_notes: string
-  entries: UploadEntry[]
+function copyChartDetail(detail: ChartDetail): ChartDetail {
+  return {
+    ...detail,
+    checklist_items: detail.checklist_items.map((item) => ({ ...item })),
+  }
 }
 
-type ManagedUserForm = {
-  full_name: string
-  role: Role
-  is_active: boolean
-  is_locked: boolean
-  must_reset_password: boolean
+function toChartUpdatePayload(detail: ChartDetail) {
+  return {
+    patient_id: detail.patient_id,
+    client_name: detail.client_name,
+    level_of_care: detail.level_of_care,
+    admission_date: detail.admission_date,
+    discharge_date: detail.discharge_date,
+    primary_clinician: detail.primary_clinician,
+    auditor_name: detail.auditor_name,
+    other_details: detail.other_details,
+    notes: detail.notes,
+    checklist_items: detail.checklist_items.map((item) => ({
+      item_key: item.item_key,
+      status: item.status,
+      notes: item.notes,
+      evidence_location: item.evidence_location,
+      evidence_date: item.evidence_date,
+      expiration_date: item.expiration_date,
+    })),
+  }
 }
 
-type CreateUserForm = {
-  username: string
-  full_name: string
-  password: string
-  role: Role
+function isBootstrapAdmin(user: User | null) {
+  return user?.username === 'admin'
 }
 
-type LogFilters = {
-  patient_id: string
-  action: string
+function buildTrend(points: (string | null | undefined)[], lookbackDays = 7): TrendPoint[] {
+  const now = new Date()
+  const dayKeys: string[] = []
+  const counts = new Map<string, number>()
+
+  for (let offset = lookbackDays - 1; offset >= 0; offset -= 1) {
+    const day = new Date(now)
+    day.setHours(0, 0, 0, 0)
+    day.setDate(now.getDate() - offset)
+    const key = day.toISOString().slice(0, 10)
+    dayKeys.push(key)
+    counts.set(key, 0)
+  }
+
+  points.forEach((raw) => {
+    if (!raw) return
+    const day = new Date(raw)
+    if (Number.isNaN(day.getTime())) return
+    const key = day.toISOString().slice(0, 10)
+    if (!counts.has(key)) return
+    counts.set(key, (counts.get(key) || 0) + 1)
+  })
+
+  return dayKeys.map((key) => {
+    const day = new Date(`${key}T00:00:00`)
+    return {
+      label: day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      count: counts.get(key) || 0,
+    }
+  })
 }
 
 async function readJson(response: Response) {
@@ -300,11 +397,13 @@ export function App() {
   const [error, setError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
   const [mustResetPassword, setMustResetPassword] = useState(false)
-  const [activeView, setActiveView] = useState<AppView>('reviews')
+  const [activeView, setActiveView] = useState<AppView>('dashboard')
 
   const [loginForm, setLoginForm] = useState({ username: 'admin', password: 'r3!@analyzer#123' })
   const [resetForm, setResetForm] = useState({ newPassword: '' })
   const [decisionComment, setDecisionComment] = useState('')
+  const [reviewDirty, setReviewDirty] = useState(false)
+  const [selectedFindingKey, setSelectedFindingKey] = useState('')
 
   const [charts, setCharts] = useState<ChartSummary[]>([])
   const [selectedChartId, setSelectedChartId] = useState<number | null>(null)
@@ -314,6 +413,12 @@ export function App() {
   const [selectedNoteSetId, setSelectedNoteSetId] = useState<number | null>(null)
   const [selectedNoteSet, setSelectedNoteSet] = useState<PatientNoteSetDetail | null>(null)
   const [uploadForm, setUploadForm] = useState<UploadFormState>(createUploadForm())
+  const [patientIdDetection, setPatientIdDetection] = useState<PatientIdDetection | null>(null)
+  const [patientIdTouched, setPatientIdTouched] = useState(false)
+  const [lastAutoFilledPatientId, setLastAutoFilledPatientId] = useState('')
+  const uploadPatientIdRef = useRef('')
+  const patientIdTouchedRef = useRef(false)
+  const lastAutoFilledPatientIdRef = useRef('')
 
   const [users, setUsers] = useState<User[]>([])
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<number | null>(null)
@@ -325,14 +430,13 @@ export function App() {
     role: 'counselor',
   })
   const [adminPasswordReset, setAdminPasswordReset] = useState('')
+  const [userFilters, setUserFilters] = useState<UserFilters>({ query: '', role: 'all' })
 
   const [logs, setLogs] = useState<AuditLogRecord[]>([])
   const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '' })
 
-  const selectedManagedUser = useMemo(
-    () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
-    [users, selectedManagedUserId],
-  )
+  const [profileForm, setProfileForm] = useState<ProfileForm>({ full_name: '' })
+  const [passwordChangeForm, setPasswordChangeForm] = useState<PasswordChangeForm>({ current_password: '', new_password: '' })
 
   const groupedFindings = useMemo(() => groupedChecklist(selectedChart?.checklist_items || []), [selectedChart])
   const openItems = useMemo(
@@ -347,6 +451,67 @@ export function App() {
     if (!user || !selectedChart) return []
     return TRANSITIONS[user.role]?.[selectedChart.state] || []
   }, [selectedChart, user])
+  const canEditCriteria = user?.role === 'admin' || user?.role === 'manager'
+
+  const selectedManagedUser = useMemo(
+    () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
+    [users, selectedManagedUserId],
+  )
+
+  const filteredUsers = useMemo(() => {
+    const query = userFilters.query.trim().toLowerCase()
+    return users.filter((candidate) => {
+      const matchesRole = userFilters.role === 'all' || candidate.role === userFilters.role
+      const matchesQuery =
+        !query ||
+        candidate.username.toLowerCase().includes(query) ||
+        candidate.full_name.toLowerCase().includes(query)
+      return matchesRole && matchesQuery
+    })
+  }, [userFilters, users])
+
+  const selectedCriterion = useMemo(() => {
+    if (!selectedChart) return null
+    return selectedChart.checklist_items.find((item) => item.item_key === selectedFindingKey) || selectedChart.checklist_items[0] || null
+  }, [selectedChart, selectedFindingKey])
+
+  const totalOpen = useMemo(
+    () => charts.filter((chart) => chart.state !== 'Approved by Office Manager').length,
+    [charts],
+  )
+  const totalAwaiting = pendingManagerQueue.length
+  const totalWaitingReverification = useMemo(
+    () => charts.filter((chart) => chart.state === 'Returned to Counselor').length,
+    [charts],
+  )
+  const totalApproved = useMemo(
+    () => charts.filter((chart) => chart.state === 'Approved by Office Manager').length,
+    [charts],
+  )
+  const activeBinders = useMemo(() => noteSets.filter((noteSet) => noteSet.status === 'active').length, [noteSets])
+  const activeUserCount = useMemo(() => users.filter((entry) => entry.is_active).length, [users])
+  const lockedUserCount = useMemo(() => users.filter((entry) => entry.is_locked).length, [users])
+  const resetRequiredCount = useMemo(() => users.filter((entry) => entry.must_reset_password).length, [users])
+
+  const newEvaluationTrend = useMemo(
+    () => buildTrend(charts.map((chart) => chart.system_generated_at || chart.created_at)),
+    [charts],
+  )
+  const approvalTrend = useMemo(
+    () => buildTrend(charts.filter((chart) => chart.state === 'Approved by Office Manager').map((chart) => chart.reviewed_at)),
+    [charts],
+  )
+  const reverificationTrend = useMemo(
+    () => buildTrend(charts.filter((chart) => chart.state === 'Returned to Counselor').map((chart) => chart.reviewed_at)),
+    [charts],
+  )
+  const uploadTrend = useMemo(
+    () => buildTrend(noteSets.map((noteSet) => noteSet.created_at)),
+    [noteSets],
+  )
+
+  const linkedNoteSet =
+    selectedChart?.source_note_set_id != null ? noteSets.find((noteSet) => noteSet.id === selectedChart.source_note_set_id) || null : null
 
   async function apiRequest<T>(path: string, init?: RequestInit, includeAuth = true): Promise<T> {
     const headers = new Headers(init?.headers)
@@ -359,10 +524,33 @@ export function App() {
     return payload as T
   }
 
+  function syncSelectedManagedUser(nextUsers: User[], preferredId?: number | null) {
+    const selectedId = preferredId ?? selectedManagedUserId ?? nextUsers[0]?.id ?? null
+    setSelectedManagedUserId(selectedId)
+    const selected = nextUsers.find((candidate) => candidate.id === selectedId) || null
+    setManagedUserForm(
+      selected
+        ? {
+            full_name: selected.full_name,
+            role: selected.role,
+            is_active: selected.is_active,
+            is_locked: selected.is_locked,
+            must_reset_password: selected.must_reset_password,
+          }
+        : null,
+    )
+  }
+
   async function loadChartDetail(chartId: number) {
-    const detail = await apiRequest<ChartDetail>(`/charts/${chartId}`)
+    const detail = copyChartDetail(await apiRequest<ChartDetail>(`/charts/${chartId}`))
     setSelectedChart(detail)
     setSelectedChartId(detail.id)
+    setSelectedFindingKey((current) => {
+      if (current && detail.checklist_items.some((item) => item.item_key === current)) return current
+      return detail.checklist_items[0]?.item_key || ''
+    })
+    setReviewDirty(false)
+
     if (detail.source_note_set_id) {
       setSelectedNoteSetId(detail.source_note_set_id)
       try {
@@ -380,24 +568,11 @@ export function App() {
     setSelectedNoteSetId(detail.id)
   }
 
-  async function loadUsers() {
+  async function loadUsers(preferredId?: number | null) {
     if (user?.role !== 'admin') return
     const nextUsers = await apiRequest<User[]>('/users')
     setUsers(nextUsers)
-    const selectedId = selectedManagedUserId ?? nextUsers[0]?.id ?? null
-    setSelectedManagedUserId(selectedId)
-    const selected = nextUsers.find((candidate) => candidate.id === selectedId) || null
-    setManagedUserForm(
-      selected
-        ? {
-            full_name: selected.full_name,
-            role: selected.role,
-            is_active: selected.is_active,
-            is_locked: selected.is_locked,
-            must_reset_password: selected.must_reset_password,
-          }
-        : null,
-    )
+    syncSelectedManagedUser(nextUsers, preferredId)
   }
 
   async function loadLogs() {
@@ -422,24 +597,14 @@ export function App() {
       ])
 
       setUser(profile)
+      setProfileForm({ full_name: profile.full_name })
       setCharts(chartList)
       setNoteSets(noteSetList)
+
       if (profile.role === 'admin') {
         const directory = await apiRequest<User[]>('/users')
         setUsers(directory)
-        const selected = directory[0] || null
-        setSelectedManagedUserId(selected?.id ?? null)
-        setManagedUserForm(
-          selected
-            ? {
-                full_name: selected.full_name,
-                role: selected.role,
-                is_active: selected.is_active,
-                is_locked: selected.is_locked,
-                must_reset_password: selected.must_reset_password,
-              }
-            : null,
-        )
+        syncSelectedManagedUser(directory, selectedManagedUserId)
       } else {
         setUsers([])
         setSelectedManagedUserId(null)
@@ -455,6 +620,7 @@ export function App() {
       } else {
         setSelectedChart(null)
         setSelectedChartId(null)
+        setSelectedFindingKey('')
       }
 
       if (!firstChartId && firstNoteSetId) {
@@ -475,6 +641,10 @@ export function App() {
           upload_notes: current.upload_notes,
         }),
       )
+      setPatientIdDetection(null)
+      setPatientIdTouched(false)
+      setLastAutoFilledPatientId('')
+
       setStatus(`Workspace ready for ${profile.full_name || profile.username}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load workspace')
@@ -494,12 +664,64 @@ export function App() {
     }
   }, [activeView, token, user, mustResetPassword])
 
+  useEffect(() => {
+    uploadPatientIdRef.current = uploadForm.patient_id
+  }, [uploadForm.patient_id])
+
+  useEffect(() => {
+    patientIdTouchedRef.current = patientIdTouched
+  }, [patientIdTouched])
+
+  useEffect(() => {
+    lastAutoFilledPatientIdRef.current = lastAutoFilledPatientId
+  }, [lastAutoFilledPatientId])
+
+  async function detectPatientId(entries: UploadEntry[]) {
+    try {
+      const body = new FormData()
+      entries.forEach((entry) => body.append('files', entry.file))
+      const detected = await apiRequest<Omit<PatientIdDetection, 'was_autofilled'>>('/patient-note-sets/detect-patient-id', {
+        method: 'POST',
+        body,
+      })
+
+      const shouldApply =
+        Boolean(detected.patient_id) &&
+        (!uploadPatientIdRef.current.trim() ||
+          !patientIdTouchedRef.current ||
+          uploadPatientIdRef.current.trim() === lastAutoFilledPatientIdRef.current)
+
+      if (shouldApply && detected.patient_id) {
+        setUploadForm((current) => ({ ...current, patient_id: detected.patient_id || current.patient_id }))
+        setLastAutoFilledPatientId(detected.patient_id)
+      }
+
+      setPatientIdDetection({ ...detected, was_autofilled: shouldApply })
+    } catch {
+      setPatientIdDetection({
+        patient_id: null,
+        confidence: 'none',
+        source_filename: null,
+        source_kind: null,
+        match_text: null,
+        reason: 'Automatic patient ID detection was unavailable. Enter the patient ID manually.',
+        was_autofilled: false,
+      })
+    }
+  }
+
   function handleFilesSelected(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || [])
+    const entries = files.map((file) => buildUploadEntry(file))
     setUploadForm((current) => ({
       ...current,
-      entries: files.map((file) => buildUploadEntry(file)),
+      entries,
     }))
+    if (!entries.length) {
+      setPatientIdDetection(null)
+      return
+    }
+    void detectPatientId(entries)
   }
 
   function updateUploadEntry(index: number, field: keyof UploadEntry, value: string | boolean) {
@@ -510,6 +732,18 @@ export function App() {
         return { ...entry, [field]: value }
       }),
     }))
+  }
+
+  function updateSelectedCriterion(patch: Partial<AuditItem>) {
+    if (!selectedChart || !selectedCriterion) return
+    setSelectedChart((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        checklist_items: current.checklist_items.map((item) => (item.item_key === selectedCriterion.item_key ? { ...item, ...patch } : item)),
+      }
+    })
+    setReviewDirty(true)
   }
 
   async function handleLogin(event: FormEvent) {
@@ -531,6 +765,7 @@ export function App() {
       setMustResetPassword(login.must_reset_password)
       const profile = await apiRequest<User>('/users/me', { headers: { Authorization: `Bearer ${login.access_token}` } }, false)
       setUser(profile)
+      setProfileForm({ full_name: profile.full_name })
       if (login.must_reset_password) {
         setStatus('Password reset required before continuing.')
       } else {
@@ -548,14 +783,11 @@ export function App() {
     setIsBusy(true)
     setError('')
     try {
-      await apiRequest(
-        '/auth/reset-password',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ new_password: resetForm.newPassword }),
-        },
-      )
+      await apiRequest('/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: resetForm.newPassword }),
+      })
       setMustResetPassword(false)
       setResetForm({ newPassword: '' })
       setStatus('Password reset complete. Loading workspace...')
@@ -621,6 +853,9 @@ export function App() {
           upload_notes: '',
         }),
       )
+      setPatientIdDetection(null)
+      setPatientIdTouched(false)
+      setLastAutoFilledPatientId('')
       setSelectedNoteSet(uploaded)
       setSelectedNoteSetId(uploaded.id)
       setActiveView('reviews')
@@ -631,6 +866,28 @@ export function App() {
       setStatus(`Clinical notes uploaded for patient ${uploaded.patient_id}. The system review is ready for office-manager disposition.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Upload failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleSaveReviewChanges() {
+    if (!selectedChart || !canEditCriteria) return
+    setIsBusy(true)
+    setError('')
+    setStatus(`Saving criterion review changes for patient ${selectedChart.patient_id}...`)
+    try {
+      const updated = await apiRequest<ChartDetail>(`/charts/${selectedChart.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toChartUpdatePayload(selectedChart)),
+      })
+      setSelectedChart(copyChartDetail(updated))
+      setReviewDirty(false)
+      await loadWorkspace()
+      setStatus(`Criterion review changes saved for patient ${updated.patient_id}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to save review changes')
     } finally {
       setIsBusy(false)
     }
@@ -652,8 +909,9 @@ export function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to_state: action.toState, comment: decisionComment }),
       })
-      setSelectedChart(updated)
+      setSelectedChart(copyChartDetail(updated))
       setDecisionComment('')
+      setReviewDirty(false)
       await loadWorkspace()
       setStatus(`Office-manager decision recorded for patient ${updated.patient_id}.`)
     } catch (caught) {
@@ -694,15 +952,7 @@ export function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(managedUserForm),
       })
-      await loadUsers()
-      setSelectedManagedUserId(updated.id)
-      setManagedUserForm({
-        full_name: updated.full_name,
-        role: updated.role,
-        is_active: updated.is_active,
-        is_locked: updated.is_locked,
-        must_reset_password: updated.must_reset_password,
-      })
+      await loadUsers(updated.id)
       setStatus(`Updated user ${updated.username}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to update user')
@@ -723,10 +973,49 @@ export function App() {
         body: JSON.stringify({ new_password: adminPasswordReset, require_reset_on_login: true }),
       })
       setAdminPasswordReset('')
-      await loadUsers()
+      await loadUsers(selectedManagedUser.id)
       setStatus(`Password reset staged for ${selectedManagedUser.username}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to reset password')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleProfileSave(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      const updated = await apiRequest<User>('/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileForm),
+      })
+      setUser(updated)
+      setProfileForm({ full_name: updated.full_name })
+      setStatus('Your profile has been updated.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to update profile')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handlePasswordChange(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest('/users/me/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordChangeForm),
+      })
+      setPasswordChangeForm({ current_password: '', new_password: '' })
+      setStatus('Your password has been updated.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to change password')
     } finally {
       setIsBusy(false)
     }
@@ -764,19 +1053,35 @@ export function App() {
     setAdminPasswordReset('')
   }
 
-  const totalPending = pendingManagerQueue.length
-  const totalRejected = charts.filter((chart) => chart.state === 'Returned to Counselor').length
-  const totalApproved = charts.filter((chart) => chart.state === 'Approved by Office Manager').length
-
-  const linkedNoteSet =
-    selectedChart?.source_note_set_id != null ? noteSets.find((noteSet) => noteSet.id === selectedChart.source_note_set_id) || null : null
+  function renderTrendCard(title: string, points: TrendPoint[]) {
+    const max = Math.max(1, ...points.map((point) => point.count))
+    return (
+      <article className='trend-card'>
+        <div className='trend-card__header'>
+          <strong>{title}</strong>
+          <span>Last 7 days</span>
+        </div>
+        <div className='trend-strip'>
+          {points.map((point) => (
+            <div key={`${title}-${point.label}`} className='trend-strip__point'>
+              <span className='trend-strip__count'>{point.count}</span>
+              <div className='trend-strip__bar'>
+                <div className='trend-strip__fill' style={{ height: `${(point.count / max) * 100}%` }} />
+              </div>
+              <span className='trend-strip__label'>{point.label}</span>
+            </div>
+          ))}
+        </div>
+      </article>
+    )
+  }
 
   return (
     <main className='shell'>
       <section className='hero'>
         <div>
           <p className='eyebrow'>Clinical note analyzer</p>
-          <h1>Upload notes, let the system audit them, then route the result to office-manager approval.</h1>
+          <h1>Upload notes, review each criterion interactively, and route final approval through the office manager.</h1>
           <p className='hero-copy'>
             Counselors upload the latest clinical binder. The system evaluates the content against the audit rules, records every event in the
             forensic log, and places the result into a final approval queue for the office manager.
@@ -820,6 +1125,7 @@ export function App() {
             <ol>
               <li>Counselor uploads a patient note binder using patient ID.</li>
               <li>The app runs an automatic clinical-note checklist evaluation.</li>
+              <li>The reviewer can drill into any criterion and mark it ok or not ok.</li>
               <li>The office manager approves or returns the chart for correction.</li>
               <li>Every read, write, approval, and change is written to the forensic log.</li>
             </ol>
@@ -848,25 +1154,25 @@ export function App() {
         <>
           <section className='metrics'>
             <article className='metric-card'>
-              <span>Awaiting manager</span>
-              <strong>{totalPending}</strong>
+              <span>Current open</span>
+              <strong>{totalOpen}</strong>
             </article>
             <article className='metric-card'>
-              <span>Returned</span>
-              <strong>{totalRejected}</strong>
+              <span>Awaiting approval</span>
+              <strong>{totalAwaiting}</strong>
+            </article>
+            <article className='metric-card'>
+              <span>Waiting re-verification</span>
+              <strong>{totalWaitingReverification}</strong>
             </article>
             <article className='metric-card'>
               <span>Approved</span>
               <strong>{totalApproved}</strong>
             </article>
-            <article className='metric-card'>
-              <span>Binders</span>
-              <strong>{noteSets.length}</strong>
-            </article>
           </section>
 
           <nav className='view-tabs'>
-            {(['reviews', 'uploads'] as AppView[]).map((view) => (
+            {(['dashboard', 'reviews', 'uploads', 'profile'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -889,6 +1195,109 @@ export function App() {
                 ))
               : null}
           </nav>
+
+          {activeView === 'dashboard' ? (
+            <section className='dashboard-grid'>
+              <section className='panel detail-panel'>
+                <div className='panel-heading'>
+                  <div>
+                    <h2>Summary dashboard</h2>
+                    <p>Queue health, recent throughput, and approval trends for the current workspace.</p>
+                  </div>
+                  <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                </div>
+
+                <div className='dashboard-metrics'>
+                  <article className='mini-card'>
+                    <span>Active binders</span>
+                    <strong>{activeBinders}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Manager queue</span>
+                    <strong>{totalAwaiting}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Returned for correction</span>
+                    <strong>{totalWaitingReverification}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Current user</span>
+                    <strong>{user?.full_name || user?.username}</strong>
+                  </article>
+                </div>
+
+                <div className='trend-grid'>
+                  {renderTrendCard('New evaluations', newEvaluationTrend)}
+                  {renderTrendCard('Approvals', approvalTrend)}
+                  {renderTrendCard('Re-verification queue', reverificationTrend)}
+                  {renderTrendCard('Binder uploads', uploadTrend)}
+                </div>
+              </section>
+
+              <aside className='panel queue-panel'>
+                <section className='panel-subsection'>
+                  <h3>Quick actions</h3>
+                  <div className='quick-actions'>
+                    <button type='button' onClick={() => setActiveView('uploads')}>
+                      Upload binder
+                    </button>
+                    <button type='button' className='ghost-button' onClick={() => setActiveView('reviews')}>
+                      Open review queue
+                    </button>
+                    <button type='button' className='ghost-button' onClick={() => setActiveView('profile')}>
+                      My account
+                    </button>
+                    {user?.role === 'admin' ? (
+                      <>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('users')}>
+                          User management
+                        </button>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('logs')}>
+                          Forensic logs
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+
+                <section className='panel-subsection'>
+                  <h3>Current queue</h3>
+                  {charts.length ? (
+                    <ul className='queue-list'>
+                      {charts.slice(0, 5).map((chart) => (
+                        <li key={chart.id}>
+                          <button type='button' className='queue-item' onClick={() => void loadChartDetail(chart.id)}>
+                            <div>
+                              <strong>{chart.patient_id}</strong>
+                              <span>{chart.primary_clinician || 'Clinician pending'}</span>
+                            </div>
+                            <div className='queue-item-meta'>
+                              <span className={`pill pill--${workflowTone(chart.state)}`}>{chart.state}</span>
+                              <span>{chart.system_score}%</span>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className='empty-state'>No automated reviews are in the queue yet.</p>
+                  )}
+                </section>
+
+                {user?.role === 'admin' ? (
+                  <section className='panel-subsection admin-banner'>
+                    <h3>Administrator controls</h3>
+                    <p>
+                      User management and forensic log review are available only to the administrator. Active: {activeUserCount}, locked:{' '}
+                      {lockedUserCount}, password reset required: {resetRequiredCount}.
+                    </p>
+                  </section>
+                ) : null}
+              </aside>
+            </section>
+          ) : null}
 
           {activeView === 'reviews' ? (
             <section className='workspace-grid'>
@@ -975,6 +1384,125 @@ export function App() {
                     </section>
 
                     <section className='panel-subsection'>
+                      <h3>Criterion review workbench</h3>
+                      <div className='criteria-grid'>
+                        <div className='criteria-list'>
+                          {selectedChart.checklist_items.map((item) => (
+                            <button
+                              key={item.item_key}
+                              type='button'
+                              className={selectedFindingKey === item.item_key ? 'criterion-chip criterion-chip--active' : 'criterion-chip'}
+                              onClick={() => setSelectedFindingKey(item.item_key)}
+                            >
+                              <span>Step {item.step}</span>
+                              <strong>{item.label}</strong>
+                              <small>{STATUS_LABELS[item.status]}</small>
+                            </button>
+                          ))}
+                        </div>
+
+                        {selectedCriterion ? (
+                          <div className='criterion-workbench'>
+                            <div className='finding-card__header'>
+                              <strong>
+                                Step {selectedCriterion.step}. {selectedCriterion.label}
+                              </strong>
+                              <span className={`pill pill--${checklistTone(selectedCriterion.status)}`}>{STATUS_LABELS[selectedCriterion.status]}</span>
+                            </div>
+                            <p>{selectedCriterion.instructions}</p>
+                            <p className='muted-text'>Evidence hint: {selectedCriterion.evidence_hint}</p>
+                            {selectedCriterion.policy_note ? <p className='muted-text'>Policy note: {selectedCriterion.policy_note}</p> : null}
+
+                            <div className='segmented-actions'>
+                              <button
+                                type='button'
+                                className='ghost-button'
+                                onClick={() => updateSelectedCriterion({ status: 'yes' })}
+                                disabled={!canEditCriteria}
+                              >
+                                Mark OK
+                              </button>
+                              <button
+                                type='button'
+                                className='ghost-button'
+                                onClick={() => updateSelectedCriterion({ status: 'no' })}
+                                disabled={!canEditCriteria}
+                              >
+                                Mark not OK
+                              </button>
+                              <button
+                                type='button'
+                                className='ghost-button'
+                                onClick={() => updateSelectedCriterion({ status: 'pending' })}
+                                disabled={!canEditCriteria}
+                              >
+                                Needs follow-up
+                              </button>
+                              <button
+                                type='button'
+                                className='ghost-button'
+                                onClick={() => updateSelectedCriterion({ status: 'na' })}
+                                disabled={!canEditCriteria}
+                              >
+                                N/A
+                              </button>
+                            </div>
+
+                            <div className='form-grid'>
+                              <label className='full-width'>
+                                Reviewer notes
+                                <textarea
+                                  aria-label='Reviewer notes'
+                                  value={selectedCriterion.notes}
+                                  onChange={(event) => updateSelectedCriterion({ notes: event.target.value })}
+                                  disabled={!canEditCriteria}
+                                />
+                              </label>
+                              <label>
+                                Evidence location
+                                <input
+                                  aria-label='Evidence location'
+                                  value={selectedCriterion.evidence_location}
+                                  onChange={(event) => updateSelectedCriterion({ evidence_location: event.target.value })}
+                                  disabled={!canEditCriteria}
+                                />
+                              </label>
+                              <label>
+                                Evidence date
+                                <input
+                                  aria-label='Evidence date'
+                                  value={selectedCriterion.evidence_date}
+                                  onChange={(event) => updateSelectedCriterion({ evidence_date: event.target.value })}
+                                  disabled={!canEditCriteria}
+                                />
+                              </label>
+                              <label>
+                                Expiration date
+                                <input
+                                  aria-label='Expiration date'
+                                  value={selectedCriterion.expiration_date}
+                                  onChange={(event) => updateSelectedCriterion({ expiration_date: event.target.value })}
+                                  disabled={!canEditCriteria}
+                                />
+                              </label>
+                            </div>
+
+                            {canEditCriteria ? (
+                              <div className='decision-actions'>
+                                <button type='button' onClick={() => void handleSaveReviewChanges()} disabled={isBusy || !reviewDirty}>
+                                  Save criterion review changes
+                                </button>
+                                {reviewDirty ? <span className='muted-text'>Unsaved criterion review changes</span> : null}
+                              </div>
+                            ) : (
+                              <p className='muted-text'>Criterion drill-down is visible to you, but only admins and managers can change the review result.</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    <section className='panel-subsection'>
                       <h3>Checklist findings</h3>
                       {groupedFindings.map(([section, items]) => (
                         <div key={section} className='finding-group'>
@@ -1003,6 +1531,11 @@ export function App() {
                                     <dd>{item.policy_note || 'No extra policy note for this rule.'}</dd>
                                   </div>
                                 </dl>
+                                <div className='decision-actions'>
+                                  <button type='button' className='ghost-button' onClick={() => setSelectedFindingKey(item.item_key)}>
+                                    Dig deeper
+                                  </button>
+                                </div>
                               </article>
                             ))}
                           </div>
@@ -1018,6 +1551,7 @@ export function App() {
                           <label>
                             Manager comment
                             <textarea
+                              aria-label='Manager comment'
                               value={decisionComment}
                               placeholder='Record final approval context or describe what the counselor needs to fix.'
                               onChange={(event) => setDecisionComment(event.target.value)}
@@ -1025,10 +1559,11 @@ export function App() {
                           </label>
                           <div className='decision-actions'>
                             {transitionActions.map((action) => (
-                              <button key={action.toState} type='button' onClick={() => void handleTransition(action)} disabled={isBusy}>
+                              <button key={action.toState} type='button' onClick={() => void handleTransition(action)} disabled={isBusy || reviewDirty}>
                                 {action.label}
                               </button>
                             ))}
+                            {reviewDirty ? <span className='muted-text'>Save criterion changes before recording the final decision.</span> : null}
                           </div>
                         </div>
                       ) : user?.role === 'counselor' && selectedChart.state === 'Returned to Counselor' ? (
@@ -1079,7 +1614,17 @@ export function App() {
                 <form className='form-grid' onSubmit={handleUpload}>
                   <label>
                     Patient ID
-                    <input value={uploadForm.patient_id} onChange={(event) => setUploadForm((current) => ({ ...current, patient_id: event.target.value }))} />
+                    <input
+                      value={uploadForm.patient_id}
+                      onChange={(event) => {
+                        const nextValue = event.target.value
+                        setPatientIdTouched(true)
+                        if (nextValue.trim() !== lastAutoFilledPatientId) {
+                          setLastAutoFilledPatientId('')
+                        }
+                        setUploadForm((current) => ({ ...current, patient_id: nextValue }))
+                      }}
+                    />
                   </label>
                   <label>
                     Upload mode
@@ -1129,6 +1674,40 @@ export function App() {
                     Clinical note files
                     <input multiple type='file' onChange={handleFilesSelected} />
                   </label>
+                  {patientIdDetection ? (
+                    <div className={`full-width detection-card ${patientIdDetection.patient_id ? 'detection-card--success' : 'detection-card--neutral'}`}>
+                      <div>
+                        <strong>
+                          {patientIdDetection.patient_id
+                            ? `Detected patient ID ${patientIdDetection.patient_id}`
+                            : 'Patient ID could not be read automatically'}
+                        </strong>
+                        <p>{patientIdDetection.reason}</p>
+                        {patientIdDetection.source_filename ? (
+                          <p className='detection-card__meta'>
+                            Source: {patientIdDetection.source_filename}
+                            {patientIdDetection.confidence !== 'none' ? ` · Confidence: ${patientIdDetection.confidence}` : ''}
+                          </p>
+                        ) : null}
+                      </div>
+                      {patientIdDetection.patient_id && uploadForm.patient_id !== patientIdDetection.patient_id ? (
+                        <button
+                          type='button'
+                          className='ghost-button'
+                          onClick={() => {
+                            setUploadForm((current) => ({ ...current, patient_id: patientIdDetection.patient_id || current.patient_id }))
+                            setPatientIdTouched(false)
+                            setLastAutoFilledPatientId(patientIdDetection.patient_id || '')
+                            setPatientIdDetection((current) => (current ? { ...current, was_autofilled: true } : current))
+                          }}
+                        >
+                          Use detected ID
+                        </button>
+                      ) : patientIdDetection.was_autofilled ? (
+                        <span className='pill pill--success'>Auto-filled</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {uploadForm.entries.length ? (
                     <div className='full-width file-editor'>
                       <h3>Binder file metadata</h3>
@@ -1266,6 +1845,84 @@ export function App() {
             </section>
           ) : null}
 
+          {activeView === 'profile' ? (
+            <section className='workspace-grid'>
+              <aside className='panel queue-panel'>
+                <section className='panel-subsection'>
+                  <h2>My account</h2>
+                  <div className='fact-list'>
+                    <div>
+                      <dt>Username</dt>
+                      <dd>{user?.username}</dd>
+                    </div>
+                    <div>
+                      <dt>Role</dt>
+                      <dd>{user?.role}</dd>
+                    </div>
+                    <div>
+                      <dt>Last login</dt>
+                      <dd>{formatDateTime(user?.last_login_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>Created</dt>
+                      <dd>{formatDateTime(user?.created_at)}</dd>
+                    </div>
+                  </div>
+                </section>
+              </aside>
+
+              <section className='panel detail-panel'>
+                <section className='panel-subsection'>
+                  <h2>User profile</h2>
+                  <form className='form-grid' onSubmit={handleProfileSave}>
+                    <label className='full-width'>
+                      Full name
+                      <input value={profileForm.full_name} onChange={(event) => setProfileForm({ full_name: event.target.value })} />
+                    </label>
+                    <div className='full-width form-actions'>
+                      <button type='submit' disabled={isBusy}>
+                        Save profile
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
+                <section className='panel-subsection'>
+                  <h3>Change password</h3>
+                  {isBootstrapAdmin(user) ? (
+                    <p className='muted-text'>The bootstrap admin password is static and managed outside the app.</p>
+                  ) : (
+                    <form className='form-grid' onSubmit={handlePasswordChange}>
+                      <label>
+                        Current password
+                        <input
+                          type='password'
+                          value={passwordChangeForm.current_password}
+                          onChange={(event) =>
+                            setPasswordChangeForm((current) => ({ ...current, current_password: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        New password
+                        <input
+                          type='password'
+                          value={passwordChangeForm.new_password}
+                          onChange={(event) => setPasswordChangeForm((current) => ({ ...current, new_password: event.target.value }))}
+                        />
+                      </label>
+                      <div className='full-width form-actions'>
+                        <button type='submit' disabled={isBusy}>
+                          Change password
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </section>
+              </section>
+            </section>
+          ) : null}
+
           {activeView === 'users' && user?.role === 'admin' ? (
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
@@ -1275,8 +1932,47 @@ export function App() {
                     Refresh
                   </button>
                 </div>
+
+                <div className='dashboard-metrics'>
+                  <article className='mini-card'>
+                    <span>Total users</span>
+                    <strong>{users.length}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Active</span>
+                    <strong>{activeUserCount}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Locked</span>
+                    <strong>{lockedUserCount}</strong>
+                  </article>
+                  <article className='mini-card'>
+                    <span>Reset required</span>
+                    <strong>{resetRequiredCount}</strong>
+                  </article>
+                </div>
+
+                <div className='filter-row'>
+                  <label>
+                    Search
+                    <input value={userFilters.query} onChange={(event) => setUserFilters((current) => ({ ...current, query: event.target.value }))} />
+                  </label>
+                  <label>
+                    Role
+                    <select
+                      value={userFilters.role}
+                      onChange={(event) => setUserFilters((current) => ({ ...current, role: event.target.value as UserFilters['role'] }))}
+                    >
+                      <option value='all'>All roles</option>
+                      <option value='admin'>Admin</option>
+                      <option value='manager'>Office manager</option>
+                      <option value='counselor'>Counselor</option>
+                    </select>
+                  </label>
+                </div>
+
                 <ul className='queue-list'>
-                  {users.map((managedUser) => (
+                  {filteredUsers.map((managedUser) => (
                     <li key={managedUser.id}>
                       <button
                         type='button'
@@ -1289,7 +1985,7 @@ export function App() {
                         </div>
                         <div className='queue-item-meta'>
                           <span className='pill pill--neutral'>{managedUser.role}</span>
-                          <span>{managedUser.is_active ? 'Active' : 'Inactive'}</span>
+                          <span>{managedUser.is_active ? (managedUser.is_locked ? 'Locked' : 'Active') : 'Inactive'}</span>
                         </div>
                       </button>
                     </li>
@@ -1298,44 +1994,46 @@ export function App() {
               </aside>
 
               <section className='panel detail-panel'>
-                <h2>Create user</h2>
-                <form className='form-grid' onSubmit={handleCreateUser}>
-                  <label>
-                    Username
-                    <input
-                      value={newUserForm.username}
-                      onChange={(event) => setNewUserForm((current) => ({ ...current, username: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    Full name
-                    <input
-                      value={newUserForm.full_name}
-                      onChange={(event) => setNewUserForm((current) => ({ ...current, full_name: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    Role
-                    <select value={newUserForm.role} onChange={(event) => setNewUserForm((current) => ({ ...current, role: event.target.value as Role }))}>
-                      <option value='counselor'>Counselor</option>
-                      <option value='manager'>Office manager</option>
-                      <option value='admin'>Admin</option>
-                    </select>
-                  </label>
-                  <label>
-                    Temporary password
-                    <input
-                      type='password'
-                      value={newUserForm.password}
-                      onChange={(event) => setNewUserForm((current) => ({ ...current, password: event.target.value }))}
-                    />
-                  </label>
-                  <div className='full-width form-actions'>
-                    <button type='submit' disabled={isBusy}>
-                      Create user
-                    </button>
-                  </div>
-                </form>
+                <section className='panel-subsection'>
+                  <h2>Create user</h2>
+                  <form className='form-grid' onSubmit={handleCreateUser}>
+                    <label>
+                      Username
+                      <input
+                        value={newUserForm.username}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, username: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Full name
+                      <input
+                        value={newUserForm.full_name}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, full_name: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Role
+                      <select value={newUserForm.role} onChange={(event) => setNewUserForm((current) => ({ ...current, role: event.target.value as Role }))}>
+                        <option value='counselor'>Counselor</option>
+                        <option value='manager'>Office manager</option>
+                        <option value='admin'>Admin</option>
+                      </select>
+                    </label>
+                    <label>
+                      Temporary password
+                      <input
+                        type='password'
+                        value={newUserForm.password}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, password: event.target.value }))}
+                      />
+                    </label>
+                    <div className='full-width form-actions'>
+                      <button type='submit' disabled={isBusy}>
+                        Create user
+                      </button>
+                    </div>
+                  </form>
+                </section>
 
                 {selectedManagedUser && managedUserForm ? (
                   <>

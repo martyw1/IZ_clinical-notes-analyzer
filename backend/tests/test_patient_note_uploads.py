@@ -14,7 +14,7 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 
 
-def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label: str):
+def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label: str, content: bytes | None = None):
     data = {
         'patient_id': patient_id,
         'upload_mode': upload_mode,
@@ -39,8 +39,34 @@ def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label:
             ]
         ),
     }
-    files = [('files', (file_name, b'Intake packet completed and signed.\nPrimary clinician assigned.\n', 'text/plain'))]
+    files = [('files', (file_name, content or b'Intake packet completed and signed.\nPrimary clinician assigned.\n', 'text/plain'))]
     return data, files
+
+
+def test_detect_patient_id_from_uploaded_files(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        response = client.post(
+            '/api/patient-note-sets/detect-patient-id',
+            headers=headers,
+            files=[('files', ('alleva-intake.txt', b'Patient ID: PAT-DETECT-100\nAdmission completed.\n', 'text/plain'))],
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload['patient_id'] == 'PAT-DETECT-100'
+        assert payload['confidence'] == 'high'
+        assert payload['source_filename'] == 'alleva-intake.txt'
+
+    db = session_local()
+    try:
+        detection_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.patient_id.detected')).scalar_one_or_none()
+        assert detection_log is not None
+        assert detection_log.patient_id == 'PAT-DETECT-100'
+    finally:
+        db.close()
 
 
 def test_initial_patient_note_upload_and_download(app_with_sqlite):
@@ -130,3 +156,23 @@ def test_patient_note_update_creates_new_version_and_supersedes_previous_set(app
         assert note_sets[1].status.value == 'active'
     finally:
         db.close()
+
+
+def test_upload_uses_detected_patient_id_when_field_is_blank(app_with_sqlite):
+    app, _session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _upload_payload(
+            '',
+            upload_mode='initial',
+            file_name='alleva-binder.txt',
+            label='Admission Binder',
+            content=b'Client ID: PAT-AUTO-200\nInitial binder import.\n',
+        )
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+
+        assert uploaded.status_code == 200
+        payload = uploaded.json()
+        assert payload['patient_id'] == 'PAT-AUTO-200'
+        assert payload['review_chart_id'] is not None
