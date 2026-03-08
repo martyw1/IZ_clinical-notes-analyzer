@@ -10,6 +10,7 @@ The app now runs against its own dedicated PostgreSQL service in every supported
 
 ## Dedicated PostgreSQL configuration
 Key env vars:
+- `COMPOSE_PROJECT_NAME` (default: `iz_clinical_notes_analyzer`, keeps containers/networks/volumes isolated from other apps)
 - `DATABASE_HOST` (default: `127.0.0.1` for host-local backend runs)
 - `DATABASE_PORT` (host-visible dedicated Postgres port; defaults to `5432`)
 - `DATABASE_NAME` (default: `iz_clinical_notes_analyzer`)
@@ -21,6 +22,7 @@ Key env vars:
 Behavior inside the Docker backend container:
 - Host-local DB URLs are automatically rewritten from `127.0.0.1`/`localhost` to the dedicated Compose `postgres` service.
 - The Ubuntu/macOS/Windows startup scripts start the dedicated Postgres container first and create the application database if it is missing.
+- The backend rejects non-local PostgreSQL hosts so an old shared-VPS DSN cannot survive this startup path.
 
 
 ## Default login credentials

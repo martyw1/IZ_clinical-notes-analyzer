@@ -2,9 +2,11 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
+from sqlalchemy.engine.url import make_url
 
 
 REPO_ENV_FILE = Path(__file__).resolve().parents[3] / '.env'
+LOCAL_DATABASE_HOSTS = {'localhost', '127.0.0.1', '::1'}
 
 
 class Settings(BaseSettings):
@@ -39,7 +41,23 @@ class Settings(BaseSettings):
     @property
     def database_url_value(self) -> str:
         if self.database_url:
+            if self.database_url.startswith('postgresql'):
+                parsed_url = make_url(self.database_url)
+                allowed_hosts = LOCAL_DATABASE_HOSTS | {self.postgres_service_host}
+                if parsed_url.host not in allowed_hosts:
+                    raise ValueError(
+                        'This app only supports its own isolated PostgreSQL instance. '
+                        f'Configured host "{parsed_url.host}" is not allowed.'
+                    )
             return self.database_url
+
+        allowed_hosts = LOCAL_DATABASE_HOSTS | {self.postgres_service_host}
+        if self.database_host not in allowed_hosts:
+            raise ValueError(
+                'This app only supports its own isolated PostgreSQL instance. '
+                f'Configured host "{self.database_host}" is not allowed.'
+            )
+
         return URL.create(
             'postgresql+psycopg',
             username=self.database_user,

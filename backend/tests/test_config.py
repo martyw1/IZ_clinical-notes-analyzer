@@ -1,3 +1,5 @@
+import pytest
+
 from app.core.config import Settings
 from app.db.session import resolve_database_url
 
@@ -17,6 +19,25 @@ def test_database_url_value_builds_from_dedicated_postgres_settings():
         database_password='s3cret!',
     )
     assert settings.database_url_value == 'postgresql+psycopg://clinical_user:s3cret%21@127.0.0.1:55432/clinical_notes_app'
+
+
+def test_database_url_value_rejects_external_explicit_database_url():
+    settings = Settings(database_url='postgresql+psycopg://clinical_user:s3cret%21@shared-db.example.org:5432/clinical_notes_app')
+    with pytest.raises(ValueError, match='isolated PostgreSQL instance'):
+        _ = settings.database_url_value
+
+
+def test_database_url_value_rejects_external_component_host():
+    settings = Settings(
+        database_url=None,
+        database_host='shared-db.example.org',
+        database_port=5432,
+        database_name='clinical_notes_app',
+        database_user='clinical_user',
+        database_password='s3cret!',
+    )
+    with pytest.raises(ValueError, match='isolated PostgreSQL instance'):
+        _ = settings.database_url_value
 
 
 def test_resolve_database_url_rewrites_localhost_inside_docker_to_postgres_service():

@@ -105,7 +105,7 @@ PY
 startup_db_apply_env_defaults() {
   local env_file="$1"
   local postgres_port="$2"
-  local database_name database_user database_password database_host database_url volume_name
+  local database_name database_user database_password database_host database_url volume_name compose_project_name
 
   database_name="$(startup_db_env_value "$env_file" DATABASE_NAME)"
   database_name="${database_name:-$(startup_db_env_value "$env_file" POSTGRES_DB)}"
@@ -119,14 +119,17 @@ startup_db_apply_env_defaults() {
   database_password="${database_password:-$(startup_db_env_value "$env_file" POSTGRES_PASSWORD)}"
   database_password="${database_password:-change-me-app}"
 
-  database_host="$(startup_db_env_value "$env_file" DATABASE_HOST)"
-  database_host="${database_host:-127.0.0.1}"
+  database_host='127.0.0.1'
 
   volume_name="$(startup_db_env_value "$env_file" POSTGRES_VOLUME_NAME)"
   volume_name="${volume_name:-iz_clinical_notes_analyzer_postgres_data}"
 
+  compose_project_name="$(startup_db_env_value "$env_file" COMPOSE_PROJECT_NAME)"
+  compose_project_name="${compose_project_name:-iz_clinical_notes_analyzer}"
+
   database_url="$(startup_db_build_database_url "$database_user" "$database_password" "$database_host" "$postgres_port" "$database_name")"
 
+  startup_db_set_env_value "$env_file" COMPOSE_PROJECT_NAME "$compose_project_name"
   startup_db_set_env_value "$env_file" POSTGRES_PORT "$postgres_port"
   startup_db_set_env_value "$env_file" POSTGRES_VOLUME_NAME "$volume_name"
   startup_db_set_env_value "$env_file" DATABASE_HOST "$database_host"
