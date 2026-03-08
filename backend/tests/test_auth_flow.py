@@ -1,10 +1,31 @@
+import importlib
 import uuid
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.models import Role, User
+
+
+def reload_app_with_env(tmp_path: Path, monkeypatch, **env_overrides):
+    db_path = tmp_path / 'test.db'
+    monkeypatch.setenv('DATABASE_URL', f'sqlite:///{db_path}')
+    monkeypatch.setenv('SECRET_KEY', 'test-secret')
+
+    for key, value in env_overrides.items():
+        monkeypatch.setenv(key, value)
+
+    import app.core.config as config_module
+    import app.db.session as session_module
+    import app.main as main_module
+
+    importlib.reload(config_module)
+    importlib.reload(session_module)
+    importlib.reload(main_module)
+
+    return main_module.app, session_module.SessionLocal
 
 
 def test_health(app_with_sqlite):
@@ -66,3 +87,52 @@ def test_reset_password_flow_for_first_login_user(app_with_sqlite):
         me = client.get('/api/users/me', headers={'Authorization': f"Bearer {relogin.json()['access_token']}"})
         assert me.status_code == 200
         assert me.json()['must_reset_password'] is False
+
+
+def test_startup_restores_locked_bootstrap_admin(tmp_path: Path, monkeypatch):
+    bootstrap_password = 'bootstrap-pass-1234'
+    app, session_local = reload_app_with_env(
+        tmp_path,
+        monkeypatch,
+        BOOTSTRAP_ADMIN_USERNAME='admin',
+        BOOTSTRAP_ADMIN_PASSWORD=bootstrap_password,
+        RESET_BOOTSTRAP_ADMIN_ON_STARTUP='true',
+        ENVIRONMENT='development',
+    )
+
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        admin = db.execute(select(User).where(User.username == 'admin')).scalar_one()
+        admin.password_hash = hash_password('wrong-pass-1234')
+        admin.failed_login_attempts = 5
+        admin.is_locked = True
+        admin.must_reset_password = False
+        db.commit()
+    finally:
+        db.close()
+
+    app, session_local = reload_app_with_env(
+        tmp_path,
+        monkeypatch,
+        BOOTSTRAP_ADMIN_USERNAME='admin',
+        BOOTSTRAP_ADMIN_PASSWORD=bootstrap_password,
+        RESET_BOOTSTRAP_ADMIN_ON_STARTUP='true',
+        ENVIRONMENT='development',
+    )
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': bootstrap_password})
+        assert login.status_code == 200
+        assert login.json()['must_reset_password'] is True
+
+    db = session_local()
+    try:
+        admin = db.execute(select(User).where(User.username == 'admin')).scalar_one()
+        assert admin.failed_login_attempts == 0
+        assert admin.is_locked is False
+        assert admin.must_reset_password is True
+    finally:
+        db.close()

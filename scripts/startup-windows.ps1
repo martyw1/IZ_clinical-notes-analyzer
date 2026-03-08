@@ -234,6 +234,15 @@ try {
     Write-Info 'Current service status'
     docker compose ps
 
+    $bootstrapUsername = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME' } else { 'admin' }
+    $bootstrapPassword = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD' } else { 'r3' }
+    Write-Info 'Running smoke test'
+    $env:FRONTEND_PORT = if (Get-EnvValue $EnvFile 'FRONTEND_PORT') { Get-EnvValue $EnvFile 'FRONTEND_PORT' } else { '5173' }
+    $env:SMOKE_RESET_PASSWORD = 'false'
+    $env:SMOKE_USERNAME = $bootstrapUsername
+    $env:SMOKE_PASSWORD = $bootstrapPassword
+    & (Join-Path $RootDir 'scripts/smoke.sh')
+
     Write-Pass "Startup complete. Logs are in $LogFile"
 }
 catch {

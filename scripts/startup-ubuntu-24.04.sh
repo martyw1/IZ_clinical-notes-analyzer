@@ -141,7 +141,11 @@ fi
 docker compose ps
 
 info 'Running smoke test'
-if FRONTEND_PORT="$FRONTEND_PORT" ./scripts/smoke.sh; then
+if SMOKE_RESET_PASSWORD='false' \
+  SMOKE_USERNAME="$(startup_db_env_value "$ENV_FILE" BOOTSTRAP_ADMIN_USERNAME)" \
+  SMOKE_PASSWORD="$(startup_db_env_value "$ENV_FILE" BOOTSTRAP_ADMIN_PASSWORD)" \
+  FRONTEND_PORT="$FRONTEND_PORT" \
+  ./scripts/smoke.sh; then
   pass 'Smoke test passed.'
 else
   warn 'Smoke failed; collecting recent logs.'
