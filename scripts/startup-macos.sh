@@ -55,6 +55,15 @@ install_brew_package_if_missing() {
   fi
 }
 
+install_frontend_dependencies() {
+  if npm install; then
+    return 0
+  fi
+
+  warn 'npm install failed; retrying with --include=dev --force to repair local node_modules state.'
+  npm install --include=dev --force
+}
+
 info "Starting macOS bootstrap from ${ROOT_DIR}"
 cd "${ROOT_DIR}"
 
@@ -140,7 +149,7 @@ deactivate
 
 info "Setting up frontend Node environment"
 cd frontend
-npm install
+install_frontend_dependencies
 cd "${ROOT_DIR}"
 
 info "Starting Docker Compose stack"

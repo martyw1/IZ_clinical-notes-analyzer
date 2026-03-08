@@ -153,6 +153,16 @@ SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES 
     $schemaSql | docker compose exec -T -e "PGPASSWORD=$DatabasePassword" postgres psql -U $DatabaseUser -d $DatabaseName -v ON_ERROR_STOP=1 -v "app_db_user=$DatabaseUser" | Out-Null
 }
 
+function Install-FrontendDependencies {
+    try {
+        npm install
+    }
+    catch {
+        Write-Warn 'npm install failed; retrying with --include=dev --force to repair local node_modules state.'
+        npm install --include=dev --force
+    }
+}
+
 function Ensure-Command {
     param(
         [string]$Command,
@@ -209,7 +219,7 @@ try {
 
     Write-Info 'Setting up frontend Node environment'
     Set-Location (Join-Path $RootDir 'frontend')
-    npm install
+    Install-FrontendDependencies
     Set-Location $RootDir
 
     Write-Info 'Starting dedicated PostgreSQL service'

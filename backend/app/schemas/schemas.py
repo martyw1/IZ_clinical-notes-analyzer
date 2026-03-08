@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.models import Role, WorkflowState
 
@@ -21,13 +21,12 @@ class PasswordResetInput(BaseModel):
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     role: Role
     must_reset_password: bool
-
-    class Config:
-        from_attributes = True
 
 
 class UserCreate(BaseModel):
@@ -44,6 +43,8 @@ class ChartCreate(BaseModel):
 
 
 class ChartOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     client_name: str
     level_of_care: str
@@ -51,9 +52,6 @@ class ChartOut(BaseModel):
     counselor_id: int
     state: WorkflowState
     notes: str
-
-    class Config:
-        from_attributes = True
 
 
 class TransitionInput(BaseModel):

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 import time
@@ -62,7 +63,13 @@ def initialize_database() -> None:
 
 def create_app() -> FastAPI:
     os.makedirs(settings.upload_dir, exist_ok=True)
-    api = FastAPI(title=settings.app_name)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        initialize_database()
+        yield
+
+    api = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     api.add_middleware(
         CORSMiddleware,
@@ -71,10 +78,6 @@ def create_app() -> FastAPI:
         allow_methods=['*'],
         allow_headers=['*'],
     )
-
-    @api.on_event('startup')
-    def startup() -> None:
-        initialize_database()
 
     @api.get('/health')
     def health():
