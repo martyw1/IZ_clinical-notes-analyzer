@@ -5,6 +5,9 @@ STARTUP_DB_DEFAULT_DATABASE_NAME='iz_clinical_notes_analyzer'
 STARTUP_DB_DEFAULT_DATABASE_USER='iz_clinical_notes_app'
 STARTUP_DB_DEFAULT_DATABASE_PASSWORD='change-me-app'
 STARTUP_DB_DEFAULT_VOLUME_NAME='iz_clinical_notes_analyzer_postgres_data'
+STARTUP_BOOTSTRAP_ADMIN_USERNAME='admin'
+STARTUP_BOOTSTRAP_ADMIN_PASSWORD='r3!@analyzer#123'
+STARTUP_BOOTSTRAP_ADMIN_RESET='true'
 
 startup_db_info() {
   if declare -F info >/dev/null 2>&1; then
@@ -191,6 +194,9 @@ startup_db_apply_env_defaults() {
   startup_db_set_env_value "$env_file" DATABASE_PASSWORD "$database_password"
   startup_db_set_env_value "$env_file" POSTGRES_SERVICE_HOST "postgres"
   startup_db_set_env_value "$env_file" DATABASE_URL "$database_url"
+  startup_db_set_env_value "$env_file" BOOTSTRAP_ADMIN_USERNAME "$STARTUP_BOOTSTRAP_ADMIN_USERNAME"
+  startup_db_set_env_value "$env_file" BOOTSTRAP_ADMIN_PASSWORD "$STARTUP_BOOTSTRAP_ADMIN_PASSWORD"
+  startup_db_set_env_value "$env_file" RESET_BOOTSTRAP_ADMIN_ON_STARTUP "$STARTUP_BOOTSTRAP_ADMIN_RESET"
 
   # Keep legacy variable names aligned for older local tooling.
   startup_db_set_env_value "$env_file" POSTGRES_DB "$database_name"
