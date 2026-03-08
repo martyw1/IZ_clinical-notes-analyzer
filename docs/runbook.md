@@ -12,6 +12,13 @@
 - Admin access to forensic logs is available through `GET /api/audit/logs`.
 - Preserve UTC timestamps during exports and correlate events using `request_id` and `correlation_id`.
 
+## Patient note set handling
+- Patient note uploads are keyed by `patient_id` and stored under `UPLOAD_DIR/patient-notes/...`.
+- Initial uploads use `POST /api/patient-note-sets` with `upload_mode=initial`; later changes must use `upload_mode=update`, which creates a new immutable version instead of replacing the prior set.
+- Current and historical binders can be listed with `GET /api/patient-note-sets` and inspected with `GET /api/patient-note-sets/{id}`.
+- Stored source files can be retrieved with `GET /api/patient-note-sets/{note_set_id}/documents/{document_id}/download`.
+- Every stored file has a SHA-256 digest in the database; use that hash when validating backup integrity or investigating file tampering.
+
 ## Dedicated PostgreSQL runtime
 - The app always runs against its own Docker-managed `postgres` service.
 - Host-local backend runs connect through `DATABASE_HOST=127.0.0.1` and `DATABASE_PORT=$POSTGRES_PORT`.

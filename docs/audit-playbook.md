@@ -4,6 +4,8 @@ This playbook combines the Alleva walkthrough transcripts, the screenshot eviden
 
 ## Combined Flow
 
+Before step 1, make sure the patient’s current Alleva note binder has been uploaded into the app under the correct `patient_id`. Audits should be linked to that patient ID instead of patient name.
+
 1. Verify client overview episode metadata.
    Record client name, original admission date, original discharge date, and every level of care shown for the episode.
 2. Verify the primary clinician assignment.

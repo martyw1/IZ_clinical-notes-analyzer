@@ -2,7 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.models import ComplianceStatus, Role, WorkflowState
+from app.models.models import (
+    AllevaBucket,
+    ComplianceStatus,
+    DocumentCompletionStatus,
+    NoteSetStatus,
+    NoteSetUploadMode,
+    Role,
+    WorkflowState,
+)
 
 
 class Token(BaseModel):
@@ -71,7 +79,8 @@ class AuditItemOut(AuditItemUpdate):
 
 
 class ChartCreate(BaseModel):
-    client_name: str
+    patient_id: str
+    client_name: str = ''
     level_of_care: str
     admission_date: str = ''
     discharge_date: str = ''
@@ -83,6 +92,7 @@ class ChartCreate(BaseModel):
 
 class ChartSummaryOut(BaseModel):
     id: int
+    patient_id: str
     client_name: str
     level_of_care: str
     admission_date: str
@@ -104,7 +114,8 @@ class ChartDetailOut(ChartSummaryOut):
 
 
 class ChartUpdate(BaseModel):
-    client_name: str
+    patient_id: str
+    client_name: str = ''
     level_of_care: str
     admission_date: str = ''
     discharge_date: str = ''
@@ -118,6 +129,57 @@ class ChartUpdate(BaseModel):
 class TransitionInput(BaseModel):
     to_state: WorkflowState
     comment: str = ''
+
+
+class PatientNoteDocumentUploadInput(BaseModel):
+    client_file_name: str = ''
+    document_label: str = ''
+    alleva_bucket: AllevaBucket = AllevaBucket.custom_forms
+    document_type: str = 'clinical_note'
+    completion_status: DocumentCompletionStatus = DocumentCompletionStatus.completed
+    client_signed: bool = False
+    staff_signed: bool = False
+    document_date: str = ''
+    description: str = ''
+
+
+class PatientNoteDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_label: str
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    alleva_bucket: AllevaBucket
+    document_type: str
+    completion_status: DocumentCompletionStatus
+    client_signed: bool
+    staff_signed: bool
+    document_date: str
+    description: str
+    created_at: datetime
+
+
+class PatientNoteSetSummaryOut(BaseModel):
+    id: int
+    patient_id: str
+    version: int
+    status: NoteSetStatus
+    upload_mode: NoteSetUploadMode
+    source_system: str
+    primary_clinician: str
+    level_of_care: str
+    admission_date: str
+    discharge_date: str
+    upload_notes: str
+    created_at: datetime
+    file_count: int
+
+
+class PatientNoteSetDetailOut(PatientNoteSetSummaryOut):
+    documents: list[PatientNoteDocumentOut]
 
 
 class AuditLogOut(BaseModel):

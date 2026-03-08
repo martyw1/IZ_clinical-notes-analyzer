@@ -12,8 +12,15 @@ IZ Clinical Notes Analyzer is a React + FastAPI + PostgreSQL application for ent
 - Authenticated actions bind actor identity into the request context so committed database changes can be tied back to the requesting user.
 - All committed inserts, updates, and deletes for tracked domain models are captured automatically with before-state, after-state, and field-level diff payloads.
 - Explicit domain events are also emitted for sensitive reads and workflow actions such as login, password reset, chart transitions, and audit log access.
+- Patient note-set uploads and downloads also emit explicit file activity events, and each stored file carries a persisted SHA-256 hash plus byte count for forensic validation.
 - Audit records are tamper-evident through hash chaining and also carry CEF-style payloads plus FHIR AuditEvent-style JSON for downstream compliance integrations.
 - If the audit log cannot be written to the database, records are spooled to `logs/forensic-audit-fallback.jsonl` so evidence is not silently lost.
+
+## Patient note binders
+- The app now tracks work by `patient_id` instead of relying on patient name in the UI workflow.
+- Alleva-compatible document uploads are grouped into immutable `patient_note_sets`, with each update creating a new version and marking the previous active version as superseded.
+- Individual uploaded files are stored as `patient_note_documents` with Alleva bucket metadata, completion state, signature flags, document dates, size, content type, and SHA-256 digest.
+- The frontend presents those note sets as a document-manager-style binder so counselors and office managers can upload, update, inspect, and download source documents without overwriting historical evidence.
 
 ## Database connectivity model
 Configuration is explicit and deterministic:

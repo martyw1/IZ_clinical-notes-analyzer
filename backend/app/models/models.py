@@ -29,6 +29,32 @@ class ComplianceStatus(str, enum.Enum):
     na = 'na'
 
 
+class NoteSetStatus(str, enum.Enum):
+    active = 'active'
+    superseded = 'superseded'
+
+
+class NoteSetUploadMode(str, enum.Enum):
+    initial = 'initial'
+    update = 'update'
+
+
+class AllevaBucket(str, enum.Enum):
+    custom_forms = 'custom_forms'
+    uploaded_documents = 'uploaded_documents'
+    portal_documents = 'portal_documents'
+    labs = 'labs'
+    medications = 'medications'
+    notes = 'notes'
+    other = 'other'
+
+
+class DocumentCompletionStatus(str, enum.Enum):
+    completed = 'completed'
+    incomplete = 'incomplete'
+    draft = 'draft'
+
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -46,6 +72,7 @@ class Chart(Base):
     __tablename__ = 'charts'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(120), default='', index=True)
     client_name: Mapped[str] = mapped_column(String(120), index=True)
     level_of_care: Mapped[str] = mapped_column(String(120))
     admission_date: Mapped[str] = mapped_column(String(40), default='')
@@ -60,6 +87,56 @@ class Chart(Base):
 
     counselor: Mapped[User] = relationship()
     audit_responses: Mapped[list['AuditItemResponse']] = relationship(cascade='all, delete-orphan', back_populates='chart')
+
+
+class PatientNoteSet(Base):
+    __tablename__ = 'patient_note_sets'
+    __table_args__ = (UniqueConstraint('patient_id', 'version', name='uq_patient_note_sets_patient_version'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(120), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[NoteSetStatus] = mapped_column(Enum(NoteSetStatus), default=NoteSetStatus.active, index=True)
+    upload_mode: Mapped[NoteSetUploadMode] = mapped_column(Enum(NoteSetUploadMode), default=NoteSetUploadMode.initial)
+    source_system: Mapped[str] = mapped_column(String(80), default='Alleva EMR')
+    primary_clinician: Mapped[str] = mapped_column(String(120), default='')
+    level_of_care: Mapped[str] = mapped_column(String(120), default='')
+    admission_date: Mapped[str] = mapped_column(String(40), default='')
+    discharge_date: Mapped[str] = mapped_column(String(40), default='')
+    upload_notes: Mapped[str] = mapped_column(Text, default='')
+    replaced_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True)
+    uploaded_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    uploaded_by: Mapped[User] = relationship()
+    documents: Mapped[list['PatientNoteDocument']] = relationship(cascade='all, delete-orphan', back_populates='note_set')
+
+
+class PatientNoteDocument(Base):
+    __tablename__ = 'patient_note_documents'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), index=True)
+    document_label: Mapped[str] = mapped_column(String(255))
+    original_filename: Mapped[str] = mapped_column(String(255))
+    storage_path: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120), default='application/octet-stream')
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    alleva_bucket: Mapped[AllevaBucket] = mapped_column(Enum(AllevaBucket), default=AllevaBucket.custom_forms, index=True)
+    document_type: Mapped[str] = mapped_column(String(80), default='clinical_note')
+    completion_status: Mapped[DocumentCompletionStatus] = mapped_column(
+        Enum(DocumentCompletionStatus),
+        default=DocumentCompletionStatus.completed,
+        index=True,
+    )
+    client_signed: Mapped[bool] = mapped_column(Boolean, default=False)
+    staff_signed: Mapped[bool] = mapped_column(Boolean, default=False)
+    document_date: Mapped[str] = mapped_column(String(40), default='')
+    description: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    note_set: Mapped[PatientNoteSet] = relationship(back_populates='documents')
 
 
 class WorkflowTransition(Base):

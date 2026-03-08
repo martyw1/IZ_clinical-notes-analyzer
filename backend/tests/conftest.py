@@ -9,6 +9,7 @@ def app_with_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_path = tmp_path / 'test.db'
     monkeypatch.setenv('DATABASE_URL', f'sqlite:///{db_path}')
     monkeypatch.setenv('SECRET_KEY', 'test-secret')
+    monkeypatch.setenv('UPLOAD_DIR', str(tmp_path / 'uploads'))
 
     import app.core.config as config_module
     import app.db.session as session_module

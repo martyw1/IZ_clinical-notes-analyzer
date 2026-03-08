@@ -49,6 +49,7 @@ def test_ensure_schema_compatibility_adds_new_chart_columns(tmp_path):
     ensure_schema_compatibility(engine)
 
     columns = {column['name'] for column in inspect(engine).get_columns('charts')}
+    assert 'patient_id' in columns
     assert 'admission_date' in columns
     assert 'discharge_date' in columns
     assert 'auditor_name' in columns

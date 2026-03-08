@@ -1,6 +1,10 @@
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -8,7 +12,22 @@ from app.api.deps import get_current_user, require_roles
 from app.core.audit_template import AUDIT_TEMPLATE, AUDIT_TEMPLATE_BY_KEY, audit_sections
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models.models import AuditItemResponse, AuditLog, Chart, ComplianceStatus, Role, User, WorkflowState, WorkflowTransition
+from app.models.models import (
+    AllevaBucket,
+    AuditItemResponse,
+    AuditLog,
+    Chart,
+    ComplianceStatus,
+    DocumentCompletionStatus,
+    NoteSetStatus,
+    NoteSetUploadMode,
+    PatientNoteDocument,
+    PatientNoteSet,
+    Role,
+    User,
+    WorkflowState,
+    WorkflowTransition,
+)
 from app.schemas.schemas import (
     AuditLogOut,
     AuditTemplateSectionOut,
@@ -18,14 +37,20 @@ from app.schemas.schemas import (
     ChartUpdate,
     LoginInput,
     PasswordResetInput,
+    PatientNoteDocumentOut,
+    PatientNoteDocumentUploadInput,
+    PatientNoteSetDetailOut,
+    PatientNoteSetSummaryOut,
     Token,
     TransitionInput,
     UserCreate,
     UserOut,
 )
 from app.services.audit import log_event
+from app.services.patient_notes import remove_stored_paths, resolve_storage_path, store_upload_file
 
 router = APIRouter(prefix='/api')
+NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:
@@ -51,6 +76,10 @@ def _chart_stmt():
     return select(Chart).options(selectinload(Chart.audit_responses), selectinload(Chart.counselor))
 
 
+def _note_set_stmt():
+    return select(PatientNoteSet).options(selectinload(PatientNoteSet.documents), selectinload(PatientNoteSet.uploaded_by))
+
+
 def _ensure_chart_access(chart: Chart | None, user: User) -> Chart:
     if not chart:
         raise HTTPException(status_code=404, detail='Chart not found')
@@ -62,6 +91,13 @@ def _ensure_chart_access(chart: Chart | None, user: User) -> Chart:
 def _find_chart(chart_id: int, user: User, db: Session) -> Chart:
     chart = db.execute(_chart_stmt().where(Chart.id == chart_id)).scalar_one_or_none()
     return _ensure_chart_access(chart, user)
+
+
+def _find_note_set(note_set_id: int, db: Session) -> PatientNoteSet:
+    note_set = db.execute(_note_set_stmt().where(PatientNoteSet.id == note_set_id)).scalar_one_or_none()
+    if not note_set:
+        raise HTTPException(status_code=404, detail='Patient note set not found')
+    return note_set
 
 
 def _ensure_all_responses(chart: Chart) -> None:
@@ -84,11 +120,60 @@ def _status_counts(chart: Chart) -> dict[ComplianceStatus, int]:
     return counts
 
 
+def _chart_label(chart: Chart) -> str:
+    return chart.patient_id or chart.client_name or f'chart-{chart.id}'
+
+
+def _note_set_summary(note_set: PatientNoteSet) -> dict[str, object]:
+    return {
+        'id': note_set.id,
+        'patient_id': note_set.patient_id,
+        'version': note_set.version,
+        'status': note_set.status,
+        'upload_mode': note_set.upload_mode,
+        'source_system': note_set.source_system,
+        'primary_clinician': note_set.primary_clinician,
+        'level_of_care': note_set.level_of_care,
+        'admission_date': note_set.admission_date,
+        'discharge_date': note_set.discharge_date,
+        'upload_notes': note_set.upload_notes,
+        'created_at': note_set.created_at,
+        'file_count': len(note_set.documents),
+    }
+
+
+def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
+    documents = sorted(note_set.documents, key=lambda document: (document.document_date, document.id))
+    return {
+        **_note_set_summary(note_set),
+        'documents': [
+            {
+                'id': document.id,
+                'document_label': document.document_label,
+                'original_filename': document.original_filename,
+                'content_type': document.content_type,
+                'size_bytes': document.size_bytes,
+                'sha256': document.sha256,
+                'alleva_bucket': document.alleva_bucket,
+                'document_type': document.document_type,
+                'completion_status': document.completion_status,
+                'client_signed': document.client_signed,
+                'staff_signed': document.staff_signed,
+                'document_date': document.document_date,
+                'description': document.description,
+                'created_at': document.created_at,
+            }
+            for document in documents
+        ],
+    }
+
+
 def _chart_summary(chart: Chart) -> dict[str, object]:
     _ensure_all_responses(chart)
     counts = _status_counts(chart)
     return {
         'id': chart.id,
+        'patient_id': chart.patient_id,
         'client_name': chart.client_name,
         'level_of_care': chart.level_of_care,
         'admission_date': chart.admission_date,
@@ -134,8 +219,15 @@ def _chart_detail(chart: Chart) -> dict[str, object]:
     return {**summary, 'checklist_items': checklist_items}
 
 
-def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate, db: Session) -> None:
-    chart.client_name = payload.client_name.strip()
+def _normalized_chart_name(payload: ChartUpdate | ChartCreate) -> str:
+    patient_id = payload.patient_id.strip()
+    client_name = payload.client_name.strip()
+    return client_name or patient_id
+
+
+def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate) -> None:
+    chart.patient_id = payload.patient_id.strip()
+    chart.client_name = _normalized_chart_name(payload)
     chart.level_of_care = payload.level_of_care.strip()
     chart.admission_date = payload.admission_date.strip()
     chart.discharge_date = payload.discharge_date.strip()
@@ -168,6 +260,41 @@ def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate, db: S
     missing_keys = [template_item['key'] for template_item in AUDIT_TEMPLATE if template_item['key'] not in seen_keys]
     if missing_keys:
         raise HTTPException(status_code=400, detail=f'Missing checklist items: {", ".join(missing_keys)}')
+
+
+def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[PatientNoteDocumentUploadInput]:
+    adapter = TypeAdapter(list[PatientNoteDocumentUploadInput])
+    if file_manifest.strip():
+        try:
+            manifest = adapter.validate_json(file_manifest)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=f'Invalid file manifest: {exc.errors()[0]["msg"]}') from exc
+    else:
+        manifest = []
+
+    if not manifest:
+        manifest = [PatientNoteDocumentUploadInput(client_file_name=file.filename or '') for file in files]
+
+    if len(manifest) != len(files):
+        raise HTTPException(status_code=400, detail='Uploaded file manifest must include exactly one entry per file')
+
+    normalized: list[PatientNoteDocumentUploadInput] = []
+    for metadata, upload in zip(manifest, files):
+        expected_name = upload.filename or ''
+        if metadata.client_file_name and metadata.client_file_name != expected_name:
+            raise HTTPException(status_code=400, detail=f'File manifest mismatch for uploaded file {expected_name}')
+        normalized.append(
+            metadata.model_copy(
+                update={
+                    'client_file_name': expected_name,
+                    'document_label': metadata.document_label.strip() or Path(expected_name or 'document').stem,
+                    'document_type': metadata.document_type.strip() or 'clinical_note',
+                    'description': metadata.description.strip(),
+                    'document_date': metadata.document_date.strip(),
+                }
+            )
+        )
+    return normalized
 
 
 @router.post('/auth/login', response_model=Token)
@@ -290,15 +417,16 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
 def get_audit_template(_: User = Depends(get_current_user)):
+    sections = audit_sections()
     log_event(
         action='audit.template.read',
         event_category='data_access',
         target_entity='audit_template',
         target_entity_type='template',
-        details={'section_count': len(audit_sections())},
+        details={'section_count': len(sections)},
         message='Audit checklist template viewed.',
     )
-    return audit_sections()
+    return sections
 
 
 @router.get('/charts', response_model=list[ChartSummaryOut])
@@ -322,6 +450,7 @@ def list_charts(user: User = Depends(get_current_user), db: Session = Depends(ge
 @router.post('/charts', response_model=ChartDetailOut)
 def create_chart(payload: ChartCreate, request: Request, user: User = Depends(require_roles(Role.counselor, Role.admin)), db: Session = Depends(get_db)):
     chart = Chart(
+        patient_id='',
         client_name='',
         level_of_care='',
         admission_date='',
@@ -332,7 +461,7 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
         counselor_id=user.id,
         notes='',
     )
-    _apply_chart_updates(chart, payload, db)
+    _apply_chart_updates(chart, payload)
     chart.auditor_name = chart.auditor_name or user.username
     _ensure_all_responses(chart)
     db.add(chart)
@@ -347,8 +476,9 @@ def create_chart(payload: ChartCreate, request: Request, user: User = Depends(re
         target_entity=f'chart:{chart.id}',
         target_entity_type='chart',
         target_entity_id=str(chart.id),
-        details={'state': chart.state.value, 'client_name': chart.client_name},
-        message=f'Chart audit {chart.id} created by {user.username}.',
+        patient_id=chart.patient_id,
+        details={'state': chart.state.value, 'patient_id': chart.patient_id},
+        message=f'Chart audit {chart.id} created for patient {chart.patient_id or chart.id}.',
     )
     return _chart_detail(chart)
 
@@ -363,6 +493,7 @@ def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session
         target_entity=f'chart:{chart.id}',
         target_entity_type='chart',
         target_entity_id=str(chart.id),
+        patient_id=chart.patient_id,
         details={'state': chart.state.value},
         message=f'Chart audit {chart.id} viewed by {user.username}.',
     )
@@ -372,7 +503,7 @@ def get_chart(chart_id: int, user: User = Depends(get_current_user), db: Session
 @router.put('/charts/{chart_id}', response_model=ChartDetailOut)
 def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     chart = _find_chart(chart_id, user, db)
-    _apply_chart_updates(chart, payload, db)
+    _apply_chart_updates(chart, payload)
     db.commit()
     chart = _find_chart(chart_id, user, db)
     log_event(
@@ -384,7 +515,8 @@ def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: Us
         target_entity=f'chart:{chart.id}',
         target_entity_type='chart',
         target_entity_id=str(chart.id),
-        details={'state': chart.state.value, 'client_name': chart.client_name},
+        patient_id=chart.patient_id,
+        details={'state': chart.state.value, 'patient_id': chart.patient_id},
         message=f'Chart audit {chart.id} updated by {user.username}.',
     )
     return _chart_detail(chart)
@@ -411,29 +543,229 @@ def transition_chart(chart_id: int, payload: TransitionInput, request: Request, 
         target_entity=f'chart:{chart.id}',
         target_entity_type='chart',
         target_entity_id=str(chart.id),
+        patient_id=chart.patient_id,
         details={'from': old.value, 'to': payload.to_state.value, 'comment': payload.comment},
         message=f'Chart audit {chart.id} transitioned from {old.value} to {payload.to_state.value}.',
     )
     return _chart_detail(chart)
 
 
-@router.post('/uploads')
-def upload_files(request: Request, files: list[UploadFile] = File(...), user: User = Depends(require_roles(Role.counselor, Role.admin)), db: Session = Depends(get_db)):
-    accepted = []
-    for f in files:
-        accepted.append({'filename': f.filename, 'content_type': f.content_type})
+@router.get('/patient-note-sets', response_model=list[PatientNoteSetSummaryOut])
+def list_patient_note_sets(
+    patient_id: str | None = None,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    stmt = _note_set_stmt().order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())
+    if patient_id:
+        stmt = stmt.where(PatientNoteSet.patient_id == patient_id.strip())
+    note_sets = list(db.execute(stmt).scalars().unique().all())
+    log_event(
+        action='patient_note_sets.list.read',
+        actor=user,
+        event_category='data_access',
+        target_entity='patient_note_sets',
+        target_entity_type='patient_note_set',
+        patient_id=patient_id.strip() if patient_id else None,
+        details={'count': len(note_sets), 'patient_id': patient_id.strip() if patient_id else None},
+        message=f'Patient note set queue viewed by {user.username}.',
+    )
+    return [_note_set_summary(note_set) for note_set in note_sets]
+
+
+@router.get('/patient-note-sets/{note_set_id}', response_model=PatientNoteSetDetailOut)
+def get_patient_note_set(note_set_id: int, user: User = Depends(require_roles(*NOTE_SET_ROLES)), db: Session = Depends(get_db)):
+    note_set = _find_note_set(note_set_id, db)
+    log_event(
+        action='patient_note_set.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'patient_note_set:{note_set.id}',
+        target_entity_type='patient_note_set',
+        target_entity_id=str(note_set.id),
+        patient_id=note_set.patient_id,
+        details={'version': note_set.version, 'document_count': len(note_set.documents)},
+        message=f'Patient note set {note_set.id} viewed by {user.username}.',
+    )
+    return _note_set_detail(note_set)
+
+
+@router.post('/patient-note-sets', response_model=PatientNoteSetDetailOut)
+async def upload_patient_note_set(
+    request: Request,
+    patient_id: str = Form(...),
+    upload_mode: NoteSetUploadMode = Form(NoteSetUploadMode.initial),
+    level_of_care: str = Form(''),
+    admission_date: str = Form(''),
+    discharge_date: str = Form(''),
+    primary_clinician: str = Form(''),
+    upload_notes: str = Form(''),
+    file_manifest: str = Form(''),
+    files: list[UploadFile] = File(...),
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    normalized_patient_id = patient_id.strip()
+    if not normalized_patient_id:
+        raise HTTPException(status_code=400, detail='Patient ID is required')
+    if not files:
+        raise HTTPException(status_code=400, detail='At least one clinical note file is required')
+
+    manifest = _parse_manifest(file_manifest, files)
+    existing_active = db.execute(
+        _note_set_stmt().where(PatientNoteSet.patient_id == normalized_patient_id, PatientNoteSet.status == NoteSetStatus.active)
+    ).scalar_one_or_none()
+
+    if upload_mode == NoteSetUploadMode.initial and existing_active:
+        raise HTTPException(status_code=409, detail='A patient note set already exists for this patient ID; use update mode instead')
+    if upload_mode == NoteSetUploadMode.update and not existing_active:
+        raise HTTPException(status_code=404, detail='No active patient note set exists for this patient ID; use initial upload instead')
+
+    next_version = (existing_active.version + 1) if existing_active else 1
+    note_set = PatientNoteSet(
+        patient_id=normalized_patient_id,
+        version=next_version,
+        status=NoteSetStatus.active,
+        upload_mode=upload_mode,
+        source_system='Alleva EMR',
+        primary_clinician=primary_clinician.strip(),
+        level_of_care=level_of_care.strip(),
+        admission_date=admission_date.strip(),
+        discharge_date=discharge_date.strip(),
+        upload_notes=upload_notes.strip(),
+        replaced_note_set_id=existing_active.id if existing_active else None,
+        uploaded_by_id=user.id,
+    )
+
+    created_documents: list[PatientNoteDocument] = []
+    stored_paths: list[str] = []
+    try:
+        if existing_active:
+            existing_active.status = NoteSetStatus.superseded
+        db.add(note_set)
+        db.flush()
+
+        for metadata in manifest:
+            document = PatientNoteDocument(
+                note_set_id=note_set.id,
+                document_label=metadata.document_label,
+                original_filename=metadata.client_file_name,
+                storage_path='',
+                content_type='application/octet-stream',
+                size_bytes=0,
+                sha256='',
+                alleva_bucket=metadata.alleva_bucket,
+                document_type=metadata.document_type,
+                completion_status=metadata.completion_status,
+                client_signed=metadata.client_signed,
+                staff_signed=metadata.staff_signed,
+                document_date=metadata.document_date,
+                description=metadata.description,
+            )
+            db.add(document)
+            created_documents.append(document)
+
+        db.flush()
+
+        for upload, document in zip(files, created_documents):
+            stored = await store_upload_file(upload, patient_id=normalized_patient_id, note_set_id=note_set.id, document_id=document.id)
+            document.storage_path = stored.storage_path
+            document.content_type = stored.content_type
+            document.size_bytes = stored.size_bytes
+            document.sha256 = stored.sha256
+            stored_paths.append(stored.storage_path)
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        remove_stored_paths(stored_paths)
+        log_event(
+            db,
+            request,
+            'patient_note_set.upload.failed',
+            actor=user,
+            event_category='file_activity',
+            target_entity='patient_note_set',
+            target_entity_type='patient_note_set',
+            patient_id=normalized_patient_id,
+            details={'file_count': len(files), 'reason': exc.__class__.__name__},
+            outcome_status='failure',
+            severity='error',
+            message=f'Patient note upload failed for {normalized_patient_id}.',
+            http_status_code=500 if not isinstance(exc, HTTPException) else exc.status_code,
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        raise
+
+    note_set = _find_note_set(note_set.id, db)
     log_event(
         db,
         request,
-        'file.upload',
+        'patient_note_set.uploaded',
         actor=user,
         event_category='file_activity',
-        target_entity='batch-upload',
-        target_entity_type='upload_batch',
-        details={'count': len(accepted), 'files': accepted},
-        message=f'{len(accepted)} file(s) uploaded by {user.username}.',
+        target_entity=f'patient_note_set:{note_set.id}',
+        target_entity_type='patient_note_set',
+        target_entity_id=str(note_set.id),
+        patient_id=note_set.patient_id,
+        details={'version': note_set.version, 'file_count': len(note_set.documents), 'upload_mode': note_set.upload_mode.value},
+        message=f'Patient note set {note_set.id} uploaded for patient {note_set.patient_id}.',
     )
-    return {'uploaded': accepted}
+    for document in note_set.documents:
+        log_event(
+            db,
+            request,
+            'patient_note.document.uploaded',
+            actor=user,
+            event_category='file_activity',
+            target_entity=f'patient_note_document:{document.id}',
+            target_entity_type='patient_note_document',
+            target_entity_id=str(document.id),
+            patient_id=note_set.patient_id,
+            details={
+                'note_set_id': note_set.id,
+                'filename': document.original_filename,
+                'sha256': document.sha256,
+                'size_bytes': document.size_bytes,
+                'alleva_bucket': document.alleva_bucket.value,
+            },
+            message=f'Clinical note document {document.id} stored for patient {note_set.patient_id}.',
+        )
+    return _note_set_detail(note_set)
+
+
+@router.get('/patient-note-sets/{note_set_id}/documents/{document_id}/download')
+def download_patient_note_document(
+    note_set_id: int,
+    document_id: int,
+    request: Request,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    note_set = _find_note_set(note_set_id, db)
+    document = next((item for item in note_set.documents if item.id == document_id), None)
+    if not document:
+        raise HTTPException(status_code=404, detail='Patient note document not found')
+
+    file_path = resolve_storage_path(document.storage_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail='Stored patient note file is missing')
+
+    log_event(
+        db,
+        request,
+        'patient_note.document.download',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'patient_note_document:{document.id}',
+        target_entity_type='patient_note_document',
+        target_entity_id=str(document.id),
+        patient_id=note_set.patient_id,
+        details={'note_set_id': note_set.id, 'filename': document.original_filename},
+        message=f'Clinical note document {document.id} downloaded by {user.username}.',
+    )
+    return FileResponse(file_path, filename=document.original_filename, media_type=document.content_type)
 
 
 @router.get('/audit/logs', response_model=list[AuditLogOut])

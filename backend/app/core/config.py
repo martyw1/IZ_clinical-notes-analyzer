@@ -67,5 +67,12 @@ class Settings(BaseSettings):
             database=self.database_name,
         ).render_as_string(hide_password=False)
 
+    @property
+    def upload_dir_path(self) -> Path:
+        configured = Path(self.upload_dir).expanduser()
+        if configured.is_absolute():
+            return configured
+        return REPO_ENV_FILE.parent / configured
+
 
 settings = Settings()

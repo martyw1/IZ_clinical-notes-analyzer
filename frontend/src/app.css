@@ -32,6 +32,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -41,6 +42,7 @@ button {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid rgba(95, 73, 54, 0.18);
@@ -52,6 +54,7 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   outline: none;
   border-color: rgba(125, 77, 47, 0.54);
@@ -134,7 +137,8 @@ textarea {
 }
 
 .role-chip,
-.state-chip {
+.state-chip,
+.note-set-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -154,6 +158,11 @@ textarea {
   border: 1px solid transparent;
 }
 
+.note-set-chip {
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+}
+
 .state-chip--draft,
 .state-chip--returned-for-update {
   background: #f8e5d9;
@@ -170,6 +179,16 @@ textarea {
 .state-chip--verified {
   background: var(--success-soft);
   color: var(--success);
+}
+
+.note-set-chip--active {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.note-set-chip--superseded {
+  background: rgba(95, 73, 54, 0.12);
+  color: var(--text-muted);
 }
 
 .status-banner,
@@ -330,7 +349,8 @@ textarea {
 .empty-queue,
 .open-issue,
 .hint-box,
-.policy-box {
+.policy-box,
+.upload-card {
   padding: 14px;
   border-radius: 18px;
 }
@@ -352,6 +372,11 @@ textarea {
   color: var(--brand);
   font-size: 0.84rem;
   margin-top: 4px;
+}
+
+.file-input-field input[type='file'] {
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .editor-grid {
@@ -388,6 +413,13 @@ textarea {
   gap: 14px;
   padding: 18px;
   border-radius: 22px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.upload-card {
+  display: grid;
+  gap: 14px;
   border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.82);
 }
@@ -451,6 +483,61 @@ textarea {
 .open-issue {
   background: rgba(255, 246, 240, 0.8);
   border: 1px solid rgba(180, 79, 63, 0.16);
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(244, 237, 223, 0.58);
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+.document-table-wrap {
+  overflow-x: auto;
+}
+
+.document-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.document-table th,
+.document-table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.document-table th {
+  color: var(--brand-deep);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.document-table td p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 button {
@@ -519,7 +606,8 @@ button:disabled {
   .panel-heading,
   .queue-card__header,
   .checklist-card__header,
-  .editor-actions {
+  .editor-actions,
+  .checkbox-row {
     flex-direction: column;
   }
 

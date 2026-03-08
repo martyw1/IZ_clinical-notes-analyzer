@@ -5,6 +5,7 @@ node_modules/
 frontend/dist/
 *.db
 .env
+uploads/
 
 .venv-*
 backend/.venv-*

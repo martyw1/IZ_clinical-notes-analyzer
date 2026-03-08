@@ -19,6 +19,7 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
     },
     'charts': {
+        'patient_id': "VARCHAR(120) NOT NULL DEFAULT ''",
         'admission_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'discharge_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'auditor_name': "VARCHAR(120) NOT NULL DEFAULT ''",
@@ -81,6 +82,7 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'created_at': 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
     'admission_date': "TEXT NOT NULL DEFAULT ''",
     'discharge_date': "TEXT NOT NULL DEFAULT ''",
+    'patient_id': "TEXT NOT NULL DEFAULT ''",
     'auditor_name': "TEXT NOT NULL DEFAULT ''",
     'other_details': "TEXT NOT NULL DEFAULT ''",
     'notes': "TEXT NOT NULL DEFAULT ''",
@@ -150,6 +152,12 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
                 logger.warning('Detected legacy schema: adding missing %s.%s column.', table_name, column_name)
                 connection.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}'))
                 added_columns.append({'table': table_name, 'column': column_name})
+
+        if inspector.has_table('charts'):
+            if dialect_name == 'postgresql':
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id)'))
+            elif dialect_name == 'sqlite':
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id)'))
 
         if inspector.has_table('audit_logs'):
             if dialect_name == 'postgresql':

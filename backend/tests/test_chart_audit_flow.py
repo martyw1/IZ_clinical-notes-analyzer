@@ -22,6 +22,7 @@ def test_audit_template_and_chart_creation(app_with_sqlite):
             '/api/charts',
             headers=headers,
             json={
+                'patient_id': 'PAT-001',
                 'client_name': 'Aegis Test',
                 'level_of_care': 'IOP, PHP',
                 'admission_date': '04/01/2025',
@@ -35,6 +36,7 @@ def test_audit_template_and_chart_creation(app_with_sqlite):
 
         assert created.status_code == 200
         payload = created.json()
+        assert payload['patient_id'] == 'PAT-001'
         assert payload['client_name'] == 'Aegis Test'
         assert payload['auditor_name'] == 'admin'
         assert len(payload['checklist_items']) == len(AUDIT_TEMPLATE)
@@ -55,6 +57,7 @@ def test_chart_update_persists_audit_results(app_with_sqlite):
             '/api/charts',
             headers=headers,
             json={
+                'patient_id': 'PAT-001',
                 'client_name': 'Aegis Test',
                 'level_of_care': 'Residential',
                 'admission_date': '04/01/2025',
@@ -79,6 +82,7 @@ def test_chart_update_persists_audit_results(app_with_sqlite):
             f"/api/charts/{chart['id']}",
             headers=headers,
             json={
+                'patient_id': chart['patient_id'],
                 'client_name': chart['client_name'],
                 'level_of_care': chart['level_of_care'],
                 'admission_date': chart['admission_date'],

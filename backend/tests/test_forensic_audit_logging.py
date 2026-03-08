@@ -21,6 +21,7 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
             '/api/charts',
             headers=headers,
             json={
+                'patient_id': 'PAT-001',
                 'client_name': 'Patient-001',
                 'level_of_care': 'Residential',
                 'admission_date': '04/01/2025',
@@ -42,6 +43,7 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
             f'/api/charts/{chart_id}',
             headers=headers,
             json={
+                'patient_id': 'PAT-001',
                 'client_name': 'Patient-001',
                 'level_of_care': 'Residential',
                 'admission_date': '04/01/2025',
@@ -73,6 +75,7 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
         )
         assert insert_log.before_state is None
         assert insert_log.after_state is not None
+        assert '"patient_id":"PAT-001"' in insert_log.after_state
         assert '"client_name":"Patient-001"' in insert_log.after_state
 
         update_log = next(
@@ -82,6 +85,7 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
         assert 'primary_clinician' in diff_state
         assert diff_state['primary_clinician']['before'] == 'Clinician A'
         assert diff_state['primary_clinician']['after'] == 'Clinician B'
+        assert update_log.patient_id == 'PAT-001'
         assert update_log.route_template == '/api/charts/{chart_id}'
         assert update_log.actor_username == 'admin'
     finally:
