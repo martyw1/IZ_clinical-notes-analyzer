@@ -352,6 +352,12 @@ function isBootstrapAdmin(user: User | null) {
   return user?.username === 'admin'
 }
 
+function validateCreateUserForm(form: CreateUserForm) {
+  if (!form.username.trim()) return 'Username is required.'
+  if (form.password.trim().length < 12) return 'Temporary password must be at least 12 characters.'
+  return ''
+}
+
 function buildTrend(points: (string | null | undefined)[], lookbackDays = 7): TrendPoint[] {
   const now = new Date()
   const dayKeys: string[] = []
@@ -923,17 +929,24 @@ export function App() {
 
   async function handleCreateUser(event: FormEvent) {
     event.preventDefault()
+    const validationError = validateCreateUserForm(newUserForm)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     setIsBusy(true)
     setError('')
     try {
-      await apiRequest<User>('/users', {
+      const created = await apiRequest<User>('/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUserForm),
       })
       setNewUserForm({ username: '', full_name: '', password: '', role: 'counselor' })
-      await loadUsers()
-      setStatus('User created successfully.')
+      setUserFilters({ query: '', role: 'all' })
+      setAdminPasswordReset('')
+      await loadUsers(created.id)
+      setStatus(`User ${created.username} created successfully.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to create user')
     } finally {
@@ -1996,10 +2009,12 @@ export function App() {
               <section className='panel detail-panel'>
                 <section className='panel-subsection'>
                   <h2>Create user</h2>
+                  <p className='muted-text'>Create a managed user account with a temporary password of at least 12 characters.</p>
                   <form className='form-grid' onSubmit={handleCreateUser}>
                     <label>
                       Username
                       <input
+                        required
                         value={newUserForm.username}
                         onChange={(event) => setNewUserForm((current) => ({ ...current, username: event.target.value }))}
                       />
@@ -2023,6 +2038,9 @@ export function App() {
                       Temporary password
                       <input
                         type='password'
+                        minLength={12}
+                        required
+                        autoComplete='new-password'
                         value={newUserForm.password}
                         onChange={(event) => setNewUserForm((current) => ({ ...current, password: event.target.value }))}
                       />

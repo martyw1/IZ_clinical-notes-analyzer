@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from './App'
 
 declare global {
@@ -275,6 +275,8 @@ describe('App turnkey workflow', () => {
   })
 
   it('shows profile management, admin user management, and forensic logs', async () => {
+    let directory = [userPayload('admin'), userPayload('manager')]
+
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-d', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
@@ -282,7 +284,20 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets': [noteSetSummary()],
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
-      'GET /api/users': [userPayload('admin'), userPayload('manager')],
+      'GET /api/users': () => ({ body: directory }),
+      'POST /api/users': (_, init) => {
+        const body = JSON.parse(String(init?.body || '{}'))
+        const created = {
+          ...userPayload('counselor'),
+          id: 7,
+          username: body.username,
+          full_name: body.full_name,
+          role: body.role,
+          must_reset_password: true,
+        }
+        directory = [...directory, created]
+        return { body: created }
+      },
       'PATCH /api/users/me': { ...userPayload('admin'), full_name: 'System Administrator Updated' },
       'GET /api/audit/logs': [
         {
@@ -315,6 +330,17 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByText('Your profile has been updated.')).toBeInTheDocument())
     fireEvent.click(screen.getAllByRole('button', { name: 'User management' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Create user' })).toBeInTheDocument())
+    const createUserSection = screen.getByRole('heading', { name: 'Create user' }).closest('section')
+    expect(createUserSection).not.toBeNull()
+    const createUserScope = within(createUserSection as HTMLElement)
+    fireEvent.change(createUserScope.getByLabelText('Username'), { target: { value: 'counselor-02' } })
+    fireEvent.change(createUserScope.getByLabelText('Full name'), { target: { value: 'Counselor Two' } })
+    fireEvent.change(createUserScope.getByLabelText('Temporary password'), { target: { value: 'temporary-pass-1234' } })
+    fireEvent.click(createUserScope.getByRole('button', { name: 'Create user' }))
+
+    await waitFor(() => expect(screen.getByText('User counselor-02 created successfully.')).toBeInTheDocument())
+    expect(screen.getByText('Counselor Two')).toBeInTheDocument()
+    expect(screen.getByText('counselor-02')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())
