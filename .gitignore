@@ -6,6 +6,7 @@ frontend/dist/
 *.db
 .env
 uploads/
+logs/
 
 .venv-*
 backend/.venv-*
