@@ -32,11 +32,16 @@ warn() { echo "[$(date +'%F %T')] [WARN] $*" >&2; }
 pass() { echo "[$(date +'%F %T')] [PASS] $*" >&2; }
 
 resolve_port() {
-  local key="$1" default="$2" requested
+  local key="$1" default="$2" service_name="$3" requested
   requested="${!key:-}"
   requested="${requested:-$(startup_db_env_value "$ENV_FILE" "$key")}"
   requested="${requested:-$default}"
   if startup_db_is_port_busy "$requested"; then
+    if startup_db_port_used_by_compose_service "$ENV_FILE" "$service_name" "$requested"; then
+      info "${key} ${requested} already belongs to the current ${service_name} service; reusing it."
+      echo "$requested"
+      return 0
+    fi
     local fallback
     fallback="$(startup_db_pick_next_open_port $((requested + 1)))"
     warn "${key} ${requested} busy; auto-selected ${fallback}."
@@ -96,9 +101,9 @@ info "Starting Ubuntu 24.04 bootstrap from ${ROOT_DIR}"
 
 [[ -f .env ]] || { cp .env.example .env; info 'Created .env from .env.example'; }
 
-BACKEND_PORT="$(resolve_port BACKEND_PORT 8000)"
-FRONTEND_PORT="$(resolve_port FRONTEND_PORT 5173)"
-POSTGRES_PORT="$(resolve_port POSTGRES_PORT 5432)"
+BACKEND_PORT="$(resolve_port BACKEND_PORT 8000 backend)"
+FRONTEND_PORT="$(resolve_port FRONTEND_PORT 5173 frontend)"
+POSTGRES_PORT="$(resolve_port POSTGRES_PORT 5432 postgres)"
 if [[ "$BACKEND_PORT" == "$FRONTEND_PORT" ]]; then
   FRONTEND_PORT="$(startup_db_pick_next_open_port $((FRONTEND_PORT + 1)))"
   warn "Frontend port matched backend; switched to ${FRONTEND_PORT}."

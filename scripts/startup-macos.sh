@@ -23,6 +23,7 @@ busy_ports_csv() {
 prompt_for_port() {
   local var_name="$1"
   local default_port="$2"
+  local service_name="$3"
   local chosen_port
 
   while true; do
@@ -35,6 +36,11 @@ prompt_for_port() {
     fi
 
     if startup_db_is_port_busy "${chosen_port}"; then
+      if startup_db_port_used_by_compose_service "$ENV_FILE" "$service_name" "${chosen_port}"; then
+        info "Port ${chosen_port} is already owned by this app's ${service_name} service; reusing it."
+        echo "${chosen_port}"
+        return 0
+      fi
       warn "Port ${chosen_port} is busy. These are the ports already busy: ${BUSY_PORTS_DISPLAY}"
       continue
     fi
@@ -85,22 +91,22 @@ BACKEND_DEFAULT="${BACKEND_DEFAULT:-8000}"
 FRONTEND_DEFAULT="${FRONTEND_DEFAULT:-5173}"
 POSTGRES_DEFAULT="${POSTGRES_DEFAULT:-5432}"
 
-BACKEND_PORT="$(prompt_for_port BACKEND_PORT "${BACKEND_DEFAULT}")"
+BACKEND_PORT="$(prompt_for_port BACKEND_PORT "${BACKEND_DEFAULT}" backend)"
 while [[ "${BACKEND_PORT}" == "${FRONTEND_PORT:-}" ]]; do
   warn "Backend and frontend ports must be different."
-  BACKEND_PORT="$(prompt_for_port BACKEND_PORT "${BACKEND_DEFAULT}")"
+  BACKEND_PORT="$(prompt_for_port BACKEND_PORT "${BACKEND_DEFAULT}" backend)"
 done
 
-FRONTEND_PORT="$(prompt_for_port FRONTEND_PORT "${FRONTEND_DEFAULT}")"
+FRONTEND_PORT="$(prompt_for_port FRONTEND_PORT "${FRONTEND_DEFAULT}" frontend)"
 while [[ "${FRONTEND_PORT}" == "${BACKEND_PORT}" ]]; do
   warn "Frontend and backend ports must be different."
-  FRONTEND_PORT="$(prompt_for_port FRONTEND_PORT "${FRONTEND_DEFAULT}")"
+  FRONTEND_PORT="$(prompt_for_port FRONTEND_PORT "${FRONTEND_DEFAULT}" frontend)"
 done
 
-POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}")"
+POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}" postgres)"
 while [[ "${POSTGRES_PORT}" == "${BACKEND_PORT}" || "${POSTGRES_PORT}" == "${FRONTEND_PORT}" ]]; do
   warn "PostgreSQL port must be different from the frontend and backend ports."
-  POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}")"
+  POSTGRES_PORT="$(prompt_for_port POSTGRES_PORT "${POSTGRES_DEFAULT}" postgres)"
 done
 
 export BACKEND_PORT FRONTEND_PORT POSTGRES_PORT

@@ -94,6 +94,58 @@ startup_db_pick_next_open_port() {
   return 1
 }
 
+startup_db_compose_project_name() {
+  local env_file="$1"
+  local compose_project_name
+
+  compose_project_name="${COMPOSE_PROJECT_NAME:-$(startup_db_env_value "$env_file" COMPOSE_PROJECT_NAME)}"
+  compose_project_name="${compose_project_name:-$STARTUP_DB_DEFAULT_COMPOSE_PROJECT}"
+  echo "$compose_project_name"
+}
+
+startup_db_port_used_by_compose_service() {
+  local env_file="$1"
+  local service_name="$2"
+  local port="$3"
+  local compose_project_name container_id port_lines
+
+  command -v docker >/dev/null 2>&1 || return 1
+
+  compose_project_name="$(startup_db_compose_project_name "$env_file")"
+
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    port_lines="$(docker port "$container_id" 2>/dev/null || true)"
+
+    if printf '%s\n' "$port_lines" | awk -v target="$port" '
+      {
+        split($0, parts, " -> ")
+        if (length(parts) < 2) {
+          next
+        }
+
+        split(parts[2], host_parts, ":")
+        host_port = host_parts[length(host_parts)]
+        if (host_port == target) {
+          found = 1
+        }
+      }
+      END {
+        exit(found ? 0 : 1)
+      }
+    '; then
+      return 0
+    fi
+  done < <(
+    docker ps \
+      --filter "label=com.docker.compose.project=${compose_project_name}" \
+      --filter "label=com.docker.compose.service=${service_name}" \
+      --format '{{.ID}}' 2>/dev/null || true
+  )
+
+  return 1
+}
+
 startup_db_build_database_url() {
   python3 - "$1" "$2" "$3" "$4" "$5" <<'PY'
 from urllib.parse import quote
