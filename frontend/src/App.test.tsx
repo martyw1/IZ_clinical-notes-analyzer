@@ -383,8 +383,8 @@ describe('App turnkey workflow', () => {
     fireEvent.click(createUserScope.getByRole('button', { name: 'Create user' }))
 
     await waitFor(() => expect(screen.getByText('User counselor-02 created successfully.')).toBeInTheDocument())
-    expect(screen.getByText('Counselor Two')).toBeInTheDocument()
-    expect(screen.getByText('counselor-02')).toBeInTheDocument()
+    expect(screen.getAllByText('Counselor Two').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('counselor-02').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
@@ -396,6 +396,66 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())
+  })
+
+  it('lets an admin edit and delete a selected managed user', async () => {
+    let directory = [userPayload('admin'), userPayload('manager')]
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-edit-delete', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': () => ({ body: directory }),
+      'GET /api/settings': appSettingsPayload(),
+      'PATCH /api/users/2': (_path: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body || '{}'))
+        directory = directory.map((entry) =>
+          entry.id === 2
+            ? {
+                ...entry,
+                full_name: body.full_name,
+                role: body.role,
+                is_active: body.is_active,
+                is_locked: body.is_locked,
+                must_reset_password: body.must_reset_password,
+              }
+            : entry,
+        )
+        return { body: directory.find((entry) => entry.id === 2) }
+      },
+      'DELETE /api/users/2': () => {
+        directory = directory.filter((entry) => entry.id !== 2)
+        return { body: { status: 'deleted' } }
+      },
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: 'User management' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Manage selected user' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Office Manager/i }))
+
+    const manageSection = screen.getByRole('heading', { name: 'Manage selected user' }).closest('section')
+    expect(manageSection).not.toBeNull()
+    const manageScope = within(manageSection as HTMLElement)
+
+    fireEvent.change(manageScope.getByLabelText('Full name'), { target: { value: 'Office Manager Updated' } })
+    fireEvent.click(manageScope.getByLabelText('Locked'))
+    fireEvent.click(manageScope.getByRole('button', { name: 'Save selected user' }))
+
+    await waitFor(() => expect(screen.getByText('Updated user manager.')).toBeInTheDocument())
+    expect(screen.getAllByText('Office Manager Updated').length).toBeGreaterThan(0)
+
+    fireEvent.change(manageScope.getByLabelText('Type username to confirm'), { target: { value: 'manager' } })
+    fireEvent.click(manageScope.getByRole('button', { name: 'Delete user' }))
+
+    await waitFor(() => expect(screen.getByText('Deleted user manager.')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /Office Manager Updated/i })).not.toBeInTheDocument()
   })
 
   it('completes a required password reset before loading the workspace', async () => {

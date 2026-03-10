@@ -423,6 +423,17 @@ function isBootstrapAdmin(user: User | null) {
   return user?.username === 'admin'
 }
 
+function userStatusLabel(candidate: Pick<User, 'is_active' | 'is_locked'>) {
+  if (!candidate.is_active) return 'Inactive'
+  if (candidate.is_locked) return 'Locked'
+  return 'Active'
+}
+
+function userStatusTone(candidate: Pick<User, 'is_active' | 'is_locked'>) {
+  if (!candidate.is_active || candidate.is_locked) return 'danger'
+  return 'success'
+}
+
 function validateCreateUserForm(form: CreateUserForm) {
   if (!form.username.trim()) return 'Username is required.'
   if (form.password.trim().length < 12) return 'Temporary password must be at least 12 characters.'
@@ -507,6 +518,7 @@ export function App() {
     role: 'counselor',
   })
   const [adminPasswordReset, setAdminPasswordReset] = useState('')
+  const [deleteUserConfirmation, setDeleteUserConfirmation] = useState('')
   const [userFilters, setUserFilters] = useState<UserFilters>({ query: '', role: 'all' })
 
   const [logs, setLogs] = useState<AuditLogRecord[]>([])
@@ -536,6 +548,9 @@ export function App() {
     () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
     [users, selectedManagedUserId],
   )
+  const selectedManagedUserIsBootstrap = isBootstrapAdmin(selectedManagedUser)
+  const selectedManagedUserIsCurrentUser = selectedManagedUser?.id === user?.id
+  const selectedManagedUserCanDelete = Boolean(selectedManagedUser && !selectedManagedUserIsBootstrap && !selectedManagedUserIsCurrentUser)
 
   const filteredUsers = useMemo(() => {
     const query = userFilters.query.trim().toLowerCase()
@@ -620,6 +635,7 @@ export function App() {
           }
         : null,
     )
+    setDeleteUserConfirmation('')
   }
 
   async function loadChartDetail(chartId: number) {
@@ -702,6 +718,7 @@ export function App() {
         setManagedUserForm(null)
         setAppSettings(null)
         setSettingsForm(null)
+        setDeleteUserConfirmation('')
       }
 
       const firstChartId = selectedChartId && chartList.some((chart) => chart.id === selectedChartId) ? selectedChartId : chartList[0]?.id ?? null
@@ -1088,6 +1105,31 @@ export function App() {
     }
   }
 
+  async function handleDeleteManagedUser(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedManagedUser) return
+    if (deleteUserConfirmation.trim() !== selectedManagedUser.username) {
+      setError(`Type ${selectedManagedUser.username} exactly to confirm deletion.`)
+      return
+    }
+
+    const username = selectedManagedUser.username
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<{ status: string }>(`/users/${selectedManagedUser.id}`, {
+        method: 'DELETE',
+      })
+      setDeleteUserConfirmation('')
+      await loadUsers()
+      setStatus(`Deleted user ${username}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete user')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function handleProfileSave(event: FormEvent) {
     event.preventDefault()
     setIsBusy(true)
@@ -1178,6 +1220,7 @@ export function App() {
         : null,
     )
     setAdminPasswordReset('')
+    setDeleteUserConfirmation('')
   }
 
   function renderTrendCard(title: string, points: TrendPoint[]) {
@@ -2064,7 +2107,10 @@ export function App() {
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
                 <div className='panel-heading'>
-                  <h2>User management</h2>
+                  <div>
+                    <h2>User management</h2>
+                    <p>Select a user to edit access, reset their password, or delete the account.</p>
+                  </div>
                   <button type='button' className='ghost-button' onClick={() => void loadUsers()} disabled={isBusy}>
                     Refresh
                   </button>
@@ -2122,7 +2168,8 @@ export function App() {
                         </div>
                         <div className='queue-item-meta'>
                           <span className='pill pill--neutral'>{managedUser.role}</span>
-                          <span>{managedUser.is_active ? (managedUser.is_locked ? 'Locked' : 'Active') : 'Inactive'}</span>
+                          {managedUser.must_reset_password ? <span className='pill pill--warning'>Reset required</span> : null}
+                          <span className={`pill pill--${userStatusTone(managedUser)}`}>{userStatusLabel(managedUser)}</span>
                         </div>
                       </button>
                     </li>
@@ -2132,8 +2179,173 @@ export function App() {
 
               <section className='panel detail-panel'>
                 <section className='panel-subsection'>
+                  <h2>Manage selected user</h2>
+                  <p className='muted-text'>The selected user can be edited below. New accounts sign in with the temporary password once, then must choose a new password.</p>
+
+                  {selectedManagedUser && managedUserForm ? (
+                    <>
+                      <article className='finding-card'>
+                        <div className='finding-card__header'>
+                          <div>
+                            <strong>{selectedManagedUser.full_name || selectedManagedUser.username}</strong>
+                            <p>{selectedManagedUser.username}</p>
+                          </div>
+                          <div className='quick-actions'>
+                            <span className='pill pill--neutral'>{selectedManagedUser.role}</span>
+                            {selectedManagedUser.must_reset_password ? <span className='pill pill--warning'>Reset required</span> : null}
+                            <span className={`pill pill--${userStatusTone(selectedManagedUser)}`}>{userStatusLabel(selectedManagedUser)}</span>
+                          </div>
+                        </div>
+                        <dl className='detail-grid'>
+                          <div>
+                            <dt>Last login</dt>
+                            <dd>{formatDateTime(selectedManagedUser.last_login_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>Created</dt>
+                            <dd>{formatDateTime(selectedManagedUser.created_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>Editable role</dt>
+                            <dd>{selectedManagedUserIsBootstrap ? 'Bootstrap admin is fixed' : 'Yes'}</dd>
+                          </div>
+                          <div>
+                            <dt>Deletion</dt>
+                            <dd>
+                              {selectedManagedUserCanDelete
+                                ? 'Available when no historical records are attached'
+                                : selectedManagedUserIsBootstrap
+                                  ? 'Bootstrap admin cannot be deleted'
+                                  : 'You cannot delete the signed-in account'}
+                            </dd>
+                          </div>
+                        </dl>
+                      </article>
+
+                      <form className='form-grid' onSubmit={handleSaveManagedUser}>
+                        <label>
+                          Full name
+                          <input
+                            value={managedUserForm.full_name}
+                            onChange={(event) => setManagedUserForm((current) => (current ? { ...current, full_name: event.target.value } : current))}
+                          />
+                        </label>
+                        <label>
+                          Role
+                          <select
+                            value={managedUserForm.role}
+                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, role: event.target.value as Role } : current))
+                            }
+                          >
+                            <option value='counselor'>Counselor</option>
+                            <option value='manager'>Office manager</option>
+                            <option value='admin'>Admin</option>
+                          </select>
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.is_active}
+                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, is_active: event.target.checked } : current))
+                            }
+                          />
+                          Active
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.is_locked}
+                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, is_locked: event.target.checked } : current))
+                            }
+                          />
+                          Locked
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={managedUserForm.must_reset_password}
+                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            onChange={(event) =>
+                              setManagedUserForm((current) => (current ? { ...current, must_reset_password: event.target.checked } : current))
+                            }
+                          />
+                          Force password reset at next login
+                        </label>
+                        <div className='full-width form-actions'>
+                          <button type='submit' disabled={isBusy}>
+                            Save selected user
+                          </button>
+                        </div>
+                      </form>
+
+                      <section className='panel-subsection'>
+                        <h3>Admin password reset</h3>
+                        {selectedManagedUserIsBootstrap ? (
+                          <p className='muted-text'>The bootstrap admin password is fixed outside the app.</p>
+                        ) : (
+                          <form className='form-grid' onSubmit={handleAdminPasswordReset}>
+                            <label className='full-width'>
+                              New temporary password
+                              <input
+                                type='password'
+                                minLength={12}
+                                value={adminPasswordReset}
+                                onChange={(event) => setAdminPasswordReset(event.target.value)}
+                              />
+                            </label>
+                            <div className='full-width form-actions'>
+                              <button type='submit' disabled={isBusy}>
+                                Reset password and require login reset
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </section>
+
+                      <section className='panel-subsection'>
+                        <h3>Delete user</h3>
+                        {selectedManagedUserCanDelete ? (
+                          <form className='form-grid' onSubmit={handleDeleteManagedUser}>
+                            <label className='full-width'>
+                              Type username to confirm
+                              <input
+                                value={deleteUserConfirmation}
+                                onChange={(event) => setDeleteUserConfirmation(event.target.value)}
+                                placeholder={selectedManagedUser.username}
+                              />
+                            </label>
+                            <div className='full-width form-actions'>
+                              <button type='submit' className='danger-button' disabled={isBusy || deleteUserConfirmation.trim() !== selectedManagedUser.username}>
+                                Delete user
+                              </button>
+                            </div>
+                            <p className='muted-text'>
+                              Deletion is permanent and only works when the account has no linked charts, uploads, workflow history, or audit trail.
+                            </p>
+                          </form>
+                        ) : (
+                          <p className='muted-text'>
+                            {selectedManagedUserIsBootstrap
+                              ? 'The bootstrap admin account cannot be deleted.'
+                              : 'The signed-in admin account cannot delete itself.'}
+                          </p>
+                        )}
+                      </section>
+                    </>
+                  ) : (
+                    <p className='empty-state'>Select a user to edit details, reset a password, or delete the account.</p>
+                  )}
+                </section>
+
+                <section className='panel-subsection'>
                   <h2>Create user</h2>
-                  <p className='muted-text'>Create a managed user account with a temporary password of at least 12 characters.</p>
+                  <p className='muted-text'>Create a managed user account with a temporary password of at least 12 characters. The user will be prompted to reset it after the first sign-in.</p>
                   <form className='form-grid' onSubmit={handleCreateUser}>
                     <label>
                       Username
@@ -2176,89 +2388,6 @@ export function App() {
                     </div>
                   </form>
                 </section>
-
-                {selectedManagedUser && managedUserForm ? (
-                  <>
-                    <section className='panel-subsection'>
-                      <h3>Edit selected user</h3>
-                      <form className='form-grid' onSubmit={handleSaveManagedUser}>
-                        <label>
-                          Full name
-                          <input
-                            value={managedUserForm.full_name}
-                            onChange={(event) => setManagedUserForm((current) => (current ? { ...current, full_name: event.target.value } : current))}
-                          />
-                        </label>
-                        <label>
-                          Role
-                          <select
-                            value={managedUserForm.role}
-                            onChange={(event) =>
-                              setManagedUserForm((current) => (current ? { ...current, role: event.target.value as Role } : current))
-                            }
-                          >
-                            <option value='counselor'>Counselor</option>
-                            <option value='manager'>Office manager</option>
-                            <option value='admin'>Admin</option>
-                          </select>
-                        </label>
-                        <label className='checkbox-row'>
-                          <input
-                            type='checkbox'
-                            checked={managedUserForm.is_active}
-                            onChange={(event) =>
-                              setManagedUserForm((current) => (current ? { ...current, is_active: event.target.checked } : current))
-                            }
-                          />
-                          Active
-                        </label>
-                        <label className='checkbox-row'>
-                          <input
-                            type='checkbox'
-                            checked={managedUserForm.is_locked}
-                            onChange={(event) =>
-                              setManagedUserForm((current) => (current ? { ...current, is_locked: event.target.checked } : current))
-                            }
-                          />
-                          Locked
-                        </label>
-                        <label className='checkbox-row'>
-                          <input
-                            type='checkbox'
-                            checked={managedUserForm.must_reset_password}
-                            onChange={(event) =>
-                              setManagedUserForm((current) => (current ? { ...current, must_reset_password: event.target.checked } : current))
-                            }
-                          />
-                          Force password reset at next login
-                        </label>
-                        <div className='full-width form-actions'>
-                          <button type='submit' disabled={isBusy}>
-                            Save changes
-                          </button>
-                        </div>
-                      </form>
-                    </section>
-
-                    <section className='panel-subsection'>
-                      <h3>Admin password reset</h3>
-                      <form className='form-grid' onSubmit={handleAdminPasswordReset}>
-                        <label className='full-width'>
-                          New temporary password
-                          <input type='password' value={adminPasswordReset} onChange={(event) => setAdminPasswordReset(event.target.value)} />
-                        </label>
-                        <div className='full-width form-actions'>
-                          <button type='submit' disabled={isBusy}>
-                            Reset password and require login reset
-                          </button>
-                        </div>
-                      </form>
-                      <p className='muted-text'>Last login: {formatDateTime(selectedManagedUser.last_login_at)}</p>
-                    </section>
-                  </>
-                ) : (
-                  <p className='empty-state'>Select a user to manage account status, role, and password recovery.</p>
-                )}
               </section>
             </section>
           ) : null}

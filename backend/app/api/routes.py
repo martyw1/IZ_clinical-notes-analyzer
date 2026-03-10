@@ -390,6 +390,39 @@ def _assert_admin_safety(target: User, db: Session, *, new_role: Role | None = N
         raise HTTPException(status_code=400, detail='At least one active, unlocked admin account must remain')
 
 
+def _user_snapshot(user: User) -> dict[str, object]:
+    return {
+        'id': user.id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'role': user.role.value,
+        'is_active': user.is_active,
+        'is_locked': user.is_locked,
+        'must_reset_password': user.must_reset_password,
+        'last_login_at': user.last_login_at,
+        'created_at': user.created_at,
+    }
+
+
+def _user_delete_blockers(user_id: int, db: Session) -> list[str]:
+    blockers: list[str] = []
+
+    relationship_checks = [
+        ('assigned charts', select(Chart.id).where(Chart.counselor_id == user_id).limit(1)),
+        ('reviewed charts', select(Chart.id).where(Chart.reviewed_by_id == user_id).limit(1)),
+        ('uploaded patient note sets', select(PatientNoteSet.id).where(PatientNoteSet.uploaded_by_id == user_id).limit(1)),
+        ('workflow transitions', select(WorkflowTransition.id).where(WorkflowTransition.actor_id == user_id).limit(1)),
+        ('application settings updates', select(AppSetting.id).where(AppSetting.updated_by_id == user_id).limit(1)),
+        ('forensic audit history', select(AuditLog.id).where(AuditLog.actor_id == user_id).limit(1)),
+    ]
+
+    for label, stmt in relationship_checks:
+        if db.execute(stmt).scalar_one_or_none() is not None:
+            blockers.append(label)
+
+    return blockers
+
+
 @router.post('/auth/login', response_model=Token)
 def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
     username = payload.username.strip()
@@ -741,6 +774,47 @@ def admin_reset_password(
         message=f'Password reset by admin for {target.username}.',
     )
     return target
+
+
+@router.delete('/users/{user_id}')
+def delete_user(user_id: int, request: Request, actor: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail='User not found')
+    if actor.id == target.id:
+        raise HTTPException(status_code=400, detail='You cannot delete your own account')
+    if _is_bootstrap_admin(target):
+        raise HTTPException(status_code=400, detail='The bootstrap admin account cannot be deleted')
+
+    _assert_admin_safety(target, db, new_is_active=False)
+    blockers = _user_delete_blockers(target.id, db)
+    if blockers:
+        blocker_summary = ', '.join(blockers)
+        raise HTTPException(
+            status_code=400,
+            detail=f'User cannot be deleted because related records exist: {blocker_summary}. Deactivate the account instead.',
+        )
+
+    before_state = _user_snapshot(target)
+    username = target.username
+    target_id = target.id
+    db.delete(target)
+    db.commit()
+    log_event(
+        db,
+        request,
+        'user.delete',
+        actor=actor,
+        event_category='user_management',
+        target_entity='user',
+        target_entity_type='user',
+        target_entity_id=str(target_id),
+        details={'username': username},
+        before_state=before_state,
+        diff_state=before_state,
+        message=f'User {username} deleted by {actor.username}.',
+    )
+    return {'status': 'deleted'}
 
 
 @router.get('/settings', response_model=AppSettingsOut)

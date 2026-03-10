@@ -10,6 +10,12 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 
 
+def _login_headers(client: TestClient, username: str, password: str) -> dict[str, str]:
+    login = client.post('/api/auth/login', json={'username': username, 'password': password})
+    assert login.status_code == 200
+    return {'Authorization': f"Bearer {login.json()['access_token']}"}
+
+
 def test_admin_can_create_update_and_reset_managed_users(app_with_sqlite):
     app, _ = app_with_sqlite
 
@@ -117,6 +123,105 @@ def test_user_can_manage_own_profile_and_password(app_with_sqlite):
 
         relogin = client.post('/api/auth/login', json={'username': 'counselor-01', 'password': 'replacement-pass-1234'})
         assert relogin.status_code == 200
+
+
+def test_managed_roles_can_sign_in_and_access_allowed_endpoints(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        admin_headers = _auth_headers(client)
+        created = []
+        for username, full_name, role in [
+            ('counselor-02', 'Counselor Two', 'counselor'),
+            ('manager-02', 'Office Manager Two', 'manager'),
+        ]:
+            response = client.post(
+                '/api/users',
+                headers=admin_headers,
+                json={
+                    'username': username,
+                    'full_name': full_name,
+                    'password': 'temporary-pass-1234',
+                    'role': role,
+                },
+            )
+            assert response.status_code == 200
+            created.append(response.json())
+
+        for user in created:
+            headers = _login_headers(client, user['username'], 'temporary-pass-1234')
+
+            me = client.get('/api/users/me', headers=headers)
+            assert me.status_code == 200
+            assert me.json()['username'] == user['username']
+
+            charts = client.get('/api/charts', headers=headers)
+            assert charts.status_code == 200
+            assert charts.json() == []
+
+            note_sets = client.get('/api/patient-note-sets', headers=headers)
+            assert note_sets.status_code == 200
+            assert note_sets.json() == []
+
+            directory = client.get('/api/users', headers=headers)
+            assert directory.status_code == 403
+
+
+def test_admin_can_delete_unused_managed_user(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/users',
+            headers=headers,
+            json={
+                'username': 'temp-user-01',
+                'full_name': 'Temporary User',
+                'password': 'temporary-pass-1234',
+                'role': 'counselor',
+            },
+        )
+        assert created.status_code == 200
+        created_user = created.json()
+
+        deleted = client.delete(f"/api/users/{created_user['id']}", headers=headers)
+        assert deleted.status_code == 200
+        assert deleted.json()['status'] == 'deleted'
+
+        listed = client.get('/api/users', headers=headers)
+        assert listed.status_code == 200
+        assert all(user['username'] != 'temp-user-01' for user in listed.json())
+
+        login = client.post('/api/auth/login', json={'username': 'temp-user-01', 'password': 'temporary-pass-1234'})
+        assert login.status_code == 401
+
+
+def test_admin_cannot_delete_user_with_audit_history(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        admin_headers = _auth_headers(client)
+        created = client.post(
+            '/api/users',
+            headers=admin_headers,
+            json={
+                'username': 'counselor-audit',
+                'full_name': 'Counselor Audit',
+                'password': 'temporary-pass-1234',
+                'role': 'counselor',
+            },
+        )
+        assert created.status_code == 200
+        created_user = created.json()
+
+        user_login = client.post('/api/auth/login', json={'username': 'counselor-audit', 'password': 'temporary-pass-1234'})
+        assert user_login.status_code == 200
+
+        deleted = client.delete(f"/api/users/{created_user['id']}", headers=admin_headers)
+        assert deleted.status_code == 400
+        assert 'related records exist' in deleted.json()['detail']
+        assert 'forensic audit history' in deleted.json()['detail']
 
 
 def test_admin_can_view_and_update_app_settings(app_with_sqlite):

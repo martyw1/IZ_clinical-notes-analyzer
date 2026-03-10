@@ -685,6 +685,15 @@ label {
   border: 1px solid rgba(24, 84, 59, 0.14);
 }
 
+.danger-button {
+  background: #8c2431;
+  color: #f9f2f1;
+}
+
+.danger-button:hover {
+  background: #761b29;
+}
+
 ol {
   margin: 0;
   padding-left: 1.2rem;
