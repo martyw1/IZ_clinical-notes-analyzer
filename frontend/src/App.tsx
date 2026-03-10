@@ -14,7 +14,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'dashboard' | 'reviews' | 'uploads' | 'profile' | 'users' | 'logs'
+type AppView = 'dashboard' | 'reviews' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
 
 type User = {
   id: number
@@ -125,8 +125,47 @@ type AuditLogRecord = {
   action: string
   patient_id: string | null
   message: string
+  details: string
   outcome_status: string
   severity: string
+}
+
+type AppSettings = {
+  organization_name: string
+  access_intel_enabled: boolean
+  access_geo_lookup_url: string
+  access_reputation_url: string
+  access_reputation_api_key_configured: boolean
+  access_lookup_timeout_seconds: number
+  llm_enabled: boolean
+  llm_provider_name: string
+  llm_base_url: string
+  llm_model: string
+  llm_api_key_configured: boolean
+  llm_use_for_access_review: boolean
+  llm_use_for_evaluation_gap_analysis: boolean
+  llm_analysis_instructions: string
+  updated_by_id: number | null
+  updated_at: string | null
+}
+
+type AppSettingsForm = {
+  organization_name: string
+  access_intel_enabled: boolean
+  access_geo_lookup_url: string
+  access_reputation_url: string
+  access_reputation_api_key: string
+  clear_access_reputation_api_key: boolean
+  access_lookup_timeout_seconds: number
+  llm_enabled: boolean
+  llm_provider_name: string
+  llm_base_url: string
+  llm_model: string
+  llm_api_key: string
+  clear_llm_api_key: boolean
+  llm_use_for_access_review: boolean
+  llm_use_for_evaluation_gap_analysis: boolean
+  llm_analysis_instructions: string
 }
 
 type UploadEntry = {
@@ -191,6 +230,7 @@ type CreateUserForm = {
 type LogFilters = {
   patient_id: string
   action: string
+  event_category: string
 }
 
 type UserFilters = {
@@ -231,6 +271,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   profile: 'My account',
   users: 'User management',
   logs: 'Forensic logs',
+  settings: 'Settings',
 }
 
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
@@ -280,6 +321,27 @@ function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>)
   }
 }
 
+function createSettingsForm(settings: AppSettings): AppSettingsForm {
+  return {
+    organization_name: settings.organization_name,
+    access_intel_enabled: settings.access_intel_enabled,
+    access_geo_lookup_url: settings.access_geo_lookup_url,
+    access_reputation_url: settings.access_reputation_url,
+    access_reputation_api_key: '',
+    clear_access_reputation_api_key: false,
+    access_lookup_timeout_seconds: settings.access_lookup_timeout_seconds,
+    llm_enabled: settings.llm_enabled,
+    llm_provider_name: settings.llm_provider_name,
+    llm_base_url: settings.llm_base_url,
+    llm_model: settings.llm_model,
+    llm_api_key: '',
+    clear_llm_api_key: false,
+    llm_use_for_access_review: settings.llm_use_for_access_review,
+    llm_use_for_evaluation_gap_analysis: settings.llm_use_for_evaluation_gap_analysis,
+    llm_analysis_instructions: settings.llm_analysis_instructions,
+  }
+}
+
 function buildUploadEntry(file: File): UploadEntry {
   const label = file.name.replace(/\.[^.]+$/, '')
   return {
@@ -300,6 +362,15 @@ function formatDateTime(value: string | null | undefined) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function parseLogDetails(details: string) {
+  try {
+    const parsed = JSON.parse(details)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
 }
 
 function shortHash(value: string) {
@@ -405,7 +476,7 @@ export function App() {
   const [mustResetPassword, setMustResetPassword] = useState(false)
   const [activeView, setActiveView] = useState<AppView>('dashboard')
 
-  const [loginForm, setLoginForm] = useState({ username: 'admin', password: 'r3!@analyzer#123' })
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [resetForm, setResetForm] = useState({ newPassword: '' })
   const [decisionComment, setDecisionComment] = useState('')
   const [reviewDirty, setReviewDirty] = useState(false)
@@ -439,7 +510,9 @@ export function App() {
   const [userFilters, setUserFilters] = useState<UserFilters>({ query: '', role: 'all' })
 
   const [logs, setLogs] = useState<AuditLogRecord[]>([])
-  const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '' })
+  const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '', event_category: '' })
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
+  const [settingsForm, setSettingsForm] = useState<AppSettingsForm | null>(null)
 
   const [profileForm, setProfileForm] = useState<ProfileForm>({ full_name: '' })
   const [passwordChangeForm, setPasswordChangeForm] = useState<PasswordChangeForm>({ current_password: '', new_password: '' })
@@ -475,6 +548,8 @@ export function App() {
       return matchesRole && matchesQuery
     })
   }, [userFilters, users])
+
+  const accessAttemptLogs = useMemo(() => logs.filter((entry) => entry.event_category === 'access_attempt'), [logs])
 
   const selectedCriterion = useMemo(() => {
     if (!selectedChart) return null
@@ -581,12 +656,20 @@ export function App() {
     syncSelectedManagedUser(nextUsers, preferredId)
   }
 
+  async function loadSettings() {
+    if (user?.role !== 'admin') return
+    const payload = await apiRequest<AppSettings>('/settings')
+    setAppSettings(payload)
+    setSettingsForm(createSettingsForm(payload))
+  }
+
   async function loadLogs() {
     if (user?.role !== 'admin') return
     const params = new URLSearchParams()
     params.set('limit', '200')
     if (logFilters.patient_id.trim()) params.set('patient_id', logFilters.patient_id.trim())
     if (logFilters.action.trim()) params.set('action', logFilters.action.trim())
+    if (logFilters.event_category.trim()) params.set('event_category', logFilters.event_category.trim())
     const payload = await apiRequest<AuditLogRecord[]>(`/audit/logs?${params.toString()}`)
     setLogs(payload)
   }
@@ -608,13 +691,17 @@ export function App() {
       setNoteSets(noteSetList)
 
       if (profile.role === 'admin') {
-        const directory = await apiRequest<User[]>('/users')
+        const [directory, configuredSettings] = await Promise.all([apiRequest<User[]>('/users'), apiRequest<AppSettings>('/settings')])
         setUsers(directory)
         syncSelectedManagedUser(directory, selectedManagedUserId)
+        setAppSettings(configuredSettings)
+        setSettingsForm(createSettingsForm(configuredSettings))
       } else {
         setUsers([])
         setSelectedManagedUserId(null)
         setManagedUserForm(null)
+        setAppSettings(null)
+        setSettingsForm(null)
       }
 
       const firstChartId = selectedChartId && chartList.some((chart) => chart.id === selectedChartId) ? selectedChartId : chartList[0]?.id ?? null
@@ -667,6 +754,12 @@ export function App() {
   useEffect(() => {
     if (activeView === 'logs' && token && user?.role === 'admin' && !mustResetPassword) {
       void loadLogs()
+    }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'settings' && token && user?.role === 'admin' && !mustResetPassword) {
+      void loadSettings()
     }
   }, [activeView, token, user, mustResetPassword])
 
@@ -1034,6 +1127,27 @@ export function App() {
     }
   }
 
+  async function handleSettingsSave(event: FormEvent) {
+    event.preventDefault()
+    if (!settingsForm) return
+    setIsBusy(true)
+    setError('')
+    try {
+      const payload = await apiRequest<AppSettings>('/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm),
+      })
+      setAppSettings(payload)
+      setSettingsForm(createSettingsForm(payload))
+      setStatus('Application settings have been updated.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   function openRejectedPatientUpload(chart: ChartDetail) {
     setActiveView('uploads')
     setUploadForm(
@@ -1119,12 +1233,19 @@ export function App() {
             <h2>Sign in</h2>
             <label>
               Username
-              <input value={loginForm.username} onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))} />
+              <input
+                required
+                autoComplete='username'
+                value={loginForm.username}
+                onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))}
+              />
             </label>
             <label>
               Password
               <input
                 type='password'
+                required
+                autoComplete='current-password'
                 value={loginForm.password}
                 onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
               />
@@ -1196,7 +1317,7 @@ export function App() {
               </button>
             ))}
             {user?.role === 'admin'
-              ? (['users', 'logs'] as AppView[]).map((view) => (
+              ? (['users', 'logs', 'settings'] as AppView[]).map((view) => (
                   <button
                     key={view}
                     className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -1269,6 +1390,9 @@ export function App() {
                         </button>
                         <button type='button' className='ghost-button' onClick={() => setActiveView('logs')}>
                           Forensic logs
+                        </button>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                          Settings
                         </button>
                       </>
                     ) : null}
@@ -2139,16 +2263,246 @@ export function App() {
             </section>
           ) : null}
 
+          {activeView === 'settings' && user?.role === 'admin' ? (
+            <section className='workspace-grid'>
+              <aside className='panel queue-panel'>
+                <div className='panel-heading'>
+                  <div>
+                    <h2>Application settings</h2>
+                    <p>Configure external access intelligence and the LLM used for gap-filling analysis.</p>
+                  </div>
+                  <button type='button' className='ghost-button' onClick={() => void loadSettings()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                </div>
+
+                <div className='fact-list'>
+                  <div>
+                    <dt>Organization</dt>
+                    <dd>{appSettings?.organization_name || 'Not configured'}</dd>
+                  </div>
+                  <div>
+                    <dt>LLM configured</dt>
+                    <dd>{appSettings?.llm_api_key_configured ? 'Yes' : 'No'}</dd>
+                  </div>
+                  <div>
+                    <dt>Reputation API configured</dt>
+                    <dd>{appSettings?.access_reputation_api_key_configured ? 'Yes' : 'No'}</dd>
+                  </div>
+                  <div>
+                    <dt>Updated</dt>
+                    <dd>{formatDateTime(appSettings?.updated_at)}</dd>
+                  </div>
+                </div>
+              </aside>
+
+              <section className='panel detail-panel'>
+                {settingsForm ? (
+                  <form className='form-grid' onSubmit={handleSettingsSave}>
+                    <label className='full-width'>
+                      Organization name
+                      <input
+                        value={settingsForm.organization_name}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, organization_name: event.target.value } : current))}
+                      />
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.access_intel_enabled}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, access_intel_enabled: event.target.checked } : current))
+                        }
+                      />
+                      Enable access intelligence lookups
+                    </label>
+                    <label>
+                      Geolocation URL
+                      <input
+                        value={settingsForm.access_geo_lookup_url}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, access_geo_lookup_url: event.target.value } : current))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Reputation URL
+                      <input
+                        value={settingsForm.access_reputation_url}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, access_reputation_url: event.target.value } : current))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Reputation API key
+                      <input
+                        type='password'
+                        autoComplete='off'
+                        value={settingsForm.access_reputation_api_key}
+                        placeholder={appSettings?.access_reputation_api_key_configured ? 'Configured. Enter a new key to replace it.' : 'Optional'}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  access_reputation_api_key: event.target.value,
+                                  clear_access_reputation_api_key: false,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.clear_access_reputation_api_key}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, clear_access_reputation_api_key: event.target.checked } : current))
+                        }
+                      />
+                      Clear stored reputation API key
+                    </label>
+                    <label>
+                      Lookup timeout (seconds)
+                      <input
+                        type='number'
+                        min={1}
+                        max={30}
+                        value={settingsForm.access_lookup_timeout_seconds}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current ? { ...current, access_lookup_timeout_seconds: Number(event.target.value || 1) } : current
+                          )
+                        }
+                      />
+                    </label>
+
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.llm_enabled}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, llm_enabled: event.target.checked } : current))}
+                      />
+                      Enable LLM-assisted analysis
+                    </label>
+                    <label>
+                      LLM provider label
+                      <input
+                        value={settingsForm.llm_provider_name}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, llm_provider_name: event.target.value } : current))
+                        }
+                      />
+                    </label>
+                    <label>
+                      LLM base URL
+                      <input
+                        value={settingsForm.llm_base_url}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, llm_base_url: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      LLM model
+                      <input
+                        value={settingsForm.llm_model}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, llm_model: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      LLM API key
+                      <input
+                        type='password'
+                        autoComplete='off'
+                        value={settingsForm.llm_api_key}
+                        placeholder={appSettings?.llm_api_key_configured ? 'Configured. Enter a new key to replace it.' : 'Required to enable LLM analysis'}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  llm_api_key: event.target.value,
+                                  clear_llm_api_key: false,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.clear_llm_api_key}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, clear_llm_api_key: event.target.checked } : current))}
+                      />
+                      Clear stored LLM API key
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.llm_use_for_access_review}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, llm_use_for_access_review: event.target.checked } : current))
+                        }
+                      />
+                      Use LLM for dangerous-IP access summaries
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.llm_use_for_evaluation_gap_analysis}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current ? { ...current, llm_use_for_evaluation_gap_analysis: event.target.checked } : current
+                          )
+                        }
+                      />
+                      Use LLM to fill note-analysis gaps
+                    </label>
+                    <label className='full-width'>
+                      Analysis instructions
+                      <textarea
+                        value={settingsForm.llm_analysis_instructions}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, llm_analysis_instructions: event.target.value } : current))
+                        }
+                      />
+                    </label>
+                    <div className='full-width form-actions'>
+                      <button type='submit' disabled={isBusy}>
+                        Save settings
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <p className='empty-state'>Settings are loading.</p>
+                )}
+              </section>
+            </section>
+          ) : null}
+
           {activeView === 'logs' && user?.role === 'admin' ? (
             <section className='panel detail-panel'>
               <div className='panel-heading'>
                 <div>
                   <h2>Forensic audit logs</h2>
-                  <p>Admin-only access to request, data-change, authentication, workflow, and upload events.</p>
+                  <p>Admin-only access to request, data-change, access-attempt, workflow, and upload events.</p>
                 </div>
                 <button type='button' className='ghost-button' onClick={() => void loadLogs()} disabled={isBusy}>
                   Refresh
                 </button>
+              </div>
+
+              <div className='dashboard-metrics'>
+                <article className='mini-card'>
+                  <span>Access attempts loaded</span>
+                  <strong>{accessAttemptLogs.length}</strong>
+                </article>
+                <article className='mini-card'>
+                  <span>Total logs loaded</span>
+                  <strong>{logs.length}</strong>
+                </article>
               </div>
 
               <form
@@ -2166,6 +2520,20 @@ export function App() {
                   Action
                   <input value={logFilters.action} onChange={(event) => setLogFilters((current) => ({ ...current, action: event.target.value }))} />
                 </label>
+                <label>
+                  Category
+                  <select
+                    value={logFilters.event_category}
+                    onChange={(event) => setLogFilters((current) => ({ ...current, event_category: event.target.value }))}
+                  >
+                    <option value=''>All categories</option>
+                    <option value='access_attempt'>Access attempts</option>
+                    <option value='data_change'>Data changes</option>
+                    <option value='forensic_access'>Forensic access</option>
+                    <option value='http_request'>HTTP requests</option>
+                    <option value='workflow'>Workflow</option>
+                  </select>
+                </label>
                 <button type='submit' disabled={isBusy}>
                   Filter logs
                 </button>
@@ -2173,23 +2541,35 @@ export function App() {
 
               {logs.length ? (
                 <div className='log-table'>
-                  {logs.map((log) => (
-                    <article key={log.event_id} className='log-row'>
-                      <div className='log-row__meta'>
-                        <strong>{log.action}</strong>
-                        <span>{formatDateTime(log.timestamp_utc)}</span>
-                      </div>
-                      <p>{log.message}</p>
-                      <div className='log-row__details'>
-                        <span>Actor: {log.actor_username || log.actor_type}</span>
-                        <span>Patient: {log.patient_id || 'n/a'}</span>
-                        <span>IP: {log.source_ip || 'n/a'}</span>
-                        <span>Request: {log.request_id}</span>
-                        <span>{log.event_category}</span>
-                        <span className={`pill pill--${log.outcome_status === 'success' ? 'success' : 'danger'}`}>{log.outcome_status}</span>
-                      </div>
-                    </article>
-                  ))}
+                  {logs.map((log) => {
+                    const details = parseLogDetails(log.details)
+                    const geolocation = details.geolocation as Record<string, unknown> | undefined
+                    return (
+                      <article key={log.event_id} className='log-row'>
+                        <div className='log-row__meta'>
+                          <strong>{log.action}</strong>
+                          <span>{formatDateTime(log.timestamp_utc)}</span>
+                        </div>
+                        <p>{log.message}</p>
+                        {log.event_category === 'access_attempt' && typeof details.danger_summary === 'string' ? (
+                          <p className='muted-text'>
+                            {details.danger_summary}
+                            {typeof geolocation?.city === 'string' || typeof geolocation?.country === 'string'
+                              ? ` Location: ${[geolocation?.city, geolocation?.region, geolocation?.country].filter(Boolean).join(', ')}.`
+                              : ''}
+                          </p>
+                        ) : null}
+                        <div className='log-row__details'>
+                          <span>Actor: {log.actor_username || log.actor_type}</span>
+                          <span>Patient: {log.patient_id || 'n/a'}</span>
+                          <span>IP: {log.source_ip || 'n/a'}</span>
+                          <span>Request: {log.request_id}</span>
+                          <span>{log.event_category}</span>
+                          <span className={`pill pill--${log.outcome_status === 'success' ? 'success' : 'danger'}`}>{log.outcome_status}</span>
+                        </div>
+                      </article>
+                    )
+                  })}
                 </div>
               ) : (
                 <p className='empty-state'>No audit logs matched the current filters.</p>

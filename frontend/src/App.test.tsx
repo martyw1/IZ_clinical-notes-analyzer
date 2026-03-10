@@ -1,10 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
-
-declare global {
-  // eslint-disable-next-line no-var
-  var fetch: typeof window.fetch
-}
 
 type RouteHandler = (path: string, init?: RequestInit) => { status?: number; body?: unknown }
 
@@ -34,7 +30,7 @@ function installFetchMock(routes: Record<string, unknown | RouteHandler>) {
     return jsonResponse(200, route)
   })
 
-  global.fetch = fn as unknown as typeof window.fetch
+  globalThis.fetch = fn as unknown as typeof window.fetch
   return fn
 }
 
@@ -162,6 +158,33 @@ function noteSetDetail() {
   }
 }
 
+function appSettingsPayload() {
+  return {
+    organization_name: 'R3 Recovery Services',
+    access_intel_enabled: true,
+    access_geo_lookup_url: 'https://ipwho.is/{ip}',
+    access_reputation_url: 'https://api.abuseipdb.com/api/v2/check',
+    access_reputation_api_key_configured: false,
+    access_lookup_timeout_seconds: 4,
+    llm_enabled: false,
+    llm_provider_name: 'OpenAI-compatible',
+    llm_base_url: 'https://api.openai.com/v1',
+    llm_model: 'gpt-4.1-mini',
+    llm_api_key_configured: false,
+    llm_use_for_access_review: true,
+    llm_use_for_evaluation_gap_analysis: true,
+    llm_analysis_instructions: '',
+    updated_by_id: 1,
+    updated_at: '2026-03-08T13:00:00Z',
+  }
+}
+
+function signIn() {
+  fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'admin' } })
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'r3!@analyzer#123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+}
+
 describe('App turnkey workflow', () => {
   it('renders the summary dashboard and admin tools for administrators', async () => {
     installFetchMock({
@@ -172,10 +195,11 @@ describe('App turnkey workflow', () => {
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
     })
 
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    signIn()
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
@@ -212,6 +236,8 @@ describe('App turnkey workflow', () => {
     })
 
     render(<App />)
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'counselor' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Upload clinical notes' })).toBeInTheDocument())
@@ -239,7 +265,7 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets': [noteSetSummary()],
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
-      'PUT /api/charts/8': (_, init) => {
+      'PUT /api/charts/8': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         const savedItem = body.checklist_items.find((item: { item_key: string }) => item.item_key === 'attendance_policy_consent')
         return {
@@ -259,6 +285,8 @@ describe('App turnkey workflow', () => {
     })
 
     render(<App />)
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'manager' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
@@ -285,7 +313,22 @@ describe('App turnkey workflow', () => {
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': () => ({ body: directory }),
-      'POST /api/users': (_, init) => {
+      'GET /api/settings': appSettingsPayload(),
+      'PATCH /api/settings': (_path: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body || '{}'))
+        return {
+          body: {
+            ...appSettingsPayload(),
+            organization_name: body.organization_name,
+            llm_enabled: body.llm_enabled,
+            llm_provider_name: body.llm_provider_name,
+            llm_base_url: body.llm_base_url,
+            llm_model: body.llm_model,
+            llm_api_key_configured: true,
+          },
+        }
+      },
+      'POST /api/users': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         const created = {
           ...userPayload('counselor'),
@@ -312,6 +355,7 @@ describe('App turnkey workflow', () => {
           action: 'chart.system_evaluated',
           patient_id: 'PAT-001',
           message: 'Automated evaluation completed for chart 8.',
+          details: '{}',
           outcome_status: 'success',
           severity: 'info',
         },
@@ -319,7 +363,7 @@ describe('App turnkey workflow', () => {
     })
 
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    signIn()
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByRole('button', { name: 'My account' })[0])
@@ -342,6 +386,14 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText('Counselor Two')).toBeInTheDocument()
     expect(screen.getByText('counselor-02')).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
+    fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
+    fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+    await waitFor(() => expect(screen.getByText('Application settings have been updated.')).toBeInTheDocument())
+
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())
   })
@@ -360,6 +412,8 @@ describe('App turnkey workflow', () => {
     })
 
     render(<App />)
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'counselor' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(screen.getByText('Password reset required')).toBeInTheDocument())

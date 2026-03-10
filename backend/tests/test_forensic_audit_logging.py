@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.models.models import AuditLog
+from app.services.access_intel import AccessIntelResult
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -113,5 +114,39 @@ def test_audit_log_endpoint_returns_enriched_records(app_with_sqlite):
         read_log = db.execute(select(AuditLog).where(AuditLog.action == 'audit.logs.read')).scalar_one_or_none()
         assert read_log is not None
         assert read_log.event_category == 'forensic_access'
+    finally:
+        db.close()
+
+
+def test_login_access_attempts_capture_ip_intelligence(app_with_sqlite, monkeypatch):
+    app, session_local = app_with_sqlite
+
+    monkeypatch.setattr(
+        'app.api.routes.lookup_access_intel',
+        lambda *_args, **_kwargs: AccessIntelResult(
+            source_ip='8.8.8.8',
+            ip_scope='public',
+            geolocation={'country': 'United States', 'region': 'Virginia', 'city': 'Ashburn'},
+            reputation={'abuse_confidence_score': 12},
+            lookup_status='complete',
+            danger_score=12,
+            dangerous=False,
+            danger_summary='This IP is not dangerous based on the current geolocation and reputation evidence.',
+        ),
+    )
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD}, headers={'x-forwarded-for': '8.8.8.8'})
+        assert login.status_code == 200
+
+    db = session_local()
+    try:
+        access_log = db.execute(select(AuditLog).where(AuditLog.action == 'auth.login.success')).scalar_one_or_none()
+        assert access_log is not None
+        assert access_log.event_category == 'access_attempt'
+        details = json.loads(access_log.details)
+        assert details['source_ip'] == '8.8.8.8'
+        assert details['geolocation']['country'] == 'United States'
+        assert details['danger_summary'].startswith('This IP is not dangerous')
     finally:
         db.close()

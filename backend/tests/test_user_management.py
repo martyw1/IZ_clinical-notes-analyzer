@@ -117,3 +117,37 @@ def test_user_can_manage_own_profile_and_password(app_with_sqlite):
 
         relogin = client.post('/api/auth/login', json={'username': 'counselor-01', 'password': 'replacement-pass-1234'})
         assert relogin.status_code == 200
+
+
+def test_admin_can_view_and_update_app_settings(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+
+        current = client.get('/api/settings', headers=headers)
+        assert current.status_code == 200
+        assert current.json()['organization_name'] == 'R3 Recovery Services'
+        assert current.json()['llm_api_key_configured'] is False
+
+        updated = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'organization_name': 'R3 Recovery Services QA',
+                'llm_enabled': True,
+                'llm_provider_name': 'OpenAI-compatible',
+                'llm_base_url': 'https://api.openai.com/v1',
+                'llm_model': 'gpt-4.1-mini',
+                'llm_api_key': 'sk-test-123',
+                'llm_use_for_access_review': True,
+                'llm_use_for_evaluation_gap_analysis': True,
+                'access_intel_enabled': True,
+                'access_lookup_timeout_seconds': 5,
+            },
+        )
+        assert updated.status_code == 200
+        payload = updated.json()
+        assert payload['organization_name'] == 'R3 Recovery Services QA'
+        assert payload['llm_enabled'] is True
+        assert payload['llm_api_key_configured'] is True

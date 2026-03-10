@@ -15,6 +15,26 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  id SERIAL PRIMARY KEY,
+  organization_name VARCHAR(120) NOT NULL DEFAULT 'R3 Recovery Services',
+  access_intel_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  access_geo_lookup_url VARCHAR(255) NOT NULL DEFAULT 'https://ipwho.is/{ip}',
+  access_reputation_url VARCHAR(255) NOT NULL DEFAULT 'https://api.abuseipdb.com/api/v2/check',
+  access_reputation_api_key VARCHAR(255) NOT NULL DEFAULT '',
+  access_lookup_timeout_seconds INTEGER NOT NULL DEFAULT 4,
+  llm_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  llm_provider_name VARCHAR(80) NOT NULL DEFAULT 'OpenAI-compatible',
+  llm_base_url VARCHAR(255) NOT NULL DEFAULT 'https://api.openai.com/v1',
+  llm_model VARCHAR(120) NOT NULL DEFAULT 'gpt-4.1-mini',
+  llm_api_key VARCHAR(255) NOT NULL DEFAULT '',
+  llm_use_for_access_review BOOLEAN NOT NULL DEFAULT TRUE,
+  llm_use_for_evaluation_gap_analysis BOOLEAN NOT NULL DEFAULT TRUE,
+  llm_analysis_instructions TEXT NOT NULL DEFAULT '',
+  updated_by_id INTEGER REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS charts (
   id SERIAL PRIMARY KEY,
   source_note_set_id INTEGER,

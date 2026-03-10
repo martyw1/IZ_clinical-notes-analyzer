@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from app.core.audit_template import AUDIT_TEMPLATE
 from app.models.models import (
+    AppSetting,
     AuditItemResponse,
     Chart,
     ComplianceStatus,
@@ -14,6 +15,7 @@ from app.models.models import (
     PatientNoteSet,
     WorkflowState,
 )
+from app.services.llm_assist import call_llm_json
 from app.services.patient_notes import extract_text_from_storage
 
 DATE_FORMATS = ('%m/%d/%Y', '%m-%d-%Y', '%Y-%m-%d')
@@ -375,9 +377,96 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
     return [keyed_items[template['key']] for template in AUDIT_TEMPLATE]
 
 
-def generate_evaluation_report(note_set: PatientNoteSet) -> EvaluationReport:
+def _apply_llm_gap_analysis(
+    note_set: PatientNoteSet,
+    documents: list[EvaluationDocument],
+    items: list[EvaluatedItem],
+    app_settings: AppSetting | None,
+) -> tuple[list[EvaluatedItem], str]:
+    if (
+        app_settings is None
+        or not app_settings.llm_enabled
+        or not app_settings.llm_use_for_evaluation_gap_analysis
+        or not app_settings.llm_api_key.strip()
+    ):
+        return items, ''
+
+    unresolved_items = [item for item in items if item.status == ComplianceStatus.pending]
+    if not unresolved_items:
+        return items, ''
+
+    extracted_documents = [
+        {
+            'label': document.document.document_label,
+            'date': document.document.document_date,
+            'bucket': document.document.alleva_bucket.value,
+            'text': document.normalized_text[:2500],
+        }
+        for document in documents
+        if document.normalized_text
+    ]
+    payload = call_llm_json(
+        app_settings,
+        system_prompt=(
+            'You are helping a clinical note audit application fill documentation-analysis gaps. '
+            'Return strict JSON with keys "summary_addendum" and "item_updates". '
+            'Each item update must include item_key and notes, and may include status, evidence_location, evidence_date, and expiration_date. '
+            'Only reference evidence that is present in the supplied documents.'
+        ),
+        user_prompt=(
+            f'Patient ID: {note_set.patient_id}\n'
+            f'Admission date: {note_set.admission_date}\n'
+            f'Primary clinician: {note_set.primary_clinician}\n'
+            f'Unresolved items: {[{"item_key": item.item_key, "notes": item.notes} for item in unresolved_items]}\n'
+            f'Documents: {extracted_documents}\n'
+            f'Additional instructions: {app_settings.llm_analysis_instructions or "None"}'
+        ),
+        max_tokens=900,
+        temperature=0,
+    )
+    if not payload:
+        return items, ''
+
+    updates = payload.get('item_updates')
+    updates_by_key = {item.item_key: item for item in items}
+    next_items: list[EvaluatedItem] = []
+    for item in items:
+        proposed = None
+        if isinstance(updates, list):
+            proposed = next((entry for entry in updates if isinstance(entry, dict) and entry.get('item_key') == item.item_key), None)
+        if item.status != ComplianceStatus.pending or not isinstance(proposed, dict):
+            next_items.append(item)
+            continue
+
+        proposed_status = proposed.get('status')
+        next_status = item.status
+        if proposed_status in {status.value for status in ComplianceStatus}:
+            next_status = ComplianceStatus(proposed_status)
+
+        llm_notes = str(proposed.get('notes') or '').strip()
+        combined_notes = item.notes
+        if llm_notes:
+            combined_notes = f'{item.notes} LLM gap analysis: {llm_notes}'.strip()
+
+        next_items.append(
+            EvaluatedItem(
+                item_key=item.item_key,
+                status=next_status,
+                notes=combined_notes,
+                evidence_location=str(proposed.get('evidence_location') or item.evidence_location),
+                evidence_date=str(proposed.get('evidence_date') or item.evidence_date),
+                expiration_date=str(proposed.get('expiration_date') or item.expiration_date),
+            )
+        )
+
+    summary_addendum = str(payload.get('summary_addendum') or '').strip()
+    return next_items, summary_addendum
+
+
+def generate_evaluation_report(note_set: PatientNoteSet, *, app_settings: AppSetting | None = None) -> EvaluationReport:
     documents = _build_evaluation_documents(note_set)
     items = _evaluate_note_set(note_set, documents)
+    items, llm_summary_addendum = _apply_llm_gap_analysis(note_set, documents, items, app_settings)
     total = len(items) or 1
     passed = sum(1 for item in items if item.status == ComplianceStatus.yes)
     not_applicable = sum(1 for item in items if item.status == ComplianceStatus.na)
@@ -389,6 +478,8 @@ def generate_evaluation_report(note_set: PatientNoteSet) -> EvaluationReport:
         f'{passed} item(s) passed, {failed} item(s) failed, {pending} item(s) need manual confirmation, '
         f'and the automated readiness score is {score}%.'
     )
+    if llm_summary_addendum:
+        summary = f'{summary} LLM gap analysis: {llm_summary_addendum}'
     return EvaluationReport(
         summary=summary,
         system_score=score,

@@ -55,3 +55,19 @@ def test_ensure_schema_compatibility_adds_new_chart_columns(tmp_path):
     assert 'auditor_name' in columns
     assert 'other_details' in columns
     assert 'notes' in columns
+
+
+def test_ensure_schema_compatibility_adds_app_settings_columns(tmp_path):
+    db_path = tmp_path / 'legacy-settings.db'
+    engine = create_engine(f'sqlite:///{db_path}')
+
+    with engine.begin() as connection:
+        connection.execute(text('CREATE TABLE app_settings (id INTEGER PRIMARY KEY)'))
+
+    ensure_schema_compatibility(engine)
+
+    columns = {column['name'] for column in inspect(engine).get_columns('app_settings')}
+    assert 'organization_name' in columns
+    assert 'access_intel_enabled' in columns
+    assert 'llm_enabled' in columns
+    assert 'llm_model' in columns

@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models.models import (
+    AppSetting,
     AuditItemResponse,
     AuditLog,
     Chart,
@@ -30,6 +31,8 @@ from app.models.models import (
     WorkflowTransition,
 )
 from app.schemas.schemas import (
+    AppSettingsOut,
+    AppSettingsUpdate,
     AuditLogOut,
     AuditTemplateSectionOut,
     ChartCreate,
@@ -52,6 +55,8 @@ from app.schemas.schemas import (
     UserUpdate,
 )
 from app.services.audit import log_event
+from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
+from app.services.access_intel import lookup_access_intel
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, store_upload_file
 
@@ -208,6 +213,26 @@ def _patient_id_detection_payload(patient_id: str | None, confidence: str, sourc
         'source_kind': source_kind,
         'match_text': match_text,
         'reason': reason,
+    }
+
+
+def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
+    return {
+        'organization_name': settings_row.organization_name,
+        'access_intel_enabled': settings_row.access_intel_enabled,
+        'access_geo_lookup_url': settings_row.access_geo_lookup_url,
+        'access_reputation_url': settings_row.access_reputation_url,
+        'access_reputation_api_key_configured': bool(settings_row.access_reputation_api_key),
+        'access_lookup_timeout_seconds': settings_row.access_lookup_timeout_seconds,
+        'llm_enabled': settings_row.llm_enabled,
+        'llm_provider_name': settings_row.llm_provider_name,
+        'llm_base_url': settings_row.llm_base_url,
+        'llm_model': settings_row.llm_model,
+        'llm_api_key_configured': bool(settings_row.llm_api_key),
+        'llm_use_for_access_review': settings_row.llm_use_for_access_review,
+        'llm_use_for_evaluation_gap_analysis': settings_row.llm_use_for_evaluation_gap_analysis,
+        'llm_analysis_instructions': settings_row.llm_analysis_instructions,
+        'updated_by_id': settings_row.updated_by_id,
     }
 
 
@@ -368,6 +393,10 @@ def _assert_admin_safety(target: User, db: Session, *, new_role: Role | None = N
 @router.post('/auth/login', response_model=Token)
 def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
     username = payload.username.strip()
+    app_settings = get_or_create_app_settings(db)
+    forwarded_for = request.headers.get('x-forwarded-for', '')
+    source_ip = (forwarded_for.split(',')[0].strip() if forwarded_for else '') or request.headers.get('x-real-ip') or (request.client.host if request.client else None)
+    access_intel = lookup_access_intel(app_settings, source_ip)
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
 
     if not user or not verify_password(payload.password, user.password_hash):
@@ -380,15 +409,15 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             db,
             request,
             'auth.login.failed',
-            event_category='authentication',
+            event_category='access_attempt',
             target_entity='user',
             target_entity_type='user',
             target_entity_id=username,
-            details={'username': username},
+            details={'username': username, **access_intel.as_details()},
             outcome_status='failure',
             severity='warning',
             http_status_code=401,
-            message=f'Login failed for username {username}.',
+            message=f'Login failed for username {username}. {access_intel.danger_summary}',
         )
         raise HTTPException(status_code=401, detail='Invalid credentials')
 
@@ -398,15 +427,15 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             request,
             'auth.login.blocked',
             actor=user,
-            event_category='authentication',
+            event_category='access_attempt',
             target_entity='user',
             target_entity_type='user',
             target_entity_id=str(user.id),
-            details={'username': user.username, 'reason': 'inactive'},
+            details={'username': user.username, 'reason': 'inactive', **access_intel.as_details()},
             outcome_status='failure',
             severity='warning',
             http_status_code=403,
-            message=f'Login blocked for inactive account {user.username}.',
+            message=f'Login blocked for inactive account {user.username}. {access_intel.danger_summary}',
         )
         raise HTTPException(status_code=403, detail='Account inactive')
 
@@ -416,15 +445,15 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
             request,
             'auth.login.blocked',
             actor=user,
-            event_category='authentication',
+            event_category='access_attempt',
             target_entity='user',
             target_entity_type='user',
             target_entity_id=str(user.id),
-            details={'username': user.username, 'reason': 'locked'},
+            details={'username': user.username, 'reason': 'locked', **access_intel.as_details()},
             outcome_status='failure',
             severity='warning',
             http_status_code=403,
-            message=f'Login blocked for locked account {user.username}.',
+            message=f'Login blocked for locked account {user.username}. {access_intel.danger_summary}',
         )
         raise HTTPException(status_code=403, detail='Account locked')
 
@@ -440,13 +469,13 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
         request,
         'auth.login.success',
         actor=user,
-        event_category='authentication',
+        event_category='access_attempt',
         target_entity='user',
         target_entity_type='user',
         target_entity_id=str(user.id),
-        details={'username': user.username},
+        details={'username': user.username, **access_intel.as_details()},
         http_status_code=200,
-        message=f'Login succeeded for {user.username}.',
+        message=f'Login succeeded for {user.username}. {access_intel.danger_summary}',
     )
     return Token(access_token=token, must_reset_password=user.must_reset_password)
 
@@ -712,6 +741,90 @@ def admin_reset_password(
         message=f'Password reset by admin for {target.username}.',
     )
     return target
+
+
+@router.get('/settings', response_model=AppSettingsOut)
+def get_app_settings(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    settings_row = get_or_create_app_settings(db)
+    log_event(
+        db,
+        request,
+        'settings.read',
+        actor=user,
+        event_category='configuration',
+        target_entity='app_settings',
+        target_entity_type='app_setting',
+        target_entity_id=str(settings_row.id),
+        details=_settings_snapshot(settings_row),
+        message='Application settings viewed.',
+    )
+    return app_settings_public_payload(settings_row)
+
+
+@router.patch('/settings', response_model=AppSettingsOut)
+def update_app_settings(
+    payload: AppSettingsUpdate,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    before_state = _settings_snapshot(settings_row)
+
+    if payload.organization_name is not None:
+        settings_row.organization_name = payload.organization_name.strip() or settings_row.organization_name
+    if payload.access_intel_enabled is not None:
+        settings_row.access_intel_enabled = payload.access_intel_enabled
+    if payload.access_geo_lookup_url is not None:
+        settings_row.access_geo_lookup_url = payload.access_geo_lookup_url.strip() or settings_row.access_geo_lookup_url
+    if payload.access_reputation_url is not None:
+        settings_row.access_reputation_url = payload.access_reputation_url.strip() or settings_row.access_reputation_url
+    if payload.access_lookup_timeout_seconds is not None:
+        settings_row.access_lookup_timeout_seconds = payload.access_lookup_timeout_seconds
+    if payload.access_reputation_api_key is not None:
+        settings_row.access_reputation_api_key = payload.access_reputation_api_key.strip()
+    if payload.clear_access_reputation_api_key:
+        settings_row.access_reputation_api_key = ''
+    if payload.llm_enabled is not None:
+        settings_row.llm_enabled = payload.llm_enabled
+    if payload.llm_provider_name is not None:
+        settings_row.llm_provider_name = payload.llm_provider_name.strip() or settings_row.llm_provider_name
+    if payload.llm_base_url is not None:
+        settings_row.llm_base_url = payload.llm_base_url.strip() or settings_row.llm_base_url
+    if payload.llm_model is not None:
+        settings_row.llm_model = payload.llm_model.strip() or settings_row.llm_model
+    if payload.llm_api_key is not None:
+        settings_row.llm_api_key = payload.llm_api_key.strip()
+    if payload.clear_llm_api_key:
+        settings_row.llm_api_key = ''
+    if payload.llm_use_for_access_review is not None:
+        settings_row.llm_use_for_access_review = payload.llm_use_for_access_review
+    if payload.llm_use_for_evaluation_gap_analysis is not None:
+        settings_row.llm_use_for_evaluation_gap_analysis = payload.llm_use_for_evaluation_gap_analysis
+    if payload.llm_analysis_instructions is not None:
+        settings_row.llm_analysis_instructions = payload.llm_analysis_instructions.strip()
+
+    touch_app_settings(settings_row, actor=user)
+    db.commit()
+    db.refresh(settings_row)
+
+    after_state = _settings_snapshot(settings_row)
+    log_event(
+        db,
+        request,
+        'settings.update',
+        actor=user,
+        event_category='configuration',
+        target_entity='app_settings',
+        target_entity_type='app_setting',
+        target_entity_id=str(settings_row.id),
+        details=after_state,
+        before_state=before_state,
+        after_state=after_state,
+        diff_state={key: {'before': before_state.get(key), 'after': after_state.get(key)} for key in sorted(set(before_state) | set(after_state)) if before_state.get(key) != after_state.get(key)},
+        message='Application settings updated.',
+    )
+    return app_settings_public_payload(settings_row)
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
@@ -1120,7 +1233,7 @@ async def upload_patient_note_set(
         db.flush()
 
         note_set.documents[:] = created_documents
-        report = generate_evaluation_report(note_set)
+        report = generate_evaluation_report(note_set, app_settings=get_or_create_app_settings(db))
         apply_report_to_chart(chart, report)
         chart.notes = note_set.upload_notes
         db.add(

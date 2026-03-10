@@ -17,7 +17,7 @@ from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
-from app.models.models import AuditItemResponse, AuditLog, Chart, PatientNoteDocument, PatientNoteSet, User, WorkflowTransition
+from app.models.models import AppSetting, AuditItemResponse, AuditLog, Chart, PatientNoteDocument, PatientNoteSet, User, WorkflowTransition
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +25,10 @@ DEFAULT_DEVICE_VENDOR = 'OpenAI'
 DEFAULT_DEVICE_PRODUCT = 'IZ Clinical Notes Analyzer'
 DEFAULT_DEVICE_VERSION = '1'
 FALLBACK_LOG_PATH = Path(__file__).resolve().parents[3] / 'logs' / 'forensic-audit-fallback.jsonl'
-TRACKED_MODELS = (User, Chart, WorkflowTransition, AuditItemResponse, PatientNoteSet, PatientNoteDocument)
+TRACKED_MODELS = (User, AppSetting, Chart, WorkflowTransition, AuditItemResponse, PatientNoteSet, PatientNoteDocument)
 SENSITIVE_FIELDS: dict[str, set[str]] = {
     'User': {'password_hash'},
+    'AppSetting': {'llm_api_key', 'access_reputation_api_key'},
 }
 _audit_context_var: ContextVar['AuditContext | None'] = ContextVar('audit_context', default=None)
 

@@ -71,6 +71,44 @@ class UserPasswordChangeInput(BaseModel):
     new_password: str = Field(min_length=12)
 
 
+class AppSettingsUpdate(BaseModel):
+    organization_name: str | None = Field(default=None, max_length=120)
+    access_intel_enabled: bool | None = None
+    access_geo_lookup_url: str | None = Field(default=None, max_length=255)
+    access_reputation_url: str | None = Field(default=None, max_length=255)
+    access_reputation_api_key: str | None = None
+    clear_access_reputation_api_key: bool = False
+    access_lookup_timeout_seconds: int | None = Field(default=None, ge=1, le=30)
+    llm_enabled: bool | None = None
+    llm_provider_name: str | None = Field(default=None, max_length=80)
+    llm_base_url: str | None = Field(default=None, max_length=255)
+    llm_model: str | None = Field(default=None, max_length=120)
+    llm_api_key: str | None = None
+    clear_llm_api_key: bool = False
+    llm_use_for_access_review: bool | None = None
+    llm_use_for_evaluation_gap_analysis: bool | None = None
+    llm_analysis_instructions: str | None = None
+
+
+class AppSettingsOut(BaseModel):
+    organization_name: str
+    access_intel_enabled: bool
+    access_geo_lookup_url: str
+    access_reputation_url: str
+    access_reputation_api_key_configured: bool
+    access_lookup_timeout_seconds: int
+    llm_enabled: bool
+    llm_provider_name: str
+    llm_base_url: str
+    llm_model: str
+    llm_api_key_configured: bool
+    llm_use_for_access_review: bool
+    llm_use_for_evaluation_gap_analysis: bool
+    llm_analysis_instructions: str
+    updated_by_id: int | None = None
+    updated_at: datetime | None = None
+
+
 class AuditTemplateItemOut(BaseModel):
     key: str
     step: int

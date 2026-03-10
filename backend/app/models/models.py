@@ -74,6 +74,30 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+class AppSetting(Base):
+    __tablename__ = 'app_settings'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_name: Mapped[str] = mapped_column(String(120), default='R3 Recovery Services')
+    access_intel_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    access_geo_lookup_url: Mapped[str] = mapped_column(String(255), default='https://ipwho.is/{ip}')
+    access_reputation_url: Mapped[str] = mapped_column(String(255), default='https://api.abuseipdb.com/api/v2/check')
+    access_reputation_api_key: Mapped[str] = mapped_column(String(255), default='')
+    access_lookup_timeout_seconds: Mapped[int] = mapped_column(Integer, default=4)
+    llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    llm_provider_name: Mapped[str] = mapped_column(String(80), default='OpenAI-compatible')
+    llm_base_url: Mapped[str] = mapped_column(String(255), default='https://api.openai.com/v1')
+    llm_model: Mapped[str] = mapped_column(String(120), default='gpt-4.1-mini')
+    llm_api_key: Mapped[str] = mapped_column(String(255), default='')
+    llm_use_for_access_review: Mapped[bool] = mapped_column(Boolean, default=True)
+    llm_use_for_evaluation_gap_analysis: Mapped[bool] = mapped_column(Boolean, default=True)
+    llm_analysis_instructions: Mapped[str] = mapped_column(Text, default='')
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    updated_by: Mapped[User] = relationship(foreign_keys=[updated_by_id])
+
+
 class Chart(Base):
     __tablename__ = 'charts'
 
