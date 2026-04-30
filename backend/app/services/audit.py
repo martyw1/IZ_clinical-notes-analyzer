@@ -8,7 +8,6 @@ from contextvars import ContextVar, Token
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -24,11 +23,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_DEVICE_VENDOR = 'OpenAI'
 DEFAULT_DEVICE_PRODUCT = 'IZ Clinical Notes Analyzer'
 DEFAULT_DEVICE_VERSION = '1'
-FALLBACK_LOG_PATH = Path(__file__).resolve().parents[3] / 'logs' / 'forensic-audit-fallback.jsonl'
+FALLBACK_LOG_PATH = settings.log_dir_path / 'forensic-audit-fallback.jsonl'
 TRACKED_MODELS = (User, AppSetting, Chart, WorkflowTransition, AuditItemResponse, PatientNoteSet, PatientNoteDocument)
 SENSITIVE_FIELDS: dict[str, set[str]] = {
     'User': {'password_hash'},
-    'AppSetting': {'llm_api_key', 'access_reputation_api_key'},
+    'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'emr_smart_client_secret'},
+    'Chart': {'notes', 'other_details', 'system_summary', 'manager_comment'},
+    'AuditItemResponse': {'notes', 'evidence_location'},
+    'PatientNoteSet': {'upload_notes'},
+    'PatientNoteDocument': {'original_filename', 'description'},
 }
 _audit_context_var: ContextVar['AuditContext | None'] = ContextVar('audit_context', default=None)
 

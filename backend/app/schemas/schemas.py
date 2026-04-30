@@ -88,6 +88,14 @@ class AppSettingsUpdate(BaseModel):
     llm_use_for_access_review: bool | None = None
     llm_use_for_evaluation_gap_analysis: bool | None = None
     llm_analysis_instructions: str | None = None
+    emr_api_enabled: bool | None = None
+    emr_vendor_name: str | None = Field(default=None, max_length=120)
+    emr_fhir_base_url: str | None = Field(default=None, max_length=255)
+    emr_smart_client_id: str | None = Field(default=None, max_length=255)
+    emr_smart_client_secret: str | None = None
+    clear_emr_smart_client_secret: bool = False
+    emr_smart_scopes: str | None = Field(default=None, max_length=500)
+    emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
 
 
 class AppSettingsOut(BaseModel):
@@ -105,8 +113,72 @@ class AppSettingsOut(BaseModel):
     llm_use_for_access_review: bool
     llm_use_for_evaluation_gap_analysis: bool
     llm_analysis_instructions: str
+    emr_api_enabled: bool
+    emr_vendor_name: str
+    emr_fhir_base_url: str
+    emr_smart_client_id: str
+    emr_smart_client_secret_configured: bool
+    emr_smart_scopes: str
+    emr_api_timeout_seconds: int
     updated_by_id: int | None = None
     updated_at: datetime | None = None
+
+
+class RuntimeCheckOut(BaseModel):
+    name: str
+    status: str
+    message: str
+    detail: str = ''
+
+
+class ReadinessOut(BaseModel):
+    status: str
+    failed: int
+    warnings: int
+    checks: list[RuntimeCheckOut]
+
+
+class EmrDiscoveryInput(BaseModel):
+    fhir_base_url: str | None = Field(default=None, max_length=255)
+
+
+class EmrDiscoveryOut(BaseModel):
+    status: str
+    fhir_base_url: str
+    smart_configuration_url: str
+    authorization_endpoint_configured: bool
+    token_endpoint_configured: bool
+    capabilities: list[str]
+    message: str
+
+
+class EmrConnectionProfileOut(BaseModel):
+    adapter_key: str
+    enabled: bool
+    vendor_name: str
+    live_import_status: str
+    fhir_base_url: str
+    smart_discovery_url: str | None
+    client_id_configured: bool
+    client_secret_configured: bool
+    scopes: list[str]
+    supported_resources: list[str]
+    standards: list[str]
+    supported_export_formats: list[str]
+    document_manager_sections: list[dict[str, str]]
+    required_vendor_inputs: list[str]
+
+
+class EmrImportPlanOut(BaseModel):
+    patient_id: str
+    fhir_base_url: str
+    source_identifier_note: str
+    planned_requests: list[dict[str, str]]
+    alleva_notes: list[str]
+    supported_export_formats: list[str]
+    document_manager_sections: list[dict[str, str]]
+    attachment_handling: str
+    document_mapping: dict[str, str]
 
 
 class AuditTemplateItemOut(BaseModel):
@@ -215,6 +287,13 @@ class PatientNoteDocumentUploadInput(BaseModel):
     staff_signed: bool = False
     document_date: str = ''
     description: str = ''
+    source_document_id: str = ''
+    source_document_reference_id: str = ''
+    source_attachment_url: str = ''
+    source_author: str = ''
+    source_custodian: str = ''
+    source_security_label: str = ''
+    source_provenance_id: str = ''
 
 
 class PatientNoteDocumentOut(BaseModel):
@@ -233,6 +312,13 @@ class PatientNoteDocumentOut(BaseModel):
     staff_signed: bool
     document_date: str
     description: str
+    source_document_id: str
+    source_document_reference_id: str
+    source_attachment_url: str
+    source_author: str
+    source_custodian: str
+    source_security_label: str
+    source_provenance_id: str
     created_at: datetime
 
 
@@ -249,6 +335,8 @@ class PatientNoteSetSummaryOut(BaseModel):
     admission_date: str
     discharge_date: str
     upload_notes: str
+    source_export_id: str
+    source_patient_resource_id: str
     created_at: datetime
     file_count: int
 

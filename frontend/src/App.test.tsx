@@ -174,8 +174,47 @@ function appSettingsPayload() {
     llm_use_for_access_review: true,
     llm_use_for_evaluation_gap_analysis: true,
     llm_analysis_instructions: '',
+    emr_api_enabled: false,
+    emr_vendor_name: 'Alleva / SMART on FHIR',
+    emr_fhir_base_url: '',
+    emr_smart_client_id: '',
+    emr_smart_client_secret_configured: false,
+    emr_smart_scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
+    emr_api_timeout_seconds: 10,
     updated_by_id: 1,
     updated_at: '2026-03-08T13:00:00Z',
+  }
+}
+
+function emrProfilePayload() {
+  return {
+    vendor_name: 'Alleva / SMART on FHIR',
+    adapter_key: 'alleva-smart-fhir-document-manager',
+    live_import_status: 'disabled',
+    enabled: false,
+    fhir_base_url: '',
+    smart_discovery_url: null,
+    client_id_configured: false,
+    client_secret_configured: false,
+    scopes: ['openid', 'fhirUser', 'launch/patient', 'patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs', 'patient/Provenance.rs'],
+    supported_resources: ['Patient', 'DocumentReference', 'Binary', 'Provenance'],
+    standards: ['HL7 FHIR R4 DocumentReference', 'HL7 FHIR R4 Binary', 'HL7 FHIR R4 Provenance', 'SMART App Launch OAuth2'],
+    supported_export_formats: ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP'],
+    document_manager_sections: [
+      { key: 'custom_forms', label: 'Custom Forms', expected_content: ['Admission packets', 'signed client forms'] },
+      { key: 'uploaded_documents', label: 'Uploaded Documents', expected_content: ['External PDFs', 'Word documents'] },
+      { key: 'portal_documents', label: 'Portal Documents', expected_content: ['Client-uploaded portal documents'] },
+    ],
+    required_vendor_inputs: ['Alleva tenant FHIR base URL', 'SMART client ID', 'SMART client secret'],
+  }
+}
+
+function readinessPayload() {
+  return {
+    status: 'ok',
+    failed: 0,
+    warnings: 0,
+    checks: [{ name: 'python', status: 'ok', message: 'Python 3.11 or newer is required.', detail: '3.14.4' }],
   }
 }
 
@@ -196,6 +235,8 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': [userPayload('admin')],
       'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
     })
 
     render(<App />)
@@ -314,6 +355,8 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': () => ({ body: directory }),
       'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
       'PATCH /api/settings': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         return {
@@ -325,8 +368,42 @@ describe('App turnkey workflow', () => {
             llm_base_url: body.llm_base_url,
             llm_model: body.llm_model,
             llm_api_key_configured: true,
+            emr_api_enabled: body.emr_api_enabled,
+            emr_vendor_name: body.emr_vendor_name,
+            emr_fhir_base_url: body.emr_fhir_base_url,
+            emr_smart_client_id: body.emr_smart_client_id,
+            emr_smart_client_secret_configured: Boolean(body.emr_smart_client_secret),
+            emr_smart_scopes: body.emr_smart_scopes,
+            emr_api_timeout_seconds: body.emr_api_timeout_seconds,
           },
         }
+      },
+      'POST /api/emr/discover': {
+        status: 'ok',
+        metadata_url: 'https://alleva.example.com/fhir/.well-known/smart-configuration',
+        authorization_endpoint_configured: true,
+        token_endpoint_configured: true,
+        document_reference_supported: true,
+        binary_supported: true,
+      },
+      'GET /api/emr/import-plan': {
+        patient_id: 'PAT-001',
+        vendor_name: 'Alleva / SMART on FHIR',
+        live_import_enabled: false,
+        planned_requests: [
+          {
+            step: 1,
+            method: 'GET',
+            url: 'DocumentReference?patient=PAT-001&status=current&_sort=-date',
+            purpose: 'Find Alleva Document Manager records for the patient.',
+          },
+        ],
+        local_export_guidance: ['Export Custom Forms, Uploaded Documents, and Portal Documents from Alleva Document Manager.'],
+        required_scopes: ['patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'],
+        alleva_notes: ['Map Alleva Document Manager sections into import buckets.'],
+        supported_export_formats: ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP'],
+        document_manager_sections: emrProfilePayload().document_manager_sections,
+        attachment_handling: 'Fetch Binary URLs with the same SMART bearer token.',
       },
       'POST /api/users': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
@@ -388,9 +465,17 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Alleva import profile' })).toBeInTheDocument()
+    expect(screen.getByText('alleva-smart-fhir-document-manager')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
     fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.change(screen.getByLabelText('FHIR base URL'), { target: { value: 'https://alleva.example.com/fhir' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Check SMART discovery' }))
+    await waitFor(() => expect(screen.getByText(/Discovery: ok/i)).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Import plan patient ID'), { target: { value: 'PAT-001' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Build import plan' }))
+    await waitFor(() => expect(screen.getByText(/DocumentReference\?patient=PAT-001/i)).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
     await waitFor(() => expect(screen.getByText('Application settings have been updated.')).toBeInTheDocument())
 
@@ -410,6 +495,8 @@ describe('App turnkey workflow', () => {
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': () => ({ body: directory }),
       'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
       'PATCH /api/users/2': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         directory = directory.map((entry) =>

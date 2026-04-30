@@ -92,6 +92,16 @@ class AppSetting(Base):
     llm_use_for_access_review: Mapped[bool] = mapped_column(Boolean, default=True)
     llm_use_for_evaluation_gap_analysis: Mapped[bool] = mapped_column(Boolean, default=True)
     llm_analysis_instructions: Mapped[str] = mapped_column(Text, default='')
+    emr_api_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    emr_vendor_name: Mapped[str] = mapped_column(String(120), default='Alleva / SMART on FHIR')
+    emr_fhir_base_url: Mapped[str] = mapped_column(String(255), default='')
+    emr_smart_client_id: Mapped[str] = mapped_column(String(255), default='')
+    emr_smart_client_secret: Mapped[str] = mapped_column(String(1024), default='')
+    emr_smart_scopes: Mapped[str] = mapped_column(
+        String(500),
+        default='openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
+    )
+    emr_api_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -143,6 +153,8 @@ class PatientNoteSet(Base):
     admission_date: Mapped[str] = mapped_column(String(40), default='')
     discharge_date: Mapped[str] = mapped_column(String(40), default='')
     upload_notes: Mapped[str] = mapped_column(Text, default='')
+    source_export_id: Mapped[str] = mapped_column(String(120), default='')
+    source_patient_resource_id: Mapped[str] = mapped_column(String(120), default='')
     replaced_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True)
     uploaded_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -174,6 +186,13 @@ class PatientNoteDocument(Base):
     staff_signed: Mapped[bool] = mapped_column(Boolean, default=False)
     document_date: Mapped[str] = mapped_column(String(40), default='')
     description: Mapped[str] = mapped_column(Text, default='')
+    source_document_id: Mapped[str] = mapped_column(String(120), default='')
+    source_document_reference_id: Mapped[str] = mapped_column(String(120), default='')
+    source_attachment_url: Mapped[str] = mapped_column(String(500), default='')
+    source_author: Mapped[str] = mapped_column(String(255), default='')
+    source_custodian: Mapped[str] = mapped_column(String(255), default='')
+    source_security_label: Mapped[str] = mapped_column(String(255), default='')
+    source_provenance_id: Mapped[str] = mapped_column(String(120), default='')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     note_set: Mapped[PatientNoteSet] = relationship(back_populates='documents')

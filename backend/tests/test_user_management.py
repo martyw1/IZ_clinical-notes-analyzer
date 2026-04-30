@@ -13,6 +13,15 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
 def _login_headers(client: TestClient, username: str, password: str) -> dict[str, str]:
     login = client.post('/api/auth/login', json={'username': username, 'password': password})
     assert login.status_code == 200
+    if login.json().get('must_reset_password'):
+        reset = client.post(
+            '/api/auth/reset-password',
+            json={'new_password': password},
+            headers={'Authorization': f"Bearer {login.json()['access_token']}"},
+        )
+        assert reset.status_code == 200
+        login = client.post('/api/auth/login', json={'username': username, 'password': password})
+        assert login.status_code == 200
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
 
 

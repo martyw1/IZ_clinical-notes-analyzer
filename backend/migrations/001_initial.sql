@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
   llm_use_for_access_review BOOLEAN NOT NULL DEFAULT TRUE,
   llm_use_for_evaluation_gap_analysis BOOLEAN NOT NULL DEFAULT TRUE,
   llm_analysis_instructions TEXT NOT NULL DEFAULT '',
+  emr_api_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  emr_vendor_name VARCHAR(120) NOT NULL DEFAULT 'Alleva / SMART on FHIR',
+  emr_fhir_base_url VARCHAR(255) NOT NULL DEFAULT '',
+  emr_smart_client_id VARCHAR(255) NOT NULL DEFAULT '',
+  emr_smart_client_secret VARCHAR(1024) NOT NULL DEFAULT '',
+  emr_smart_scopes VARCHAR(500) NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
+  emr_api_timeout_seconds INTEGER NOT NULL DEFAULT 10,
   updated_by_id INTEGER REFERENCES users(id),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -70,6 +77,8 @@ CREATE TABLE IF NOT EXISTS patient_note_sets (
   admission_date VARCHAR(40) NOT NULL DEFAULT '',
   discharge_date VARCHAR(40) NOT NULL DEFAULT '',
   upload_notes TEXT NOT NULL DEFAULT '',
+  source_export_id VARCHAR(120) NOT NULL DEFAULT '',
+  source_patient_resource_id VARCHAR(120) NOT NULL DEFAULT '',
   replaced_note_set_id INTEGER REFERENCES patient_note_sets(id),
   uploaded_by_id INTEGER NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -92,6 +101,13 @@ CREATE TABLE IF NOT EXISTS patient_note_documents (
   staff_signed BOOLEAN NOT NULL DEFAULT FALSE,
   document_date VARCHAR(40) NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
+  source_document_id VARCHAR(120) NOT NULL DEFAULT '',
+  source_document_reference_id VARCHAR(120) NOT NULL DEFAULT '',
+  source_attachment_url VARCHAR(500) NOT NULL DEFAULT '',
+  source_author VARCHAR(255) NOT NULL DEFAULT '',
+  source_custodian VARCHAR(255) NOT NULL DEFAULT '',
+  source_security_label VARCHAR(255) NOT NULL DEFAULT '',
+  source_provenance_id VARCHAR(120) NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

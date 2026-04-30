@@ -3,7 +3,7 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.models.models import AuditLog, PatientNoteSet
+from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -111,6 +111,15 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         upload_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.uploaded')).scalar_one_or_none()
         assert upload_log is not None
         assert upload_log.patient_id == 'PAT-100'
+
+        document = db.execute(select(PatientNoteDocument).where(PatientNoteDocument.note_set_id == payload['id'])).scalar_one()
+        import app.services.patient_notes as patient_notes_module
+        from app.services.secure_storage import ENCRYPTION_MAGIC
+
+        stored_path = patient_notes_module.settings.upload_dir_path / document.storage_path
+        stored_bytes = stored_path.read_bytes()
+        assert stored_bytes.startswith(ENCRYPTION_MAGIC)
+        assert b'Intake packet completed' not in stored_bytes
 
         document_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note.document.download')).scalar_one_or_none()
         assert document_log is not None

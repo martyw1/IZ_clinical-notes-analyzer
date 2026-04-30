@@ -81,6 +81,10 @@ def test_reset_password_flow_for_first_login_user(app_with_sqlite):
         token = login.json()['access_token']
         assert login.json()['must_reset_password'] is True
 
+        blocked = client.get('/api/charts', headers={'Authorization': f'Bearer {token}'})
+        assert blocked.status_code == 403
+        assert 'Password reset required' in blocked.json()['detail']
+
         reset = client.post('/api/auth/reset-password', json={'new_password': replacement_password}, headers={'Authorization': f'Bearer {token}'})
         assert reset.status_code == 200
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_user, require_roles
 from app.core.audit_template import AUDIT_TEMPLATE, AUDIT_TEMPLATE_BY_KEY, audit_sections
 from app.core.config import settings
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, hash_password, password_policy_error, verify_password
 from app.db.session import get_db
 from app.models.models import (
     AppSetting,
@@ -41,10 +41,15 @@ from app.schemas.schemas import (
     ChartUpdate,
     LoginInput,
     PasswordResetInput,
+    EmrConnectionProfileOut,
+    EmrDiscoveryInput,
+    EmrDiscoveryOut,
+    EmrImportPlanOut,
     PatientIdDetectionOut,
     PatientNoteDocumentUploadInput,
     PatientNoteSetDetailOut,
     PatientNoteSetSummaryOut,
+    ReadinessOut,
     Token,
     TransitionInput,
     UserCreate,
@@ -57,12 +62,16 @@ from app.schemas.schemas import (
 from app.services.audit import log_event
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
 from app.services.access_intel import lookup_access_intel
+from app.services.emr_fhir import build_document_reference_import_plan, discover_smart_configuration, emr_connection_profile, normalize_fhir_base_url
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
-from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, store_upload_file
+from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, sanitize_filename, store_upload_file
+from app.services.runtime_checks import readiness_payload
+from app.services.secure_storage import encrypt_text_secret, read_secure_file
 
 router = APIRouter(prefix='/api')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
 REVIEW_ROLES = (Role.admin, Role.manager)
+REQUIRED_EMR_READ_SCOPES = {'patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'}
 
 
 def _utc_now() -> datetime:
@@ -71,6 +80,27 @@ def _utc_now() -> datetime:
 
 def _is_bootstrap_admin(user: User) -> bool:
     return user.username == settings.bootstrap_admin_username
+
+
+def _enforce_password_policy(password: str, *, username: str | None = None) -> None:
+    error = password_policy_error(password, username=username)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+
+def _validate_emr_enablement(settings_row: AppSetting) -> None:
+    """Reject live EMR enablement until the minimum Alleva/FHIR contract exists."""
+    if not settings_row.emr_api_enabled:
+        return
+    if not settings_row.emr_fhir_base_url.strip():
+        raise HTTPException(status_code=400, detail='FHIR base URL is required before enabling the EMR API connector')
+    settings_row.emr_fhir_base_url = normalize_fhir_base_url(settings_row.emr_fhir_base_url)
+    if not settings_row.emr_smart_client_id.strip():
+        raise HTTPException(status_code=400, detail='SMART client ID is required before enabling the EMR API connector')
+    scopes = {scope for scope in settings_row.emr_smart_scopes.split() if scope}
+    missing_scopes = sorted(REQUIRED_EMR_READ_SCOPES - scopes)
+    if missing_scopes:
+        raise HTTPException(status_code=400, detail=f'Missing required read scopes for Alleva document import: {", ".join(missing_scopes)}')
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:
@@ -174,6 +204,8 @@ def _note_set_summary(note_set: PatientNoteSet) -> dict[str, object]:
         'admission_date': note_set.admission_date,
         'discharge_date': note_set.discharge_date,
         'upload_notes': note_set.upload_notes,
+        'source_export_id': note_set.source_export_id,
+        'source_patient_resource_id': note_set.source_patient_resource_id,
         'created_at': note_set.created_at,
         'file_count': len(note_set.documents),
     }
@@ -198,6 +230,13 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
                 'staff_signed': document.staff_signed,
                 'document_date': document.document_date,
                 'description': document.description,
+                'source_document_id': document.source_document_id,
+                'source_document_reference_id': document.source_document_reference_id,
+                'source_attachment_url': document.source_attachment_url,
+                'source_author': document.source_author,
+                'source_custodian': document.source_custodian,
+                'source_security_label': document.source_security_label,
+                'source_provenance_id': document.source_provenance_id,
                 'created_at': document.created_at,
             }
             for document in documents
@@ -232,6 +271,13 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'llm_use_for_access_review': settings_row.llm_use_for_access_review,
         'llm_use_for_evaluation_gap_analysis': settings_row.llm_use_for_evaluation_gap_analysis,
         'llm_analysis_instructions': settings_row.llm_analysis_instructions,
+        'emr_api_enabled': settings_row.emr_api_enabled,
+        'emr_vendor_name': settings_row.emr_vendor_name,
+        'emr_fhir_base_url': settings_row.emr_fhir_base_url,
+        'emr_smart_client_id': settings_row.emr_smart_client_id,
+        'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
+        'emr_smart_scopes': settings_row.emr_smart_scopes,
+        'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
         'updated_by_id': settings_row.updated_by_id,
     }
 
@@ -367,10 +413,36 @@ def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[Patient
                     'document_type': metadata.document_type.strip() or 'clinical_note',
                     'description': metadata.description.strip(),
                     'document_date': metadata.document_date.strip(),
+                    'source_document_id': metadata.source_document_id.strip(),
+                    'source_document_reference_id': metadata.source_document_reference_id.strip(),
+                    'source_attachment_url': metadata.source_attachment_url.strip(),
+                    'source_author': metadata.source_author.strip(),
+                    'source_custodian': metadata.source_custodian.strip(),
+                    'source_security_label': metadata.source_security_label.strip(),
+                    'source_provenance_id': metadata.source_provenance_id.strip(),
                 }
             )
         )
     return normalized
+
+
+def _validate_upload_batch(files: list[UploadFile]) -> None:
+    if len(files) > settings.max_upload_file_count:
+        raise HTTPException(status_code=413, detail=f'Upload includes too many files; maximum is {settings.max_upload_file_count}')
+    total_size = 0
+    for upload in files:
+        # Validate names before any text inspection so detection endpoints reject
+        # unsafe formats just as strictly as the final storage endpoint.
+        sanitize_filename(upload.filename or '')
+        size = getattr(upload, 'size', None)
+        if isinstance(size, int) and size > 0:
+            total_size += size
+            if size > settings.max_upload_file_bytes:
+                limit_mb = settings.max_upload_file_bytes // (1024 * 1024)
+                raise HTTPException(status_code=413, detail=f'{upload.filename or "Uploaded file"} exceeds the {limit_mb}MB per-file limit')
+    if total_size > settings.max_upload_total_bytes:
+        limit_mb = settings.max_upload_total_bytes // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f'Upload exceeds the {limit_mb}MB total binder limit')
 
 
 def _active_admin_count(db: Session) -> int:
@@ -533,6 +605,7 @@ def reset_password(payload: PasswordResetInput, request: Request, user: User = D
         )
         raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
 
+    _enforce_password_policy(payload.new_password, username=user.username)
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
     user.is_locked = False
@@ -617,6 +690,7 @@ def change_my_password(
         )
         raise HTTPException(status_code=400, detail='Current password is incorrect')
 
+    _enforce_password_policy(payload.new_password, username=user.username)
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
     user.is_locked = False
@@ -663,6 +737,7 @@ def create_user(payload: UserCreate, request: Request, user: User = Depends(requ
     if exists:
         raise HTTPException(status_code=409, detail='Username exists')
 
+    _enforce_password_policy(payload.password, username=username)
     created = User(
         username=username,
         full_name=payload.full_name.strip() or username,
@@ -755,6 +830,7 @@ def admin_reset_password(
     if _is_bootstrap_admin(target):
         raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
 
+    _enforce_password_policy(payload.new_password, username=target.username)
     target.password_hash = hash_password(payload.new_password)
     target.must_reset_password = payload.require_reset_on_login
     target.is_locked = False
@@ -877,6 +953,25 @@ def update_app_settings(
         settings_row.llm_use_for_evaluation_gap_analysis = payload.llm_use_for_evaluation_gap_analysis
     if payload.llm_analysis_instructions is not None:
         settings_row.llm_analysis_instructions = payload.llm_analysis_instructions.strip()
+    if payload.emr_api_enabled is not None:
+        settings_row.emr_api_enabled = payload.emr_api_enabled
+    if payload.emr_vendor_name is not None:
+        settings_row.emr_vendor_name = payload.emr_vendor_name.strip() or settings_row.emr_vendor_name
+    if payload.emr_fhir_base_url is not None:
+        settings_row.emr_fhir_base_url = payload.emr_fhir_base_url.strip()
+    if payload.emr_smart_client_id is not None:
+        settings_row.emr_smart_client_id = payload.emr_smart_client_id.strip()
+    if payload.emr_smart_client_secret is not None:
+        candidate_secret = payload.emr_smart_client_secret.strip()
+        if candidate_secret:
+            settings_row.emr_smart_client_secret = encrypt_text_secret(candidate_secret)
+    if payload.clear_emr_smart_client_secret:
+        settings_row.emr_smart_client_secret = ''
+    if payload.emr_smart_scopes is not None:
+        settings_row.emr_smart_scopes = ' '.join(payload.emr_smart_scopes.split())
+    if payload.emr_api_timeout_seconds is not None:
+        settings_row.emr_api_timeout_seconds = payload.emr_api_timeout_seconds
+    _validate_emr_enablement(settings_row)
 
     touch_app_settings(settings_row, actor=user)
     db.commit()
@@ -899,6 +994,96 @@ def update_app_settings(
         message='Application settings updated.',
     )
     return app_settings_public_payload(settings_row)
+
+
+@router.get('/system/readiness', response_model=ReadinessOut)
+def get_system_readiness(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    payload = readiness_payload()
+    log_event(
+        db,
+        request,
+        'system.readiness.read',
+        actor=user,
+        event_category='system',
+        target_entity='runtime_readiness',
+        target_entity_type='runtime_check',
+        details={'status': payload['status'], 'failed': payload['failed'], 'warnings': payload['warnings']},
+        message='Runtime readiness checks viewed.',
+    )
+    return payload
+
+
+@router.get('/emr/profile', response_model=EmrConnectionProfileOut)
+def get_emr_profile(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    settings_row = get_or_create_app_settings(db)
+    profile = emr_connection_profile(settings_row)
+    log_event(
+        db,
+        request,
+        'emr.profile.read',
+        actor=user,
+        event_category='configuration',
+        target_entity='emr_connection_profile',
+        target_entity_type='emr_connection',
+        details={key: value for key, value in profile.items() if key != 'scopes'},
+        message='EMR connection profile viewed.',
+    )
+    return profile
+
+
+@router.post('/emr/discover', response_model=EmrDiscoveryOut)
+def discover_emr_smart_configuration(
+    payload: EmrDiscoveryInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    fhir_base_url = (payload.fhir_base_url or settings_row.emr_fhir_base_url).strip()
+    discovery = discover_smart_configuration(fhir_base_url, timeout_seconds=settings_row.emr_api_timeout_seconds)
+    log_event(
+        db,
+        request,
+        'emr.smart.discovery',
+        actor=user,
+        event_category='configuration',
+        target_entity='emr_smart_configuration',
+        target_entity_type='emr_connection',
+        details={
+            'fhir_base_url': discovery['fhir_base_url'],
+            'authorization_endpoint_configured': discovery['authorization_endpoint_configured'],
+            'token_endpoint_configured': discovery['token_endpoint_configured'],
+            'capabilities_count': len(discovery['capabilities']),
+        },
+        message='SMART-on-FHIR discovery completed.',
+    )
+    return discovery
+
+
+@router.get('/emr/import-plan', response_model=EmrImportPlanOut)
+def get_emr_import_plan(
+    request: Request,
+    patient_id: str = Query(..., min_length=1),
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    if not settings_row.emr_fhir_base_url.strip():
+        raise HTTPException(status_code=400, detail='Configure the EMR FHIR base URL before building an import plan')
+    plan = build_document_reference_import_plan(patient_id, settings_row.emr_fhir_base_url)
+    log_event(
+        db,
+        request,
+        'emr.import_plan.read',
+        actor=user,
+        event_category='configuration',
+        target_entity='emr_import_plan',
+        target_entity_type='emr_connection',
+        patient_id=patient_id.strip(),
+        details={'fhir_base_url': plan['fhir_base_url'], 'planned_request_count': len(plan['planned_requests'])},
+        message='EMR DocumentReference import plan viewed.',
+    )
+    return plan
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
@@ -1133,6 +1318,7 @@ async def detect_patient_id_for_uploads(
 ):
     if not files:
         raise HTTPException(status_code=400, detail='At least one clinical note file is required')
+    _validate_upload_batch(files)
 
     detection = await detect_patient_id_from_uploads(files)
     action = 'patient_note_set.patient_id.detected' if detection.patient_id else 'patient_note_set.patient_id.not_detected'
@@ -1149,7 +1335,7 @@ async def detect_patient_id_for_uploads(
             'confidence': detection.confidence,
             'source_filename': detection.source_filename,
             'source_kind': detection.source_kind,
-            'match_text': detection.match_text,
+            'matched': bool(detection.match_text),
             'reason': detection.reason,
         },
         outcome_status='success' if detection.patient_id else 'failure',
@@ -1184,6 +1370,7 @@ async def upload_patient_note_set(
 ):
     if not files:
         raise HTTPException(status_code=400, detail='At least one clinical note file is required')
+    _validate_upload_batch(files)
 
     normalized_patient_id = patient_id.strip()
     detection = await detect_patient_id_from_uploads(files) if not normalized_patient_id else None
@@ -1201,7 +1388,7 @@ async def upload_patient_note_set(
                 'confidence': detection.confidence,
                 'source_filename': detection.source_filename,
                 'source_kind': detection.source_kind,
-                'match_text': detection.match_text,
+                'matched': bool(detection.match_text),
             },
             message=f'Patient ID {normalized_patient_id} was auto-filled from the uploaded files during upload.',
             http_status_code=200,
@@ -1275,6 +1462,13 @@ async def upload_patient_note_set(
                 staff_signed=metadata.staff_signed,
                 document_date=metadata.document_date,
                 description=metadata.description,
+                source_document_id=metadata.source_document_id,
+                source_document_reference_id=metadata.source_document_reference_id,
+                source_attachment_url=metadata.source_attachment_url,
+                source_author=metadata.source_author,
+                source_custodian=metadata.source_custodian,
+                source_security_label=metadata.source_security_label,
+                source_provenance_id=metadata.source_provenance_id,
             )
             db.add(document)
             created_documents.append(document)
@@ -1417,8 +1611,7 @@ def download_patient_note_document(
         raise HTTPException(status_code=404, detail='Patient note document not found')
 
     file_path = resolve_storage_path(document.storage_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail='Stored patient note file is missing')
+    decrypted_content = read_secure_file(file_path)
 
     log_event(
         db,
@@ -1433,7 +1626,12 @@ def download_patient_note_document(
         details={'note_set_id': note_set.id, 'filename': document.original_filename},
         message=f'Clinical note document {document.id} downloaded by {user.username}.',
     )
-    return FileResponse(file_path, filename=document.original_filename, media_type=document.content_type)
+    safe_download_name = (Path(document.original_filename).name or 'clinical-note').replace('"', '')
+    return Response(
+        content=decrypted_content,
+        media_type=document.content_type,
+        headers={'Content-Disposition': f'attachment; filename="{safe_download_name}"'},
+    )
 
 
 @router.get('/audit/logs', response_model=list[AuditLogOut])

@@ -11,7 +11,9 @@ IZ Clinical Notes Analyzer is a chart-review application for clinical note binde
 - Lets reviewers confirm, reject, or mark checklist items as not applicable
 - Supports office-manager approval or return-to-counselor workflow
 - Keeps tamper-evident forensic audit logs for reads, writes, auth, downloads, and workflow changes
-- Stores uploaded source files with SHA-256 digests for later validation
+- Stores uploaded source files encrypted at rest with SHA-256 digests for later validation
+- Includes a readiness screen and startup checks for required dependencies, writable private storage, parser support, and placeholder secrets
+- Provides a SMART-on-FHIR/FHIR R4 EMR connector profile and import-plan stub for future EMR API work
 
 ## Who should use which section
 
@@ -62,11 +64,11 @@ If you just need to start the app and use it, use one of the startup scripts. Th
 
 - Username: value of `BOOTSTRAP_ADMIN_USERNAME` in `.env`
 - Password: value of `BOOTSTRAP_ADMIN_PASSWORD` in `.env`
-- Default bootstrap values created by the helper scripts:
-  - username: `admin`
-  - password: `r3!@analyzer#123`
+- Default bootstrap username: `admin`
+- Startup scripts replace placeholder `DATABASE_PASSWORD`, `SECRET_KEY`, `DATA_ENCRYPTION_KEY`, and `BOOTSTRAP_ADMIN_PASSWORD` with strong local random values.
+- The generated `.env.example` still shows placeholders so operators can see which values exist.
 
-Change the bootstrap password in `.env` before production use. The bootstrap admin password is managed outside the app and is reset from `.env` on startup when `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`.
+The bootstrap admin password is managed outside the app and is reset from `.env` on startup when `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`.
 
 ## Simple User Instructions
 
@@ -94,7 +96,8 @@ Admins can also:
 - create and manage users
 - unlock users or require password reset
 - review forensic logs
-- update app settings for access-intel and LLM analysis
+- update app settings for access-intel, LLM analysis, and EMR API connector registration
+- review `System readiness` from the Settings/dashboard area
 
 ## How The App Runs
 
@@ -104,9 +107,9 @@ The normal runtime is Docker Compose with three services:
 
 | Service | Purpose | Default exposed port |
 | --- | --- | --- |
-| `frontend` | Serves the React app through nginx and proxies `/api/*` to the backend | `5173` |
-| `backend` | FastAPI API, auth, workflow, uploads, audit logging, schema bootstrap | `8000` |
-| `postgres` | Dedicated application-owned PostgreSQL database | `5432` |
+| `frontend` | Serves the React app through nginx and proxies `/api/*` to the backend | `127.0.0.1:5173` |
+| `backend` | FastAPI API, auth, workflow, uploads, audit logging, schema bootstrap | `127.0.0.1:8000` |
+| `postgres` | Dedicated application-owned PostgreSQL database | `127.0.0.1:5432` |
 
 ### Startup sequence
 
@@ -115,15 +118,17 @@ When you use one of the startup scripts, the app starts in this order:
 1. Create `.env` from `.env.example` if it does not exist.
 2. Normalize or choose ports.
 3. Fill in dedicated database settings in `.env`.
-4. Start the `postgres` container first.
-5. Ensure the application database exists and is owned by the configured database user.
-6. Start the full Docker Compose stack.
-7. Let the backend:
+4. Generate strong local secrets if `.env` still contains placeholders.
+5. Start the `postgres` container first.
+6. Ensure the application database exists and is owned by the configured database user.
+7. Start the full Docker Compose stack.
+8. Let the backend:
+   - run dependency and runtime readiness checks
    - wait for the database
    - add missing legacy columns with defensive schema compatibility checks
    - create tables if needed
    - create or reset the bootstrap admin account
-8. Run `./scripts/smoke.sh` to verify the frontend, API health, login, and chart loading path.
+9. Run a smoke test to verify the frontend, API health, login, and chart loading path.
 
 ### Health endpoints
 
@@ -144,7 +149,7 @@ flowchart LR
     Browser["User Browser"] --> Frontend["React + Vite UI\nserved by nginx"]
     Frontend -->|"/api"| Backend["FastAPI API"]
     Backend --> DB["PostgreSQL"]
-    Backend --> Uploads["uploads/patient-notes"]
+    Backend --> Uploads["encrypted app-data uploads\nmacOS/Windows local storage\nDocker backend_data volume"]
     Backend --> Audit["audit_logs table\n+ fallback JSONL log"]
     Backend --> Access["Access-intel providers\n(ipwho.is / AbuseIPDB)"]
     Backend --> LLM["OpenAI-compatible LLM endpoint\n(optional)"]
@@ -203,7 +208,11 @@ Main tables:
 
 File storage:
 
-- Uploaded files are stored under `uploads/patient-notes/...` by default.
+- Uploaded files are encrypted at rest before they are written to disk.
+- Local desktop runs store uploads under the operating system app-data folder:
+  - macOS: `~/Library/Application Support/IZ Clinical Notes Analyzer/uploads`
+  - Windows: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads`
+- Docker runs store uploads in the named `backend_data` volume at `/app/data/uploads`.
 - Storage is organized by sanitized `patient_id`, note set ID, and document ID.
 - Every stored file records:
   - original filename
@@ -264,7 +273,7 @@ The main workflow is:
 
 - Supported file extensions:
   - `.csv`
-  - `.doc`
+  - `.doc` (stored securely; text extraction requires converting to DOCX/PDF/TXT first)
   - `.docx`
   - `.jpeg`
   - `.jpg`
@@ -274,7 +283,30 @@ The main workflow is:
   - `.txt`
   - `.zip`
 - Per-file limit: `50MB`
+- Total binder upload limit: `250MB`
+- Maximum files per binder upload: `40`
 - Patient ID auto-detection scans filenames and readable file contents up to a smaller detection limit
+- New uploads are encrypted before they are written to disk. Downloads are decrypted only after auth/RBAC checks pass.
+
+### Local data storage
+
+- Host-side runs store relative `UPLOAD_DIR` and `LOG_DIR` under the operating system's local app-data folder, not the OneDrive-backed repo.
+  - macOS: `~/Library/Application Support/IZ Clinical Notes Analyzer`
+  - Windows: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
+- Docker Compose stores backend uploads and fallback logs in the `BACKEND_DATA_VOLUME_NAME` Docker volume.
+- Runtime readiness warns if upload storage appears to be inside OneDrive, iCloud, Dropbox, or Google Drive.
+
+### EMR API readiness
+
+The app is upload-first today, but it now has a standards-aligned EMR connector boundary:
+
+- Admin settings store the EMR vendor label, FHIR base URL, SMART client ID/secret, scopes, and timeout.
+- `GET /api/emr/profile` reports the configured SMART/FHIR profile.
+- `POST /api/emr/discover` validates SMART `.well-known/smart-configuration` discovery when a real EMR FHIR base URL is available.
+- `GET /api/emr/import-plan?patient_id=...` shows the planned FHIR R4 `Patient`, `DocumentReference`, `Binary`, and optional `Provenance` request flow.
+- Alleva Document Manager exports are mapped to Custom Forms, Uploaded Documents, Portal Documents, Labs, Medications, Notes, or Other source buckets.
+- SMART client secrets are stored through the local encrypted secret envelope instead of plaintext app settings.
+- Alleva-specific live API import remains gated until the client/vendor provides official API credentials, tenant base URLs, attachment behavior, pagination/rate-limit rules, and documentation.
 
 ## Configuration
 
@@ -287,17 +319,21 @@ These are the settings you will use most often:
 | `BACKEND_PORT` | Host port for the FastAPI service | `8000` |
 | `FRONTEND_PORT` | Host port for the nginx-served frontend | `5173` |
 | `POSTGRES_PORT` | Host port for PostgreSQL | `5432` |
+| `BACKEND_DATA_VOLUME_NAME` | Docker volume for encrypted uploads and fallback logs | `iz_clinical_notes_analyzer_backend_data` |
 | `DATABASE_NAME` | Dedicated app database name | `iz_clinical_notes_analyzer` |
 | `DATABASE_USER` | Dedicated app DB user | `iz_clinical_notes_app` |
-| `DATABASE_PASSWORD` | Dedicated app DB password | `change-me-app` |
+| `DATABASE_PASSWORD` | Dedicated app DB password | placeholder in `.env.example` |
 | `DATABASE_URL` | Optional full SQLAlchemy DSN override | blank |
-| `SECRET_KEY` | JWT signing key | `change-me` / container fallback `change-me-in-production` |
+| `SECRET_KEY` | JWT signing key | placeholder in `.env.example` / container fallback `change-me-in-production` |
+| `DATA_ENCRYPTION_KEY` | File encryption key for uploaded clinical documents | placeholder in `.env.example` |
 | `FRONTEND_ORIGIN` | Primary frontend origin | `http://localhost:5173` |
 | `FRONTEND_ORIGINS` | Comma-separated allowed origins | `http://localhost:5173` |
+| `ALLOWED_HOSTS` | Allowed backend host headers | `localhost,127.0.0.1,::1` |
 | `BOOTSTRAP_ADMIN_USERNAME` | Bootstrap admin username | `admin` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Bootstrap admin password | `r3!@analyzer#123` |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Bootstrap admin password | placeholder in `.env.example`; replace before VPS startup |
 | `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` | Reset bootstrap admin from `.env` every startup | `true` |
-| `UPLOAD_DIR` | Upload storage directory | `uploads` |
+| `UPLOAD_DIR` | Upload storage directory; relative paths resolve to local app data | `uploads` |
+| `LOG_DIR` | Fallback log directory; relative paths resolve to local app data | `logs` |
 | `POSTGRES_SERVICE_HOST` | Docker-internal host name for Postgres | `postgres` |
 
 ### Database rules
@@ -327,8 +363,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-export PYTHONPATH=$(pwd)
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Frontend only
@@ -336,13 +371,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```bash
 cd frontend
 npm install
-VITE_API_URL=http://localhost:8000/api npm run dev
+npm run dev
 ```
 
 ### Tests
 
 ```bash
-cd backend && PYTHONPATH=$(pwd) pytest
+backend/.venv/bin/python -m pytest backend/tests -q
 cd frontend && npm test
 cd frontend && npm run build
 ```
@@ -367,6 +402,7 @@ The current server deployment model is the Ubuntu startup script plus Docker Com
 2. Create or review `.env`.
 3. Change at least these values before going live:
    - `SECRET_KEY`
+   - `DATA_ENCRYPTION_KEY`
    - `DATABASE_PASSWORD`
    - `BOOTSTRAP_ADMIN_PASSWORD`
    - `FRONTEND_ORIGIN`
@@ -507,19 +543,20 @@ Check for:
 
 ### Uploaded files are missing
 
-Stored files live under `UPLOAD_DIR/patient-notes/...` which defaults to `./uploads/patient-notes/...`.
+Stored files live under `UPLOAD_DIR/patient-notes/...`. Relative `UPLOAD_DIR` values resolve to the local app-data folder on host runs and `/app/data/uploads` in Docker Compose.
 
 If a database row exists but the file is gone:
 
 - download will fail with `Stored patient note file is missing`
-- investigate backups or restore the missing files to the same storage path
+- investigate the backend Docker volume or host local app-data backup
+- restore the missing encrypted files to the same storage path
 
 ### Audit logs are not reaching the database
 
 If audit persistence fails, the app writes fallback records to:
 
 ```text
-logs/forensic-audit-fallback.jsonl
+LOG_DIR/forensic-audit-fallback.jsonl
 ```
 
 Check that file if the `audit_logs` table is missing expected events.
@@ -556,7 +593,7 @@ pg_dump -Fc iz_clinical_notes_analyzer > backup.dump
 pg_restore -d iz_clinical_notes_analyzer backup.dump
 ```
 
-Validate uploaded-file backups separately if you need full recovery, because database backups do not include the `uploads/` directory.
+Validate uploaded-file backups separately if you need full recovery, because database backups do not include the encrypted upload volume or host app-data folder.
 
 ## Repository Layout
 
@@ -565,8 +602,7 @@ backend/                     FastAPI app, models, services, tests
 frontend/                    React/Vite UI and nginx config
 scripts/                     Startup and smoke-test helpers
 docs/                        Supporting runbook and architecture notes
-uploads/                     Stored clinical note files at runtime
-logs/                        Startup logs and audit fallback logs
+backend data volume          Encrypted clinical note files and fallback logs at runtime
 docker-compose.yml           Main local/VPS runtime definition
 ```
 

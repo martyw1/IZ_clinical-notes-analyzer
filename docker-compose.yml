@@ -5,9 +5,9 @@ services:
     environment:
       POSTGRES_DB: ${DATABASE_NAME:-iz_clinical_notes_analyzer}
       POSTGRES_USER: ${DATABASE_USER:-iz_clinical_notes_app}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change-me-app}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     healthcheck:
-      test: ['CMD-SHELL', 'PGPASSWORD=${DATABASE_PASSWORD:-change-me-app} pg_isready -U ${DATABASE_USER:-iz_clinical_notes_app} -d ${DATABASE_NAME:-iz_clinical_notes_analyzer}']
+      test: ['CMD-SHELL', 'PGPASSWORD=${DATABASE_PASSWORD} pg_isready -U ${DATABASE_USER:-iz_clinical_notes_app} -d ${DATABASE_NAME:-iz_clinical_notes_analyzer}']
       interval: 5s
       timeout: 5s
       retries: 12
@@ -15,6 +15,13 @@ services:
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    security_opt:
+      # Keep the database container from gaining extra Linux privileges at runtime.
+      - no-new-privileges:true
+    # Conservative local limits keep the app friendly to consumer-grade laptops.
+    cpus: '1.0'
+    mem_limit: 768m
+    pids_limit: 256
 
   backend:
     build: ./backend
@@ -23,15 +30,25 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_HOST: 127.0.0.1
+      DATABASE_HOST: ${POSTGRES_SERVICE_HOST:-postgres}
       DATABASE_PORT: 5432
       DATABASE_NAME: ${DATABASE_NAME:-iz_clinical_notes_analyzer}
       DATABASE_USER: ${DATABASE_USER:-iz_clinical_notes_app}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-change-me-app}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_SERVICE_HOST: ${POSTGRES_SERVICE_HOST:-postgres}
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      SECRET_KEY: ${SECRET_KEY}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT:-5173}}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-5173}}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,::1}
+      UPLOAD_DIR: /app/data/uploads
+      LOG_DIR: /app/data/logs
+      MAX_UPLOAD_FILE_BYTES: ${MAX_UPLOAD_FILE_BYTES:-52428800}
+      MAX_UPLOAD_TOTAL_BYTES: ${MAX_UPLOAD_TOTAL_BYTES:-262144000}
+      MAX_UPLOAD_FILE_COUNT: ${MAX_UPLOAD_FILE_COUNT:-40}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+      RESET_BOOTSTRAP_ADMIN_ON_STARTUP: ${RESET_BOOTSTRAP_ADMIN_ON_STARTUP:-true}
       PORT: 8000
     healthcheck:
       test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\", timeout=5)"']
@@ -40,7 +57,16 @@ services:
       start_period: 45s
       retries: 18
     ports:
-      - '${BACKEND_PORT:-8000}:8000'
+      - '127.0.0.1:${BACKEND_PORT:-8000}:8000'
+    volumes:
+      - backend_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    # The API does PDF/DOCX inspection, so leave headroom without letting it
+    # starve the host machine.
+    cpus: '1.0'
+    mem_limit: 768m
+    pids_limit: 256
 
   frontend:
     build:
@@ -52,13 +78,21 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1/index.html >/dev/null 2>&1']
+      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1:8080/index.html >/dev/null 2>&1']
       interval: 10s
       timeout: 5s
       retries: 12
     ports:
-      - '${FRONTEND_PORT:-5173}:80'
+      - '127.0.0.1:${FRONTEND_PORT:-5173}:8080'
+    security_opt:
+      - no-new-privileges:true
+    # Static UI serving should stay tiny even on older Windows laptops.
+    cpus: '0.5'
+    mem_limit: 256m
+    pids_limit: 128
 
 volumes:
   pgdata:
     name: ${POSTGRES_VOLUME_NAME:-iz_clinical_notes_analyzer_postgres_data}
+  backend_data:
+    name: ${BACKEND_DATA_VOLUME_NAME:-iz_clinical_notes_analyzer_backend_data}

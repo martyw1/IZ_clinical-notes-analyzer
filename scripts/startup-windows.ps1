@@ -61,11 +61,44 @@ function Set-EnvValue {
     Set-Content -Path $EnvFile -Value $newLines
 }
 
+function Test-PlaceholderSecret {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $true }
+    return $Value -in @('change-me', 'change-me-app', 'change-me-in-production', 'r3!@analyzer#123') -or
+        $Value.StartsWith('change-me-') -or
+        $Value.StartsWith('replace-with') -or
+        $Value.StartsWith('placeholder')
+}
+
+function New-LocalSecret {
+    param([int]$Length)
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
+    $bytes = New-Object byte[] $Length
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
+    return -join $chars
+}
+
+function Get-OrCreateSecret {
+    param(
+        [string]$EnvFile,
+        [string]$Key,
+        [int]$Length
+    )
+
+    $processValue = [Environment]::GetEnvironmentVariable($Key, 'Process')
+    $current = if ($processValue) { $processValue } else { Get-EnvValue $EnvFile $Key }
+    if (Test-PlaceholderSecret $current) {
+        return New-LocalSecret -Length $Length
+    }
+    return $current
+}
+
 function Build-DatabaseUrl {
     param(
         [string]$User,
         [string]$Password,
-        [string]$Host,
+        [string]$DbHost,
         [string]$Port,
         [string]$Database
     )
@@ -73,7 +106,7 @@ function Build-DatabaseUrl {
     $encodedUser = [System.Uri]::EscapeDataString($User)
     $encodedPassword = [System.Uri]::EscapeDataString($Password)
     $encodedDatabase = [System.Uri]::EscapeDataString($Database)
-    return "postgresql+psycopg://$encodedUser:$encodedPassword@$Host`:$Port/$encodedDatabase"
+    return "postgresql+psycopg://${encodedUser}:${encodedPassword}@${DbHost}:$Port/$encodedDatabase"
 }
 
 function Initialize-DedicatedDbEnv {
@@ -83,22 +116,33 @@ function Initialize-DedicatedDbEnv {
     $databaseHost = if (Get-EnvValue $EnvFile 'DATABASE_HOST') { Get-EnvValue $EnvFile 'DATABASE_HOST' } else { '127.0.0.1' }
     $databaseName = if (Get-EnvValue $EnvFile 'DATABASE_NAME') { Get-EnvValue $EnvFile 'DATABASE_NAME' } elseif (Get-EnvValue $EnvFile 'POSTGRES_DB') { Get-EnvValue $EnvFile 'POSTGRES_DB' } else { 'iz_clinical_notes_analyzer' }
     $databaseUser = if (Get-EnvValue $EnvFile 'DATABASE_USER') { Get-EnvValue $EnvFile 'DATABASE_USER' } elseif (Get-EnvValue $EnvFile 'POSTGRES_USER') { Get-EnvValue $EnvFile 'POSTGRES_USER' } else { 'iz_clinical_notes_app' }
-    $databasePassword = if (Get-EnvValue $EnvFile 'DATABASE_PASSWORD') { Get-EnvValue $EnvFile 'DATABASE_PASSWORD' } elseif (Get-EnvValue $EnvFile 'POSTGRES_PASSWORD') { Get-EnvValue $EnvFile 'POSTGRES_PASSWORD' } else { 'change-me-app' }
+    $databasePassword = if (Get-EnvValue $EnvFile 'DATABASE_PASSWORD') { Get-EnvValue $EnvFile 'DATABASE_PASSWORD' } elseif (Get-EnvValue $EnvFile 'POSTGRES_PASSWORD') { Get-EnvValue $EnvFile 'POSTGRES_PASSWORD' } else { '' }
+    if (Test-PlaceholderSecret $databasePassword) { $databasePassword = New-LocalSecret -Length 40 }
     $postgresVolumeName = if (Get-EnvValue $EnvFile 'POSTGRES_VOLUME_NAME') { Get-EnvValue $EnvFile 'POSTGRES_VOLUME_NAME' } else { 'iz_clinical_notes_analyzer_postgres_data' }
-    $databaseUrl = Build-DatabaseUrl -User $databaseUser -Password $databasePassword -Host $databaseHost -Port $postgresPort -Database $databaseName
+    $backendDataVolumeName = if (Get-EnvValue $EnvFile 'BACKEND_DATA_VOLUME_NAME') { Get-EnvValue $EnvFile 'BACKEND_DATA_VOLUME_NAME' } else { 'iz_clinical_notes_analyzer_backend_data' }
+    $secretKey = Get-OrCreateSecret -EnvFile $EnvFile -Key 'SECRET_KEY' -Length 64
+    $dataEncryptionKey = Get-OrCreateSecret -EnvFile $EnvFile -Key 'DATA_ENCRYPTION_KEY' -Length 64
+    $bootstrapAdminPassword = Get-OrCreateSecret -EnvFile $EnvFile -Key 'BOOTSTRAP_ADMIN_PASSWORD' -Length 24
+    $databaseUrl = Build-DatabaseUrl -User $databaseUser -Password $databasePassword -DbHost $databaseHost -Port $postgresPort -Database $databaseName
 
     Set-EnvValue $EnvFile 'POSTGRES_PORT' $postgresPort
     Set-EnvValue $EnvFile 'POSTGRES_VOLUME_NAME' $postgresVolumeName
+    Set-EnvValue $EnvFile 'BACKEND_DATA_VOLUME_NAME' $backendDataVolumeName
     Set-EnvValue $EnvFile 'DATABASE_HOST' $databaseHost
     Set-EnvValue $EnvFile 'DATABASE_PORT' $postgresPort
     Set-EnvValue $EnvFile 'DATABASE_NAME' $databaseName
     Set-EnvValue $EnvFile 'DATABASE_USER' $databaseUser
     Set-EnvValue $EnvFile 'DATABASE_PASSWORD' $databasePassword
+    Set-EnvValue $EnvFile 'SECRET_KEY' $secretKey
+    Set-EnvValue $EnvFile 'DATA_ENCRYPTION_KEY' $dataEncryptionKey
     Set-EnvValue $EnvFile 'POSTGRES_SERVICE_HOST' 'postgres'
     Set-EnvValue $EnvFile 'DATABASE_URL' $databaseUrl
     Set-EnvValue $EnvFile 'POSTGRES_DB' $databaseName
     Set-EnvValue $EnvFile 'POSTGRES_USER' $databaseUser
     Set-EnvValue $EnvFile 'POSTGRES_PASSWORD' $databasePassword
+    Set-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME' 'admin'
+    Set-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD' $bootstrapAdminPassword
+    Set-EnvValue $EnvFile 'RESET_BOOTSTRAP_ADMIN_ON_STARTUP' 'true'
 
     return @{
         PostgresPort = $postgresPort
@@ -106,6 +150,28 @@ function Initialize-DedicatedDbEnv {
         DatabaseUser = $databaseUser
         DatabasePassword = $databasePassword
     }
+}
+
+function Invoke-SmokeTest {
+    param(
+        [string]$FrontendPort,
+        [string]$Username,
+        [string]$Password
+    )
+
+    $baseUrl = "http://localhost:$FrontendPort"
+    Write-Info "Checking frontend at $baseUrl"
+    Invoke-WebRequest -Uri "$baseUrl/" -UseBasicParsing | Out-Null
+    $health = Invoke-RestMethod -Uri "$baseUrl/api/health"
+    if ($health.status -ne 'ok') { throw 'API health check did not return ok.' }
+
+    $login = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/auth/login" -ContentType 'application/json' -Body (@{ username = $Username; password = $Password } | ConvertTo-Json)
+    $headers = @{ Authorization = "Bearer $($login.access_token)" }
+    Invoke-RestMethod -Uri "$baseUrl/api/users/me" -Headers $headers | Out-Null
+    if (-not $login.must_reset_password) {
+        Invoke-RestMethod -Uri "$baseUrl/api/charts" -Headers $headers | Out-Null
+    }
+    Write-Pass 'Smoke test passed.'
 }
 
 function Wait-ForDedicatedPostgres {
@@ -235,15 +301,12 @@ try {
     docker compose ps
 
     $bootstrapUsername = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_USERNAME' } else { 'admin' }
-    $bootstrapPassword = if (Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD') { Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD' } else { 'r3!@analyzer#123' }
+    $bootstrapPassword = Get-EnvValue $EnvFile 'BOOTSTRAP_ADMIN_PASSWORD'
     Write-Info 'Running smoke test'
-    $env:FRONTEND_PORT = if (Get-EnvValue $EnvFile 'FRONTEND_PORT') { Get-EnvValue $EnvFile 'FRONTEND_PORT' } else { '5173' }
-    $env:SMOKE_RESET_PASSWORD = 'false'
-    $env:SMOKE_USERNAME = $bootstrapUsername
-    $env:SMOKE_PASSWORD = $bootstrapPassword
-    & (Join-Path $RootDir 'scripts/smoke.sh')
+    $frontendPort = if (Get-EnvValue $EnvFile 'FRONTEND_PORT') { Get-EnvValue $EnvFile 'FRONTEND_PORT' } else { '5173' }
+    Invoke-SmokeTest -FrontendPort $frontendPort -Username $bootstrapUsername -Password $bootstrapPassword
 
-    Write-Pass "Startup complete. Logs are in $LogFile"
+    Write-Pass "Startup complete. Open http://localhost:$frontendPort . Logs are in $LogFile"
 }
 catch {
     Write-Error "Startup failed: $($_.Exception.Message)"

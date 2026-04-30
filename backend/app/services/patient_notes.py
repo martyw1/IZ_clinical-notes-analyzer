@@ -16,12 +16,16 @@ except ImportError:  # pragma: no cover - exercised only in misconfigured runtim
     PdfReader = None
 
 from app.core.config import settings
+from app.services.secure_storage import ensure_private_directory, read_secure_file, write_secure_file
 
 ALLOWED_EXTENSIONS = {'.csv', '.doc', '.docx', '.jpeg', '.jpg', '.pdf', '.png', '.rtf', '.txt', '.zip'}
-MAX_FILE_BYTES = 50 * 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 DETECTION_MAX_FILE_BYTES = 8 * 1024 * 1024
+DOCX_MAX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024
+DOCX_MAX_ENTRIES = 200
 SAFE_NAME_PATTERN = re.compile(r'[^A-Za-z0-9._-]+')
+# Patient ID detection is intentionally conservative so dates and short numeric
+# fragments from clinical notes do not become accidental chart identifiers.
 PATIENT_ID_LABEL_PATTERNS = (
     re.compile(r'\b(?:patient|client)\s*(?:id|identifier|number|no\.?|#)\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9._/-]{2,31})', re.IGNORECASE),
     re.compile(r'\b(?:mrn|medical\s+record\s+number)\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9._/-]{2,31})', re.IGNORECASE),
@@ -58,8 +62,9 @@ class PatientIdDetection:
 
 
 def uploads_root() -> Path:
+    """Return the private local upload root used for encrypted files."""
     root = settings.upload_dir_path.resolve()
-    root.mkdir(parents=True, exist_ok=True)
+    ensure_private_directory(root)
     return root
 
 
@@ -86,28 +91,33 @@ def sanitize_filename(filename: str) -> str:
 
 
 async def store_upload_file(upload: UploadFile, *, patient_id: str, note_set_id: int, document_id: int) -> StoredUpload:
+    """Stream an upload into encrypted local storage while hashing plaintext."""
     safe_patient_id = sanitize_patient_id(patient_id)
     safe_filename = sanitize_filename(upload.filename or '')
 
     relative_path = Path('patient-notes') / safe_patient_id / f'note-set-{note_set_id}' / f'{document_id}-{safe_filename}'
     final_path = uploads_root() / relative_path
-    temp_path = final_path.with_suffix(final_path.suffix + '.tmp')
-    final_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = final_path.with_name(f'.{final_path.name}.tmp')
+    ensure_private_directory(final_path.parent)
 
     digest = hashlib.sha256()
     size_bytes = 0
+    raw = bytearray()
 
     try:
-        with temp_path.open('wb') as handle:
-            while True:
-                chunk = await upload.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                size_bytes += len(chunk)
-                if size_bytes > MAX_FILE_BYTES:
-                    raise HTTPException(status_code=413, detail='Uploaded file exceeds the 50MB per-file limit')
-                digest.update(chunk)
-                handle.write(chunk)
+        while True:
+            chunk = await upload.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            size_bytes += len(chunk)
+            if size_bytes > settings.max_upload_file_bytes:
+                limit_mb = settings.max_upload_file_bytes // (1024 * 1024)
+                raise HTTPException(status_code=413, detail=f'Uploaded file exceeds the {limit_mb}MB per-file limit')
+            digest.update(chunk)
+            raw.extend(chunk)
+        if size_bytes == 0:
+            raise HTTPException(status_code=400, detail='Uploaded clinical note file is empty')
+        write_secure_file(temp_path, bytes(raw))
         temp_path.replace(final_path)
     except Exception:
         if temp_path.exists():
@@ -125,9 +135,24 @@ async def store_upload_file(upload: UploadFile, *, patient_id: str, note_set_id:
 
 
 def resolve_storage_path(storage_path: str) -> Path:
+    """Resolve a stored relative path and reject traversal outside upload root."""
     root = uploads_root()
     candidate = (root / storage_path).resolve()
-    if not str(candidate).startswith(str(root)):
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Invalid stored file path') from exc
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail='Stored patient note file is missing')
+    return candidate
+
+
+def _resolve_storage_path_for_cleanup(storage_path: str) -> Path:
+    root = uploads_root()
+    candidate = (root / storage_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail='Invalid stored file path')
     return candidate
 
@@ -135,7 +160,7 @@ def resolve_storage_path(storage_path: str) -> Path:
 def remove_stored_paths(storage_paths: list[str]) -> None:
     for storage_path in storage_paths:
         try:
-            path = resolve_storage_path(storage_path)
+            path = _resolve_storage_path_for_cleanup(storage_path)
         except HTTPException:
             continue
         if path.exists():
@@ -163,7 +188,15 @@ def _extract_docx_text(path: Path) -> str:
 
 
 def _extract_docx_text_from_bytes(raw: bytes) -> str:
+    """Extract DOCX text after checking for zip bombs and encrypted archives."""
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        infos = archive.infolist()
+        total_uncompressed = sum(info.file_size for info in infos)
+        if len(infos) > DOCX_MAX_ENTRIES or total_uncompressed > DOCX_MAX_UNCOMPRESSED_BYTES:
+            raise RuntimeError('DOCX file is too large to inspect safely')
+        for info in infos:
+            if info.flag_bits & 0x1:
+                raise RuntimeError('Encrypted DOCX files are not supported')
         document_xml = archive.read('word/document.xml')
     text = _decode_bytes(document_xml)
     text = re.sub(r'</w:p>', '\n', text)
@@ -202,8 +235,9 @@ def _extract_text_from_bytes(raw: bytes, suffix: str) -> ExtractedText:
 
 
 def extract_text_from_storage(storage_path: str) -> ExtractedText:
+    """Decrypt a stored clinical document and extract searchable text when safe."""
     path = resolve_storage_path(storage_path)
-    return _extract_text_from_bytes(path.read_bytes(), path.suffix.lower())
+    return _extract_text_from_bytes(read_secure_file(path), path.suffix.lower())
 
 
 def _normalize_detected_patient_id(value: str, *, allow_numeric: bool) -> str | None:

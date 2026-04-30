@@ -180,4 +180,4 @@ else
   exit 1
 fi
 
-pass "Startup complete. Logs are in ${LOG_FILE}"
+pass "Startup complete. Open http://localhost:${FRONTEND_PORT} . Logs are in ${LOG_FILE}"

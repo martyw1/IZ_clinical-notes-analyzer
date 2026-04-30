@@ -36,6 +36,13 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'llm_use_for_access_review': 'BOOLEAN NOT NULL DEFAULT TRUE',
         'llm_use_for_evaluation_gap_analysis': 'BOOLEAN NOT NULL DEFAULT TRUE',
         'llm_analysis_instructions': "TEXT NOT NULL DEFAULT ''",
+        'emr_api_enabled': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'emr_vendor_name': "VARCHAR(120) NOT NULL DEFAULT 'Alleva / SMART on FHIR'",
+        'emr_fhir_base_url': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'emr_smart_client_id': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'emr_smart_client_secret': "VARCHAR(1024) NOT NULL DEFAULT ''",
+        'emr_smart_scopes': "VARCHAR(500) NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs'",
+        'emr_api_timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
         'updated_by_id': 'INTEGER',
         'updated_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
     },
@@ -65,6 +72,19 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
     'workflow_transitions': {
         'comment': "TEXT NOT NULL DEFAULT ''",
         'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
+    },
+    'patient_note_sets': {
+        'source_export_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'source_patient_resource_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+    },
+    'patient_note_documents': {
+        'source_document_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'source_document_reference_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'source_attachment_url': "VARCHAR(500) NOT NULL DEFAULT ''",
+        'source_author': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'source_custodian': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'source_security_label': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'source_provenance_id': "VARCHAR(120) NOT NULL DEFAULT ''",
     },
     'audit_logs': {
         'event_id': "VARCHAR(64) NOT NULL DEFAULT ''",
@@ -125,6 +145,13 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'llm_use_for_access_review': 'BOOLEAN NOT NULL DEFAULT 1',
     'llm_use_for_evaluation_gap_analysis': 'BOOLEAN NOT NULL DEFAULT 1',
     'llm_analysis_instructions': "TEXT NOT NULL DEFAULT ''",
+    'emr_api_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
+    'emr_vendor_name': "TEXT NOT NULL DEFAULT 'Alleva / SMART on FHIR'",
+    'emr_fhir_base_url': "TEXT NOT NULL DEFAULT ''",
+    'emr_smart_client_id': "TEXT NOT NULL DEFAULT ''",
+    'emr_smart_client_secret': "TEXT NOT NULL DEFAULT ''",
+    'emr_smart_scopes': "TEXT NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs'",
+    'emr_api_timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
     'updated_by_id': 'INTEGER',
     'updated_at': 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
     'source_note_set_id': 'INTEGER',
@@ -145,6 +172,15 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'expiration_date': "TEXT NOT NULL DEFAULT ''",
     'updated_at': 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
     'comment': "TEXT NOT NULL DEFAULT ''",
+    'source_export_id': "TEXT NOT NULL DEFAULT ''",
+    'source_patient_resource_id': "TEXT NOT NULL DEFAULT ''",
+    'source_document_id': "TEXT NOT NULL DEFAULT ''",
+    'source_document_reference_id': "TEXT NOT NULL DEFAULT ''",
+    'source_attachment_url': "TEXT NOT NULL DEFAULT ''",
+    'source_author': "TEXT NOT NULL DEFAULT ''",
+    'source_custodian': "TEXT NOT NULL DEFAULT ''",
+    'source_security_label': "TEXT NOT NULL DEFAULT ''",
+    'source_provenance_id': "TEXT NOT NULL DEFAULT ''",
     'event_id': "TEXT NOT NULL DEFAULT ''",
     'actor_type': "TEXT NOT NULL DEFAULT 'human'",
     'forwarded_for': 'TEXT',
@@ -206,6 +242,9 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
                 logger.warning('Detected legacy schema: adding missing %s.%s column.', table_name, column_name)
                 connection.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}'))
                 added_columns.append({'table': table_name, 'column': column_name})
+
+        if inspector.has_table('app_settings') and dialect_name == 'postgresql':
+            connection.execute(text('ALTER TABLE app_settings ALTER COLUMN emr_smart_client_secret TYPE VARCHAR(1024)'))
 
         if inspector.has_table('charts'):
             if dialect_name == 'postgresql':

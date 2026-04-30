@@ -89,6 +89,13 @@ type PatientNoteDocument = {
   staff_signed: boolean
   document_date: string
   description: string
+  source_document_id: string
+  source_document_reference_id: string
+  source_attachment_url: string
+  source_author: string
+  source_custodian: string
+  source_security_label: string
+  source_provenance_id: string
   created_at: string
 }
 
@@ -105,6 +112,8 @@ type PatientNoteSetSummary = {
   admission_date: string
   discharge_date: string
   upload_notes: string
+  source_export_id: string
+  source_patient_resource_id: string
   created_at: string
   file_count: number
 }
@@ -145,6 +154,13 @@ type AppSettings = {
   llm_use_for_access_review: boolean
   llm_use_for_evaluation_gap_analysis: boolean
   llm_analysis_instructions: string
+  emr_api_enabled: boolean
+  emr_vendor_name: string
+  emr_fhir_base_url: string
+  emr_smart_client_id: string
+  emr_smart_client_secret_configured: boolean
+  emr_smart_scopes: string
+  emr_api_timeout_seconds: number
   updated_by_id: number | null
   updated_at: string | null
 }
@@ -166,6 +182,14 @@ type AppSettingsForm = {
   llm_use_for_access_review: boolean
   llm_use_for_evaluation_gap_analysis: boolean
   llm_analysis_instructions: string
+  emr_api_enabled: boolean
+  emr_vendor_name: string
+  emr_fhir_base_url: string
+  emr_smart_client_id: string
+  emr_smart_client_secret: string
+  clear_emr_smart_client_secret: boolean
+  emr_smart_scopes: string
+  emr_api_timeout_seconds: number
 }
 
 type UploadEntry = {
@@ -178,6 +202,13 @@ type UploadEntry = {
   staff_signed: boolean
   document_date: string
   description: string
+  source_document_id: string
+  source_document_reference_id: string
+  source_attachment_url: string
+  source_author: string
+  source_custodian: string
+  source_security_label: string
+  source_provenance_id: string
 }
 
 type TransitionAction = {
@@ -251,6 +282,42 @@ type TrendPoint = {
   label: string
   count: number
 }
+
+type RuntimeReadiness = {
+  status: 'ok' | 'warn' | 'fail'
+  failed: number
+  warnings: number
+  checks: { name: string; status: string; message: string; detail: string }[]
+}
+
+type EmrProfile = {
+  adapter_key: string
+  live_import_status: string
+  supported_export_formats: string[]
+  document_manager_sections: { key: string; label: string; source_description: string }[]
+  required_vendor_inputs: string[]
+}
+
+type EmrDiscovery = {
+  status: string
+  smart_configuration_url: string
+  authorization_endpoint_configured: boolean
+  token_endpoint_configured: boolean
+  capabilities: string[]
+  message: string
+}
+
+type EmrImportPlan = {
+  patient_id: string
+  planned_requests: { step: string; purpose: string; method: string; url: string }[]
+  alleva_notes: string[]
+  attachment_handling: string
+}
+
+// Keep the browser-side upload gate aligned with backend ALLOWED_EXTENSIONS.
+const ACCEPTED_UPLOAD_TYPES = '.pdf,.doc,.docx,.txt,.csv,.rtf,.jpg,.jpeg,.png,.zip'
+const MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024
+const MAX_UPLOAD_TOTAL_BYTES = 250 * 1024 * 1024
 
 const STATUS_LABELS: Record<ComplianceStatus, string> = {
   pending: 'Needs manual confirmation',
@@ -339,6 +406,14 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     llm_use_for_access_review: settings.llm_use_for_access_review,
     llm_use_for_evaluation_gap_analysis: settings.llm_use_for_evaluation_gap_analysis,
     llm_analysis_instructions: settings.llm_analysis_instructions,
+    emr_api_enabled: settings.emr_api_enabled,
+    emr_vendor_name: settings.emr_vendor_name,
+    emr_fhir_base_url: settings.emr_fhir_base_url,
+    emr_smart_client_id: settings.emr_smart_client_id,
+    emr_smart_client_secret: '',
+    clear_emr_smart_client_secret: false,
+    emr_smart_scopes: settings.emr_smart_scopes,
+    emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
   }
 }
 
@@ -354,6 +429,13 @@ function buildUploadEntry(file: File): UploadEntry {
     staff_signed: false,
     document_date: '',
     description: '',
+    source_document_id: '',
+    source_document_reference_id: '',
+    source_attachment_url: '',
+    source_author: '',
+    source_custodian: '',
+    source_security_label: '',
+    source_provenance_id: '',
   }
 }
 
@@ -437,6 +519,20 @@ function userStatusTone(candidate: Pick<User, 'is_active' | 'is_locked'>) {
 function validateCreateUserForm(form: CreateUserForm) {
   if (!form.username.trim()) return 'Username is required.'
   if (form.password.trim().length < 12) return 'Temporary password must be at least 12 characters.'
+  return ''
+}
+
+function validateUploadFiles(files: File[]) {
+  // Validate locally first so non-technical users get immediate, plain feedback.
+  const allowed = new Set(ACCEPTED_UPLOAD_TYPES.split(','))
+  let totalBytes = 0
+  for (const file of files) {
+    const suffix = file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : ''
+    if (!allowed.has(suffix)) return `${file.name} is not an accepted clinical-note file type.`
+    if (file.size > MAX_UPLOAD_FILE_BYTES) return `${file.name} is larger than the 50 MB file limit.`
+    totalBytes += file.size
+  }
+  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) return 'The selected binder is larger than the 250 MB total upload limit.'
   return ''
 }
 
@@ -525,6 +621,11 @@ export function App() {
   const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '', event_category: '' })
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
   const [settingsForm, setSettingsForm] = useState<AppSettingsForm | null>(null)
+  const [readiness, setReadiness] = useState<RuntimeReadiness | null>(null)
+  const [emrProfile, setEmrProfile] = useState<EmrProfile | null>(null)
+  const [emrDiscovery, setEmrDiscovery] = useState<EmrDiscovery | null>(null)
+  const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
+  const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
 
   const [profileForm, setProfileForm] = useState<ProfileForm>({ full_name: '' })
   const [passwordChangeForm, setPasswordChangeForm] = useState<PasswordChangeForm>({ current_password: '', new_password: '' })
@@ -639,6 +740,7 @@ export function App() {
   }
 
   async function loadChartDetail(chartId: number) {
+    if (reviewDirty && selectedChartId !== chartId && !window.confirm('Discard unsaved criterion review changes?')) return
     const detail = copyChartDetail(await apiRequest<ChartDetail>(`/charts/${chartId}`))
     setSelectedChart(detail)
     setSelectedChartId(detail.id)
@@ -674,9 +776,16 @@ export function App() {
 
   async function loadSettings() {
     if (user?.role !== 'admin') return
-    const payload = await apiRequest<AppSettings>('/settings')
+    const [payload, profile] = await Promise.all([apiRequest<AppSettings>('/settings'), apiRequest<EmrProfile>('/emr/profile')])
     setAppSettings(payload)
     setSettingsForm(createSettingsForm(payload))
+    setEmrProfile(profile)
+  }
+
+  async function loadReadiness() {
+    if (user?.role !== 'admin') return
+    const payload = await apiRequest<RuntimeReadiness>('/system/readiness')
+    setReadiness(payload)
   }
 
   async function loadLogs() {
@@ -707,17 +816,28 @@ export function App() {
       setNoteSets(noteSetList)
 
       if (profile.role === 'admin') {
-        const [directory, configuredSettings] = await Promise.all([apiRequest<User[]>('/users'), apiRequest<AppSettings>('/settings')])
+        const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile] = await Promise.all([
+          apiRequest<User[]>('/users'),
+          apiRequest<AppSettings>('/settings'),
+          apiRequest<RuntimeReadiness>('/system/readiness'),
+          apiRequest<EmrProfile>('/emr/profile'),
+        ])
         setUsers(directory)
         syncSelectedManagedUser(directory, selectedManagedUserId)
         setAppSettings(configuredSettings)
         setSettingsForm(createSettingsForm(configuredSettings))
+        setReadiness(runtimeReadiness)
+        setEmrProfile(configuredEmrProfile)
       } else {
         setUsers([])
         setSelectedManagedUserId(null)
         setManagedUserForm(null)
         setAppSettings(null)
         setSettingsForm(null)
+        setReadiness(null)
+        setEmrProfile(null)
+        setEmrDiscovery(null)
+        setEmrImportPlan(null)
         setDeleteUserConfirmation('')
       }
 
@@ -828,6 +948,15 @@ export function App() {
 
   function handleFilesSelected(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || [])
+    const validationError = validateUploadFiles(files)
+    if (validationError) {
+      setError(validationError)
+      event.target.value = ''
+      setUploadForm((current) => ({ ...current, entries: [] }))
+      setPatientIdDetection(null)
+      return
+    }
+    setError('')
     const entries = files.map((file) => buildUploadEntry(file))
     setUploadForm((current) => ({
       ...current,
@@ -948,6 +1077,13 @@ export function App() {
             staff_signed: entry.staff_signed,
             document_date: entry.document_date,
             description: entry.description,
+            source_document_id: entry.source_document_id,
+            source_document_reference_id: entry.source_document_reference_id,
+            source_attachment_url: entry.source_attachment_url,
+            source_author: entry.source_author,
+            source_custodian: entry.source_custodian,
+            source_security_label: entry.source_security_label,
+            source_provenance_id: entry.source_provenance_id,
           })),
         ),
       )
@@ -987,6 +1123,32 @@ export function App() {
     }
   }
 
+  async function downloadDocument(noteSetId: number, document: PatientNoteDocument) {
+    setIsBusy(true)
+    setError('')
+    try {
+      const response = await fetch(`${API}/patient-note-sets/${noteSetId}/documents/${document.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const payload = (await readJson(response)) as ApiError | null
+        throw new Error(readErrorMessage(response.status, payload))
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = window.document.createElement('a')
+      anchor.href = url
+      anchor.download = document.original_filename
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setStatus(`Downloaded ${document.original_filename}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Document download failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function handleSaveReviewChanges() {
     if (!selectedChart || !canEditCriteria) return
     setIsBusy(true)
@@ -1013,6 +1175,10 @@ export function App() {
     if (!selectedChart) return
     if (action.requiresComment && !decisionComment.trim()) {
       setError('Enter a manager comment before returning a chart to the counselor.')
+      return
+    }
+    if (action.toState === 'Approved by Office Manager' && openItems.length > 0 && !decisionComment.trim()) {
+      setError('Add an approval note before approving a chart that still has open or missing criteria.')
       return
     }
 
@@ -1182,9 +1348,52 @@ export function App() {
       })
       setAppSettings(payload)
       setSettingsForm(createSettingsForm(payload))
+      setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
       setStatus('Application settings have been updated.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleEmrDiscovery() {
+    const fhirBaseUrl = settingsForm?.emr_fhir_base_url.trim() || ''
+    if (!fhirBaseUrl) {
+      setError('Enter the Alleva FHIR base URL before running discovery.')
+      return
+    }
+    setIsBusy(true)
+    setError('')
+    try {
+      const payload = await apiRequest<EmrDiscovery>('/emr/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fhir_base_url: fhirBaseUrl }),
+      })
+      setEmrDiscovery(payload)
+      setStatus('EMR discovery completed.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'EMR discovery failed')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleEmrImportPlan() {
+    const patientId = emrPlanPatientId.trim()
+    if (!patientId) {
+      setError('Enter a patient ID or MRN before building an EMR import plan.')
+      return
+    }
+    setIsBusy(true)
+    setError('')
+    try {
+      const payload = await apiRequest<EmrImportPlan>(`/emr/import-plan?patient_id=${encodeURIComponent(patientId)}`)
+      setEmrImportPlan(payload)
+      setStatus('EMR import plan is ready.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to build EMR import plan')
     } finally {
       setIsBusy(false)
     }
@@ -1203,6 +1412,21 @@ export function App() {
         upload_notes: chart.manager_comment ? `Manager follow-up: ${chart.manager_comment}` : '',
       }),
     )
+  }
+
+  function handleSignOut() {
+    setToken('')
+    setUser(null)
+    setMustResetPassword(false)
+    setCharts([])
+    setNoteSets([])
+    setSelectedChart(null)
+    setSelectedChartId(null)
+    setSelectedNoteSet(null)
+    setSelectedNoteSetId(null)
+    setReadiness(null)
+    setStatus('Signed out. Sign in to continue.')
+    setError('')
   }
 
   function handleSelectManagedUser(nextId: number) {
@@ -1371,6 +1595,9 @@ export function App() {
                   </button>
                 ))
               : null}
+            <button className='tab-button' onClick={handleSignOut} type='button'>
+              Sign out
+            </button>
           </nav>
 
           {activeView === 'dashboard' ? (
@@ -1473,6 +1700,11 @@ export function App() {
                       User management and forensic log review are available only to the administrator. Active: {activeUserCount}, locked:{' '}
                       {lockedUserCount}, password reset required: {resetRequiredCount}.
                     </p>
+                    {readiness ? (
+                      <p>
+                        Runtime readiness: {readiness.status}. Failed checks: {readiness.failed}. Warnings: {readiness.warnings}.
+                      </p>
+                    ) : null}
                   </section>
                 ) : null}
               </aside>
@@ -1832,6 +2064,7 @@ export function App() {
                   <label>
                     Admission date
                     <input
+                      type='date'
                       value={uploadForm.admission_date}
                       onChange={(event) => setUploadForm((current) => ({ ...current, admission_date: event.target.value }))}
                     />
@@ -1839,6 +2072,7 @@ export function App() {
                   <label>
                     Discharge date
                     <input
+                      type='date'
                       value={uploadForm.discharge_date}
                       onChange={(event) => setUploadForm((current) => ({ ...current, discharge_date: event.target.value }))}
                     />
@@ -1852,7 +2086,7 @@ export function App() {
                   </label>
                   <label className='full-width'>
                     Clinical note files
-                    <input multiple type='file' onChange={handleFilesSelected} />
+                    <input multiple type='file' accept={ACCEPTED_UPLOAD_TYPES} onChange={handleFilesSelected} />
                   </label>
                   {patientIdDetection ? (
                     <div className={`full-width detection-card ${patientIdDetection.patient_id ? 'detection-card--success' : 'detection-card--neutral'}`}>
@@ -1930,7 +2164,7 @@ export function App() {
                             </label>
                             <label>
                               Document date
-                              <input value={entry.document_date} onChange={(event) => updateUploadEntry(index, 'document_date', event.target.value)} />
+                              <input type='date' value={entry.document_date} onChange={(event) => updateUploadEntry(index, 'document_date', event.target.value)} />
                             </label>
                             <label className='checkbox-row'>
                               <input
@@ -2016,6 +2250,9 @@ export function App() {
                           <p>{document.original_filename}</p>
                           <p>{document.document_date || 'Date not supplied'}</p>
                           <span>{shortHash(document.sha256)}</span>
+                          <button type='button' className='ghost-button' onClick={() => void downloadDocument(selectedNoteSet.id, document)} disabled={isBusy}>
+                            Download
+                          </button>
                         </article>
                       ))}
                     </div>
@@ -2422,6 +2659,14 @@ export function App() {
                     <dt>Updated</dt>
                     <dd>{formatDateTime(appSettings?.updated_at)}</dd>
                   </div>
+                  <div>
+                    <dt>EMR API</dt>
+                    <dd>{appSettings?.emr_api_enabled ? 'Enabled' : 'Stub configured only'}</dd>
+                  </div>
+                  <div>
+                    <dt>Runtime readiness</dt>
+                    <dd>{readiness ? `${readiness.status} (${readiness.failed} failed, ${readiness.warnings} warnings)` : 'Not loaded'}</dd>
+                  </div>
                 </div>
               </aside>
 
@@ -2598,9 +2843,140 @@ export function App() {
                         }
                       />
                     </label>
+                    <label className='checkbox-row full-width'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.emr_api_enabled}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_api_enabled: event.target.checked } : current))}
+                      />
+                      Enable EMR API connector
+                    </label>
+                    <label>
+                      EMR vendor label
+                      <input
+                        value={settingsForm.emr_vendor_name}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_vendor_name: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      FHIR base URL
+                      <input
+                        value={settingsForm.emr_fhir_base_url}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_fhir_base_url: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      SMART client ID
+                      <input
+                        value={settingsForm.emr_smart_client_id}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_client_id: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      SMART client secret
+                      <input
+                        type='password'
+                        autoComplete='off'
+                        value={settingsForm.emr_smart_client_secret}
+                        placeholder={appSettings?.emr_smart_client_secret_configured ? 'Configured. Enter a new secret to replace it.' : 'Optional until EMR registration'}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  emr_smart_client_secret: event.target.value,
+                                  clear_emr_smart_client_secret: false,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.clear_emr_smart_client_secret}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, clear_emr_smart_client_secret: event.target.checked } : current))
+                        }
+                      />
+                      Clear stored SMART client secret
+                    </label>
+                    <label className='full-width'>
+                      SMART scopes
+                      <input
+                        value={settingsForm.emr_smart_scopes}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_scopes: event.target.value } : current))}
+                      />
+                    </label>
+                    <label>
+                      EMR timeout (seconds)
+                      <input
+                        type='number'
+                        min={1}
+                        max={60}
+                        value={settingsForm.emr_api_timeout_seconds}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, emr_api_timeout_seconds: Number(event.target.value || 1) } : current))
+                        }
+                      />
+                    </label>
+                    <section className='panel-subsection full-width'>
+                      <h3>Alleva import profile</h3>
+                      <div className='fact-list'>
+                        <div>
+                          <dt>Adapter</dt>
+                          <dd>{emrProfile?.adapter_key || 'Not loaded'}</dd>
+                        </div>
+                        <div>
+                          <dt>Live import</dt>
+                          <dd>{emrProfile?.live_import_status || 'Not configured'}</dd>
+                        </div>
+                        <div>
+                          <dt>Export formats</dt>
+                          <dd>{emrProfile?.supported_export_formats.join(', ') || 'Not loaded'}</dd>
+                        </div>
+                        <div>
+                          <dt>Document sections</dt>
+                          <dd>{emrProfile?.document_manager_sections.map((section) => section.label).join(', ') || 'Not loaded'}</dd>
+                        </div>
+                      </div>
+                      <div className='form-actions'>
+                        <button type='button' className='ghost-button' onClick={handleEmrDiscovery} disabled={isBusy}>
+                          Check SMART discovery
+                        </button>
+                      </div>
+                      {emrDiscovery ? (
+                        <p className='muted-text'>
+                          Discovery: {emrDiscovery.status}; auth endpoint {emrDiscovery.authorization_endpoint_configured ? 'found' : 'missing'}, token endpoint{' '}
+                          {emrDiscovery.token_endpoint_configured ? 'found' : 'missing'}.
+                        </p>
+                      ) : null}
+                      <div className='filter-row'>
+                        <label>
+                          Import plan patient ID
+                          <input value={emrPlanPatientId} onChange={(event) => setEmrPlanPatientId(event.target.value)} />
+                        </label>
+                        <button type='button' className='ghost-button' onClick={handleEmrImportPlan} disabled={isBusy}>
+                          Build import plan
+                        </button>
+                      </div>
+                      {emrImportPlan ? (
+                        <ol className='compact-list'>
+                          {emrImportPlan.planned_requests.map((request) => (
+                            <li key={request.step}>
+                              <strong>{request.method}</strong> {request.url}
+                            </li>
+                          ))}
+                        </ol>
+                      ) : null}
+                    </section>
                     <div className='full-width form-actions'>
                       <button type='submit' disabled={isBusy}>
                         Save settings
+                      </button>
+                      <button type='button' className='ghost-button' onClick={() => void loadReadiness()} disabled={isBusy}>
+                        Recheck readiness
                       </button>
                     </div>
                   </form>

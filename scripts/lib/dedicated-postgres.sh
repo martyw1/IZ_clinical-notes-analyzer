@@ -3,10 +3,9 @@
 STARTUP_DB_DEFAULT_COMPOSE_PROJECT='iz_clinical_notes_analyzer'
 STARTUP_DB_DEFAULT_DATABASE_NAME='iz_clinical_notes_analyzer'
 STARTUP_DB_DEFAULT_DATABASE_USER='iz_clinical_notes_app'
-STARTUP_DB_DEFAULT_DATABASE_PASSWORD='change-me-app'
 STARTUP_DB_DEFAULT_VOLUME_NAME='iz_clinical_notes_analyzer_postgres_data'
+STARTUP_DB_DEFAULT_BACKEND_DATA_VOLUME_NAME='iz_clinical_notes_analyzer_backend_data'
 STARTUP_BOOTSTRAP_ADMIN_USERNAME='admin'
-STARTUP_BOOTSTRAP_ADMIN_PASSWORD='r3!@analyzer#123'
 STARTUP_BOOTSTRAP_ADMIN_RESET='true'
 
 startup_db_info() {
@@ -163,10 +162,45 @@ print(f"postgresql+psycopg://{user}:{password}@{host}:{port}/{database}")
 PY
 }
 
+startup_db_is_placeholder_secret() {
+  case "${1:-}" in
+    ""|change-me|change-me-*|replace-with*|placeholder*|r3!@analyzer#123)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+startup_db_random_secret() {
+  python3 - "$1" <<'PY'
+import secrets
+import string
+import sys
+
+length = int(sys.argv[1])
+alphabet = string.ascii_letters + string.digits + "-_!@#$%^+="
+print("".join(secrets.choice(alphabet) for _ in range(length)))
+PY
+}
+
+startup_db_secret_value() {
+  local env_file="$1"
+  local key="$2"
+  local length="$3"
+  local current_value
+
+  current_value="${!key:-$(startup_db_env_value "$env_file" "$key")}"
+  if startup_db_is_placeholder_secret "$current_value"; then
+    startup_db_random_secret "$length"
+  else
+    echo "$current_value"
+  fi
+}
+
 startup_db_apply_env_defaults() {
   local env_file="$1"
   local postgres_port="$2"
-  local database_name database_user database_password database_host database_url volume_name compose_project_name
+  local database_name database_user database_password database_host database_url volume_name backend_data_volume_name compose_project_name secret_key data_encryption_key bootstrap_admin_password
 
   compose_project_name="${COMPOSE_PROJECT_NAME:-$STARTUP_DB_DEFAULT_COMPOSE_PROJECT}"
 
@@ -176,26 +210,35 @@ startup_db_apply_env_defaults() {
 
   database_password="${DATABASE_PASSWORD:-$(startup_db_env_value "$env_file" DATABASE_PASSWORD)}"
   database_password="${database_password:-$(startup_db_env_value "$env_file" POSTGRES_PASSWORD)}"
-  database_password="${database_password:-$STARTUP_DB_DEFAULT_DATABASE_PASSWORD}"
+  if startup_db_is_placeholder_secret "$database_password"; then
+    database_password="$(startup_db_random_secret 40)"
+  fi
 
   database_host='127.0.0.1'
 
   volume_name="${POSTGRES_VOLUME_NAME:-$STARTUP_DB_DEFAULT_VOLUME_NAME}"
+  backend_data_volume_name="${BACKEND_DATA_VOLUME_NAME:-$STARTUP_DB_DEFAULT_BACKEND_DATA_VOLUME_NAME}"
+  secret_key="$(startup_db_secret_value "$env_file" SECRET_KEY 64)"
+  data_encryption_key="$(startup_db_secret_value "$env_file" DATA_ENCRYPTION_KEY 64)"
+  bootstrap_admin_password="$(startup_db_secret_value "$env_file" BOOTSTRAP_ADMIN_PASSWORD 24)"
 
   database_url="$(startup_db_build_database_url "$database_user" "$database_password" "$database_host" "$postgres_port" "$database_name")"
 
   startup_db_set_env_value "$env_file" COMPOSE_PROJECT_NAME "$compose_project_name"
   startup_db_set_env_value "$env_file" POSTGRES_PORT "$postgres_port"
   startup_db_set_env_value "$env_file" POSTGRES_VOLUME_NAME "$volume_name"
+  startup_db_set_env_value "$env_file" BACKEND_DATA_VOLUME_NAME "$backend_data_volume_name"
   startup_db_set_env_value "$env_file" DATABASE_HOST "$database_host"
   startup_db_set_env_value "$env_file" DATABASE_PORT "$postgres_port"
   startup_db_set_env_value "$env_file" DATABASE_NAME "$database_name"
   startup_db_set_env_value "$env_file" DATABASE_USER "$database_user"
   startup_db_set_env_value "$env_file" DATABASE_PASSWORD "$database_password"
+  startup_db_set_env_value "$env_file" SECRET_KEY "$secret_key"
+  startup_db_set_env_value "$env_file" DATA_ENCRYPTION_KEY "$data_encryption_key"
   startup_db_set_env_value "$env_file" POSTGRES_SERVICE_HOST "postgres"
   startup_db_set_env_value "$env_file" DATABASE_URL "$database_url"
   startup_db_set_env_value "$env_file" BOOTSTRAP_ADMIN_USERNAME "$STARTUP_BOOTSTRAP_ADMIN_USERNAME"
-  startup_db_set_env_value "$env_file" BOOTSTRAP_ADMIN_PASSWORD "$STARTUP_BOOTSTRAP_ADMIN_PASSWORD"
+  startup_db_set_env_value "$env_file" BOOTSTRAP_ADMIN_PASSWORD "$bootstrap_admin_password"
   startup_db_set_env_value "$env_file" RESET_BOOTSTRAP_ADMIN_ON_STARTUP "$STARTUP_BOOTSTRAP_ADMIN_RESET"
 
   # Keep legacy variable names aligned for older local tooling.

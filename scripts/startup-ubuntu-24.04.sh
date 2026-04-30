@@ -96,6 +96,35 @@ print_db_failure_diagnostics() {
   fi
 }
 
+require_non_placeholder_secret() {
+  local key="$1"
+  local current_value
+  current_value="$(startup_db_env_value "$ENV_FILE" "$key")"
+
+  case "$current_value" in
+    ""|change-me|change-me-*|replace-with*|r3!@analyzer#123)
+      warn "${key} is missing or still using a placeholder value in ${ENV_FILE}."
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+validate_vps_secrets() {
+  local failed=0
+
+  require_non_placeholder_secret DATABASE_PASSWORD || failed=1
+  require_non_placeholder_secret SECRET_KEY || failed=1
+  require_non_placeholder_secret DATA_ENCRYPTION_KEY || failed=1
+  require_non_placeholder_secret BOOTSTRAP_ADMIN_PASSWORD || failed=1
+
+  if [[ "$failed" == "1" ]]; then
+    warn 'Set strong values in .env before starting this stack on a VPS.'
+    exit 1
+  fi
+}
+
 cd "$ROOT_DIR"
 info "Starting Ubuntu 24.04 bootstrap from ${ROOT_DIR}"
 
@@ -113,6 +142,7 @@ startup_db_set_env_value "$ENV_FILE" BACKEND_PORT "$BACKEND_PORT"
 startup_db_set_env_value "$ENV_FILE" FRONTEND_PORT "$FRONTEND_PORT"
 startup_db_apply_env_defaults "$ENV_FILE" "$POSTGRES_PORT"
 export FRONTEND_PORT BACKEND_PORT POSTGRES_PORT
+validate_vps_secrets
 
 if ! command -v docker >/dev/null 2>&1; then
   warn 'Docker is required but not installed.'

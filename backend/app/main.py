@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 
 from app.api.routes import router
@@ -18,6 +19,7 @@ from app.db.bootstrap import ensure_schema_compatibility
 from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 from app.services.audit import bind_request_context, log_event, log_request_completed, log_unhandled_exception, reset_audit_context, system_audit_context
+from app.services.runtime_checks import assert_startup_ready, readiness_payload
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None
 
 def initialize_database() -> None:
     with system_audit_context():
+        startup_checks = assert_startup_ready()
         wait_for_database()
         added_columns = ensure_schema_compatibility(engine)
         Base.metadata.create_all(bind=engine)
@@ -92,13 +95,17 @@ def initialize_database() -> None:
             target_entity='application',
             target_entity_type='application',
             target_entity_id=settings.app_name,
-            details={'schema_updates': added_columns},
+            details={
+                'schema_updates': added_columns,
+                'runtime_checks': [check.as_dict() for check in startup_checks],
+            },
             message='Application startup and schema compatibility checks completed.',
         )
 
 
 def create_app() -> FastAPI:
     os.makedirs(settings.upload_dir_path, exist_ok=True)
+    os.makedirs(settings.log_dir_path, exist_ok=True)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -106,6 +113,8 @@ def create_app() -> FastAPI:
         yield
 
     api = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+    api.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 
     api.add_middleware(
         CORSMiddleware,
@@ -129,6 +138,11 @@ def create_app() -> FastAPI:
 
         duration_ms = (perf_counter() - started_at) * 1000
         response.headers['x-request-id'] = getattr(request.state, 'request_id', '')
+        response.headers.setdefault('cache-control', 'no-store')
+        response.headers.setdefault('x-content-type-options', 'nosniff')
+        response.headers.setdefault('x-frame-options', 'DENY')
+        response.headers.setdefault('referrer-policy', 'no-referrer')
+        response.headers.setdefault('permissions-policy', 'camera=(), microphone=(), geolocation=()')
         log_request_completed(request, status_code=response.status_code, duration_ms=duration_ms)
         reset_audit_context(token)
         return response
@@ -140,6 +154,10 @@ def create_app() -> FastAPI:
     @api.get('/api/health')
     def api_health():
         return {'status': 'ok'}
+
+    @api.get('/api/readiness')
+    def api_readiness():
+        return readiness_payload()
 
     api.include_router(router)
     return api

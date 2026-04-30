@@ -11,6 +11,7 @@ from app.models.models import Role, User
 from app.services.audit import log_event, refresh_session_audit_context, set_actor_context
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/auth/login')
+PASSWORD_RESET_ALLOWED_PATHS = {'/api/auth/reset-password', '/api/users/me/change-password', '/api/users/me', '/api/health', '/health'}
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
@@ -63,6 +64,8 @@ def get_current_user(request: Request, db: Session = Depends(get_db), token: str
             message=f'Locked account {user.username} attempted API access.',
         )
         raise HTTPException(status_code=403, detail='Account locked')
+    if user.must_reset_password and request.url.path not in PASSWORD_RESET_ALLOWED_PATHS:
+        raise HTTPException(status_code=403, detail='Password reset required before accessing clinical data')
     set_actor_context(user, request)
     refresh_session_audit_context(db)
     return user

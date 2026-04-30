@@ -40,6 +40,13 @@ def app_settings_public_payload(settings_row: AppSetting) -> dict[str, object]:
         'llm_use_for_access_review': settings_row.llm_use_for_access_review,
         'llm_use_for_evaluation_gap_analysis': settings_row.llm_use_for_evaluation_gap_analysis,
         'llm_analysis_instructions': settings_row.llm_analysis_instructions,
+        'emr_api_enabled': settings_row.emr_api_enabled,
+        'emr_vendor_name': settings_row.emr_vendor_name,
+        'emr_fhir_base_url': settings_row.emr_fhir_base_url,
+        'emr_smart_client_id': settings_row.emr_smart_client_id,
+        'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
+        'emr_smart_scopes': settings_row.emr_smart_scopes,
+        'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
         'updated_by_id': settings_row.updated_by_id,
         'updated_at': settings_row.updated_at,
     }

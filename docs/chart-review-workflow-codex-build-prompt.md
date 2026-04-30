@@ -23,7 +23,7 @@ The app must support:
 ### 2.1 Security, identity, and access
 - Implement robust authentication and authorization with RBAC.
 - Roles at minimum: `admin`, `counselor`, `manager`.
-- Seed initial admin account: username `admin`, password `r3!@analyzer#123`.
+- Seed initial admin account: username `admin`, password from `BOOTSTRAP_ADMIN_PASSWORD` in `.env`.
   - Treat this bootstrap admin password as static and managed outside normal in-app reset flows.
 - Secure session management, CSRF protection, password hashing (Argon2id or bcrypt with strong work factor), account lockout/rate limiting, optional MFA-ready architecture.
 - Admin-only screens for user management, rule management, and deep logs.
