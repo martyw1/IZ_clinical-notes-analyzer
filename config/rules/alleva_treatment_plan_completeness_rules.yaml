@@ -1,0 +1,205 @@
+config_version: "0.1.0"
+config_status: "draft_from_transcript"
+organization: "R3 Recovery Services"
+last_updated: "2026-05-12"
+
+engine:
+  name: "alleva_completeness_rules_engine"
+  runtime_mode: "local_only"
+  requires_cloud_ai: false
+  phi_policy:
+    config_contains_phi: false
+    allow_phi_in_logs: false
+    redact_phi_in_exports: true
+  evaluation_defaults:
+    date_handling: "calendar_days"
+    missing_data_result: "unable_to_evaluate"
+    unknown_level_of_care_result: "unable_to_evaluate"
+    default_warning_windows_days:
+      due_soon: 7
+
+workflow:
+  id: "treatment_plan_tracking"
+  display_name: "Treatment Plan Tracking"
+  priority: 1
+  enabled: true
+  scope:
+    include_client_statuses: ["active"]
+    exclude_client_statuses: ["discharged", "inactive"]
+
+levels_of_care:
+  PHP:
+    display_name: "Partial Hospitalization Program"
+    aliases: ["PHP", "Partial Hospitalization", "Partial Hospitalization Program"]
+    treatment_plan_update_interval_days: 30
+    required_individual_sessions_per_week: 2
+    required_group_sessions_per_week: 5
+    required_daily_therapy_hours: 4
+  IOP:
+    display_name: "Intensive Outpatient Program"
+    aliases: ["IOP", "Intensive Outpatient", "Intensive Outpatient Program"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
+  OUTPATIENT:
+    display_name: "Outpatient"
+    aliases: ["Outpatient", "OP", "OUTPATIENT"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
+
+rules:
+  - id: "TP-001"
+    workflow_id: "treatment_plan_tracking"
+    name: "Only active charts are in scope"
+    enabled: true
+    severity: "info"
+    category: "scope"
+    applies_to:
+      client_status: ["active"]
+    logic:
+      type: "scope_filter"
+      include_when:
+        field: "client_status"
+        operator: "in"
+        value: ["active"]
+    pass_message: "Chart is active and eligible for Treatment Plan Tracking."
+    fail_message: "Chart is not active and is excluded from Treatment Plan Tracking."
+    output_status_on_fail: "compliant"
+
+  - id: "TP-010"
+    workflow_id: "treatment_plan_tracking"
+    name: "Current level of care must be present"
+    enabled: true
+    severity: "unable_to_evaluate"
+    category: "level_of_care"
+    logic:
+      type: "field_required"
+      field: "current_level_of_care"
+    pass_message: "Current level of care found: {current_level_of_care}."
+    fail_message: "Unable to evaluate because current level of care is missing."
+    output_status_on_fail: "unable_to_evaluate"
+
+  - id: "TP-011"
+    workflow_id: "treatment_plan_tracking"
+    name: "Current level of care must map to configured rule set"
+    enabled: true
+    severity: "unable_to_evaluate"
+    category: "level_of_care"
+    logic:
+      type: "lookup_required"
+      field: "current_level_of_care"
+      lookup_table: "levels_of_care"
+      match_against: "aliases"
+    pass_message: "Level of care {current_level_of_care} mapped to {mapped_level_of_care}."
+    fail_message: "Unable to evaluate because level of care {current_level_of_care} is not configured."
+    output_status_on_fail: "unable_to_evaluate"
+
+  - id: "TP-020"
+    workflow_id: "treatment_plan_tracking"
+    name: "Treatment plan must exist"
+    enabled: true
+    severity: "critical"
+    category: "treatment_plan_presence"
+    logic:
+      type: "boolean_required_true"
+      field: "treatment_plan.exists"
+    pass_message: "Treatment plan exists."
+    fail_message: "Treatment plan is missing."
+    output_status_on_fail: "noncompliant"
+
+  - id: "TP-021"
+    workflow_id: "treatment_plan_tracking"
+    name: "Treatment plan must have a completed or updated date"
+    enabled: true
+    severity: "critical"
+    category: "treatment_plan_date"
+    logic:
+      type: "at_least_one_field_required"
+      fields: ["treatment_plan.last_completed_date", "treatment_plan.last_updated_date"]
+    pass_message: "Treatment plan date found: {treatment_plan_effective_date}."
+    fail_message: "Treatment plan exists but no completed/updated date was found."
+    output_status_on_fail: "unable_to_evaluate"
+
+  - id: "TP-030"
+    workflow_id: "treatment_plan_tracking"
+    name: "Calculate treatment-plan due date from level-of-care interval"
+    enabled: true
+    severity: "info"
+    category: "date_calculation"
+    logic:
+      type: "date_add"
+      source_date_field: "treatment_plan_effective_date"
+      interval_days_from: "levels_of_care.{mapped_level_of_care}.treatment_plan_update_interval_days"
+      output_field: "treatment_plan.calculated_due_date"
+    pass_message: "Treatment plan due date calculated as {treatment_plan.calculated_due_date}."
+    fail_message: "Unable to calculate treatment-plan due date."
+    output_status_on_fail: "unable_to_evaluate"
+
+  - id: "TP-031"
+    workflow_id: "treatment_plan_tracking"
+    name: "Treatment plan must not be late"
+    enabled: true
+    severity: "critical"
+    category: "treatment_plan_timeliness"
+    logic:
+      type: "date_compare"
+      left_field: "evaluation_date"
+      operator: "<="
+      right_field: "treatment_plan.calculated_due_date"
+    pass_message: "Treatment plan is current through {treatment_plan.calculated_due_date}."
+    fail_message: "Treatment plan is late. Due date was {treatment_plan.calculated_due_date}; evaluation date is {evaluation_date}."
+    output_status_on_fail: "noncompliant"
+
+  - id: "TP-034"
+    workflow_id: "treatment_plan_tracking"
+    name: "Treatment plan due within warning window"
+    enabled: true
+    severity: "warning"
+    category: "treatment_plan_warning"
+    logic:
+      type: "days_until"
+      from_date_field: "evaluation_date"
+      to_date_field: "treatment_plan.calculated_due_date"
+      operator: "between_inclusive"
+      value:
+        min: 0
+        max_from_engine_default: "default_warning_windows_days.due_soon"
+    pass_message: "Treatment plan is due soon on {treatment_plan.calculated_due_date}."
+    fail_message: "Treatment plan is outside the warning window."
+    output_status_on_pass: "due_soon"
+    emit_only_when_true: true
+
+  - id: "TP-040"
+    workflow_id: "treatment_plan_tracking"
+    name: "PHP requires two individual sessions per week"
+    enabled: true
+    severity: "critical"
+    category: "attendance_individual"
+    applies_to:
+      mapped_level_of_care: ["PHP"]
+    logic:
+      type: "numeric_compare"
+      left_field: "attendance.individual_sessions_completed_count"
+      operator: ">="
+      right_value_from: "levels_of_care.PHP.required_individual_sessions_per_week"
+    pass_message: "PHP individual-session requirement met."
+    fail_message: "PHP individual-session requirement not met."
+    output_status_on_fail: "noncompliant"
+
+  - id: "TP-050"
+    workflow_id: "treatment_plan_tracking"
+    name: "IOP/outpatient requires one individual session per week"
+    enabled: true
+    severity: "critical"
+    category: "attendance_individual"
+    applies_to:
+      mapped_level_of_care: ["IOP", "OUTPATIENT"]
+    logic:
+      type: "numeric_compare"
+      left_field: "attendance.individual_sessions_completed_count"
+      operator: ">="
+      right_value: 1
+    pass_message: "Individual-session requirement met."
+    fail_message: "Individual-session requirement not met."
+    output_status_on_fail: "noncompliant"
