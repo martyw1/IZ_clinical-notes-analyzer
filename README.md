@@ -1,92 +1,530 @@
 # IZ Clinical Notes Analyzer
 
-IZ Clinical Notes Analyzer is a chart-review application for clinical note binders. It combines a React frontend, a FastAPI backend, and a dedicated PostgreSQL database to support uploads, automated checklist scoring, office-manager review, role-based access control, and forensic-style audit logging.
+IZ Clinical Notes Analyzer is a local-first clinical chart-review application for checking clinical note binders, Treatment Plan Tracking completeness, office-manager review workflow, role-based access control, and audit logging.
+
+The current Windows direction is intentionally simple for clinic users:
+
+- runs on ordinary Windows 10 and Windows 11 machines
+- does not require Docker for the local desktop workflow
+- does not require PostgreSQL for the local desktop workflow
+- uses SQLite for local desktop data
+- stores runtime data under the user's local Windows app-data folder
+- provides a double-click Windows launcher
+- provides PowerShell scripts for full-stack testing and Alleva API connectivity checks
+- keeps deterministic Treatment Plan Tracking completeness rules in YAML configuration
 
 ## What this app does
 
-- Accepts clinical note binder uploads grouped by `patient_id`
-- Auto-detects `patient_id` from uploaded files when possible
-- Creates an immutable versioned note set for every upload/update
-- Generates an automated review chart from the uploaded binder
-- Lets reviewers confirm, reject, or mark checklist items as not applicable
-- Supports office-manager approval or return-to-counselor workflow
-- Keeps tamper-evident forensic audit logs for reads, writes, auth, downloads, and workflow changes
-- Stores uploaded source files encrypted at rest with SHA-256 digests for later validation
-- Includes a readiness screen and startup checks for required dependencies, writable private storage, parser support, and placeholder secrets
-- Provides a SMART-on-FHIR/FHIR R4 EMR connector profile and import-plan stub for future EMR API work
+- Accepts clinical note binder uploads grouped by `patient_id`.
+- Auto-detects `patient_id` from uploaded files when possible.
+- Creates an immutable versioned note set for every upload/update.
+- Generates automated review output from uploaded binder contents.
+- Runs deterministic completeness checks from external YAML rules.
+- Lets reviewers confirm, reject, or mark checklist items as not applicable.
+- Supports office-manager approval or return-to-counselor workflow.
+- Keeps audit logs for reads, writes, auth, downloads, and workflow changes.
+- Stores uploaded source files encrypted at rest with SHA-256 digests.
+- Includes runtime readiness checks for the local database, storage, encryption, parser support, dependency support, and rules configuration.
+- Provides EMR connector boundaries and Alleva API connectivity probes for future EMR integration work.
 
 ## Who should use which section
 
-- Non-technical users: start with [Quick Start For Non-Technical Users](#quick-start-for-non-technical-users)
-- Developers: use [Local Development](#local-development)
-- Server operators: use [VPS Deployment](#vps-deployment) and [Troubleshooting](#troubleshooting)
+- Non-technical Windows users: start with [Windows Quick Start](#windows-quick-start).
+- Windows developers/testers: use [Windows Developer and Test Workflow](#windows-developer-and-test-workflow).
+- Alleva API testing: use [Alleva API Connectivity Test](#alleva-api-connectivity-test).
+- Docker/server operators: use [Docker and VPS Runtime](#docker-and-vps-runtime).
 
-## Quick Start For Non-Technical Users
+## Windows Quick Start
 
-If you just need to start the app and use it, use one of the startup scripts. They create `.env` if needed, prepare dependencies, start the database first, launch the app, and run a smoke test.
+This is the recommended local run path for ordinary Windows 10 and Windows 11 machines.
 
-### macOS
+### 1. Get the application folder onto the Windows machine
 
-1. Open Terminal in this project folder.
-2. Run:
+Use one of these approaches:
 
-```bash
-./scripts/startup-macos.sh
+- download or copy a release folder prepared for this app
+- clone the repo with Git
+- copy the repo folder from another machine
+
+For a source checkout, keep the project in a normal local folder such as:
+
+```text
+C:\Users\<your-user>\local-apps\IZ_clinical-notes-analyzer
 ```
 
-3. If asked, choose ports for the frontend, backend, and database.
-4. Wait for the script to finish and open the frontend URL it prints, usually `http://localhost:5173`.
+Avoid running the app directly from OneDrive, Dropbox, iCloud Drive, Google Drive, or a network share. The source code can be backed up elsewhere, but the live runtime database and uploads should stay in local app data.
 
-### Windows
+### 2. Install Python only if running from source
 
-1. Open PowerShell in this project folder.
-2. Run:
+A packaged end-user release should include its own runtime. A source checkout requires Python 3.11 or newer.
+
+To check Python from PowerShell:
 
 ```powershell
-.\scripts\startup-windows.ps1
+python --version
 ```
 
-3. Wait for the script to finish and open `http://localhost:5173` unless you changed the port.
+Expected result:
 
-### Ubuntu 24.04 or VPS
-
-1. SSH into the server and open this project folder.
-2. Run:
-
-```bash
-./scripts/startup-ubuntu-24.04.sh
+```text
+Python 3.11.x
 ```
 
-3. Wait for the smoke test to pass.
-4. Open the frontend on the configured `FRONTEND_PORT`.
+or newer.
 
-### First sign-in
+If Python is missing, install Python 3.11+ from python.org or the Microsoft Store, then reopen PowerShell and check again.
 
-- Username: value of `BOOTSTRAP_ADMIN_USERNAME` in `.env`
-- Password: value of `BOOTSTRAP_ADMIN_PASSWORD` in `.env`
-- Default bootstrap username: `admin`
-- Startup scripts replace placeholder `DATABASE_PASSWORD`, `SECRET_KEY`, `DATA_ENCRYPTION_KEY`, and `BOOTSTRAP_ADMIN_PASSWORD` with strong local random values.
-- The generated `.env.example` still shows placeholders so operators can see which values exist.
+### 3. Double-click the launcher
 
-The bootstrap admin password is managed outside the app and is reset from `.env` on startup when `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`.
+From Windows File Explorer, open the project folder and double-click:
 
-## Simple User Instructions
+```text
+scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+That launcher runs:
+
+```text
+scripts\startup-windows-local.ps1
+```
+
+The launcher will:
+
+1. create local runtime folders under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
+2. create a local `.env` file if one does not already exist
+3. generate local secrets and a bootstrap admin password
+4. create or reuse `backend\.venv`
+5. install backend Python dependencies for a source checkout
+6. run the Treatment Plan rules-engine test before launch
+7. start the local FastAPI app on `http://localhost:8000`
+8. open the browser unless started with `-NoBrowser`
+
+### 4. Save the first sign-in credentials
+
+On first launch, the startup window prints credentials similar to this:
+
+```text
+First sign-in credentials:
+  Username: admin
+  Password: <generated-password>
+```
+
+Save the password securely. It is also stored in:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
+```
+
+The default bootstrap username is:
+
+```text
+admin
+```
+
+### 5. Open the app
+
+The local app URL is:
+
+```text
+http://localhost:8000
+```
+
+The API health endpoint is:
+
+```text
+http://localhost:8000/api/health
+```
+
+The readiness endpoint is:
+
+```text
+http://localhost:8000/api/readiness
+```
+
+## Windows Command-Line Startup
+
+If double-clicking the `.cmd` launcher is blocked or you want to see more detail, use PowerShell.
+
+Open PowerShell in the repo root and run:
+
+```powershell
+.\scripts\startup-windows-local.ps1
+```
+
+To start without opening a browser automatically:
+
+```powershell
+.\scripts\startup-windows-local.ps1 -NoBrowser
+```
+
+If PowerShell blocks script execution, run the script with a one-time bypass from the repo root:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1
+```
+
+The double-click `.cmd` launcher already uses this one-time bypass for the app script. It does not permanently change the Windows execution policy.
+
+## Windows Runtime Data Locations
+
+The Windows local runtime uses the user's local app-data folder rather than the repo folder.
+
+Default runtime root:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer
+```
+
+Important files and folders:
+
+| Path | Purpose |
+| --- | --- |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env` | Local runtime configuration, generated secrets, bootstrap admin password |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\clinical-notes-analyzer.sqlite3` | Local SQLite application database |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads` | Encrypted uploaded clinical note files |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Optional Alleva connectivity JSON reports |
+
+Test runs use a separate folder:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer Test
+```
+
+## Windows Developer and Test Workflow
+
+Use this when you want to verify that all local app pieces work from a Windows source checkout.
+
+Open PowerShell in the repo root:
+
+```powershell
+.\scripts\test-local-app-stack.ps1
+```
+
+The test script does the following:
+
+1. creates `backend\.venv` if needed
+2. installs backend dependencies from `backend\requirements.txt`
+3. creates a temporary test `.env` under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer Test`
+4. configures SQLite for the test run
+5. runs backend unit tests under `backend\tests`
+6. starts a test server on `http://localhost:8000`
+7. checks `/api/health`
+8. checks `/api/readiness`
+9. logs in as the generated test admin
+10. calls `/api/users/me`
+11. stops the test server
+
+To use a different test port:
+
+```powershell
+.\scripts\test-local-app-stack.ps1 -Port 8010
+```
+
+To skip dependency installation after the environment is already prepared:
+
+```powershell
+.\scripts\test-local-app-stack.ps1 -SkipDependencyInstall
+```
+
+## Alleva API Connectivity Test
+
+The app includes a dedicated connectivity probe for the Alleva API documentation and likely OpenAPI endpoints.
+
+Run from PowerShell in the repo root:
+
+```powershell
+.\scripts\test-alleva-api-connectivity.ps1
+```
+
+To write a JSON report:
+
+```powershell
+.\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+```
+
+Default Swagger UI target:
+
+```text
+https://api.allevasoft.com/swagger/index.html
+```
+
+The script probes:
+
+- Swagger UI
+- `/swagger/v1/swagger.json`
+- `/swagger.json`
+- `/openapi.json`
+- API root
+
+If Alleva provides a different Swagger/OpenAPI URL:
+
+```powershell
+.\scripts\test-alleva-api-connectivity.ps1 -SwaggerUiUrl "https://api.allevasoft.com/swagger/index.html" -WriteJsonReport
+```
+
+If protected endpoints require credentials, set credentials as environment variables for the current PowerShell session. Do not write credentials into source files.
+
+Bearer token example:
+
+```powershell
+$env:ALLEVA_API_BEARER_TOKEN = "paste-token-here"
+.\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+Remove-Item Env:\ALLEVA_API_BEARER_TOKEN
+```
+
+API key example:
+
+```powershell
+$env:ALLEVA_API_KEY = "paste-api-key-here"
+.\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+Remove-Item Env:\ALLEVA_API_KEY
+```
+
+Reports are written to:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports
+```
+
+Credential guardrails:
+
+- do not commit Alleva credentials
+- do not paste credentials into `.env.example`
+- do not paste credentials into README files or YAML rules files
+- do not paste PHI into API connectivity tests
+
+## Running Backend Pieces Manually on Windows
+
+Most users should use the launcher or the test script. These manual commands are useful for debugging.
+
+### Create or reuse the backend virtual environment
+
+```powershell
+cd C:\path\to\IZ_clinical-notes-analyzer
+python -m venv backend\.venv
+.\backend\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+### Run backend tests
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m pytest backend\tests -q
+```
+
+### Run only the rules-engine tests
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m pytest backend\tests\test_rules_engine.py -q
+```
+
+### Start the local API manually
+
+The startup script normally sets the right environment file. Manual runs should either use the generated app-data `.env` or set the environment variable directly.
+
+```powershell
+$env:IZ_CNA_ENV_FILE = "$env:LOCALAPPDATA\IZ Clinical Notes Analyzer\.env"
+$env:PYTHONPATH = "$PWD\backend"
+.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000
+```
+
+### Start the lean desktop app entrypoint
+
+The repo also includes a lean desktop starter:
+
+```powershell
+.\scripts\start-desktop-local.ps1
+```
+
+or with a custom port:
+
+```powershell
+.\scripts\start-desktop-local.ps1 -Port 8010
+```
+
+This starts `app.desktop_main:app`. Use `startup-windows-local.ps1` for the fuller non-technical-user startup path because it creates the app-data `.env`, runs readiness-oriented checks, and opens the browser.
+
+## Running Frontend Pieces Manually on Windows
+
+The Windows local backend can serve built frontend assets if `frontend\dist` exists. During active frontend development, run Vite separately.
+
+### Install frontend dependencies
+
+```powershell
+cd frontend
+npm install
+```
+
+### Start the Vite dev server
+
+```powershell
+npm run dev
+```
+
+Default Vite URL:
+
+```text
+http://localhost:5173
+```
+
+If the backend is running on `http://localhost:8000`, make sure the frontend API proxy or frontend environment points API calls to the backend.
+
+### Build production frontend assets
+
+```powershell
+cd frontend
+npm run build
+```
+
+Expected build output:
+
+```text
+frontend\dist
+```
+
+After building, restart the Windows local backend. The desktop/backend entrypoint can serve the built assets from `frontend\dist` when configured by the app code.
+
+## Treatment Plan Tracking Rules
+
+The first deterministic completeness workflow is configured here:
+
+```text
+config\rules\alleva_treatment_plan_completeness_rules.yaml
+```
+
+The rules engine lives here:
+
+```text
+backend\app\services\rules_engine.py
+```
+
+The rules API boundary lives here:
+
+```text
+backend\app\api\rules_routes.py
+```
+
+The rules-engine unit tests live here:
+
+```text
+backend\tests\test_rules_engine.py
+```
+
+The Windows startup script validates the rules engine before launch by running the rules-engine test.
+
+Rules-file guardrails:
+
+- keep PHI out of YAML rules files
+- keep vendor credentials out of YAML rules files
+- treat YAML rules as deterministic business logic, not as LLM prompts
+- add future workflows as versioned rules profiles under `config\rules`
+
+## EMR API Readiness
+
+The app is upload-first today. It has a standards-aligned EMR connector boundary for future EMR work.
+
+Current EMR-related behavior:
+
+- Admin settings can store EMR vendor label, FHIR base URL, SMART client ID/secret, scopes, and timeout.
+- `GET /api/emr/profile` reports configured SMART/FHIR profile information.
+- `POST /api/emr/discover` validates SMART `.well-known/smart-configuration` discovery when a real EMR FHIR base URL is available.
+- `GET /api/emr/import-plan?patient_id=...` shows the planned FHIR R4 `Patient`, `DocumentReference`, `Binary`, and optional `Provenance` request flow.
+- Alleva live API import remains gated until client/vendor credentials, tenant base URLs, attachment behavior, pagination/rate-limit rules, and official documentation are available.
+
+The local connectivity script does not import patient data. It only checks reachability and OpenAPI/Swagger availability.
+
+## Default Local URLs
+
+Windows local desktop runtime:
+
+| Purpose | URL |
+| --- | --- |
+| App | `http://localhost:8000` |
+| API health | `http://localhost:8000/api/health` |
+| Readiness | `http://localhost:8000/api/readiness` |
+| Backend API base | `http://localhost:8000/api` |
+
+Frontend dev mode, when run separately:
+
+| Purpose | URL |
+| --- | --- |
+| Vite frontend | `http://localhost:5173` |
+| Backend API | `http://localhost:8000/api` |
+
+Docker/server mode defaults may expose frontend and backend separately:
+
+| Purpose | URL |
+| --- | --- |
+| Docker frontend | `http://localhost:5173` |
+| Docker backend | `http://localhost:8000` |
+| Docker backend through frontend proxy | `http://localhost:5173/api` |
+
+## Local Configuration
+
+The generated Windows local `.env` is stored outside the repo:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
+```
+
+Important local settings:
+
+| Variable | Purpose | Windows local default |
+| --- | --- | --- |
+| `ENVIRONMENT` | Runtime label | `local-client` |
+| `BACKEND_PORT` | Local backend port | `8000` |
+| `DATABASE_BACKEND` | Local DB engine | `sqlite` |
+| `LOCAL_SQLITE_DB_PATH` | SQLite database file | `clinical-notes-analyzer.sqlite3` |
+| `SECRET_KEY` | JWT signing secret | generated on first startup |
+| `DATA_ENCRYPTION_KEY` | upload encryption key | generated on first startup |
+| `FRONTEND_ORIGIN` | local app origin | `http://localhost:8000` |
+| `FRONTEND_ORIGINS` | allowed local origins | `http://localhost:8000,http://localhost:5173` |
+| `ALLOWED_HOSTS` | accepted host headers | `localhost,127.0.0.1,::1,testserver` |
+| `UPLOAD_DIR` | encrypted upload location | `uploads` under app-data root |
+| `LOG_DIR` | log location | `logs` under app-data root |
+| `RULES_CONFIG_PATH` | Treatment Plan rules file | repo `config\rules\alleva_treatment_plan_completeness_rules.yaml` |
+| `BOOTSTRAP_ADMIN_USERNAME` | bootstrap admin username | `admin` |
+| `BOOTSTRAP_ADMIN_PASSWORD` | bootstrap admin password | generated on first startup |
+| `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` | reset bootstrap admin from `.env` on startup | `true` |
+| `LLM_ENABLED` | optional LLM support | `false` |
+| `EMR_API_ENABLED` | live EMR API support | `false` |
+
+## User Roles
+
+- `admin`
+  - full access
+  - can manage users, settings, logs, charts, uploads, and rules/API configuration
+- `manager`
+  - can review charts and patient note sets
+  - can approve or return charts
+- `counselor`
+  - can upload note sets
+  - can view only their own charts and uploads
+
+## Basic User Workflow
 
 ### Counselor or uploader
 
 1. Sign in.
-2. Open `Upload clinical notes`.
-3. Enter the `patient_id`, or leave it blank and let the app try to detect it from the files.
-4. Add the clinical note files and their metadata.
+2. Open upload/review intake area.
+3. Enter `patient_id`, or leave it blank and let the app try to detect it from files.
+4. Add clinical note files and metadata.
 5. Submit the upload.
-6. The app creates a binder, stores the files, and generates an automated review chart.
+6. The app stores the binder, extracts readable text, and creates automated review output.
 
 ### Reviewer or manager
 
-1. Open `Review queue`.
+1. Open the review queue.
 2. Select the patient chart.
 3. Read the system summary and checklist results.
-4. Confirm or correct the checklist items.
+4. Confirm or correct checklist items.
 5. Approve the chart or return it with a comment.
 
 ### Administrator
@@ -96,253 +534,166 @@ Admins can also:
 - create and manage users
 - unlock users or require password reset
 - review forensic logs
-- update app settings for access-intel, LLM analysis, and EMR API connector registration
-- review `System readiness` from the Settings/dashboard area
+- update app settings
+- review system readiness
+- test future EMR connector settings
 
-## How The App Runs
+## File Rules
 
-### Runtime services
+Supported file extensions:
 
-The normal runtime is Docker Compose with three services:
+- `.csv`
+- `.doc`
+- `.docx`
+- `.jpeg`
+- `.jpg`
+- `.pdf`
+- `.png`
+- `.rtf`
+- `.txt`
+- `.zip`
+
+Limits:
+
+- per-file limit: `50MB`
+- total binder upload limit: `250MB`
+- maximum files per binder upload: `40`
+
+Notes:
+
+- `.doc` files are stored securely; reliable text extraction may require conversion to `.docx`, `.pdf`, or `.txt` first.
+- Patient ID auto-detection scans filenames and readable file contents.
+- New uploads are encrypted before being written to disk.
+- Downloads are decrypted only after authentication and authorization checks pass.
+
+## Troubleshooting Windows Local Runs
+
+### The double-click launcher opens and closes too quickly
+
+Run it from PowerShell so the error stays visible:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1
+```
+
+Also check startup logs:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs
+```
+
+### Python is not found
+
+For source checkout runs, install Python 3.11+ and reopen PowerShell.
+
+Check:
+
+```powershell
+python --version
+```
+
+A packaged release should include a bundled runtime and should not require the user to install Python.
+
+### Port 8000 is already in use
+
+Find the process using port 8000:
+
+```powershell
+netstat -ano | findstr :8000
+```
+
+Then either stop the conflicting app or run a lean desktop start on another port:
+
+```powershell
+.\scripts\start-desktop-local.ps1 -Port 8010
+```
+
+The fuller startup script currently uses port `8000` from the generated local `.env`.
+
+### Login fails
+
+Check the generated bootstrap credentials in:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
+```
+
+Look for:
+
+```text
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=...
+```
+
+If `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`, restarting the app resets the bootstrap admin from the `.env` values.
+
+### Readiness fails
+
+Open:
+
+```text
+http://localhost:8000/api/readiness
+```
+
+Also inspect:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs
+```
+
+Common causes:
+
+- missing Python dependencies
+- invalid YAML rules file
+- local app-data folder not writable
+- encryption key missing or malformed
+- SQLite database path not writable
+- running from a cloud-synced folder that interferes with runtime file access
+
+### Upload fails
+
+Check for:
+
+- unsupported file extension
+- file larger than `50MB`
+- total upload larger than `250MB`
+- missing `patient_id` with no successful auto-detection
+- conflicting detected patient IDs across uploaded files
+- upload folder not writable
+
+### Alleva connectivity test fails
+
+Run with a JSON report:
+
+```powershell
+.\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+```
+
+Then review the report under:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports
+```
+
+Likely causes:
+
+- network or DNS issue
+- Alleva Swagger/OpenAPI URL changed
+- endpoint requires authentication
+- credentials were not set in environment variables
+- proxy or security software blocked the request
+
+## Docker and VPS Runtime
+
+Docker Compose remains available for developer/server scenarios. It is not the recommended ordinary Windows desktop-user path.
+
+Docker runtime services:
 
 | Service | Purpose | Default exposed port |
 | --- | --- | --- |
-| `frontend` | Serves the React app through nginx and proxies `/api/*` to the backend | `127.0.0.1:5173` |
+| `frontend` | React app served through nginx and proxying `/api/*` to backend | `127.0.0.1:5173` |
 | `backend` | FastAPI API, auth, workflow, uploads, audit logging, schema bootstrap | `127.0.0.1:8000` |
 | `postgres` | Dedicated application-owned PostgreSQL database | `127.0.0.1:5432` |
-
-### Startup sequence
-
-When you use one of the startup scripts, the app starts in this order:
-
-1. Create `.env` from `.env.example` if it does not exist.
-2. Normalize or choose ports.
-3. Fill in dedicated database settings in `.env`.
-4. Generate strong local secrets if `.env` still contains placeholders.
-5. Start the `postgres` container first.
-6. Ensure the application database exists and is owned by the configured database user.
-7. Start the full Docker Compose stack.
-8. Let the backend:
-   - run dependency and runtime readiness checks
-   - wait for the database
-   - add missing legacy columns with defensive schema compatibility checks
-   - create tables if needed
-   - create or reset the bootstrap admin account
-9. Run a smoke test to verify the frontend, API health, login, and chart loading path.
-
-### Health endpoints
-
-- `GET /health`
-- `GET /api/health`
-
-### Default URLs
-
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
-- Backend through frontend proxy: `http://localhost:5173/api`
-- PostgreSQL: `127.0.0.1:5432`
-
-## Architecture
-
-```mermaid
-flowchart LR
-    Browser["User Browser"] --> Frontend["React + Vite UI\nserved by nginx"]
-    Frontend -->|"/api"| Backend["FastAPI API"]
-    Backend --> DB["PostgreSQL"]
-    Backend --> Uploads["encrypted app-data uploads\nmacOS/Windows local storage\nDocker backend_data volume"]
-    Backend --> Audit["audit_logs table\n+ fallback JSONL log"]
-    Backend --> Access["Access-intel providers\n(ipwho.is / AbuseIPDB)"]
-    Backend --> LLM["OpenAI-compatible LLM endpoint\n(optional)"]
-```
-
-### Frontend
-
-- Single-page React app in `frontend/src/App.tsx`
-- Built with Vite and served by nginx in Docker
-- Uses `/api` by default, so the browser usually talks only to the frontend host
-- Main views:
-  - summary dashboard
-  - review queue
-  - upload clinical notes
-  - profile
-  - user management
-  - forensic logs
-  - settings
-
-### Backend
-
-The FastAPI backend is responsible for:
-
-- JWT login and password-reset flows
-- role-based access control
-- chart creation and workflow transitions
-- patient note set uploads and file downloads
-- automatic checklist evaluation
-- access-intelligence lookups during login
-- optional OpenAI-compatible LLM gap analysis
-- forensic request and database audit logging
-
-Key backend files:
-
-- `backend/app/main.py`: app creation, CORS, health routes, startup bootstrap, request audit middleware
-- `backend/app/api/routes.py`: API routes and role checks
-- `backend/app/core/config.py`: settings and database URL rules
-- `backend/app/db/session.py`: SQLAlchemy engine/session setup and Docker DB host rewriting
-- `backend/app/db/bootstrap.py`: defensive schema compatibility layer
-- `backend/app/services/evaluation.py`: automatic checklist scoring from uploaded binder contents
-- `backend/app/services/patient_notes.py`: upload storage, text extraction, file validation, patient ID detection
-- `backend/app/services/audit.py`: request logging, event logging, DB change capture, fallback audit spool
-
-### Database and storage model
-
-Main tables:
-
-- `users`
-- `app_settings`
-- `charts`
-- `audit_item_responses`
-- `workflow_transitions`
-- `patient_note_sets`
-- `patient_note_documents`
-- `audit_logs`
-
-File storage:
-
-- Uploaded files are encrypted at rest before they are written to disk.
-- Local desktop runs store uploads under the operating system app-data folder:
-  - macOS: `~/Library/Application Support/IZ Clinical Notes Analyzer/uploads`
-  - Windows: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads`
-- Docker runs store uploads in the named `backend_data` volume at `/app/data/uploads`.
-- Storage is organized by sanitized `patient_id`, note set ID, and document ID.
-- Every stored file records:
-  - original filename
-  - content type
-  - size in bytes
-  - SHA-256 digest
-
-### Workflow model
-
-The main workflow is:
-
-1. A counselor or uploader creates a patient note binder.
-2. The backend stores the files and metadata.
-3. The backend generates an automated evaluation report.
-4. A chart is created and moved into `Awaiting Office Manager Review`.
-5. A manager or admin reviews, approves, or returns the chart.
-6. Every step is written to the forensic audit log.
-
-### Optional external integrations
-
-- Access intelligence:
-  - geolocation lookup via `ipwho.is`
-  - reputation lookup via AbuseIPDB
-- LLM analysis:
-  - any OpenAI-compatible `/chat/completions` endpoint
-  - used for access-review summarization and evaluation gap analysis when enabled in app settings
-
-## Current App Behavior
-
-### Roles
-
-- `admin`
-  - full access
-  - can manage users, settings, logs, charts, and uploads
-- `manager`
-  - can review charts and patient note sets
-  - can approve or return charts
-- `counselor`
-  - can upload note sets
-  - can view only their own charts and uploads
-
-### Password behavior
-
-- Managed users can be forced to reset passwords.
-- Accounts lock after 5 failed login attempts.
-- The bootstrap admin password cannot be changed in-app.
-- If `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`, the bootstrap admin is reset from `.env` on every startup.
-
-### Binder versioning
-
-- Initial upload requires `upload_mode=initial`
-- Later changes require `upload_mode=update`
-- Updates do not overwrite history
-- The prior note set becomes `superseded`
-- The new upload becomes the active immutable version
-
-### File rules
-
-- Supported file extensions:
-  - `.csv`
-  - `.doc` (stored securely; text extraction requires converting to DOCX/PDF/TXT first)
-  - `.docx`
-  - `.jpeg`
-  - `.jpg`
-  - `.pdf`
-  - `.png`
-  - `.rtf`
-  - `.txt`
-  - `.zip`
-- Per-file limit: `50MB`
-- Total binder upload limit: `250MB`
-- Maximum files per binder upload: `40`
-- Patient ID auto-detection scans filenames and readable file contents up to a smaller detection limit
-- New uploads are encrypted before they are written to disk. Downloads are decrypted only after auth/RBAC checks pass.
-
-### Local data storage
-
-- Host-side runs store relative `UPLOAD_DIR` and `LOG_DIR` under the operating system's local app-data folder, not the OneDrive-backed repo.
-  - macOS: `~/Library/Application Support/IZ Clinical Notes Analyzer`
-  - Windows: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
-- Docker Compose stores backend uploads and fallback logs in the `BACKEND_DATA_VOLUME_NAME` Docker volume.
-- Runtime readiness warns if upload storage appears to be inside OneDrive, iCloud, Dropbox, or Google Drive.
-
-### EMR API readiness
-
-The app is upload-first today, but it now has a standards-aligned EMR connector boundary:
-
-- Admin settings store the EMR vendor label, FHIR base URL, SMART client ID/secret, scopes, and timeout.
-- `GET /api/emr/profile` reports the configured SMART/FHIR profile.
-- `POST /api/emr/discover` validates SMART `.well-known/smart-configuration` discovery when a real EMR FHIR base URL is available.
-- `GET /api/emr/import-plan?patient_id=...` shows the planned FHIR R4 `Patient`, `DocumentReference`, `Binary`, and optional `Provenance` request flow.
-- Alleva Document Manager exports are mapped to Custom Forms, Uploaded Documents, Portal Documents, Labs, Medications, Notes, or Other source buckets.
-- SMART client secrets are stored through the local encrypted secret envelope instead of plaintext app settings.
-- Alleva-specific live API import remains gated until the client/vendor provides official API credentials, tenant base URLs, attachment behavior, pagination/rate-limit rules, and documentation.
-
-## Configuration
-
-### Important environment variables
-
-These are the settings you will use most often:
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `BACKEND_PORT` | Host port for the FastAPI service | `8000` |
-| `FRONTEND_PORT` | Host port for the nginx-served frontend | `5173` |
-| `POSTGRES_PORT` | Host port for PostgreSQL | `5432` |
-| `BACKEND_DATA_VOLUME_NAME` | Docker volume for encrypted uploads and fallback logs | `iz_clinical_notes_analyzer_backend_data` |
-| `DATABASE_NAME` | Dedicated app database name | `iz_clinical_notes_analyzer` |
-| `DATABASE_USER` | Dedicated app DB user | `iz_clinical_notes_app` |
-| `DATABASE_PASSWORD` | Dedicated app DB password | placeholder in `.env.example` |
-| `DATABASE_URL` | Optional full SQLAlchemy DSN override | blank |
-| `SECRET_KEY` | JWT signing key | placeholder in `.env.example` / container fallback `change-me-in-production` |
-| `DATA_ENCRYPTION_KEY` | File encryption key for uploaded clinical documents | placeholder in `.env.example` |
-| `FRONTEND_ORIGIN` | Primary frontend origin | `http://localhost:5173` |
-| `FRONTEND_ORIGINS` | Comma-separated allowed origins | `http://localhost:5173` |
-| `ALLOWED_HOSTS` | Allowed backend host headers | `localhost,127.0.0.1,::1` |
-| `BOOTSTRAP_ADMIN_USERNAME` | Bootstrap admin username | `admin` |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Bootstrap admin password | placeholder in `.env.example`; replace before VPS startup |
-| `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` | Reset bootstrap admin from `.env` every startup | `true` |
-| `UPLOAD_DIR` | Upload storage directory; relative paths resolve to local app data | `uploads` |
-| `LOG_DIR` | Fallback log directory; relative paths resolve to local app data | `logs` |
-| `POSTGRES_SERVICE_HOST` | Docker-internal host name for Postgres | `postgres` |
-
-### Database rules
-
-- This app only supports its own isolated PostgreSQL instance.
-- The backend rejects non-local/non-Compose PostgreSQL hosts.
-- If `DATABASE_URL` uses `localhost` and the backend is running inside Docker, the backend rewrites the host to `postgres`.
-
-## Local Development
 
 ### Full Docker stack
 
@@ -352,37 +703,7 @@ docker compose up -d --build
 ./scripts/smoke.sh
 ```
 
-### Backend only
-
-Run PostgreSQL in Docker, then run the backend from your host:
-
-```bash
-cp .env.example .env
-docker compose up -d postgres
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-### Frontend only
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Tests
-
-```bash
-backend/.venv/bin/python -m pytest backend/tests -q
-cd frontend && npm test
-cd frontend && npm run build
-```
-
-### Useful development commands
+### Useful Docker commands
 
 ```bash
 docker compose ps
@@ -390,225 +711,90 @@ docker compose logs --tail=200
 docker compose logs --tail=200 backend
 docker compose logs --tail=200 frontend
 docker compose logs --tail=200 postgres
-```
-
-## VPS Deployment
-
-The current server deployment model is the Ubuntu startup script plus Docker Compose. There is no separate deployment service in this repository.
-
-### First-time VPS setup
-
-1. Clone the repo to the server.
-2. Create or review `.env`.
-3. Change at least these values before going live:
-   - `SECRET_KEY`
-   - `DATA_ENCRYPTION_KEY`
-   - `DATABASE_PASSWORD`
-   - `BOOTSTRAP_ADMIN_PASSWORD`
-   - `FRONTEND_ORIGIN`
-   - `FRONTEND_ORIGINS`
-4. Run:
-
-```bash
-./scripts/startup-ubuntu-24.04.sh
-```
-
-5. Confirm:
-   - `docker compose ps`
-   - `curl http://localhost:8000/health`
-   - `curl http://localhost:<FRONTEND_PORT>/api/health`
-
-### Updating the VPS after a code change
-
-```bash
-git pull
-./scripts/startup-ubuntu-24.04.sh
-```
-
-The script pulls images where possible, ensures the DB exists, rebuilds containers, and reruns the smoke test.
-
-### Restarting without redeploying
-
-```bash
-docker compose up -d
-```
-
-### Stopping the app
-
-```bash
 docker compose down
 ```
 
-### Destructive reset
+### Destructive Docker reset
 
-This deletes the PostgreSQL volume and all DB contents:
+This deletes the PostgreSQL Docker volume and all database contents:
 
 ```bash
 docker compose down -v
 ```
 
-On Ubuntu there is also a helper path for auth-mismatch recovery:
+## Architecture
 
-```bash
-RESET_DEDICATED_DB_VOLUME_ON_AUTH_FAILURE=1 ./scripts/startup-ubuntu-24.04.sh
+```mermaid
+flowchart LR
+    Browser["User Browser"] --> App["Local App\nFastAPI desktop/server entrypoint"]
+    App --> Rules["YAML Rules Engine\nTreatment Plan Tracking"]
+    App --> DB["SQLite for Windows local\nPostgreSQL for Docker/server"]
+    App --> Uploads["Encrypted uploads\nlocal app-data or Docker volume"]
+    App --> Audit["audit_logs table\n+ fallback JSONL log"]
+    App --> EMR["Future EMR boundary\nSMART/FHIR + Alleva probes"]
+    DevFrontend["Optional Vite frontend dev server"] --> App
 ```
 
-Use that only if you intentionally want to recreate the dedicated database volume.
+## Key Repository Files
 
-## Troubleshooting
+| File | Purpose |
+| --- | --- |
+| `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
+| `scripts\startup-windows-local.ps1` | Main Windows local startup script |
+| `scripts\start-desktop-local.ps1` | Lean desktop runtime starter |
+| `scripts\test-local-app-stack.ps1` | Full local Windows smoke test |
+| `scripts\test-alleva-api-connectivity.ps1` | Alleva Swagger/OpenAPI/API reachability probe |
+| `backend\app\main.py` | Main FastAPI application |
+| `backend\app\desktop_main.py` | Desktop runtime app entrypoint |
+| `backend\app\services\runtime_checks.py` | Runtime readiness checks |
+| `backend\app\services\rules_engine.py` | Deterministic YAML rules engine |
+| `backend\app\api\rules_routes.py` | Rules API boundary |
+| `backend\tests\test_rules_engine.py` | Rules-engine tests |
+| `config\rules\alleva_treatment_plan_completeness_rules.yaml` | Treatment Plan Tracking completeness rules |
+| `docs\windows-local-refactor.md` | Windows local refactor notes |
+| `frontend\src` | React frontend source |
+| `frontend\dist` | Built frontend assets after `npm run build` |
 
-### Docker starts but the site does not open
+## Backup and Restore Notes
 
-Check:
+For Windows local desktop runs, back up both the SQLite database and encrypted upload files.
 
-```bash
-docker compose ps
-docker compose logs --tail=200
-```
-
-Common causes:
-
-- Docker Desktop or Docker Engine is not actually running
-- the chosen frontend port is already in use
-- the backend failed health checks because it could not connect to the database
-
-### A port is already busy
-
-- macOS script prompts you to choose another port
-- Ubuntu script auto-selects the next open port
-- Check what the app chose in `.env`
-
-### Login fails or the account becomes locked
-
-- Accounts lock after 5 bad passwords.
-- An admin can unlock managed accounts in the UI.
-- For the bootstrap admin, verify `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` in `.env`, then restart the app.
-
-### The bootstrap admin password keeps changing back
-
-That is expected when `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true`.
-
-Use one of these approaches:
-
-- keep the desired bootstrap password in `.env`
-- set `RESET_BOOTSTRAP_ADMIN_ON_STARTUP=false` if you intentionally do not want startup resets
-
-Remember: the bootstrap admin password cannot be changed from inside the app.
-
-### Database password mismatch after an earlier install
-
-This usually happens when the Postgres volume was initialized with older credentials.
-
-Safe fix:
-
-- restore the original `DATABASE_USER` and `DATABASE_PASSWORD` in `.env`
-
-Destructive fix:
-
-- recreate the volume with `docker compose down -v`
-- or on Ubuntu use `RESET_DEDICATED_DB_VOLUME_ON_AUTH_FAILURE=1 ./scripts/startup-ubuntu-24.04.sh`
-
-### Backend says it cannot reach PostgreSQL
-
-Check:
-
-```bash
-docker compose logs --tail=200 postgres
-docker compose logs --tail=200 backend
-```
-
-Also verify:
-
-- `DATABASE_HOST=127.0.0.1` for host-side backend runs
-- `POSTGRES_SERVICE_HOST=postgres`
-- `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD` match the current volume state
-
-### Frontend cannot talk to backend
-
-Check these settings in `.env`:
-
-- `FRONTEND_ORIGIN`
-- `FRONTEND_ORIGINS`
-
-For Docker Compose, the browser normally talks to the frontend port and nginx proxies `/api` to the backend.
-
-### Upload fails
-
-Check for:
-
-- unsupported file extension
-- file larger than `50MB`
-- missing `patient_id` with no successful auto-detection
-- conflicting detected patient IDs across uploaded files
-
-### Uploaded files are missing
-
-Stored files live under `UPLOAD_DIR/patient-notes/...`. Relative `UPLOAD_DIR` values resolve to the local app-data folder on host runs and `/app/data/uploads` in Docker Compose.
-
-If a database row exists but the file is gone:
-
-- download will fail with `Stored patient note file is missing`
-- investigate the backend Docker volume or host local app-data backup
-- restore the missing encrypted files to the same storage path
-
-### Audit logs are not reaching the database
-
-If audit persistence fails, the app writes fallback records to:
+Minimum Windows local backup set:
 
 ```text
-LOG_DIR/forensic-audit-fallback.jsonl
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\clinical-notes-analyzer.sqlite3
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs
 ```
 
-Check that file if the `audit_logs` table is missing expected events.
+Important: the `.env` contains the encryption key needed to read encrypted uploaded files. Losing the `.env` may make encrypted uploads unrecoverable.
 
-### Smoke test fails
+For Docker/PostgreSQL runs, back up the PostgreSQL database and the backend data volume separately.
 
-Run it manually:
-
-```bash
-./scripts/smoke.sh
-```
-
-It verifies:
-
-- frontend HTML loads
-- `/api/health` returns `{"status":"ok"}`
-- login works
-- `/api/users/me` works
-- chart list loads when password reset is not required
-
-## Backups And Restore
-
-Use the dedicated application DB name consistently.
-
-### Backup
+PostgreSQL backup example:
 
 ```bash
 pg_dump -Fc iz_clinical_notes_analyzer > backup.dump
 ```
 
-### Restore
+PostgreSQL restore example:
 
 ```bash
 pg_restore -d iz_clinical_notes_analyzer backup.dump
 ```
 
-Validate uploaded-file backups separately if you need full recovery, because database backups do not include the encrypted upload volume or host app-data folder.
+## Security and Privacy Guardrails
 
-## Repository Layout
+- Do not commit `.env` files.
+- Do not commit SQLite runtime databases.
+- Do not commit uploaded clinical documents.
+- Do not commit Alleva credentials, API keys, or bearer tokens.
+- Do not put PHI in YAML rules files.
+- Keep runtime data out of cloud-synced folders when possible.
+- Treat the local `.env` as sensitive because it contains secrets and the upload encryption key.
+- Keep deterministic completeness scoring separate from optional LLM analysis.
 
-```text
-backend/                     FastAPI app, models, services, tests
-frontend/                    React/Vite UI and nginx config
-scripts/                     Startup and smoke-test helpers
-docs/                        Supporting runbook and architecture notes
-backend data volume          Encrypted clinical note files and fallback logs at runtime
-docker-compose.yml           Main local/VPS runtime definition
-```
+## Current Status
 
-## Important Notes
-
-- This project is designed around an application-owned PostgreSQL container, not a shared external database.
-- The backend performs defensive schema compatibility updates on startup for older database volumes.
-- The frontend is served from nginx in Docker and proxies API traffic to the backend.
-- The bootstrap admin account is environment-managed and behaves differently from regular managed users.
+The app now has a Windows local runtime path designed around SQLite, local app-data storage, deterministic YAML rules, startup/readiness checks, and a double-click launcher. Docker/PostgreSQL remains available for developer and server scenarios, but it is not required for the ordinary Windows 10/11 local desktop workflow.
