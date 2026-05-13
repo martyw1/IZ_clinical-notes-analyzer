@@ -311,7 +311,14 @@ def evaluate_rules(chart: dict[str, Any], config: dict[str, Any] | None = None, 
                 source_date = _as_date(get_field(context, str(logic.get('source_date_field'))))
                 interval = _resolve_config_path(config, str(logic.get('interval_days_from') or ''), context)
                 if source_date is None or interval is None:
+                    status_on_fail = 'unable_to_evaluate'
                     passed = False
+                    details['missing_prerequisite'] = {
+                        'source_date_field': str(logic.get('source_date_field')),
+                        'source_date_value': _format_value(source_date),
+                        'interval_days_from': str(logic.get('interval_days_from') or ''),
+                        'interval_value': _format_value(interval),
+                    }
                 else:
                     due_date = source_date + timedelta(days=int(interval))
                     set_field(context, str(logic.get('output_field')), due_date.isoformat())
@@ -324,7 +331,17 @@ def evaluate_rules(chart: dict[str, Any], config: dict[str, Any] | None = None, 
                 right = _as_date(get_field(context, str(logic.get('right_field'))))
                 expected = f'{logic.get("left_field")} {logic.get("operator")} {logic.get("right_field")}'
                 actual = f'{_format_value(left)} {logic.get("operator")} {_format_value(right)}'
-                passed = bool(left and right and _compare(left, str(logic.get('operator')), right))
+                if left is None or right is None:
+                    status_on_fail = 'unable_to_evaluate'
+                    passed = False
+                    details['missing_prerequisite'] = {
+                        'left_field': str(logic.get('left_field')),
+                        'left_value': _format_value(left),
+                        'right_field': str(logic.get('right_field')),
+                        'right_value': _format_value(right),
+                    }
+                else:
+                    passed = _compare(left, str(logic.get('operator')), right)
 
             elif logic_type == 'days_until':
                 left = _as_date(get_field(context, str(logic.get('from_date_field'))))
@@ -345,6 +362,15 @@ def evaluate_rules(chart: dict[str, Any], config: dict[str, Any] | None = None, 
                         passed = _compare(delta, operator, int(target))
                         expected = f'days_until {operator} {target}'
                     actual = str(delta)
+                else:
+                    status_on_fail = 'unable_to_evaluate'
+                    passed = False
+                    details['missing_prerequisite'] = {
+                        'from_date_field': str(logic.get('from_date_field')),
+                        'from_date_value': _format_value(left),
+                        'to_date_field': str(logic.get('to_date_field')),
+                        'to_date_value': _format_value(right),
+                    }
 
             elif logic_type == 'numeric_compare':
                 left = get_field(context, str(logic.get('left_field')))
@@ -356,18 +382,31 @@ def evaluate_rules(chart: dict[str, Any], config: dict[str, Any] | None = None, 
                     right = logic.get('right_value')
                 expected = _format_value(right)
                 actual = _format_value(left)
-                passed = left is not None and right is not None and _compare(float(left), str(logic.get('operator')), float(right))
+                if left is None or right is None:
+                    status_on_fail = 'unable_to_evaluate'
+                    passed = False
+                    details['missing_prerequisite'] = {
+                        'left_field': str(logic.get('left_field')),
+                        'left_value': _format_value(left),
+                        'right_value': _format_value(right),
+                    }
+                else:
+                    passed = _compare(float(left), str(logic.get('operator')), float(right))
 
             elif logic_type == 'per_day_numeric_compare':
                 values = get_field(context, str(logic.get('collection_field')))
                 right = _resolve_config_path(config, str(logic.get('right_value_from')), context)
                 expected = f'each day >= {right}'
                 actual = _format_value(values)
-                if isinstance(values, dict):
+                if right is None:
+                    status_on_fail = 'unable_to_evaluate'
+                    passed = False
+                elif isinstance(values, dict):
                     passed = all(float(value) >= float(right) for value in values.values())
                 elif isinstance(values, list):
                     passed = all(float(value) >= float(right) for value in values)
                 else:
+                    status_on_fail = 'unable_to_evaluate'
                     passed = False
 
             elif logic_type == 'detect_level_of_care_change_within_period':
