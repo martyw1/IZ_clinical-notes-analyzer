@@ -3,8 +3,8 @@ from __future__ import annotations
 """Startup and readiness checks for a non-technical local deployment.
 
 These checks catch missing parser dependencies, weak local secrets, unwritable
-storage, and risky synced-folder placement before a clinic tries to use the app
-with real exports.
+storage, invalid YAML rules, local database availability, and risky synced-folder
+placement before a clinic tries to use the app with real exports.
 """
 
 import importlib
@@ -13,7 +13,9 @@ import platform
 import shutil
 import sys
 from dataclasses import asdict, dataclass
-from pathlib import Path
+
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.services.secure_storage import ensure_private_directory, stored_payload_is_encrypted
@@ -38,6 +40,49 @@ def _check_import(module_name: str, purpose: str) -> RuntimeCheck:
         return RuntimeCheck(module_name, 'fail', f'{purpose} is not available.', str(exc))
     version = getattr(module, '__version__', 'installed')
     return RuntimeCheck(module_name, 'ok', f'{purpose} is available.', str(version))
+
+
+def _check_database_config() -> RuntimeCheck:
+    """Confirm the selected database mode is local and service-free for desktop runs."""
+    try:
+        database_url = settings.database_url_value
+    except Exception as exc:
+        return RuntimeCheck('database_config', 'fail', 'Database configuration is invalid.', str(exc))
+    if database_url.startswith('sqlite'):
+        return RuntimeCheck('database_config', 'ok', 'Local SQLite database is configured.', str(settings.sqlite_db_path))
+    if database_url.startswith('postgresql'):
+        return RuntimeCheck('database_config', 'warn', 'PostgreSQL is configured; this is for developer/server runs, not the no-Docker Windows desktop target.', database_url.split('@')[-1])
+    return RuntimeCheck('database_config', 'fail', 'Unsupported database URL scheme.', database_url.split(':', 1)[0])
+
+
+def _check_database_connection() -> RuntimeCheck:
+    """Probe the SQLAlchemy engine without requiring app startup to complete."""
+    try:
+        from app.db.session import engine
+
+        with engine.connect() as connection:
+            connection.execute(text('SELECT 1'))
+        return RuntimeCheck('database_connection', 'ok', 'Database connection check passed.', engine.dialect.name)
+    except SQLAlchemyError as exc:
+        return RuntimeCheck('database_connection', 'fail', 'Database connection check failed.', str(exc))
+    except Exception as exc:
+        return RuntimeCheck('database_connection', 'fail', 'Database connection could not be checked.', str(exc))
+
+
+def _check_rules_config() -> RuntimeCheck:
+    """Validate the YAML rules configuration before checks are run against data."""
+    try:
+        from app.services.rules_engine import load_rules_config, validate_rules_config
+
+        config = load_rules_config()
+        errors = validate_rules_config(config)
+    except Exception as exc:
+        return RuntimeCheck('rules_config', 'fail', 'Rules configuration could not be loaded.', str(exc))
+    if errors:
+        return RuntimeCheck('rules_config', 'fail', 'Rules configuration failed validation.', '; '.join(errors[:5]))
+    workflow_id = (config.get('workflow') or {}).get('id', '')
+    rules_count = len(config.get('rules') or [])
+    return RuntimeCheck('rules_config', 'ok', 'Rules configuration loaded and validated.', f'{settings.rules_config_file} workflow={workflow_id} rules={rules_count}')
 
 
 def _check_upload_directory() -> RuntimeCheck:
@@ -100,15 +145,19 @@ def _check_existing_upload_encryption() -> RuntimeCheck:
 
 
 def collect_runtime_checks() -> list[RuntimeCheck]:
-    """Collect dependency, storage, and secret checks without raising."""
+    """Collect dependency, storage, database, rules, and secret checks without raising."""
     checks = [
         RuntimeCheck('operating_system', 'ok', 'Runtime operating system detected.', f'{platform.system()} {platform.release()}'),
-        RuntimeCheck('python', 'ok' if sys.version_info >= (3, 11) else 'fail', 'Python 3.11 or newer is required.', platform.python_version()),
+        RuntimeCheck('python', 'ok' if sys.version_info >= (3, 11) else 'fail', 'Python 3.11 or newer is required for source runs; packaged releases include a runtime.', platform.python_version()),
         _check_import('fastapi', 'FastAPI backend'),
         _check_import('sqlalchemy', 'SQLAlchemy database layer'),
+        _check_import('yaml', 'YAML rules parser'),
         _check_import('pypdf', 'PDF text extraction'),
         _check_import('cryptography', 'Encrypted local clinical-file storage'),
-        _check_import('httpx', 'FHIR/SMART API discovery client'),
+        _check_import('httpx', 'Alleva/API connectivity client'),
+        _check_database_config(),
+        _check_database_connection(),
+        _check_rules_config(),
         _check_upload_directory(),
         _check_disk_space(),
         _check_existing_upload_encryption(),
