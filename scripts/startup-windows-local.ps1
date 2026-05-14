@@ -223,6 +223,33 @@ function Ensure-BackendRuntimeDependencies {
     }
 }
 
+
+function Write-CloudSyncWarning {
+    $lower = $RootDir.ToLowerInvariant()
+    $markers = @('onedrive', 'dropbox', 'icloud', 'google drive')
+    foreach ($marker in $markers) {
+        if ($lower.Contains($marker)) {
+            Write-Warn "This source checkout appears to be inside a cloud-synced folder ($RootDir). Runtime database, logs, and uploads stay under $AppDataRoot, but Python/Node setup is usually more reliable from a non-synced local folder such as C:\IZ Clinical Notes Analyzer."
+            return
+        }
+    }
+}
+
+function Assert-PortAvailable {
+    param([int]$Port)
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $Port)
+        $listener.Start()
+    }
+    catch {
+        throw "Port $Port is already in use on 127.0.0.1. Close the other local app/server using http://localhost:$Port, then rerun this launcher. Log file: $LogFile"
+    }
+    finally {
+        if ($listener) { $listener.Stop() }
+    }
+}
+
 function Ensure-EnvFile {
     if (!(Test-Path $EnvFile)) {
         New-Item -ItemType Directory -Path $AppDataRoot -Force | Out-Null
@@ -340,6 +367,7 @@ try {
     $TranscriptStarted = $true
 
     Set-Location $RootDir
+    Write-CloudSyncWarning
 
     if (!(Test-Path (Join-Path $RootDir 'backend\requirements.txt'))) {
         throw "Could not find backend\requirements.txt under $RootDir. Keep this script in the repo scripts folder."
@@ -364,6 +392,7 @@ try {
     Ensure-FrontendBuild
 
     $port = 8000
+    Assert-PortAvailable -Port $port
     Write-Info "Starting local app on http://localhost:$port"
     if (-not $NoBrowser) { Start-Process "http://localhost:$port" }
     & $pythonExe -m uvicorn app.desktop_main:app --app-dir (Join-Path $RootDir 'backend') --host 127.0.0.1 --port $port

@@ -1,0 +1,15 @@
+Synthetic example only - no real PHI.
+Patient ID: TEST-PATIENT-001
+Patient Name: Test Patient One
+Service Date: 2026-05-01
+Treatment Plan Reference: TP-TEST-PATIENT-001-2026-04
+Provider/Counselor: Jordan Counselor, CADC
+Document Type: Treatment Plan Tracking Note
+Problem: Alcohol use disorder recovery stability
+Goal: Maintain abstinence and improve relapse-prevention skills
+Objective: Identify three triggers and practice two coping skills weekly
+Intervention: Individual counseling using motivational interviewing and CBT relapse-prevention worksheet
+Progress/Status: Partial progress. Patient identified work stress and isolation as triggers; coping-practice log is incomplete.
+Signature/Completion Status: Staff signed and completed on 2026-05-01
+Review/Approval Status: Awaiting office manager review
+Deficient Item Example: Patient signature missing; next review date not documented.

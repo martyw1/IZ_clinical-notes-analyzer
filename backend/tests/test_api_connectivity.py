@@ -78,3 +78,38 @@ def test_pull_api_definitions_discovers_and_summarizes_swagger_json(monkeypatch)
     assert result['definition_summary']['schema_count'] == 1
     assert result['definition_summary']['security_scheme_names'] == ['ApiKeyAuth']
     assert result['definition_summary']['sample_paths'] == ['/patients']
+
+
+def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        token = login.json()['access_token']
+        headers = {'Authorization': f'Bearer {token}'}
+        saved = client.patch(
+            '/api/api-configuration',
+            headers=headers,
+            json={
+                'vendor_name': 'Alleva API',
+                'api_base_url': 'https://api.example.test',
+                'api_key': 'super-secret-api-key',
+                'api_enabled': True,
+            },
+        )
+        assert saved.status_code == 200
+        body = saved.json()
+        assert body['api_key_configured'] is True
+        assert 'super-secret-api-key' not in saved.text
+
+        config = client.get('/api/api-configuration', headers=headers)
+        assert config.status_code == 200
+        assert config.json()['api_key_configured'] is True
+        assert 'super-secret-api-key' not in config.text
+
+        sample = client.get('/api/api-configuration/sample-openapi.json')
+        assert sample.status_code == 200
+        assert 'securitySchemes' in sample.text
+        assert 'super-secret-api-key' not in sample.text
