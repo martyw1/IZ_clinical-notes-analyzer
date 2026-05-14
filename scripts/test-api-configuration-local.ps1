@@ -1,0 +1,156 @@
+[CmdletBinding()]
+param(
+    [int]$Port = 8020,
+    [switch]$SkipDependencyInstall
+)
+
+$ErrorActionPreference = 'Stop'
+$RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer API Config Test'
+$EnvFile = Join-Path $AppDataRoot '.env'
+$LogDir = Join-Path $AppDataRoot 'logs'
+New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+
+function Write-Step($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" }
+
+function New-RandomSecret([int]$Length) {
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+=' 
+    $bytes = New-Object byte[] $Length
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) }
+    finally { if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() } }
+    $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
+    return -join $chars
+}
+
+function Assert-PythonVersion([string]$PythonExe) {
+    $versionText = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+    if ($LASTEXITCODE -ne 0) { throw "Could not run Python at $PythonExe." }
+    $version = [version]$versionText.Trim()
+    if ($version -lt [version]'3.11.0') { throw "Python 3.11+ is required. Found Python $version at $PythonExe." }
+    return $version
+}
+
+function Ensure-BackendVirtualEnvironment {
+    $venvDir = Join-Path $RootDir 'backend\.venv'
+    $python = Join-Path $venvDir 'Scripts\python.exe'
+    if (Test-Path $python) { return $python }
+
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($pythonCommand) {
+        & $pythonCommand.Source -m venv $venvDir
+        if (Test-Path $python) { return $python }
+    }
+
+    $pyCommand = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCommand) {
+        & $pyCommand.Source -3.11 -m venv $venvDir
+        if (Test-Path $python) { return $python }
+        & $pyCommand.Source -3 -m venv $venvDir
+        if (Test-Path $python) { return $python }
+    }
+
+    throw 'Could not create backend\.venv. Install Python 3.11+ and reopen PowerShell.'
+}
+
+try {
+    Set-Location $RootDir
+    $python = Ensure-BackendVirtualEnvironment
+    $pythonVersion = Assert-PythonVersion $python
+    Write-Step "Using Python $pythonVersion at $python."
+
+    if (-not $SkipDependencyInstall) {
+        Write-Step 'Installing backend dependencies.'
+        & $python -m pip install --upgrade pip
+        if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
+        & $python -m pip install -r (Join-Path $RootDir 'backend\requirements.txt')
+        if ($LASTEXITCODE -ne 0) { throw 'Backend dependency installation failed.' }
+    }
+
+    $adminPassword = New-RandomSecret 24
+    @"
+APP_NAME=IZ Clinical Notes Analyzer
+ENVIRONMENT=development
+BACKEND_PORT=$Port
+DATABASE_BACKEND=sqlite
+LOCAL_SQLITE_DB_PATH=$AppDataRoot\api-config-test.sqlite3
+DATABASE_URL=
+SECRET_KEY=$(New-RandomSecret 64)
+DATA_ENCRYPTION_KEY=$(New-RandomSecret 64)
+FRONTEND_ORIGIN=http://localhost:$Port
+FRONTEND_ORIGINS=http://localhost:$Port,http://localhost:5173
+ALLOWED_HOSTS=localhost,127.0.0.1,::1,testserver
+UPLOAD_DIR=$AppDataRoot\uploads
+LOG_DIR=$LogDir
+RULES_CONFIG_PATH=$RootDir\config\rules\alleva_treatment_plan_completeness_rules.yaml
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=$adminPassword
+RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true
+LLM_ENABLED=false
+EMR_API_ENABLED=false
+"@ | Set-Content -Path $EnvFile -Encoding UTF8
+
+    $env:IZ_CNA_ENV_FILE = $EnvFile
+    $env:PYTHONPATH = Join-Path $RootDir 'backend'
+
+    Write-Step 'Running focused backend API connectivity tests.'
+    & $python -m pytest (Join-Path $RootDir 'backend\tests\test_api_connectivity.py') -q
+    if ($LASTEXITCODE -ne 0) { throw 'API connectivity unit tests failed.' }
+
+    Write-Step "Starting desktop app test server on http://localhost:$Port ."
+    $server = Start-Process -FilePath $python -ArgumentList @('-m','uvicorn','app.desktop_main:app','--app-dir',(Join-Path $RootDir 'backend'),'--host','127.0.0.1','--port',"$Port") -PassThru -WindowStyle Hidden
+    try {
+        $ready = $false
+        for ($i = 0; $i -lt 40; $i++) {
+            try {
+                $health = Invoke-RestMethod -Uri "http://localhost:$Port/api/health" -TimeoutSec 2
+                if ($health.status -eq 'ok') { $ready = $true; break }
+            } catch { Start-Sleep -Seconds 1 }
+        }
+        if (!$ready) { throw 'API health endpoint did not become ready.' }
+
+        Write-Step 'Checking API configuration page.'
+        $page = Invoke-WebRequest -Uri "http://localhost:$Port/api-configuration" -TimeoutSec 10
+        if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'API Configuration and Connectivity Test') {
+            throw 'API configuration page did not load as expected.'
+        }
+
+        Write-Step 'Signing in as bootstrap admin.'
+        $loginBody = @{ username = 'admin'; password = $adminPassword } | ConvertTo-Json
+        $login = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/auth/login" -ContentType 'application/json' -Body $loginBody
+        $headers = @{ Authorization = "Bearer $($login.access_token)" }
+
+        Write-Step 'Saving API configuration and encrypted API key placeholder.'
+        $configBody = @{
+            vendor_name = 'Local Test API'
+            api_base_url = "http://localhost:$Port"
+            api_key = (New-RandomSecret 20)
+            timeout_seconds = 5
+            api_enabled = $false
+        } | ConvertTo-Json
+        $config = Invoke-RestMethod -Method Patch -Uri "http://localhost:$Port/api/api-configuration" -Headers $headers -ContentType 'application/json' -Body $configBody
+        if (-not $config.api_key_configured) { throw 'Saved API key was not reported as configured.' }
+
+        Write-Step 'Pulling local sample API definition through the in-app tester.'
+        $definitionBody = @{
+            swagger_ui_url = "http://localhost:$Port/api/api-configuration/sample-openapi.json"
+            openapi_url = "http://localhost:$Port/api/api-configuration/sample-openapi.json"
+            api_base_url = "http://localhost:$Port"
+            use_saved_api_key = $true
+            api_key_header_name = 'x-api-key'
+            timeout_seconds = 5
+        } | ConvertTo-Json
+        $definition = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/api-configuration/pull-definitions" -Headers $headers -ContentType 'application/json' -Body $definitionBody
+        if ($definition.status -ne 'ok') { throw "API definition pull did not pass: $($definition | ConvertTo-Json -Depth 8)" }
+        if ($definition.definition_summary.title -notmatch 'Connectivity Test Definition') { throw 'API definition summary was not returned as expected.' }
+
+        Write-Step 'API configuration local smoke test passed.'
+    }
+    finally {
+        if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -Force }
+    }
+}
+catch {
+    Write-Error "API configuration local smoke test failed: $($_.Exception.Message)"
+    throw
+}
