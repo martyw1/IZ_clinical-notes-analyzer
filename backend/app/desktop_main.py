@@ -21,6 +21,70 @@ from app.core.config import REPO_ROOT
 from app.main import create_app
 
 
+def _app_version() -> str:
+    version_file = REPO_ROOT / 'VERSION'
+    if version_file.exists():
+        value = version_file.read_text(encoding='utf-8').strip()
+        if value:
+            return value
+    return '0.0.0-local.unknown'
+
+
+def _desktop_chrome() -> str:
+    version = _app_version()
+    return f"""
+    <style id="iz-cna-desktop-chrome-style">
+      .iz-cna-desktop-shortcuts {{
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 999999;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        font-family: Segoe UI, Arial, sans-serif;
+      }}
+      .iz-cna-desktop-shortcuts a,
+      .iz-cna-desktop-version {{
+        border: 1px solid rgba(15, 23, 42, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.94);
+        color: #0f172a;
+        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 9px 12px;
+        text-decoration: none;
+        backdrop-filter: blur(6px);
+      }}
+      .iz-cna-desktop-shortcuts a {{
+        background: #065f46;
+        border-color: #065f46;
+        color: #ffffff;
+      }}
+      .iz-cna-desktop-shortcuts a:hover {{ background: #047857; }}
+      @media print {{ .iz-cna-desktop-shortcuts {{ display: none; }} }}
+    </style>
+    <div class="iz-cna-desktop-shortcuts" aria-label="Application shortcuts and version">
+      <a href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
+      <span class="iz-cna-desktop-version">v{version}</span>
+    </div>
+    """
+
+
+def _html_with_desktop_chrome(index_file: Path) -> HTMLResponse:
+    html = index_file.read_text(encoding='utf-8')
+    chrome = _desktop_chrome()
+    if '</body>' in html:
+        html = html.replace('</body>', f'{chrome}\n</body>', 1)
+    else:
+        html = f'{html}\n{chrome}'
+    return HTMLResponse(html, headers={'cache-control': 'no-store'})
+
+
 def _frontend_dist_dir() -> Path:
     packaged_candidate = Path(__file__).resolve().parent / 'static'
     if packaged_candidate.exists():
@@ -66,10 +130,11 @@ npm install
 npm run build</pre>
           <p>Then restart <code>scripts\\startup-windows-local.ps1</code>. Packaged end-user releases should already include the built UI.</p>
         </main>
+        {_desktop_chrome()}
       </body>
     </html>
     """
-    return HTMLResponse(html)
+    return HTMLResponse(html, headers={'cache-control': 'no-store'})
 
 
 def _mount_frontend(api: FastAPI) -> None:
@@ -82,13 +147,13 @@ def _mount_frontend(api: FastAPI) -> None:
     @api.get('/', include_in_schema=False)
     def desktop_frontend_root():
         if index_file.exists():
-            return FileResponse(index_file)
+            return _html_with_desktop_chrome(index_file)
         return _frontend_missing_page()
 
     @api.get('/desktop/{requested_path:path}', include_in_schema=False)
     def desktop_frontend_fallback(requested_path: str):
         if index_file.exists():
-            return FileResponse(index_file)
+            return _html_with_desktop_chrome(index_file)
         return _frontend_missing_page()
 
     @api.get('/app-not-built', include_in_schema=False)
