@@ -78,6 +78,17 @@ Run the existing Windows stack smoke test with:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local-app-stack.ps1
 ```
 
-## Current limitation
+## Runtime availability
 
-The new API configuration routes are wired into the Windows desktop entrypoint, `app.desktop_main:app`, which is what the Windows startup script uses. The generic `app.main:app` entrypoint was not changed in this update.
+The API configuration JSON routes are available from the main FastAPI app and the Windows desktop runtime. The browser page at `/api-configuration` is served by the desktop runtime used by the Windows startup script.
+
+## Boundary status language
+
+The app supports configuration and connectivity testing without pretending to import live Alleva patient data. The intended status language is:
+
+- **configured but not connected** when local vendor/base URL/API key settings have been saved but no successful probe has run.
+- **definition discovered** when an OpenAPI/Swagger definition is found and summarized.
+- **connectivity passed** when a probe succeeds and returns non-secret metadata such as HTTP status, selected definition URL, title/version, path count, schema count, security scheme names, and sample paths.
+- **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import. Do not fake live import without official tenant credentials and endpoint mapping.
+
+Saved API keys are encrypted in the local database. After save, API responses return only `api_key_configured: true/false`; they do not return the key value.

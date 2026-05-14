@@ -751,3 +751,15 @@ ol {
     min-width: unset;
   }
 }
+
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 2rem 0 0;
+  padding: 1rem 0 0;
+  color: #64748b;
+  font-size: 0.85rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+}

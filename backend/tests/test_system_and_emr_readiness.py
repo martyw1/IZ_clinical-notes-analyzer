@@ -110,3 +110,16 @@ def test_emr_enablement_requires_minimum_alleva_smart_contract(app_with_sqlite):
             assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
         finally:
             db.close()
+
+
+def test_version_endpoint_reports_repo_version(app_with_sqlite):
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        response = client.get('/api/version')
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload['version'] == '0.4.0'
+        assert payload['environment']
+        assert payload['git_commit']

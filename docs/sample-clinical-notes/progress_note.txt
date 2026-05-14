@@ -1,0 +1,11 @@
+Synthetic example only - no real PHI.
+Patient ID: TEST-PATIENT-001
+Service Date: 2026-05-03
+Document Type: Individual Progress Note
+Provider/Counselor: Jordan Counselor, CADC
+Treatment Plan Reference: TP-TEST-PATIENT-001-2026-04
+Problem/Goal/Objective Addressed: Goal 1, Objective 1 - trigger identification and coping skills
+Intervention: Reviewed trigger log and practiced grounding exercise.
+Progress/Status: Patient reported two sober-support contacts and one missed journaling assignment.
+Signature/Completion Status: Completed; staff signed 2026-05-03
+Review/Approval Status: Approved by office manager 2026-05-04

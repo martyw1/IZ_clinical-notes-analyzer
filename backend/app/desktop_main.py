@@ -15,7 +15,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse, HTMLResponse
 
-from app.api.api_config_routes import router as api_config_router
 from app.api.api_config_ui_routes import router as api_config_ui_router
 from app.api.clinical_notes_ui_routes import router as clinical_notes_ui_router
 from app.api.rules_routes import router as rules_router
@@ -172,7 +171,6 @@ def _mount_frontend(api: FastAPI) -> None:
 
 app = create_app()
 app.include_router(rules_router)
-app.include_router(api_config_router)
 app.include_router(api_config_ui_router)
 app.include_router(clinical_notes_ui_router)
 _mount_frontend(app)

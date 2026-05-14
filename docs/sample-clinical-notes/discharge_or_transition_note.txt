@@ -1,0 +1,13 @@
+Synthetic example only - no real PHI.
+Patient ID: TEST-PATIENT-003
+Service Date: 2026-05-10
+Document Type: Discharge or Transition Note
+Provider/Counselor: Riley Transition Coordinator, LPC
+Treatment Plan Reference: TP-TEST-PATIENT-003-2026-03
+Transition Status: Step-down from residential to intensive outpatient level of care
+Problem/Goal/Objective Summary: Goal 1 completed; Goal 2 requires continued outpatient monitoring.
+Progress/Status: Stable housing arranged; medication follow-up scheduled; relapse-prevention plan reviewed.
+Continuing Care Plan: IOP intake 2026-05-12; peer-support meeting list provided.
+Signature/Completion Status: Completed; staff signed 2026-05-10
+Review/Approval Status: Returned to counselor for missing patient acknowledgement.
+Deficient Item Example: Patient acknowledgement/signature not present.

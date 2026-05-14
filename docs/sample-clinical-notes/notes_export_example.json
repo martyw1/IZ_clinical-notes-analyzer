@@ -1,0 +1,18 @@
+[
+  {
+    "patient_id": "TEST-PATIENT-001",
+    "patient_name": "Test Patient One",
+    "service_date": "2026-05-01",
+    "document_type": "Treatment Plan Tracking Note",
+    "treatment_plan_reference": "TP-TEST-PATIENT-001-2026-04",
+    "problem": "Alcohol use disorder recovery stability",
+    "goal": "Maintain abstinence",
+    "objective": "Identify three triggers and practice two coping skills weekly",
+    "intervention": "Motivational interviewing and CBT relapse-prevention worksheet",
+    "progress_status": "Partial progress; coping-practice log incomplete",
+    "provider": "Jordan Counselor, CADC",
+    "signature_status": "Staff signed; patient signature missing",
+    "review_status": "Awaiting office manager review",
+    "deficient_items": ["patient signature missing", "next review date not documented"]
+  }
+]

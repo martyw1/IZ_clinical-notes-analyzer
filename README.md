@@ -897,3 +897,19 @@ pg_restore -d iz_clinical_notes_analyzer backup.dump
 ## Current status
 
 The app now has a Windows local runtime path designed around SQLite, local app-data storage, deterministic YAML rules, dependency checks, user prompts before source-checkout dependency installation, startup/readiness checks, an admin API configuration/testing workflow, and a double-click launcher. Docker/PostgreSQL remains available for developer and server scenarios, but it is not required for ordinary Windows 10/11 local desktop use.
+
+## Versioning
+
+The release version is stored in `VERSION` and detailed release metadata is stored in `VERSION.json`. The backend exposes this information at:
+
+```text
+GET /api/version
+```
+
+The endpoint returns the semantic version, environment label, release channel, short git commit hash, branch, and whether the checkout appears dirty. Git metadata is computed at runtime when available and degrades to `unknown` if the app is packaged without git metadata. The React UI reads `/api/version` and displays the version in a consistent footer on every page.
+
+Current finishing-pass version: **0.4.0**.
+
+## Synthetic sample clinical notes
+
+Safe examples live in `docs/sample-clinical-notes/`. They use fake identifiers such as `TEST-PATIENT-001` and demonstrate Treatment Plan Tracking fields, progress notes, group notes, discharge/transition notes, and export-shaped CSV/JSON. These examples are not proprietary Alleva exports and should not be treated as real PHI.

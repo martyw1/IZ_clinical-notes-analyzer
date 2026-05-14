@@ -12,6 +12,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 
 from app.api.routes import router
+from app.api.api_config_routes import router as api_config_router
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
@@ -20,6 +21,7 @@ from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 from app.services.audit import bind_request_context, log_event, log_request_completed, log_unhandled_exception, reset_audit_context, system_audit_context
 from app.services.runtime_checks import assert_startup_ready, readiness_payload
+from app.services.version import build_version_payload
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +161,12 @@ def create_app() -> FastAPI:
     def api_readiness():
         return readiness_payload()
 
+    @api.get('/api/version')
+    def api_version():
+        return build_version_payload()
+
     api.include_router(router)
+    api.include_router(api_config_router)
     return api
 
 

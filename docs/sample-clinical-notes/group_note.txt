@@ -1,0 +1,12 @@
+Synthetic example only - no real PHI.
+Patient ID: TEST-PATIENT-002
+Service Date: 2026-05-04
+Document Type: Group Note
+Provider/Counselor: Avery Group Facilitator, LADC
+Treatment Plan Reference: TP-TEST-PATIENT-002-2026-04
+Group Topic: Relapse warning signs and recovery planning
+Intervention: Psychoeducation, group discussion, written recovery-plan worksheet
+Progress/Status: Active participation; patient named one warning sign and one support person.
+Signature/Completion Status: Completed; facilitator signed 2026-05-04
+Review/Approval Status: Awaiting office manager review
+Deficient Item Example: Objective linkage is broad and should be tied to a specific plan objective.

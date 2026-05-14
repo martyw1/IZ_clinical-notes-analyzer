@@ -16,6 +16,19 @@ type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' |
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
 type AppView = 'dashboard' | 'reviews' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
 
+type VersionInfo = {
+  app_name: string
+  version: string
+  build: string
+  release_channel: string
+  release_date: string
+  version_name: string
+  environment: string
+  git_commit: string
+  git_branch: string
+  git_dirty: boolean
+}
+
 type User = {
   id: number
   username: string
@@ -582,6 +595,7 @@ export function App() {
   const [isBusy, setIsBusy] = useState(false)
   const [mustResetPassword, setMustResetPassword] = useState(false)
   const [activeView, setActiveView] = useState<AppView>('dashboard')
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [resetForm, setResetForm] = useState({ newPassword: '' })
@@ -666,6 +680,25 @@ export function App() {
   }, [userFilters, users])
 
   const accessAttemptLogs = useMemo(() => logs.filter((entry) => entry.event_category === 'access_attempt'), [logs])
+
+  const versionLabel = versionInfo
+    ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
+    : 'Version unavailable'
+
+  useEffect(() => {
+    let isMounted = true
+    fetch(`${API}/version`, { headers: { Accept: 'application/json' } })
+      .then((response) => (response.ok ? readJson(response) : null))
+      .then((payload) => {
+        if (isMounted && payload) setVersionInfo(payload as VersionInfo)
+      })
+      .catch(() => {
+        if (isMounted) setVersionInfo(null)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const selectedCriterion = useMemo(() => {
     if (!selectedChart) return null
@@ -3083,6 +3116,11 @@ export function App() {
           ) : null}
         </>
       )}
+
+      <footer className='app-footer' aria-label='Application version'>
+        <span>IZ Clinical Notes Analyzer</span>
+        <span>{versionLabel}</span>
+      </footer>
     </main>
   )
 }

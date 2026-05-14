@@ -12,6 +12,7 @@ def test_frontend_origins_list_parses_csv():
 def test_database_url_value_builds_from_dedicated_postgres_settings():
     settings = Settings(
         database_url=None,
+        database_backend='postgresql',
         database_host='127.0.0.1',
         database_port=55432,
         database_name='clinical_notes_app',
@@ -30,6 +31,7 @@ def test_database_url_value_rejects_external_explicit_database_url():
 def test_database_url_value_rejects_external_component_host():
     settings = Settings(
         database_url=None,
+        database_backend='postgresql',
         database_host='shared-db.example.org',
         database_port=5432,
         database_name='clinical_notes_app',
