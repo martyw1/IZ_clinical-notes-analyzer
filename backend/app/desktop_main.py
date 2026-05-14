@@ -3,9 +3,10 @@ from __future__ import annotations
 """Desktop runtime entrypoint.
 
 This module keeps the existing FastAPI app intact while adding desktop-specific
-behavior: the YAML rules API, the API configuration/test UI, and static React UI
-serving when frontend/dist is present. Windows launch scripts use this module so
-the local app can run as a single localhost service.
+behavior: the YAML rules API, the API configuration/test UI, the clinical notes
+intake UI, and static React UI serving when frontend/dist is present. Windows
+launch scripts use this module so the local app can run as a single localhost
+service.
 """
 
 from pathlib import Path
@@ -16,6 +17,7 @@ from starlette.responses import FileResponse, HTMLResponse
 
 from app.api.api_config_routes import router as api_config_router
 from app.api.api_config_ui_routes import router as api_config_ui_router
+from app.api.clinical_notes_ui_routes import router as clinical_notes_ui_router
 from app.api.rules_routes import router as rules_router
 from app.core.config import REPO_ROOT
 from app.main import create_app
@@ -65,11 +67,17 @@ def _desktop_chrome() -> str:
         border-color: #065f46;
         color: #ffffff;
       }}
-      .iz-cna-desktop-shortcuts a:hover {{ background: #047857; }}
+      .iz-cna-desktop-shortcuts a.secondary {{
+        background: #ffffff;
+        border-color: rgba(15, 23, 42, 0.18);
+        color: #0f172a;
+      }}
+      .iz-cna-desktop-shortcuts a:hover {{ background: #047857; color: #ffffff; }}
       @media print {{ .iz-cna-desktop-shortcuts {{ display: none; }} }}
     </style>
     <div class="iz-cna-desktop-shortcuts" aria-label="Application shortcuts and version">
-      <a href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
+      <a href="/clinical-notes-intake" target="_blank" rel="noopener noreferrer">Clinical Notes Intake</a>
+      <a class="secondary" href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
       <span class="iz-cna-desktop-version">v{version}</span>
     </div>
     """
@@ -120,6 +128,7 @@ def _frontend_missing_page() -> HTMLResponse:
           <ul>
             <li><a href="/api/health">API health</a></li>
             <li><a href="/api/readiness">Runtime readiness</a></li>
+            <li><a href="/clinical-notes-intake">Clinical notes intake</a></li>
             <li><a href="/api-configuration">API configuration and connectivity test</a></li>
             <li><a href="/docs">API documentation</a></li>
           </ul>
@@ -165,4 +174,5 @@ app = create_app()
 app.include_router(rules_router)
 app.include_router(api_config_router)
 app.include_router(api_config_ui_router)
+app.include_router(clinical_notes_ui_router)
 _mount_frontend(app)
