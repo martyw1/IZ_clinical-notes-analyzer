@@ -6,10 +6,12 @@ from app.services.api_connectivity import (
     pull_api_definitions,
 )
 
+OriginalHttpxClient = httpx.Client
+
 
 class MockedHttpxClient:
     def __init__(self, *args, **kwargs):
-        self._client = httpx.Client(transport=httpx.MockTransport(self._handler), follow_redirects=True)
+        self._client = OriginalHttpxClient(transport=httpx.MockTransport(self._handler), follow_redirects=True)
 
     def __enter__(self):
         return self._client
