@@ -60,10 +60,15 @@ function Find-SystemPython {
     if ($pythonCommand) {
         & $pythonCommand.Source -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
         if ($LASTEXITCODE -eq 0) { return $pythonCommand.Source }
+        Write-Warn "The python command was found at $($pythonCommand.Source), but it is not a working Python 3.11+ runtime."
     }
 
     $pyCommand = Get-Command py -ErrorAction SilentlyContinue
     if ($pyCommand) {
+        & $pyCommand.Source -3.13 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) { return "$($pyCommand.Source) -3.13" }
+        & $pyCommand.Source -3.12 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) { return "$($pyCommand.Source) -3.12" }
         & $pyCommand.Source -3.11 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
         if ($LASTEXITCODE -eq 0) { return "$($pyCommand.Source) -3.11" }
         & $pyCommand.Source -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
@@ -100,6 +105,15 @@ function New-BackendVirtualEnvironment {
     if ($LASTEXITCODE -ne 0) { throw 'Could not create backend\.venv.' }
 }
 
+function Reset-BackendVirtualEnvironment {
+    $venvDir = Join-Path $RootDir 'backend\.venv'
+    if (Test-Path $venvDir) {
+        Write-Warn "Existing backend virtual environment is broken or stale. Recreating $venvDir."
+        Remove-Item -Path $venvDir -Recurse -Force
+    }
+    New-BackendVirtualEnvironment
+}
+
 function Get-PythonRuntime {
     $embedded = Join-Path $RootDir 'runtime\python\python.exe'
     if (Test-Path $embedded) {
@@ -107,11 +121,23 @@ function Get-PythonRuntime {
         return @{ Path = $embedded; InstallDependencies = $false; Version = $version; Bundled = $true }
     }
 
-    $venv = Join-Path $RootDir 'backend\.venv\Scripts\python.exe'
+    $venvDir = Join-Path $RootDir 'backend\.venv'
+    $venv = Join-Path $venvDir 'Scripts\python.exe'
     if (!(Test-Path $venv)) { New-BackendVirtualEnvironment }
+
     if (Test-Path $venv) {
-        $version = Assert-PythonVersion -PythonExe $venv
-        return @{ Path = $venv; InstallDependencies = $true; Version = $version; Bundled = $false }
+        try {
+            $version = Assert-PythonVersion -PythonExe $venv
+            return @{ Path = $venv; InstallDependencies = $true; Version = $version; Bundled = $false }
+        }
+        catch {
+            Write-Warn "The existing backend virtual environment could not run: $($_.Exception.Message)"
+            Reset-BackendVirtualEnvironment
+            if (Test-Path $venv) {
+                $version = Assert-PythonVersion -PythonExe $venv
+                return @{ Path = $venv; InstallDependencies = $true; Version = $version; Bundled = $false }
+            }
+        }
     }
 
     throw 'Python runtime setup failed. backend\.venv\Scripts\python.exe was not created.'
