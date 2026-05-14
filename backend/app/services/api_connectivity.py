@@ -176,8 +176,12 @@ def _probe_get(client: httpx.Client, url: str, *, kind: str, headers: dict[str, 
     result = ProbeResult(url=url, kind=kind)
     try:
         response = client.get(url, headers=headers)
+        response.read()
         result.status_code = response.status_code
-        result.elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+        try:
+            result.elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+        except RuntimeError:
+            result.elapsed_ms = None
         result.content_type = response.headers.get('content-type', '')
         body_text = response.text[:MAX_BODY_SNIPPET_CHARS]
         response.raise_for_status()
