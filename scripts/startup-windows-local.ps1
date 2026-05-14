@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$NoBrowser,
-    [switch]$SkipFrontendBuild
+    [switch]$SkipFrontendBuild,
+    [switch]$AssumeYes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,23 +18,23 @@ function Write-Info($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:m
 function Write-Pass($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [PASS] $Message" -ForegroundColor Green }
 function Write-Warn($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [WARN] $Message" -ForegroundColor Yellow }
 
+function Confirm-Install {
+    param([string]$Message)
+    if ($AssumeYes) { return $true }
+    Write-Host ""
+    Write-Warn $Message
+    $answer = Read-Host 'Do you want to install these now? Type Y for yes or N for no'
+    return $answer -match '^(y|yes)$'
+}
+
 function New-RandomBytes {
     param([int]$Length)
     $bytes = New-Object byte[] $Length
-
-    # Windows PowerShell 5.1 runs on .NET Framework, where the static
-    # RandomNumberGenerator::Fill(byte[]) helper is not available. Use the
-    # older Create()/GetBytes() pattern so startup works on plain Windows 10/11.
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try {
-        $rng.GetBytes($bytes)
-    }
+    try { $rng.GetBytes($bytes) }
     finally {
-        if ($rng -and ($rng -is [System.IDisposable])) {
-            $rng.Dispose()
-        }
+        if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() }
     }
-
     return $bytes
 }
 
@@ -47,66 +48,132 @@ function New-LocalSecret {
 
 function Assert-PythonVersion {
     param([string]$PythonExe)
-
     $versionText = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not run Python at $PythonExe."
-    }
-
+    if ($LASTEXITCODE -ne 0) { throw "Could not run Python at $PythonExe." }
     $version = [version]$versionText.Trim()
-    if ($version -lt [version]'3.11.0') {
-        throw "Python 3.11+ is required. Found Python $version at $PythonExe."
+    if ($version -lt [version]'3.11.0') { throw "Python 3.11+ is required. Found Python $version at $PythonExe." }
+    return $version
+}
+
+function Find-SystemPython {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($pythonCommand) {
+        & $pythonCommand.Source -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) { return $pythonCommand.Source }
     }
 
-    return $version
+    $pyCommand = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCommand) {
+        & $pyCommand.Source -3.11 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) { return "$($pyCommand.Source) -3.11" }
+        & $pyCommand.Source -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) { return "$($pyCommand.Source) -3" }
+    }
+
+    return $null
+}
+
+function Invoke-PythonCommand {
+    param(
+        [string]$PythonCommand,
+        [string[]]$Arguments
+    )
+    if ($PythonCommand -like '* -3*') {
+        $parts = $PythonCommand.Split(' ', 2)
+        & $parts[0] $parts[1] @Arguments
+    } else {
+        & $PythonCommand @Arguments
+    }
 }
 
 function New-BackendVirtualEnvironment {
     $venvDir = Join-Path $RootDir 'backend\.venv'
     New-Item -ItemType Directory -Path (Split-Path $venvDir -Parent) -Force | Out-Null
 
-    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if ($pythonCommand) {
-        Write-Info "Creating backend virtual environment with $($pythonCommand.Source)."
-        & $pythonCommand.Source -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
-        if ($LASTEXITCODE -eq 0) {
-            & $pythonCommand.Source -m venv $venvDir
-            if ($LASTEXITCODE -eq 0) { return }
-        }
-        Write-Warn 'The python command was found, but it is not Python 3.11+ or could not create the virtual environment.'
+    $systemPython = Find-SystemPython
+    if (!$systemPython) {
+        throw 'Python 3.11+ was not found. Install Python 3.11+ from python.org or the Microsoft Store, reopen PowerShell, and run this launcher again.'
     }
 
-    $pyCommand = Get-Command py -ErrorAction SilentlyContinue
-    if ($pyCommand) {
-        Write-Info "Creating backend virtual environment with Python Launcher at $($pyCommand.Source)."
-        & $pyCommand.Source -3.11 -m venv $venvDir
-        if ($LASTEXITCODE -eq 0) { return }
-
-        & $pyCommand.Source -3 -m venv $venvDir
-        if ($LASTEXITCODE -eq 0) { return }
-    }
-
-    throw 'Python 3.11+ was not found or could not create backend\.venv. Install Python 3.11+ and reopen PowerShell.'
+    Write-Info "Creating backend virtual environment with $systemPython."
+    Invoke-PythonCommand -PythonCommand $systemPython -Arguments @('-m', 'venv', $venvDir)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create backend\.venv.' }
 }
 
 function Get-PythonRuntime {
     $embedded = Join-Path $RootDir 'runtime\python\python.exe'
     if (Test-Path $embedded) {
         $version = Assert-PythonVersion -PythonExe $embedded
-        return @{ Path = $embedded; InstallDependencies = $false; Version = $version }
+        return @{ Path = $embedded; InstallDependencies = $false; Version = $version; Bundled = $true }
     }
 
     $venv = Join-Path $RootDir 'backend\.venv\Scripts\python.exe'
-    if (!(Test-Path $venv)) {
-        New-BackendVirtualEnvironment
-    }
-
+    if (!(Test-Path $venv)) { New-BackendVirtualEnvironment }
     if (Test-Path $venv) {
         $version = Assert-PythonVersion -PythonExe $venv
-        return @{ Path = $venv; InstallDependencies = $true; Version = $version }
+        return @{ Path = $venv; InstallDependencies = $true; Version = $version; Bundled = $false }
     }
 
     throw 'Python runtime setup failed. backend\.venv\Scripts\python.exe was not created.'
+}
+
+function Test-BackendRuntimeDependencies {
+    param([string]$PythonExe)
+    $checkCode = @'
+import importlib.util
+import sys
+required = {
+    "fastapi": "fastapi",
+    "uvicorn": "uvicorn",
+    "sqlalchemy": "sqlalchemy",
+    "jose": "python-jose",
+    "passlib": "passlib",
+    "bcrypt": "bcrypt",
+    "multipart": "python-multipart",
+    "pydantic_settings": "pydantic-settings",
+    "email_validator": "email-validator",
+    "pypdf": "pypdf",
+    "cryptography": "cryptography",
+    "yaml": "PyYAML",
+}
+missing = [package for module, package in required.items() if importlib.util.find_spec(module) is None]
+if missing:
+    print("Missing Python packages: " + ", ".join(missing))
+    sys.exit(1)
+print("Python runtime packages are present.")
+'@
+    & $PythonExe -c $checkCode
+    return $LASTEXITCODE -eq 0
+}
+
+function Ensure-BackendRuntimeDependencies {
+    param([string]$PythonExe)
+    $runtimeRequirements = Join-Path $RootDir 'backend\requirements-windows-local.txt'
+    if (!(Test-Path $runtimeRequirements)) {
+        $runtimeRequirements = Join-Path $RootDir 'backend\requirements.txt'
+        Write-Warn 'Lean Windows runtime requirements file was not found; falling back to backend\requirements.txt.'
+    }
+
+    if (Test-BackendRuntimeDependencies -PythonExe $PythonExe) {
+        Write-Pass 'Required local Python packages are already installed.'
+        return
+    }
+
+    $message = "The app needs local Python packages listed in $runtimeRequirements."
+    if (!(Confirm-Install -Message $message)) {
+        throw 'Required Python packages are missing and were not installed. Startup cannot continue.'
+    }
+
+    Write-Info 'Installing required local Python packages into backend\.venv.'
+    & $PythonExe -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
+
+    & $PythonExe -m pip install -r $runtimeRequirements
+    if ($LASTEXITCODE -ne 0) { throw 'Python package installation failed.' }
+
+    if (!(Test-BackendRuntimeDependencies -PythonExe $PythonExe)) {
+        throw 'Python packages were installed, but the dependency check still failed.'
+    }
 }
 
 function Ensure-EnvFile {
@@ -149,6 +216,22 @@ EMR_API_ENABLED=false
     }
 }
 
+function Test-RulesConfiguration {
+    param([string]$PythonExe)
+    $rulesPath = Join-Path $RootDir 'config\rules\alleva_treatment_plan_completeness_rules.yaml'
+    $checkCode = @"
+from app.services.rules_engine import load_rules_config, validate_rules_config
+config = load_rules_config(r'$rulesPath')
+errors = validate_rules_config(config)
+if errors:
+    raise SystemExit('; '.join(errors))
+print('Rules configuration is valid.')
+"@
+    & $PythonExe -c $checkCode
+    if ($LASTEXITCODE -ne 0) { throw 'Rules configuration validation failed.' }
+    Write-Pass 'Rules configuration validated without requiring pytest.'
+}
+
 function Ensure-FrontendBuild {
     if ($SkipFrontendBuild) {
         Write-Warn 'Skipping frontend build because -SkipFrontendBuild was supplied.'
@@ -170,42 +253,38 @@ function Ensure-FrontendBuild {
     }
 
     $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if (!$npmCommand) {
-        $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
-    }
+    if (!$npmCommand) { $npmCommand = Get-Command npm -ErrorAction SilentlyContinue }
 
     if (!$npmCommand) {
-        Write-Warn 'Node.js/npm was not found. The backend will start, but the browser UI cannot be built from source.'
-        Write-Warn 'Install Node.js LTS, then rerun this startup script, or use a packaged release with frontend\dist included.'
+        Write-Warn 'Browser UI build files are missing, and Node.js/npm was not found.'
+        Write-Warn 'Install Node.js LTS, then rerun this launcher, or use a packaged release that includes frontend\dist.'
+        return
+    }
+
+    $message = 'Browser UI build files are missing. The app needs Node.js/npm to install frontend packages and build frontend\dist from source.'
+    if (!(Confirm-Install -Message $message)) {
+        Write-Warn 'Frontend build was skipped. The backend will still start, but the full browser UI may be unavailable until frontend\dist exists.'
         return
     }
 
     Write-Info "Building frontend UI with $($npmCommand.Source)."
     Push-Location $frontendDir
     try {
-        if (Test-Path (Join-Path $frontendDir 'package-lock.json')) {
-            & $npmCommand.Source ci
-        } else {
-            & $npmCommand.Source install
-        }
+        if (Test-Path (Join-Path $frontendDir 'package-lock.json')) { & $npmCommand.Source ci }
+        else { & $npmCommand.Source install }
         if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed.' }
 
         & $npmCommand.Source run build
         if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 
-        if (Test-Path $indexFile) {
-            Write-Pass 'Frontend build completed at frontend\dist.'
-        } else {
-            Write-Warn 'Frontend build command finished, but frontend\dist\index.html was not found.'
-        }
+        if (Test-Path $indexFile) { Write-Pass 'Frontend build completed at frontend\dist.' }
+        else { Write-Warn 'Frontend build command finished, but frontend\dist\index.html was not found.' }
     }
     catch {
         Write-Warn "Frontend build did not complete: $($_.Exception.Message)"
         Write-Warn 'The backend will still start and / will show a local status page with build instructions.'
     }
-    finally {
-        Pop-Location
-    }
+    finally { Pop-Location }
 }
 
 try {
@@ -229,25 +308,17 @@ try {
     Write-Info "Python version: $($pythonRuntime.Version)"
 
     if ($pythonRuntime.InstallDependencies) {
-        Write-Info 'Installing or refreshing backend dependencies in backend\.venv.'
-        & $pythonExe -m pip install --upgrade pip
-        if ($LASTEXITCODE -ne 0) { throw 'pip upgrade failed.' }
-
-        & $pythonExe -m pip install -r (Join-Path $RootDir 'backend\requirements.txt')
-        if ($LASTEXITCODE -ne 0) { throw 'Backend dependency installation failed.' }
+        Ensure-BackendRuntimeDependencies -PythonExe $pythonExe
     }
 
-    Write-Info 'Running backend readiness checks before launch.'
-    & $pythonExe -m pytest (Join-Path $RootDir 'backend\tests\test_rules_engine.py') -q
-    if ($LASTEXITCODE -ne 0) { throw 'Rules-engine test failed.' }
+    Write-Info 'Running lightweight readiness checks before launch.'
+    Test-RulesConfiguration -PythonExe $pythonExe
 
     Ensure-FrontendBuild
 
     $port = 8000
     Write-Info "Starting local app on http://localhost:$port"
-    if (-not $NoBrowser) {
-        Start-Process "http://localhost:$port"
-    }
+    if (-not $NoBrowser) { Start-Process "http://localhost:$port" }
     & $pythonExe -m uvicorn app.desktop_main:app --app-dir (Join-Path $RootDir 'backend') --host 127.0.0.1 --port $port
     if ($LASTEXITCODE -ne 0) { throw 'Local FastAPI server exited with an error.' }
 }
@@ -257,7 +328,5 @@ catch {
     throw
 }
 finally {
-    if ($TranscriptStarted) {
-        Stop-Transcript | Out-Null
-    }
+    if ($TranscriptStarted) { Stop-Transcript | Out-Null }
 }
