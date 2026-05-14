@@ -91,6 +91,27 @@ function Invoke-PythonCommand {
     }
 }
 
+function Invoke-PythonSnippet {
+    param(
+        [string]$PythonExe,
+        [string]$Code
+    )
+
+    # Windows PowerShell 5.1 can strip quotes from complex multi-line arguments
+    # passed to native commands through `python -c`. Write the check to a
+    # temporary .py file instead so the Python code runs exactly as authored.
+    $scriptName = "iz-cna-python-check-$([guid]::NewGuid().ToString('N')).py"
+    $scriptPath = Join-Path $env:TEMP $scriptName
+    try {
+        Set-Content -Path $scriptPath -Value $Code -Encoding UTF8
+        & $PythonExe $scriptPath
+        return $LASTEXITCODE
+    }
+    finally {
+        Remove-Item -Path $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function New-BackendVirtualEnvironment {
     $venvDir = Join-Path $RootDir 'backend\.venv'
     New-Item -ItemType Directory -Path (Split-Path $venvDir -Parent) -Force | Out-Null
@@ -168,8 +189,8 @@ if missing:
     sys.exit(1)
 print("Python runtime packages are present.")
 '@
-    & $PythonExe -c $checkCode
-    return $LASTEXITCODE -eq 0
+    $exitCode = Invoke-PythonSnippet -PythonExe $PythonExe -Code $checkCode
+    return $exitCode -eq 0
 }
 
 function Ensure-BackendRuntimeDependencies {
@@ -253,8 +274,8 @@ if errors:
     raise SystemExit('; '.join(errors))
 print('Rules configuration is valid.')
 "@
-    & $PythonExe -c $checkCode
-    if ($LASTEXITCODE -ne 0) { throw 'Rules configuration validation failed.' }
+    $exitCode = Invoke-PythonSnippet -PythonExe $PythonExe -Code $checkCode
+    if ($exitCode -ne 0) { throw 'Rules configuration validation failed.' }
     Write-Pass 'Rules configuration validated without requiring pytest.'
 }
 
