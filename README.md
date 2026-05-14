@@ -1,107 +1,98 @@
 # IZ Clinical Notes Analyzer
 
-IZ Clinical Notes Analyzer is a local-first clinical chart-review application for checking clinical note binders, Treatment Plan Tracking completeness, office-manager review workflow, role-based access control, and audit logging.
+IZ Clinical Notes Analyzer is a local-first clinical chart-review application for checking clinical note binders, Treatment Plan Tracking completeness, office-manager review workflow, role-based access control, API configuration/testing, and audit logging.
 
-The current Windows direction is intentionally simple for clinic users:
+The Windows desktop direction is intentionally simple:
 
 - runs on ordinary Windows 10 and Windows 11 machines
-- does not require Docker for the local desktop workflow
-- does not require PostgreSQL for the local desktop workflow
+- uses a double-click launcher for non-technical users
+- does not require Docker for local desktop use
+- does not require PostgreSQL for local desktop use
 - uses SQLite for local desktop data
 - stores runtime data under the user's local Windows app-data folder
-- provides a double-click Windows launcher
-- provides PowerShell scripts for full-stack testing and Alleva API connectivity checks
+- checks required dependencies before launch
+- asks before installing missing source-checkout dependencies
+- uses a smaller Windows runtime dependency file for ordinary local runs
 - keeps deterministic Treatment Plan Tracking completeness rules in YAML configuration
+- provides an in-app admin API configuration and connectivity-test page
+- provides PowerShell scripts for full-stack, API configuration, and Alleva/OpenAPI connectivity tests
 
-## What this app does
+## Start Here: Windows 11 Non-Technical User Guide
 
-- Accepts clinical note binder uploads grouped by `patient_id`.
-- Auto-detects `patient_id` from uploaded files when possible.
-- Creates an immutable versioned note set for every upload/update.
-- Generates automated review output from uploaded binder contents.
-- Runs deterministic completeness checks from external YAML rules.
-- Lets reviewers confirm, reject, or mark checklist items as not applicable.
-- Supports office-manager approval or return-to-counselor workflow.
-- Keeps audit logs for reads, writes, auth, downloads, and workflow changes.
-- Stores uploaded source files encrypted at rest with SHA-256 digests.
-- Includes runtime readiness checks for the local database, storage, encryption, parser support, dependency support, and rules configuration.
-- Provides EMR connector boundaries and Alleva API connectivity probes for future EMR integration work.
+Use this section when you just want to start the app on a Windows 11 laptop.
 
-## Who should use which section
+### What you need
 
-- Non-technical Windows users: start with [Windows Quick Start](#windows-quick-start).
-- Windows developers/testers: use [Windows Developer and Test Workflow](#windows-developer-and-test-workflow).
-- Alleva API testing: use [Alleva API Connectivity Test](#alleva-api-connectivity-test).
-- Docker/server operators: use [Docker and VPS Runtime](#docker-and-vps-runtime).
+For a packaged release folder, the goal is that everything needed is already included.
 
-## Windows Quick Start
+For a source-code checkout, the Windows laptop needs:
 
-This is the recommended local run path for ordinary Windows 10 and Windows 11 machines.
+1. Windows 11.
+2. Python 3.11 or newer.
+3. Internet access the first time dependencies are installed.
+4. Node.js LTS only if the React browser UI has not already been built into `frontend\dist`.
 
-### 1. Get the application folder onto the Windows machine
+The app does **not** require Docker or PostgreSQL for the normal Windows desktop run.
 
-Use one of these approaches:
+### Step 1: Put the app folder somewhere local
 
-- download or copy a release folder prepared for this app
-- clone the repo with Git
-- copy the repo folder from another machine
-
-For a source checkout, keep the project in a normal local folder such as:
+Use a normal local folder such as:
 
 ```text
 C:\Users\<your-user>\local-apps\IZ_clinical-notes-analyzer
 ```
 
-Avoid running the app directly from OneDrive, Dropbox, iCloud Drive, Google Drive, or a network share. The source code can be backed up elsewhere, but the live runtime database and uploads should stay in local app data.
+Avoid running the live app folder directly from OneDrive, Dropbox, iCloud Drive, Google Drive, or a network share. The app stores the actual runtime database and uploads under Windows local app data, but local source folders are still more reliable for startup scripts and virtual environments.
 
-### 2. Install Python only if running from source
+### Step 2: Double-click the launcher
 
-A packaged end-user release should include its own runtime. A source checkout requires Python 3.11 or newer.
-
-To check Python from PowerShell:
-
-```powershell
-python --version
-```
-
-Expected result:
-
-```text
-Python 3.11.x
-```
-
-or newer.
-
-If Python is missing, install Python 3.11+ from python.org or the Microsoft Store, then reopen PowerShell and check again.
-
-### 3. Double-click the launcher
-
-From Windows File Explorer, open the project folder and double-click:
+In Windows File Explorer, open the app folder and double-click:
 
 ```text
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-That launcher runs:
+That is the main start button for non-technical users.
+
+It opens a command window titled:
 
 ```text
-scripts\startup-windows-local.ps1
+IZ Clinical Notes Analyzer
 ```
 
-The launcher will:
+If startup fails, the window stays open and tells you to review the messages and logs.
 
-1. create local runtime folders under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
-2. create a local `.env` file if one does not already exist
-3. generate local secrets and a bootstrap admin password
-4. create or reuse `backend\.venv`
-5. install backend Python dependencies for a source checkout
-6. run the Treatment Plan rules-engine test before launch
-7. start the local FastAPI app on `http://localhost:8000`
-8. open the browser unless started with `-NoBrowser`
+### Step 3: Answer dependency prompts
 
-### 4. Save the first sign-in credentials
+On a source checkout, the app checks whether required Python packages are already installed in `backend\.venv`.
 
-On first launch, the startup window prints credentials similar to this:
+If packages are missing, it says that the app needs local Python packages and asks:
+
+```text
+Do you want to install these now? Type Y for yes or N for no
+```
+
+Type:
+
+```text
+Y
+```
+
+and press Enter.
+
+The source-checkout runtime installs from:
+
+```text
+backend\requirements-windows-local.txt
+```
+
+That file is intentionally smaller than the developer requirements file.
+
+If the browser UI files are missing and Node.js/npm is available, the launcher may also ask before building the frontend. Type `Y` to let it build `frontend\dist`.
+
+### Step 4: Save the first admin password
+
+On first launch, the startup window prints something like:
 
 ```text
 First sign-in credentials:
@@ -109,63 +100,78 @@ First sign-in credentials:
   Password: <generated-password>
 ```
 
-Save the password securely. It is also stored in:
+Save that password securely.
+
+The password is also stored in:
 
 ```text
 %LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
 ```
 
-The default bootstrap username is:
+### Step 5: Use the app in the browser
 
-```text
-admin
-```
-
-### 5. Open the app
-
-The local app URL is:
+The app should open automatically. If it does not, open a browser and go to:
 
 ```text
 http://localhost:8000
 ```
 
-The API health endpoint is:
+Useful local pages:
+
+| Page | Address |
+| --- | --- |
+| App home | `http://localhost:8000` |
+| API health | `http://localhost:8000/api/health` |
+| Readiness | `http://localhost:8000/api/readiness` |
+| API configuration page | `http://localhost:8000/api-configuration` |
+
+## What the Windows launcher does
+
+`Start-IZ-Clinical-Notes-Analyzer.cmd` runs:
 
 ```text
-http://localhost:8000/api/health
+scripts\startup-windows-local.ps1
 ```
 
-The readiness endpoint is:
+The startup script:
 
-```text
-http://localhost:8000/api/readiness
-```
+1. creates local runtime folders under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
+2. creates a local `.env` file if one does not already exist
+3. generates local secrets and a bootstrap admin password
+4. finds or creates `backend\.venv`
+5. verifies Python 3.11 or newer
+6. checks required Python packages before launch
+7. asks before installing missing Python packages
+8. installs from the lean Windows runtime file, `backend\requirements-windows-local.txt`
+9. validates the YAML Treatment Plan rules configuration without requiring `pytest`
+10. checks whether `frontend\dist` already exists
+11. asks before using Node/npm to install and build frontend files when needed
+12. starts the local FastAPI desktop app on `http://localhost:8000`
+13. opens the browser unless started with `-NoBrowser`
 
-## Windows Command-Line Startup
-
-If double-clicking the `.cmd` launcher is blocked or you want to see more detail, use PowerShell.
-
-Open PowerShell in the repo root and run:
+For automated setup, developers can run the startup script with:
 
 ```powershell
-.\scripts\startup-windows-local.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1 -AssumeYes
 ```
 
-To start without opening a browser automatically:
+## Windows command-line startup
 
-```powershell
-.\scripts\startup-windows-local.ps1 -NoBrowser
-```
-
-If PowerShell blocks script execution, run the script with a one-time bypass from the repo root:
+If double-clicking the launcher is blocked, open PowerShell in the repo root and run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1
 ```
 
-The double-click `.cmd` launcher already uses this one-time bypass for the app script. It does not permanently change the Windows execution policy.
+To start without opening a browser automatically:
 
-## Windows Runtime Data Locations
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1 -NoBrowser
+```
+
+The one-time execution-policy bypass does not permanently change the Windows machine's PowerShell policy.
+
+## Windows runtime data locations
 
 The Windows local runtime uses the user's local app-data folder rather than the repo folder.
 
@@ -185,51 +191,92 @@ Important files and folders:
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Optional Alleva connectivity JSON reports |
 
-Test runs use a separate folder:
+Test scripts use separate app-data folders so they do not overwrite the normal desktop runtime.
+
+## Main user workflows
+
+### Counselor or uploader
+
+1. Sign in.
+2. Open the upload/review intake area.
+3. Enter `patient_id`, or allow the app to try to detect it from file names and readable file contents.
+4. Add clinical note files and metadata.
+5. Submit the upload.
+6. The app stores the binder, extracts readable text, and creates automated review output.
+
+### Reviewer or manager
+
+1. Open the review queue.
+2. Select the patient chart.
+3. Review system summary and checklist results.
+4. Confirm, reject, or mark checklist items as not applicable.
+5. Approve the chart or return it with a comment.
+
+### Administrator
+
+Admins can also:
+
+- create and manage users
+- unlock users or require password reset
+- review forensic logs
+- update app settings
+- review system readiness
+- test future EMR/API connector settings
+- open the API configuration and connectivity-test page
+
+## User roles
+
+| Role | Purpose |
+| --- | --- |
+| `admin` | Full access, including user management, settings, logs, charts, uploads, rules, and API configuration |
+| `manager` | Review charts, patient note sets, approvals, and return-to-counselor workflow |
+| `counselor` | Upload note sets and view permitted charts/uploads |
+
+## API configuration and connectivity testing
+
+The Windows desktop runtime includes an admin-only API configuration page:
 
 ```text
-%LOCALAPPDATA%\IZ Clinical Notes Analyzer Test
+http://localhost:8000/api-configuration
 ```
 
-## Windows Developer and Test Workflow
+The page lets an admin:
 
-Use this when you want to verify that all local app pieces work from a Windows source checkout.
+1. sign in with the local admin account
+2. enter or update API vendor/base URL details
+3. enter an API key for a one-time test or save it for later use
+4. pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL
+5. test connectivity from inside the running app
+6. review non-secret test results such as probed URLs, HTTP status codes, OpenAPI title/version, path counts, schema counts, security scheme names, and sample paths
 
-Open PowerShell in the repo root:
+Secret handling:
 
-```powershell
-.\scripts\test-local-app-stack.ps1
+- saved API keys are encrypted before storage
+- API keys are not returned to the browser after save
+- API keys are not written into audit-log details
+- one-time pasted API keys can be used for a test without saving them
+
+Desktop API configuration routes:
+
+```text
+GET   /api/api-configuration
+PATCH /api/api-configuration
+POST  /api/api-configuration/pull-definitions
+POST  /api/api-configuration/test
+GET   /api/api-configuration/sample-openapi.json
 ```
 
-The test script does the following:
+The privileged routes require an authenticated admin bearer token. The sample OpenAPI JSON endpoint is intentionally non-sensitive and exists so local smoke tests can validate the definition-pull logic without live Alleva credentials or internet access.
 
-1. creates `backend\.venv` if needed
-2. installs backend dependencies from `backend\requirements.txt`
-3. creates a temporary test `.env` under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer Test`
-4. configures SQLite for the test run
-5. runs backend unit tests under `backend\tests`
-6. starts a test server on `http://localhost:8000`
-7. checks `/api/health`
-8. checks `/api/readiness`
-9. logs in as the generated test admin
-10. calls `/api/users/me`
-11. stops the test server
+More detail is documented in:
 
-To use a different test port:
-
-```powershell
-.\scripts\test-local-app-stack.ps1 -Port 8010
+```text
+docs\api-configuration-and-connectivity.md
 ```
 
-To skip dependency installation after the environment is already prepared:
+## Alleva API connectivity test script
 
-```powershell
-.\scripts\test-local-app-stack.ps1 -SkipDependencyInstall
-```
-
-## Alleva API Connectivity Test
-
-The app includes a dedicated connectivity probe for the Alleva API documentation and likely OpenAPI endpoints.
+The repo also includes a standalone PowerShell connectivity probe for Alleva/OpenAPI discovery.
 
 Run from PowerShell in the repo root:
 
@@ -257,13 +304,13 @@ The script probes:
 - `/openapi.json`
 - API root
 
-If Alleva provides a different Swagger/OpenAPI URL:
+Reports are written to:
 
-```powershell
-.\scripts\test-alleva-api-connectivity.ps1 -SwaggerUiUrl "https://api.allevasoft.com/swagger/index.html" -WriteJsonReport
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports
 ```
 
-If protected endpoints require credentials, set credentials as environment variables for the current PowerShell session. Do not write credentials into source files.
+If protected endpoints require credentials, set credentials only as temporary PowerShell environment variables. Do not write credentials into source files, README files, YAML files, or `.env.example`.
 
 Bearer token example:
 
@@ -281,52 +328,106 @@ $env:ALLEVA_API_KEY = "paste-api-key-here"
 Remove-Item Env:\ALLEVA_API_KEY
 ```
 
-Reports are written to:
+## Windows developer and test workflow
 
-```text
-%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports
+Use these commands when validating a Windows source checkout.
+
+### Full local app stack test
+
+```powershell
+.\scripts\test-local-app-stack.ps1
 ```
 
-Credential guardrails:
+The test script:
 
-- do not commit Alleva credentials
-- do not paste credentials into `.env.example`
-- do not paste credentials into README files or YAML rules files
-- do not paste PHI into API connectivity tests
+1. creates `backend\.venv` if needed
+2. installs backend developer/test dependencies from `backend\requirements.txt`
+3. creates a temporary test `.env`
+4. configures SQLite for the test run
+5. runs backend unit tests under `backend\tests`
+6. starts a test server
+7. checks `/api/health`
+8. checks `/api/readiness`
+9. logs in as the generated test admin
+10. calls `/api/users/me`
+11. stops the test server
 
-## Running Backend Pieces Manually on Windows
+Use a different test port:
 
-Most users should use the launcher or the test script. These manual commands are useful for debugging.
+```powershell
+.\scripts\test-local-app-stack.ps1 -Port 8010
+```
 
-### Create or reuse the backend virtual environment
+Skip dependency installation after the environment is already prepared:
+
+```powershell
+.\scripts\test-local-app-stack.ps1 -SkipDependencyInstall
+```
+
+### Focused API configuration smoke test
+
+```powershell
+.\scripts\test-api-configuration-local.ps1
+```
+
+This script validates the API configuration page and endpoints against a local sample OpenAPI definition. It does not require live Alleva credentials.
+
+Use a different port:
+
+```powershell
+.\scripts\test-api-configuration-local.ps1 -Port 8021
+```
+
+Skip dependency installation after the environment is already prepared:
+
+```powershell
+.\scripts\test-api-configuration-local.ps1 -SkipDependencyInstall
+```
+
+## Backend and frontend dependencies
+
+There are two Python requirements files with different purposes.
+
+| File | Purpose |
+| --- | --- |
+| `backend\requirements-windows-local.txt` | Lean runtime dependencies for ordinary Windows desktop startup |
+| `backend\requirements.txt` | Developer/test/server dependencies, including test tooling and extra backend components |
+
+The Windows double-click startup path uses `requirements-windows-local.txt` when packages are missing. Developer test scripts may still use `requirements.txt` because they run pytest and broader test tooling.
+
+Frontend dependencies are under:
+
+```text
+frontend\package.json
+```
+
+For ordinary users, the preferred release shape is to include already-built frontend files under:
+
+```text
+frontend\dist
+```
+
+If `frontend\dist` is missing in a source checkout, the startup script can ask before using Node/npm to install frontend packages and build the UI.
+
+## Running backend pieces manually on Windows
+
+Most users should use the double-click launcher. These manual commands are for debugging.
+
+Create or reuse the backend virtual environment:
 
 ```powershell
 cd C:\path\to\IZ_clinical-notes-analyzer
 python -m venv backend\.venv
 .\backend\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements-windows-local.txt
 ```
 
-### Run backend tests
-
-```powershell
-.\backend\.venv\Scripts\python.exe -m pytest backend\tests -q
-```
-
-### Run only the rules-engine tests
-
-```powershell
-.\backend\.venv\Scripts\python.exe -m pytest backend\tests\test_rules_engine.py -q
-```
-
-### Start the local API manually
-
-The startup script normally sets the right environment file. Manual runs should either use the generated app-data `.env` or set the environment variable directly.
+Start the local desktop API manually:
 
 ```powershell
 $env:IZ_CNA_ENV_FILE = "$env:LOCALAPPDATA\IZ Clinical Notes Analyzer\.env"
 $env:PYTHONPATH = "$PWD\backend"
-.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+.\backend\.venv\Scripts\python.exe -m uvicorn app.desktop_main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
 Then open:
@@ -335,34 +436,18 @@ Then open:
 http://localhost:8000
 ```
 
-### Start the lean desktop app entrypoint
-
-The repo also includes a lean desktop starter:
-
-```powershell
-.\scripts\start-desktop-local.ps1
-```
-
-or with a custom port:
-
-```powershell
-.\scripts\start-desktop-local.ps1 -Port 8010
-```
-
-This starts `app.desktop_main:app`. Use `startup-windows-local.ps1` for the fuller non-technical-user startup path because it creates the app-data `.env`, runs readiness-oriented checks, and opens the browser.
-
-## Running Frontend Pieces Manually on Windows
+## Running frontend pieces manually on Windows
 
 The Windows local backend can serve built frontend assets if `frontend\dist` exists. During active frontend development, run Vite separately.
 
-### Install frontend dependencies
+Install frontend dependencies:
 
 ```powershell
 cd frontend
 npm install
 ```
 
-### Start the Vite dev server
+Start the Vite dev server:
 
 ```powershell
 npm run dev
@@ -374,9 +459,7 @@ Default Vite URL:
 http://localhost:5173
 ```
 
-If the backend is running on `http://localhost:8000`, make sure the frontend API proxy or frontend environment points API calls to the backend.
-
-### Build production frontend assets
+Build production frontend assets:
 
 ```powershell
 cd frontend
@@ -389,9 +472,9 @@ Expected build output:
 frontend\dist
 ```
 
-After building, restart the Windows local backend. The desktop/backend entrypoint can serve the built assets from `frontend\dist` when configured by the app code.
+After building, restart the Windows local backend.
 
-## Treatment Plan Tracking Rules
+## Treatment Plan Tracking rules
 
 The first deterministic completeness workflow is configured here:
 
@@ -417,30 +500,31 @@ The rules-engine unit tests live here:
 backend\tests\test_rules_engine.py
 ```
 
-The Windows startup script validates the rules engine before launch by running the rules-engine test.
+The Windows startup script validates the rules configuration before launch without requiring pytest in the ordinary Windows runtime path.
 
 Rules-file guardrails:
 
 - keep PHI out of YAML rules files
 - keep vendor credentials out of YAML rules files
-- treat YAML rules as deterministic business logic, not as LLM prompts
+- treat YAML rules as deterministic business logic, not LLM prompts
 - add future workflows as versioned rules profiles under `config\rules`
 
-## EMR API Readiness
+## EMR and API readiness
 
-The app is upload-first today. It has a standards-aligned EMR connector boundary for future EMR work.
+The app is upload-first today. It also has EMR/API connector boundaries for future integration work.
 
-Current EMR-related behavior:
+Current EMR/API behavior:
 
 - Admin settings can store EMR vendor label, FHIR base URL, SMART client ID/secret, scopes, and timeout.
 - `GET /api/emr/profile` reports configured SMART/FHIR profile information.
 - `POST /api/emr/discover` validates SMART `.well-known/smart-configuration` discovery when a real EMR FHIR base URL is available.
 - `GET /api/emr/import-plan?patient_id=...` shows the planned FHIR R4 `Patient`, `DocumentReference`, `Binary`, and optional `Provenance` request flow.
+- The API configuration page can store encrypted API keys, pull OpenAPI/Swagger definitions, and test connectivity.
 - Alleva live API import remains gated until client/vendor credentials, tenant base URLs, attachment behavior, pagination/rate-limit rules, and official documentation are available.
 
-The local connectivity script does not import patient data. It only checks reachability and OpenAPI/Swagger availability.
+The local connectivity scripts and sample OpenAPI endpoint do not import patient data.
 
-## Default Local URLs
+## Default local URLs
 
 Windows local desktop runtime:
 
@@ -450,6 +534,8 @@ Windows local desktop runtime:
 | API health | `http://localhost:8000/api/health` |
 | Readiness | `http://localhost:8000/api/readiness` |
 | Backend API base | `http://localhost:8000/api` |
+| API configuration page | `http://localhost:8000/api-configuration` |
+| API configuration sample OpenAPI | `http://localhost:8000/api/api-configuration/sample-openapi.json` |
 
 Frontend dev mode, when run separately:
 
@@ -466,7 +552,7 @@ Docker/server mode defaults may expose frontend and backend separately:
 | Docker backend | `http://localhost:8000` |
 | Docker backend through frontend proxy | `http://localhost:5173/api` |
 
-## Local Configuration
+## Local configuration
 
 The generated Windows local `.env` is stored outside the repo:
 
@@ -483,7 +569,7 @@ Important local settings:
 | `DATABASE_BACKEND` | Local DB engine | `sqlite` |
 | `LOCAL_SQLITE_DB_PATH` | SQLite database file | `clinical-notes-analyzer.sqlite3` |
 | `SECRET_KEY` | JWT signing secret | generated on first startup |
-| `DATA_ENCRYPTION_KEY` | upload encryption key | generated on first startup |
+| `DATA_ENCRYPTION_KEY` | upload/API-secret encryption key | generated on first startup |
 | `FRONTEND_ORIGIN` | local app origin | `http://localhost:8000` |
 | `FRONTEND_ORIGINS` | allowed local origins | `http://localhost:8000,http://localhost:5173` |
 | `ALLOWED_HOSTS` | accepted host headers | `localhost,127.0.0.1,::1,testserver` |
@@ -496,49 +582,7 @@ Important local settings:
 | `LLM_ENABLED` | optional LLM support | `false` |
 | `EMR_API_ENABLED` | live EMR API support | `false` |
 
-## User Roles
-
-- `admin`
-  - full access
-  - can manage users, settings, logs, charts, uploads, and rules/API configuration
-- `manager`
-  - can review charts and patient note sets
-  - can approve or return charts
-- `counselor`
-  - can upload note sets
-  - can view only their own charts and uploads
-
-## Basic User Workflow
-
-### Counselor or uploader
-
-1. Sign in.
-2. Open upload/review intake area.
-3. Enter `patient_id`, or leave it blank and let the app try to detect it from files.
-4. Add clinical note files and metadata.
-5. Submit the upload.
-6. The app stores the binder, extracts readable text, and creates automated review output.
-
-### Reviewer or manager
-
-1. Open the review queue.
-2. Select the patient chart.
-3. Read the system summary and checklist results.
-4. Confirm or correct checklist items.
-5. Approve the chart or return it with a comment.
-
-### Administrator
-
-Admins can also:
-
-- create and manage users
-- unlock users or require password reset
-- review forensic logs
-- update app settings
-- review system readiness
-- test future EMR connector settings
-
-## File Rules
+## File rules
 
 Supported file extensions:
 
@@ -566,20 +610,20 @@ Notes:
 - New uploads are encrypted before being written to disk.
 - Downloads are decrypted only after authentication and authorization checks pass.
 
-## Troubleshooting Windows Local Runs
+## Troubleshooting Windows local runs
 
-### The double-click launcher opens and closes too quickly
+### The double-click launcher opens but startup fails
 
-Run it from PowerShell so the error stays visible:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1
-```
-
-Also check startup logs:
+The updated launcher should keep the window open if startup fails. Read the messages shown in the window, then check startup logs:
 
 ```text
 %LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs
+```
+
+You can also run startup from PowerShell so all messages remain visible:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1
 ```
 
 ### Python is not found
@@ -592,7 +636,29 @@ Check:
 python --version
 ```
 
-A packaged release should include a bundled runtime and should not require the user to install Python.
+A packaged release should eventually include a bundled runtime and should not require the user to install Python.
+
+### Required Python packages are missing
+
+The startup script will say the app needs local Python packages and ask whether to install them.
+
+Type `Y` to install from:
+
+```text
+backend\requirements-windows-local.txt
+```
+
+If the install fails, check internet access, antivirus/security blocking, and whether Python/pip can reach package repositories.
+
+### Browser UI is missing
+
+If `frontend\dist` is missing, the startup script can ask to build it when Node.js/npm is available.
+
+For a non-technical deployment, prefer a packaged release that already includes:
+
+```text
+frontend\dist
+```
 
 ### Port 8000 is already in use
 
@@ -602,13 +668,11 @@ Find the process using port 8000:
 netstat -ano | findstr :8000
 ```
 
-Then either stop the conflicting app or run a lean desktop start on another port:
+Then stop the conflicting app or run a lean desktop start on another port:
 
 ```powershell
 .\scripts\start-desktop-local.ps1 -Port 8010
 ```
-
-The fuller startup script currently uses port `8000` from the generated local `.env`.
 
 ### Login fails
 
@@ -661,7 +725,29 @@ Check for:
 - conflicting detected patient IDs across uploaded files
 - upload folder not writable
 
-### Alleva connectivity test fails
+### API configuration test fails
+
+Open:
+
+```text
+http://localhost:8000/api-configuration
+```
+
+Confirm you are signed in as an admin. Then check:
+
+- API base URL
+- Swagger/OpenAPI URL
+- timeout seconds
+- whether the endpoint requires an API key or bearer token
+- local audit/log entries
+
+For an offline local validation path, run:
+
+```powershell
+.\scripts\test-api-configuration-local.ps1
+```
+
+### Alleva connectivity script fails
 
 Run with a JSON report:
 
@@ -683,7 +769,7 @@ Likely causes:
 - credentials were not set in environment variables
 - proxy or security software blocked the request
 
-## Docker and VPS Runtime
+## Docker and VPS runtime
 
 Docker Compose remains available for developer/server scenarios. It is not the recommended ordinary Windows desktop-user path.
 
@@ -695,7 +781,7 @@ Docker runtime services:
 | `backend` | FastAPI API, auth, workflow, uploads, audit logging, schema bootstrap | `127.0.0.1:8000` |
 | `postgres` | Dedicated application-owned PostgreSQL database | `127.0.0.1:5432` |
 
-### Full Docker stack
+Full Docker stack:
 
 ```bash
 cp .env.example .env
@@ -703,7 +789,7 @@ docker compose up -d --build
 ./scripts/smoke.sh
 ```
 
-### Useful Docker commands
+Useful Docker commands:
 
 ```bash
 docker compose ps
@@ -714,48 +800,59 @@ docker compose logs --tail=200 postgres
 docker compose down
 ```
 
-### Destructive Docker reset
-
-This deletes the PostgreSQL Docker volume and all database contents:
+Destructive Docker reset:
 
 ```bash
 docker compose down -v
 ```
 
+This deletes the PostgreSQL Docker volume and all database contents.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Browser["User Browser"] --> App["Local App\nFastAPI desktop/server entrypoint"]
-    App --> Rules["YAML Rules Engine\nTreatment Plan Tracking"]
-    App --> DB["SQLite for Windows local\nPostgreSQL for Docker/server"]
-    App --> Uploads["Encrypted uploads\nlocal app-data or Docker volume"]
-    App --> Audit["audit_logs table\n+ fallback JSONL log"]
-    App --> EMR["Future EMR boundary\nSMART/FHIR + Alleva probes"]
-    DevFrontend["Optional Vite frontend dev server"] --> App
+    User["Windows User"] --> Launcher["Double-click launcher\nStart-IZ-Clinical-Notes-Analyzer.cmd"]
+    Launcher --> Startup["startup-windows-local.ps1\nDependency checks + prompts"]
+    Startup --> Runtime["Python 3.11+\nbackend .venv or bundled runtime"]
+    Runtime --> App["FastAPI desktop app\napp.desktop_main:app"]
+    Browser["Browser\nlocalhost:8000"] --> App
+    App --> Auth["Login + roles\nadmin / manager / counselor"]
+    App --> DB["SQLite local desktop DB\nPostgreSQL optional Docker/server"]
+    App --> Uploads["Encrypted uploads\nlocal app-data"]
+    App --> Rules["YAML rules engine\nTreatment Plan Tracking"]
+    App --> Audit["Audit logs\nDB + fallback logs"]
+    App --> APIConfig["Admin API configuration\nOpenAPI pull + connectivity test"]
+    APIConfig --> SecretStore["Encrypted API keys\nnot returned to browser"]
+    DevFrontend["Optional Vite dev server\nlocalhost:5173"] --> App
 ```
 
-## Key Repository Files
+## Key repository files
 
 | File | Purpose |
 | --- | --- |
-| `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
-| `scripts\startup-windows-local.ps1` | Main Windows local startup script |
+| `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher for non-technical users |
+| `scripts\startup-windows-local.ps1` | Main Windows local startup script with dependency checks and install prompts |
+| `backend\requirements-windows-local.txt` | Lean Windows local runtime Python dependencies |
+| `backend\requirements.txt` | Developer/test/server Python dependencies |
 | `scripts\start-desktop-local.ps1` | Lean desktop runtime starter |
 | `scripts\test-local-app-stack.ps1` | Full local Windows smoke test |
+| `scripts\test-api-configuration-local.ps1` | Focused local API configuration smoke test |
 | `scripts\test-alleva-api-connectivity.ps1` | Alleva Swagger/OpenAPI/API reachability probe |
-| `backend\app\main.py` | Main FastAPI application |
-| `backend\app\desktop_main.py` | Desktop runtime app entrypoint |
+| `backend\app\desktop_main.py` | Windows desktop FastAPI entrypoint |
+| `backend\app\main.py` | Main/backend FastAPI application entrypoint for non-desktop contexts |
 | `backend\app\services\runtime_checks.py` | Runtime readiness checks |
 | `backend\app\services\rules_engine.py` | Deterministic YAML rules engine |
 | `backend\app\api\rules_routes.py` | Rules API boundary |
 | `backend\tests\test_rules_engine.py` | Rules-engine tests |
+| `backend\tests\test_api_connectivity.py` | Offline API connectivity tests using mocked transport |
+| `docs\api-configuration-and-connectivity.md` | API configuration workflow documentation |
 | `config\rules\alleva_treatment_plan_completeness_rules.yaml` | Treatment Plan Tracking completeness rules |
 | `docs\windows-local-refactor.md` | Windows local refactor notes |
 | `frontend\src` | React frontend source |
 | `frontend\dist` | Built frontend assets after `npm run build` |
 
-## Backup and Restore Notes
+## Backup and restore notes
 
 For Windows local desktop runs, back up both the SQLite database and encrypted upload files.
 
@@ -768,7 +865,7 @@ Minimum Windows local backup set:
 %LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs
 ```
 
-Important: the `.env` contains the encryption key needed to read encrypted uploaded files. Losing the `.env` may make encrypted uploads unrecoverable.
+Important: the `.env` contains the encryption key needed to read encrypted uploaded files and saved API secrets. Losing the `.env` may make encrypted uploads and saved API keys unrecoverable.
 
 For Docker/PostgreSQL runs, back up the PostgreSQL database and the backend data volume separately.
 
@@ -784,17 +881,19 @@ PostgreSQL restore example:
 pg_restore -d iz_clinical_notes_analyzer backup.dump
 ```
 
-## Security and Privacy Guardrails
+## Security and privacy guardrails
 
 - Do not commit `.env` files.
 - Do not commit SQLite runtime databases.
 - Do not commit uploaded clinical documents.
 - Do not commit Alleva credentials, API keys, or bearer tokens.
 - Do not put PHI in YAML rules files.
+- Do not paste PHI into API connectivity tests.
 - Keep runtime data out of cloud-synced folders when possible.
-- Treat the local `.env` as sensitive because it contains secrets and the upload encryption key.
+- Treat the local `.env` as sensitive because it contains secrets and encryption keys.
 - Keep deterministic completeness scoring separate from optional LLM analysis.
+- Prefer packaged releases with bundled runtime and built frontend assets for true non-technical deployment.
 
-## Current Status
+## Current status
 
-The app now has a Windows local runtime path designed around SQLite, local app-data storage, deterministic YAML rules, startup/readiness checks, and a double-click launcher. Docker/PostgreSQL remains available for developer and server scenarios, but it is not required for the ordinary Windows 10/11 local desktop workflow.
+The app now has a Windows local runtime path designed around SQLite, local app-data storage, deterministic YAML rules, dependency checks, user prompts before source-checkout dependency installation, startup/readiness checks, an admin API configuration/testing workflow, and a double-click launcher. Docker/PostgreSQL remains available for developer and server scenarios, but it is not required for ordinary Windows 10/11 local desktop use.
