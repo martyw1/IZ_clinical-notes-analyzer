@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
@@ -15,6 +15,7 @@ DEFAULT_ALLEVA_SWAGGER_UI_URL = 'https://api.allevasoft.com/swagger/index.html'
 DEFAULT_TIMEOUT_SECONDS = 10
 MAX_BODY_SNIPPET_CHARS = 600
 MAX_PATHS_RETURNED = 40
+HTTP_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
 
 
 @dataclass
@@ -149,6 +150,131 @@ def _headers(api_key: str | None = None, api_key_header_name: str = 'x-api-key')
     return headers
 
 
+def _resolve_schema_ref(definition: dict[str, Any], value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    ref = value.get('$ref')
+    if not isinstance(ref, str) or not ref.startswith('#/'):
+        return value
+    current: Any = definition
+    for part in ref[2:].split('/'):
+        if not isinstance(current, dict):
+            return value
+        current = current.get(part.replace('~1', '/').replace('~0', '~'))
+    return current if isinstance(current, dict) else value
+
+
+def _schema_type(schema: Any) -> str:
+    if not isinstance(schema, dict):
+        return 'string'
+    if isinstance(schema.get('type'), str):
+        return schema['type']
+    if isinstance(schema.get('enum'), list):
+        return 'string'
+    if isinstance(schema.get('properties'), dict):
+        return 'object'
+    if isinstance(schema.get('items'), dict):
+        return 'array'
+    return 'string'
+
+
+def _field_from_schema(name: str, schema: Any, *, required: bool = False, location: str = 'body') -> dict[str, Any]:
+    schema = schema if isinstance(schema, dict) else {}
+    return {
+        'name': name,
+        'in': location,
+        'required': required,
+        'type': _schema_type(schema),
+        'description': str(schema.get('description') or ''),
+        'enum': schema.get('enum') if isinstance(schema.get('enum'), list) else [],
+        'default': schema.get('default', ''),
+        'format': str(schema.get('format') or ''),
+    }
+
+
+def _body_fields(definition: dict[str, Any], schema: Any) -> list[dict[str, Any]]:
+    schema = _resolve_schema_ref(definition, schema)
+    if not isinstance(schema, dict):
+        return []
+    if isinstance(schema.get('allOf'), list):
+        merged: list[dict[str, Any]] = []
+        for part in schema['allOf']:
+            merged.extend(_body_fields(definition, part))
+        return merged
+    properties = schema.get('properties') if isinstance(schema.get('properties'), dict) else {}
+    required_names = set(schema.get('required') if isinstance(schema.get('required'), list) else [])
+    return [
+        _field_from_schema(name, _resolve_schema_ref(definition, prop_schema), required=name in required_names, location='body')
+        for name, prop_schema in properties.items()
+    ]
+
+
+def extract_openapi_operations(definition: dict[str, Any], *, selected_definition_url: str = '') -> list[dict[str, Any]]:
+    """Return a UI-friendly list of API operations with their required inputs."""
+    if not isinstance(definition, dict):
+        return []
+    paths = definition.get('paths') if isinstance(definition.get('paths'), dict) else {}
+    operations: list[dict[str, Any]] = []
+    for path, path_item in sorted(paths.items()):
+        if not isinstance(path_item, dict):
+            continue
+        inherited_parameters = path_item.get('parameters') if isinstance(path_item.get('parameters'), list) else []
+        for method, operation in sorted(path_item.items()):
+            method_lower = method.lower()
+            if method_lower not in HTTP_METHODS or not isinstance(operation, dict):
+                continue
+            parameters: list[dict[str, Any]] = []
+            for raw_parameter in [*inherited_parameters, *(operation.get('parameters') if isinstance(operation.get('parameters'), list) else [])]:
+                parameter = _resolve_schema_ref(definition, raw_parameter)
+                if not isinstance(parameter, dict):
+                    continue
+                schema = _resolve_schema_ref(definition, parameter.get('schema') or {})
+                parameters.append(
+                    {
+                        **_field_from_schema(
+                            str(parameter.get('name') or ''),
+                            schema,
+                            required=bool(parameter.get('required')),
+                            location=str(parameter.get('in') or 'query'),
+                        ),
+                        'description': str(parameter.get('description') or schema.get('description') or ''),
+                    }
+                )
+
+            request_body = operation.get('requestBody') if isinstance(operation.get('requestBody'), dict) else {}
+            request_body = _resolve_schema_ref(definition, request_body)
+            content = request_body.get('content') if isinstance(request_body, dict) and isinstance(request_body.get('content'), dict) else {}
+            preferred_content_type = ''
+            body_schema: Any = {}
+            for candidate in ['application/json', 'application/x-www-form-urlencoded', 'multipart/form-data']:
+                if isinstance(content.get(candidate), dict):
+                    preferred_content_type = candidate
+                    body_schema = content[candidate].get('schema') or {}
+                    break
+            if not preferred_content_type and content:
+                preferred_content_type = str(next(iter(content.keys())))
+                first = content.get(preferred_content_type)
+                body_schema = first.get('schema') if isinstance(first, dict) else {}
+
+            operations.append(
+                {
+                    'operation_key': f'{method_lower.upper()} {path}',
+                    'method': method_lower.upper(),
+                    'path': path,
+                    'operation_id': str(operation.get('operationId') or ''),
+                    'summary': str(operation.get('summary') or ''),
+                    'description': str(operation.get('description') or ''),
+                    'tags': operation.get('tags') if isinstance(operation.get('tags'), list) else [],
+                    'parameters': parameters,
+                    'request_body_required': bool(request_body.get('required')) if isinstance(request_body, dict) else False,
+                    'request_body_content_type': preferred_content_type,
+                    'request_body_fields': _body_fields(definition, body_schema),
+                    'selected_definition_url': selected_definition_url,
+                }
+            )
+    return operations
+
+
 def _json_summary(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
@@ -264,12 +390,119 @@ def pull_api_definitions(
         message = 'At least one endpoint was reachable, but no OpenAPI/Swagger definition was loaded.'
 
     selected_summary = _json_summary(selected_definition) if selected_definition else None
+    operations = extract_openapi_operations(selected_definition or {}, selected_definition_url=selected_definition_url)
     return {
         'status': status,
         'message': message,
         'selected_definition_url': selected_definition_url,
         'definition_summary': selected_summary or {},
         'definition': selected_definition or {},
+        'operations': operations,
         'probes': [probe.as_dict() for probe in probes],
         'api_key_used': bool((api_key or '').strip()),
+    }
+
+
+def _base_url_for_operation(*, api_base_url: str | None, definition: dict[str, Any], selected_definition_url: str | None) -> str:
+    configured = _clean_url(api_base_url).rstrip('/')
+    if configured and _is_http_url(configured):
+        return configured
+    servers = definition.get('servers') if isinstance(definition.get('servers'), list) else []
+    for server in servers:
+        if isinstance(server, dict) and _is_http_url(str(server.get('url') or '')):
+            return str(server['url']).rstrip('/')
+    origin = _origin(_clean_url(selected_definition_url))
+    if origin:
+        return origin.rstrip('/')
+    return ''
+
+
+def execute_openapi_operation(
+    *,
+    definition: dict[str, Any],
+    selected_definition_url: str | None = None,
+    api_base_url: str | None = None,
+    method: str,
+    path: str,
+    parameters: dict[str, Any] | None = None,
+    request_body: Any | None = None,
+    api_key: str | None = None,
+    api_key_header_name: str = 'x-api-key',
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    operations = extract_openapi_operations(definition, selected_definition_url=selected_definition_url or '')
+    operation = next((item for item in operations if item['method'] == method.upper() and item['path'] == path), None)
+    if not operation:
+        return {'status': 'fail', 'message': 'Selected API operation was not found in the loaded definition.'}
+
+    values = parameters or {}
+    missing = [item['name'] for item in operation['parameters'] if item.get('required') and not str(values.get(item['name'], '')).strip()]
+    missing.extend([item['name'] for item in operation['request_body_fields'] if item.get('required') and (not isinstance(request_body, dict) or request_body.get(item['name']) in (None, ''))])
+    if missing:
+        return {'status': 'fail', 'message': f'Missing required value(s): {", ".join(sorted(set(missing)))}', 'missing': sorted(set(missing))}
+
+    base_url = _base_url_for_operation(api_base_url=api_base_url, definition=definition, selected_definition_url=selected_definition_url)
+    if not base_url:
+        return {'status': 'fail', 'message': 'No HTTP API base URL is available for this operation.'}
+
+    resolved_path = path
+    query: dict[str, Any] = {}
+    headers = _headers(api_key=api_key, api_key_header_name=api_key_header_name)
+    for parameter in operation['parameters']:
+        name = parameter['name']
+        value = values.get(name)
+        if value in (None, ''):
+            continue
+        location = parameter.get('in')
+        if location == 'path':
+            resolved_path = resolved_path.replace('{' + name + '}', str(value)).replace('{' + name + '+}', str(value))
+        elif location == 'query':
+            query[name] = value
+        elif location == 'header':
+            headers[name] = str(value)
+
+    url = urljoin(base_url.rstrip('/') + '/', resolved_path.lstrip('/'))
+    if query:
+        url = f'{url}?{urlencode(query, doseq=True)}'
+
+    timeout = max(1, min(int(timeout_seconds or DEFAULT_TIMEOUT_SECONDS), 60))
+    started_result: dict[str, Any] = {
+        'status': 'fail',
+        'method': method.upper(),
+        'url': url,
+        'request_body_sent': request_body is not None and method.upper() not in {'GET', 'HEAD'},
+    }
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.request(
+                method.upper(),
+                url,
+                headers=headers,
+                json=request_body if method.upper() not in {'GET', 'HEAD'} and request_body not in (None, '') else None,
+            )
+            response.read()
+    except httpx.RequestError as exc:
+        return {**started_result, 'message': f'{exc.__class__.__name__}: {exc}'}
+
+    try:
+        elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+    except RuntimeError:
+        elapsed_ms = None
+    content_type = response.headers.get('content-type', '')
+    body_text = response.text[:MAX_BODY_SNIPPET_CHARS]
+    parsed_json: Any | None = None
+    if 'json' in content_type.lower():
+        try:
+            parsed_json = response.json()
+        except json.JSONDecodeError:
+            parsed_json = None
+    return {
+        **started_result,
+        'status': 'ok' if 200 <= response.status_code < 300 else 'warn',
+        'message': f'HTTP {response.status_code}',
+        'status_code': response.status_code,
+        'elapsed_ms': elapsed_ms,
+        'content_type': content_type,
+        'response_json': parsed_json,
+        'response_body_preview': '' if parsed_json is not None else body_text,
     }

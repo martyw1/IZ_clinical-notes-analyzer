@@ -22,7 +22,7 @@ def _api_configuration_page() -> HTMLResponse:
       h1 { margin-bottom: 0.25rem; }
       h2 { margin-top: 0; }
       label { display: block; font-weight: 650; margin-top: 0.8rem; }
-      input, textarea { width: 100%; box-sizing: border-box; margin-top: 0.25rem; padding: 0.65rem; border-radius: 10px; border: 1px solid #cbd5e1; font: inherit; }
+      input, textarea, select { width: 100%; box-sizing: border-box; margin-top: 0.25rem; padding: 0.65rem; border-radius: 10px; border: 1px solid #cbd5e1; font: inherit; }
       textarea { min-height: 5rem; }
       button { margin-top: 0.8rem; margin-right: 0.5rem; padding: 0.65rem 0.9rem; border: 0; border-radius: 10px; background: #1d4ed8; color: white; font-weight: 700; cursor: pointer; }
       button.secondary { background: #475569; }
@@ -32,6 +32,9 @@ def _api_configuration_page() -> HTMLResponse:
       .ok { color: #047857; font-weight: 700; }
       .warn { color: #b45309; font-weight: 700; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+      .operation-row { display: grid; grid-template-columns: 110px 1fr; gap: 0.8rem; align-items: end; }
+      .field-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.8rem; background: #f8fafc; }
+      .required { color: #b91c1c; font-weight: 800; }
     </style>
   </head>
   <body>
@@ -69,7 +72,21 @@ def _api_configuration_page() -> HTMLResponse:
       </section>
 
       <section>
-        <h2>3. Pull definitions and test connectivity</h2>
+        <h2>3. Test a specific API call</h2>
+        <p class="hint">After pulling an OpenAPI/Swagger definition, choose an operation. The form below is generated from that operation's path, query, header, and request body requirements.</p>
+        <label>API call / operation
+          <select id="operationSelect" onchange="renderOperationForm()">
+            <option value="">Pull definitions first.</option>
+          </select>
+        </label>
+        <div id="operationFields" class="grid"></div>
+        <button onclick="testSelectedOperation()">Test selected API call</button>
+        <p id="operationStatus" class="hint">No API call selected.</p>
+        <pre id="operationResult">API call test results will appear here.</pre>
+      </section>
+
+      <section>
+        <h2>4. Pull definitions and test connectivity</h2>
         <button onclick="testConnectivity()">Pull API definitions / test connectivity</button>
         <button onclick="useLocalSample()" class="secondary">Use local sample definition</button>
         <p id="testStatus" class="hint">No test run yet.</p>
@@ -79,11 +96,15 @@ def _api_configuration_page() -> HTMLResponse:
 
     <script>
       let token = '';
+      let currentDefinition = {};
+      let currentSelectedDefinitionUrl = '';
+      let currentOperations = [];
       const api = '/api';
       const byId = (id) => document.getElementById(id);
       const setText = (id, text) => { byId(id).textContent = text; };
       const getValue = (id) => byId(id).value.trim();
       const authHeaders = () => ({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' });
+      const operationByKey = () => currentOperations.find((item) => item.operation_key === byId('operationSelect').value);
 
       async function readJson(response) {
         const text = await response.text();
@@ -151,7 +172,12 @@ def _api_configuration_page() -> HTMLResponse:
       }
 
       async function testConnectivity() {
-        if (!token) { setText('loginStatus', 'Sign in first.'); return; }
+        if (!token) {
+          setText('loginStatus', 'Sign in first.');
+          setText('testStatus', 'Sign in with the admin account before pulling definitions.');
+          byId('testStatus').className = 'warn';
+          return;
+        }
         setText('testStatus', 'Testing...');
         byId('testStatus').className = 'hint';
         const body = {
@@ -169,6 +195,10 @@ def _api_configuration_page() -> HTMLResponse:
             headers: authHeaders(),
             body: JSON.stringify(body)
           }));
+          currentDefinition = result.definition || {};
+          currentSelectedDefinitionUrl = result.selected_definition_url || '';
+          currentOperations = result.operations || [];
+          populateOperations();
           setText('testStatus', `Result: ${result.status} - ${result.message}`);
           byId('testStatus').className = result.status === 'ok' ? 'ok' : 'warn';
           setText('result', JSON.stringify(result, null, 2));
@@ -183,6 +213,113 @@ def _api_configuration_page() -> HTMLResponse:
         byId('swaggerUiUrl').value = `${origin}/api/api-configuration/sample-openapi.json`;
         byId('openApiUrl').value = `${origin}/api/api-configuration/sample-openapi.json`;
         byId('apiBaseUrl').value = origin;
+        setText('testStatus', 'Local sample definition selected. Sign in, then click Pull API definitions / test connectivity.');
+        byId('testStatus').className = 'ok';
+        setText('result', JSON.stringify({
+          swagger_ui_url: byId('swaggerUiUrl').value,
+          openapi_url: byId('openApiUrl').value,
+          api_base_url: byId('apiBaseUrl').value,
+          next_step: 'Click Pull API definitions / test connectivity.'
+        }, null, 2));
+      }
+
+      function populateOperations() {
+        const select = byId('operationSelect');
+        select.innerHTML = '';
+        if (!currentOperations.length) {
+          select.appendChild(new Option('No operations found in the loaded definition.', ''));
+          byId('operationFields').innerHTML = '';
+          return;
+        }
+        currentOperations.forEach((operation) => {
+          const label = `${operation.method} ${operation.path}${operation.summary ? ' - ' + operation.summary : ''}`;
+          select.appendChild(new Option(label, operation.operation_key));
+        });
+        renderOperationForm();
+      }
+
+      function inputTypeFor(field) {
+        if (field.type === 'integer' || field.type === 'number') return 'number';
+        if (field.type === 'boolean') return 'checkbox';
+        if (field.format === 'date') return 'date';
+        if (field.format === 'date-time') return 'datetime-local';
+        return 'text';
+      }
+
+      function fieldInput(field, prefix) {
+        const id = `${prefix}-${field.name}`;
+        const required = field.required ? 'required' : '';
+        const label = `${field.in || prefix}: ${field.name}${field.required ? ' *' : ''}`;
+        if (field.enum && field.enum.length) {
+          return `<label class="field-card">${label}<select id="${id}" data-name="${field.name}" data-kind="${prefix}" ${required}>${field.enum.map((value) => `<option value="${String(value)}">${String(value)}</option>`).join('')}</select><span class="hint">${field.description || ''}</span></label>`;
+        }
+        const type = inputTypeFor(field);
+        if (type === 'checkbox') {
+          return `<label class="field-card"><input id="${id}" data-name="${field.name}" data-kind="${prefix}" type="checkbox" /> ${label}<br /><span class="hint">${field.description || ''}</span></label>`;
+        }
+        return `<label class="field-card">${label}<input id="${id}" data-name="${field.name}" data-kind="${prefix}" type="${type}" value="${field.default || ''}" ${required} /><span class="hint">${field.description || ''}</span></label>`;
+      }
+
+      function renderOperationForm() {
+        const operation = operationByKey();
+        if (!operation) {
+          byId('operationFields').innerHTML = '';
+          setText('operationStatus', 'No API call selected.');
+          return;
+        }
+        const parts = [];
+        const parameters = operation.parameters || [];
+        const bodyFields = operation.request_body_fields || [];
+        if (parameters.length) parts.push(...parameters.map((field) => fieldInput(field, 'parameter')));
+        if (bodyFields.length) parts.push(...bodyFields.map((field) => fieldInput(field, 'body')));
+        if (!parts.length) parts.push('<p class="hint">This operation does not declare required path, query, header, or request body fields.</p>');
+        byId('operationFields').innerHTML = parts.join('');
+        setText('operationStatus', `${operation.method} ${operation.path} is ready to test.`);
+      }
+
+      function collectGeneratedValues(kind) {
+        const values = {};
+        document.querySelectorAll(`[data-kind="${kind}"]`).forEach((input) => {
+          const name = input.getAttribute('data-name');
+          if (!name) return;
+          if (input.type === 'checkbox') values[name] = input.checked;
+          else if (input.value !== '') values[name] = input.value;
+        });
+        return values;
+      }
+
+      async function testSelectedOperation() {
+        if (!token) { setText('loginStatus', 'Sign in first.'); return; }
+        const operation = operationByKey();
+        if (!operation) { setText('operationStatus', 'Choose an API call first.'); return; }
+        setText('operationStatus', 'Testing selected API call...');
+        byId('operationStatus').className = 'hint';
+        const body = {
+          definition: currentDefinition,
+          selected_definition_url: currentSelectedDefinitionUrl,
+          method: operation.method,
+          path: operation.path,
+          parameters: collectGeneratedValues('parameter'),
+          request_body: collectGeneratedValues('body'),
+          api_base_url: getValue('apiBaseUrl'),
+          api_key: getValue('apiKey') || null,
+          use_saved_api_key: true,
+          api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
+          timeout_seconds: Number(getValue('timeoutSeconds') || '10')
+        };
+        try {
+          const result = await readJson(await fetch(`${api}/api-configuration/test-operation`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(body)
+          }));
+          setText('operationStatus', `${result.status}: ${result.message}`);
+          byId('operationStatus').className = result.status === 'ok' ? 'ok' : 'warn';
+          setText('operationResult', JSON.stringify(result, null, 2));
+        } catch (error) {
+          setText('operationStatus', error.message);
+          byId('operationStatus').className = 'warn';
+        }
       }
     </script>
   </body>

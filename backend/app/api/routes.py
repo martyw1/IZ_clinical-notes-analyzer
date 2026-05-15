@@ -1357,6 +1357,7 @@ async def detect_patient_id_for_uploads(
 async def upload_patient_note_set(
     request: Request,
     patient_id: str = Form(''),
+    client_name: str = Form(''),
     upload_mode: NoteSetUploadMode = Form(NoteSetUploadMode.initial),
     level_of_care: str = Form(''),
     admission_date: str = Form(''),
@@ -1486,7 +1487,7 @@ async def upload_patient_note_set(
         chart = Chart(
             source_note_set_id=note_set.id,
             patient_id=normalized_patient_id,
-            client_name=normalized_patient_id,
+            client_name=client_name.strip() or normalized_patient_id,
             level_of_care=note_set.level_of_care,
             admission_date=note_set.admission_date,
             discharge_date=note_set.discharge_date,

@@ -763,3 +763,232 @@ ol {
   font-size: 0.85rem;
   border-top: 1px solid rgba(148, 163, 184, 0.35);
 }
+
+/* Audit-workbench visual pass: denser worksheet/document-manager styling. */
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #1f2933;
+  background: #eef2f3;
+}
+
+body {
+  background: #eef2f3;
+}
+
+button {
+  border-radius: 3px;
+  padding: 0.55rem 0.85rem;
+  background: #0b6f86;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+button:hover {
+  transform: none;
+  background: #09596c;
+}
+
+input,
+textarea,
+select {
+  border-radius: 2px;
+  border: 1px solid #b7c5cc;
+  background: #ffffff;
+  padding: 0.55rem 0.65rem;
+}
+
+label {
+  color: #31424a;
+  font-size: 0.9rem;
+}
+
+.shell {
+  max-width: none;
+  padding: 0;
+  gap: 0;
+}
+
+.hero {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 0;
+  align-items: stretch;
+  border-bottom: 1px solid #cbd5da;
+  background: #ffffff;
+}
+
+.hero > div:first-child {
+  padding: 1rem 1.25rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: #5f6d73;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  font-size: 1.45rem;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.hero-copy {
+  margin: 0.3rem 0 0;
+  max-width: none;
+  color: #52646d;
+}
+
+.status-card,
+.panel,
+.metric-card,
+.mini-card,
+.trend-card,
+.finding-card,
+.document-card,
+.log-row,
+.file-editor-row,
+.decision-box,
+.criterion-workbench,
+.admin-banner,
+.issue,
+.queue-item,
+.criterion-chip,
+.detection-card {
+  border-radius: 2px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.status-card {
+  border: 0;
+  border-left: 1px solid #d4dde1;
+  background: #f8fafb;
+  padding: 0.9rem 1rem;
+}
+
+.status-card h2,
+.panel h2,
+.panel h3,
+.panel h4 {
+  color: #263940;
+  font-weight: 600;
+}
+
+.auth-grid,
+.workspace-grid,
+.dashboard-grid {
+  padding: 1rem;
+}
+
+.metrics {
+  padding: 0.8rem 1rem;
+  background: #f8fafb;
+  border-bottom: 1px solid #d4dde1;
+}
+
+.metric-card,
+.panel {
+  border: 1px solid #cbd5da;
+  background: #ffffff;
+}
+
+.metric-card {
+  padding: 0.75rem 0.9rem;
+}
+
+.metric-card strong {
+  font-size: 1.45rem;
+}
+
+.view-tabs {
+  gap: 0;
+  padding: 0 1rem;
+  background: #073342;
+  border-bottom: 1px solid #052a36;
+}
+
+.tab-button,
+.ghost-button {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  background: #073342;
+  color: #e8f1f3;
+}
+
+.tab-button--active {
+  background: #f27d62;
+  color: #ffffff;
+}
+
+.ghost-button {
+  border: 1px solid #b9c7ce;
+  background: #ffffff;
+  color: #1f4550;
+}
+
+.queue-item,
+.finding-card,
+.document-card,
+.file-editor-row,
+.criterion-workbench,
+.trend-card,
+.mini-card {
+  background: #f9fbfc;
+  border: 1px solid #d4dde1;
+}
+
+.queue-item--active,
+.criterion-chip--active {
+  border-color: #0b6f86;
+  box-shadow: inset 3px 0 0 #0b6f86;
+}
+
+.pill {
+  border-radius: 3px;
+  padding: 0.22rem 0.5rem;
+}
+
+.form-grid {
+  align-items: end;
+}
+
+.file-editor-row__fields {
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
+.checkbox-row {
+  border-radius: 2px;
+  border: 1px solid #d4dde1;
+  background: #ffffff;
+}
+
+.document-list {
+  gap: 0;
+  border: 1px solid #d4dde1;
+}
+
+.document-card {
+  border-width: 0 0 1px;
+}
+
+.document-card:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .status-card {
+    border-left: 0;
+    border-top: 1px solid #d4dde1;
+  }
+
+  .view-tabs {
+    padding: 0;
+  }
+}

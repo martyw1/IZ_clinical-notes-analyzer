@@ -237,6 +237,7 @@ type ApiError = {
 
 type UploadFormState = {
   patient_id: string
+  client_name: string
   upload_mode: NoteSetUploadMode
   level_of_care: string
   admission_date: string
@@ -345,9 +346,9 @@ const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
 }
 
 const VIEW_LABELS: Record<AppView, string> = {
-  dashboard: 'Summary dashboard',
+  dashboard: 'Chart audit',
   reviews: 'Review queue',
-  uploads: 'Upload clinical notes',
+  uploads: 'Manual upload',
   profile: 'My account',
   users: 'User management',
   logs: 'Forensic logs',
@@ -390,6 +391,7 @@ function groupedChecklist(items: AuditItem[]) {
 function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>) {
   return {
     patient_id: '',
+    client_name: '',
     upload_mode: 'initial' as NoteSetUploadMode,
     level_of_care: '',
     admission_date: '',
@@ -399,6 +401,12 @@ function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>)
     entries: [],
     ...overrides,
   }
+}
+
+function viewFromUrl(): AppView {
+  if (typeof window === 'undefined') return 'dashboard'
+  const requested = new URLSearchParams(window.location.search).get('view') || window.location.hash.replace(/^#\/?/, '')
+  return ['dashboard', 'reviews', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
 }
 
 function createSettingsForm(settings: AppSettings): AppSettingsForm {
@@ -594,7 +602,7 @@ export function App() {
   const [error, setError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
   const [mustResetPassword, setMustResetPassword] = useState(false)
-  const [activeView, setActiveView] = useState<AppView>('dashboard')
+  const [activeView, setActiveView] = useState<AppView>(viewFromUrl)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
@@ -684,6 +692,13 @@ export function App() {
   const versionLabel = versionInfo
     ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const current = new URL(window.location.href)
+    current.searchParams.set('view', activeView)
+    window.history.replaceState(null, '', `${current.pathname}?${current.searchParams.toString()}`)
+  }, [activeView])
 
   useEffect(() => {
     let isMounted = true
@@ -896,6 +911,7 @@ export function App() {
       setUploadForm((current) =>
         createUploadForm({
           patient_id: current.patient_id,
+          client_name: current.client_name,
           upload_mode: current.upload_mode,
           level_of_care: current.level_of_care,
           admission_date: current.admission_date,
@@ -1091,6 +1107,7 @@ export function App() {
     try {
       const body = new FormData()
       body.set('patient_id', uploadForm.patient_id)
+      body.set('client_name', uploadForm.client_name)
       body.set('upload_mode', uploadForm.upload_mode)
       body.set('level_of_care', uploadForm.level_of_care)
       body.set('admission_date', uploadForm.admission_date)
@@ -1130,6 +1147,7 @@ export function App() {
       setUploadForm(
         createUploadForm({
           patient_id: uploaded.patient_id,
+          client_name: uploadForm.client_name,
           upload_mode: 'update',
           level_of_care: uploaded.level_of_care,
           admission_date: uploaded.admission_date,
@@ -1437,6 +1455,7 @@ export function App() {
     setUploadForm(
       createUploadForm({
         patient_id: chart.patient_id,
+        client_name: chart.client_name,
         upload_mode: 'update',
         level_of_care: chart.level_of_care,
         admission_date: chart.admission_date,
@@ -1507,11 +1526,10 @@ export function App() {
     <main className='shell'>
       <section className='hero'>
         <div>
-          <p className='eyebrow'>Clinical note analyzer</p>
-          <h1>Upload notes, review each criterion interactively, and route final approval through the office manager.</h1>
+          <p className='eyebrow'>R3 Recovery Services Chart Audit</p>
+          <h1>Clinical notes completeness review</h1>
           <p className='hero-copy'>
-            Counselors upload the latest clinical binder. The system evaluates the content against the audit rules, records every event in the
-            forensic log, and places the result into a final approval queue for the office manager.
+            Upload a patient binder, review each chart-audit criterion, and route final approval through the office manager.
           </p>
         </div>
         <div className='status-card'>
@@ -1557,7 +1575,7 @@ export function App() {
           <div className='panel info-panel'>
             <h2>Workflow</h2>
             <ol>
-              <li>Counselor uploads a patient note binder using patient ID.</li>
+              <li>Counselor uploads a patient note binder using patient ID and client name when available.</li>
               <li>The app runs an automatic clinical-note checklist evaluation.</li>
               <li>The reviewer can drill into any criterion and mark it ok or not ok.</li>
               <li>The office manager approves or returns the chart for correction.</li>
@@ -2054,7 +2072,7 @@ export function App() {
               <section className='panel detail-panel'>
                 <h2>Upload clinical notes</h2>
                 <p>
-                  Use the patient ID as the source-of-truth key. Each upload creates a new immutable binder version and a new automated review record.
+                  Manual upload is the primary local workflow. Use the patient ID as the source-of-truth key and add the client name when it is present in the export.
                 </p>
                 <form className='form-grid' onSubmit={handleUpload}>
                   <label>
@@ -2069,6 +2087,14 @@ export function App() {
                         }
                         setUploadForm((current) => ({ ...current, patient_id: nextValue }))
                       }}
+                    />
+                  </label>
+                  <label>
+                    Client name
+                    <input
+                      value={uploadForm.client_name}
+                      placeholder='Optional, for chart audit context'
+                      onChange={(event) => setUploadForm((current) => ({ ...current, client_name: event.target.value }))}
                     />
                   </label>
                   <label>

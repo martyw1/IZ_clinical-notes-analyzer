@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 type RouteHandler = (path: string, init?: RequestInit) => { status?: number; body?: unknown }
@@ -225,6 +225,10 @@ function signIn() {
 }
 
 describe('App turnkey workflow', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
   it('renders the summary dashboard and admin tools for administrators', async () => {
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-a', must_reset_password: false },
@@ -281,9 +285,10 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload clinical notes' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Upload clinical notes' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Manual upload' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Manual upload' }))
 
+    fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Aegis Test' } })
     fireEvent.change(screen.getByLabelText('Level of care'), { target: { value: 'Residential' } })
     fireEvent.change(screen.getByLabelText('Primary clinician'), { target: { value: 'Marleigh Johnson' } })
     fireEvent.change(screen.getByLabelText('Clinical note files'), {
@@ -569,6 +574,6 @@ describe('App turnkey workflow', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Summary dashboard' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chart audit' })).toBeInTheDocument())
   })
 })

@@ -75,7 +75,8 @@ def _desktop_chrome() -> str:
       @media print {{ .iz-cna-desktop-shortcuts {{ display: none; }} }}
     </style>
     <div class="iz-cna-desktop-shortcuts" aria-label="Application shortcuts and version">
-      <a href="/clinical-notes-intake" target="_blank" rel="noopener noreferrer">Clinical Notes Intake</a>
+      <a href="/?view=uploads">Manual Upload</a>
+      <a class="secondary" href="/clinical-notes-intake" target="_blank" rel="noopener noreferrer">Intake Guide</a>
       <a class="secondary" href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
       <span class="iz-cna-desktop-version">v{version}</span>
     </div>

@@ -45,7 +45,8 @@ def _clinical_notes_intake_page() -> HTMLResponse:
       <p class="lead">This page makes the two required intake paths explicit: manual upload of a patient's clinical-note bundle, and direct API-oriented lookup by patient ID or patient name when the Alleva/API connection is configured.</p>
 
       <nav class="nav">
-        <a class="pill primary" href="/">Main dashboard</a>
+        <a class="pill primary" href="/?view=uploads">Open manual upload</a>
+        <a class="pill" href="/">Main dashboard</a>
         <a class="pill" href="/api-configuration" target="_blank" rel="noopener noreferrer">API connectivity</a>
         <a class="pill" href="/api/readiness" target="_blank" rel="noopener noreferrer">Readiness</a>
         <a class="pill" href="/docs" target="_blank" rel="noopener noreferrer">API docs</a>
@@ -56,7 +57,7 @@ def _clinical_notes_intake_page() -> HTMLResponse:
           <h2>Manual upload workflow</h2>
           <p class="hint">Use this when staff already downloaded notes/documents from Alleva or received a clinical-note export bundle.</p>
           <div class="workflow">
-            <div class="step"><div class="num">1</div><div><b>Choose Upload clinical notes</b><br /><span class="hint">Use the main app's upload tab for PDFs, DOCX, TXT, CSV, RTF, images, ZIPs, or other supported exports.</span></div></div>
+            <div class="step"><div class="num">1</div><div><b>Choose Manual upload</b><br /><span class="hint">Use the main app's manual upload tab for PDFs, DOCX, TXT, CSV, RTF, images, ZIPs, or other supported exports.</span></div></div>
             <div class="step"><div class="num">2</div><div><b>Enter patient context</b><br /><span class="hint">Patient ID is preferred. Patient name can be entered as chart context when ID is unavailable.</span></div></div>
             <div class="step"><div class="num">3</div><div><b>Map each file</b><br /><span class="hint">Classify files as custom forms, uploaded documents, portal documents, labs, medication data, notes, or other.</span></div></div>
             <div class="step"><div class="num">4</div><div><b>Run completeness check</b><br /><span class="hint">The same Treatment Plan Tracking rules apply after intake regardless of manual or API source.</span></div></div>

@@ -25,7 +25,21 @@ The API configuration page lets an admin:
 3. Enter an API key for a one-time test or save it for later use.
 4. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
 5. Test connectivity from inside the running app.
-6. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, and sample paths.
+6. Pick any operation found in the loaded API definition and test that specific API call.
+7. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
+8. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, and operation-test responses.
+
+## Operation test workbench
+
+After a definition is loaded, the page builds an operation picker from the OpenAPI `paths` object. For each selected method/path, it derives a form from:
+
+- path parameters, such as `{patient_id}`
+- query parameters
+- header parameters
+- top-level JSON request-body fields
+- required flags, types, enums, defaults, descriptions, and date formats where present
+
+When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, one-time API key, or saved encrypted API key. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys are injected into the outbound request but are not returned in the test result.
 
 ## Secret handling
 
@@ -40,6 +54,7 @@ GET   /api/api-configuration
 PATCH /api/api-configuration
 POST  /api/api-configuration/pull-definitions
 POST  /api/api-configuration/test
+POST  /api/api-configuration/test-operation
 GET   /api/api-configuration/sample-openapi.json
 ```
 
@@ -53,6 +68,7 @@ The API configuration workflow uses the app's existing forensic audit service. I
 - API configuration updates.
 - Whether a key was added or cleared, without recording the key itself.
 - Definition-pull attempts and outcomes.
+- Specific API operation test attempts and non-secret outcomes.
 - Probe count and selected definition URL when found.
 
 The low-level connectivity service also emits standard Python logger warnings for request failures or HTTP errors.
@@ -63,7 +79,7 @@ The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the exi
 
 ## Offline validation path
 
-The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, and OpenAPI summary extraction without calling the live Alleva API.
+The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, OpenAPI summary extraction, operation-form extraction, required-field validation, and selected-operation request execution without calling the live Alleva API.
 
 Run backend tests from a configured repo checkout with:
 

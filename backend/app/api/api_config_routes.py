@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.models import AppSetting, Role, User
-from app.services.api_connectivity import DEFAULT_ALLEVA_SWAGGER_UI_URL, pull_api_definitions
+from app.services.api_connectivity import DEFAULT_ALLEVA_SWAGGER_UI_URL, execute_openapi_operation, pull_api_definitions
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
@@ -38,6 +38,38 @@ SAMPLE_OPENAPI_DEFINITION: dict[str, Any] = {
                 'summary': 'Pull and summarize OpenAPI or Swagger definitions',
                 'responses': {'200': {'description': 'Definition pull result'}},
             }
+        },
+        '/api/api-configuration/operation-test-target/{patient_id}': {
+            'get': {
+                'summary': 'Local operation test target',
+                'parameters': [
+                    {'name': 'patient_id', 'in': 'path', 'required': True, 'schema': {'type': 'string'}, 'description': 'Synthetic patient ID'},
+                    {'name': 'include_documents', 'in': 'query', 'required': True, 'schema': {'type': 'boolean'}, 'description': 'Whether to include document metadata'},
+                ],
+                'responses': {'200': {'description': 'Synthetic target response'}},
+            },
+            'post': {
+                'summary': 'Local operation test target with request body',
+                'parameters': [
+                    {'name': 'patient_id', 'in': 'path', 'required': True, 'schema': {'type': 'string'}, 'description': 'Synthetic patient ID'},
+                ],
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                'type': 'object',
+                                'required': ['note_type'],
+                                'properties': {
+                                    'note_type': {'type': 'string', 'enum': ['progress_note', 'treatment_plan_tracking'], 'description': 'Synthetic note category'},
+                                    'service_date': {'type': 'string', 'format': 'date', 'description': 'Service date to test'},
+                                },
+                            }
+                        }
+                    },
+                },
+                'responses': {'200': {'description': 'Synthetic target response'}},
+            },
         },
     },
     'components': {
@@ -89,6 +121,15 @@ class ApiDefinitionPullInput(BaseModel):
     timeout_seconds: int | None = Field(default=None, ge=1, le=60)
 
 
+class ApiOperationTestInput(ApiDefinitionPullInput):
+    definition: dict[str, Any] = Field(default_factory=dict)
+    selected_definition_url: str | None = Field(default='', max_length=500)
+    method: str = Field(max_length=12)
+    path: str = Field(max_length=500)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    request_body: Any | None = None
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -133,6 +174,27 @@ def _saved_api_key(settings_row: AppSetting) -> str:
 def sample_openapi_definition():
     """Small local OpenAPI file used by the full-stack smoke test."""
     return SAMPLE_OPENAPI_DEFINITION
+
+
+@router.get('/api-configuration/operation-test-target/{patient_id}', include_in_schema=False)
+def sample_operation_test_target(patient_id: str, include_documents: bool):
+    return {
+        'patient_id': patient_id,
+        'include_documents': include_documents,
+        'documents': [{'id': 'doc-001', 'type': 'progress_note'}] if include_documents else [],
+        'source': 'local sample operation target',
+    }
+
+
+@router.post('/api-configuration/operation-test-target/{patient_id}', include_in_schema=False)
+async def sample_operation_post_target(patient_id: str, request: Request):
+    body = await request.json()
+    return {
+        'patient_id': patient_id,
+        'accepted': True,
+        'received': body,
+        'source': 'local sample operation target',
+    }
 
 
 @router.get('/api-configuration', response_model=ApiConfigurationOut)
@@ -268,3 +330,50 @@ def test_api_configuration(
 ):
     """Compatibility alias for users who expect a named connectivity test action."""
     return pull_api_configuration_definitions(payload, request, user, db)
+
+
+@router.post('/api-configuration/test-operation')
+def test_api_configuration_operation(
+    payload: ApiOperationTestInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    supplied_key = _strip(payload.api_key)
+    saved_key = _saved_api_key(settings_row) if payload.use_saved_api_key else ''
+    api_key = supplied_key or saved_key
+    result = execute_openapi_operation(
+        definition=payload.definition,
+        selected_definition_url=_strip(payload.selected_definition_url),
+        api_base_url=_strip(payload.api_base_url) or settings_row.emr_fhir_base_url,
+        method=payload.method,
+        path=payload.path,
+        parameters=payload.parameters,
+        request_body=payload.request_body,
+        api_key=api_key,
+        api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
+        timeout_seconds=payload.timeout_seconds or settings_row.emr_api_timeout_seconds,
+    )
+    status = result.get('status')
+    log_event(
+        db,
+        request,
+        'api_configuration.test_operation',
+        actor=user,
+        event_category='api_connectivity',
+        target_entity=f"{payload.method.upper()} {payload.path}",
+        target_entity_type='external_api_operation',
+        details={
+            'status': status,
+            'method': payload.method.upper(),
+            'path': payload.path,
+            'api_key_used': bool(api_key),
+            'api_key_source': 'inline' if supplied_key else ('saved' if saved_key else 'none'),
+            'http_status': result.get('status_code'),
+        },
+        outcome_status='success' if status == 'ok' else 'failure',
+        severity='info' if status == 'ok' else 'warning',
+        message=f"API operation test completed for {payload.method.upper()} {payload.path} with status {status}.",
+    )
+    return result

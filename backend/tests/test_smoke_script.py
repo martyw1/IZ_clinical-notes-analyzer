@@ -1,9 +1,11 @@
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE_SCRIPT = REPO_ROOT / 'scripts' / 'smoke.sh'
@@ -115,6 +117,8 @@ def write_fake_curl(tmp_path: Path) -> Path:
 
 
 def run_smoke(tmp_path: Path, state: dict[str, object], extra_env: dict[str, str] | None = None):
+    if shutil.which('bash') is None:
+        pytest.skip('bash is not available on PATH; shell smoke script tests require Bash.')
     write_fake_curl(tmp_path)
     state_path = tmp_path / 'curl-state.json'
     state_path.write_text(json.dumps(state), encoding='utf-8')
