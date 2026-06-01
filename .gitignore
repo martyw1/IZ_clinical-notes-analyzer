@@ -11,3 +11,6 @@ logs/
 
 .venv-*
 backend/.venv-*
+
+# Never commit local credential notes
+/docs/First sign-in credentials.txt
