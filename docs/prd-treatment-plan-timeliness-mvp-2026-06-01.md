@@ -367,13 +367,15 @@ Reuse the existing FastAPI backend, React/Vite frontend, SQLite-first local runt
 
 The level-of-care change treatment-plan update window remains unvalidated. Keep it configurable, visibly mark it unvalidated in admin/settings UI and documentation, and do not hard-code a final value until `docs/open-blockers.md` is resolved.
 
+S2 implementation status on 2026-06-04: backend timeliness tables, APIs, deterministic evaluation, upload metadata sync, settings fields, manual override audit logging, and React dashboard/detail UI are implemented on `refactor/codex-v0.5.0`. Remaining stations still need upload/API harness hardening, workflow CRUD/versioning, full-stack/e2e test hardening, Windows packaging decisions, and target Dell validation before release.
+
 Expected implementation work:
 
-1. Expand YAML rules for Marleigh's exact timeline requirements.
-2. Add or extend models for treatment plan timeline records and LOC history.
-3. Add dashboard status APIs and UI.
-4. Implement missing-data matrix.
-5. Implement override RBAC and audit behavior.
+1. Finish upload hardening and secure download edge-case coverage.
+2. Harden the direct API test harness with offline OpenAPI coverage and redaction checks.
+3. Add workflow CRUD/versioning for workflows beyond the MVP timeliness tracker.
+4. Complete browser/full-stack validation and Windows rerunnable scripts.
+5. Complete Windows Home packaging decision and Dell validation.
 6. Add structured import templates.
 7. Add robust Windows Home installer/repair/uninstall flow.
 8. Add backend, frontend, full-stack, functional, performance, and security-oriented tests.

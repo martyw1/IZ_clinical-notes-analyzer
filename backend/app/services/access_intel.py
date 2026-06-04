@@ -9,6 +9,7 @@ import httpx
 
 from app.models.models import AppSetting
 from app.services.llm_assist import call_llm_text, llm_is_configured
+from app.services.secure_storage import decrypt_text_secret
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,8 @@ def _fetch_geolocation(app_settings: AppSetting, source_ip: str) -> dict[str, An
 
 
 def _fetch_reputation(app_settings: AppSetting, source_ip: str) -> dict[str, Any]:
-    if not app_settings.access_reputation_api_key.strip() or not app_settings.access_reputation_url.strip():
+    reputation_key = decrypt_text_secret(app_settings.access_reputation_api_key)
+    if not reputation_key.strip() or not app_settings.access_reputation_url.strip():
         return {}
 
     with httpx.Client(timeout=_request_timeout(app_settings)) as client:
@@ -104,7 +106,7 @@ def _fetch_reputation(app_settings: AppSetting, source_ip: str) -> dict[str, Any
             params={'ipAddress': source_ip, 'maxAgeInDays': 90},
             headers={
                 'Accept': 'application/json',
-                'Key': app_settings.access_reputation_api_key,
+                'Key': reputation_key,
             },
         )
         response.raise_for_status()

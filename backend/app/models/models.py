@@ -58,6 +58,22 @@ class DocumentCompletionStatus(str, enum.Enum):
     draft = 'draft'
 
 
+class TimelinessStatus(str, enum.Enum):
+    overdue = 'Overdue'
+    urgent = 'Urgent'
+    due_soon = 'Due Soon'
+    needs_review = 'Needs Review'
+    missing_data = 'Missing Data'
+    compliant = 'Compliant'
+
+
+class TreatmentPlanKind(str, enum.Enum):
+    initial = 'initial'
+    master = 'master'
+    review = 'review'
+    loc_update = 'loc_update'
+
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -102,6 +118,8 @@ class AppSetting(Base):
         default='openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     )
     emr_api_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    treatment_plan_loc_change_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    treatment_plan_loc_change_window_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -275,3 +293,76 @@ class AuditLog(Base):
     severity: Mapped[str] = mapped_column(String(20), default='info')
     prev_hash: Mapped[str] = mapped_column(String(128), nullable=True)
     hash: Mapped[str] = mapped_column(String(128), index=True)
+
+
+class TreatmentPlanClient(Base):
+    __tablename__ = 'treatment_plan_clients'
+    __table_args__ = (UniqueConstraint('patient_id', name='uq_treatment_plan_clients_patient_id'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(120), index=True)
+    permitted_name: Mapped[str] = mapped_column(String(120), default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    current_level_of_care: Mapped[str] = mapped_column(String(120), default='')
+    counselor_name: Mapped[str] = mapped_column(String(120), default='')
+    admission_date: Mapped[str] = mapped_column(String(40), default='')
+    source_evidence: Mapped[str] = mapped_column(Text, default='')
+    source_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True, index=True)
+    last_imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    source_note_set: Mapped[PatientNoteSet] = relationship()
+    level_of_care_history: Mapped[list['LevelOfCareHistory']] = relationship(cascade='all, delete-orphan', back_populates='client')
+    treatment_plans: Mapped[list['TreatmentPlanRecord']] = relationship(cascade='all, delete-orphan', back_populates='client')
+    overrides: Mapped[list['TreatmentPlanOverride']] = relationship(cascade='all, delete-orphan', back_populates='client')
+
+
+class LevelOfCareHistory(Base):
+    __tablename__ = 'level_of_care_history'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey('treatment_plan_clients.id'), index=True)
+    level_of_care: Mapped[str] = mapped_column(String(120), default='')
+    effective_date: Mapped[str] = mapped_column(String(40), default='')
+    source_evidence: Mapped[str] = mapped_column(Text, default='')
+    source_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    client: Mapped[TreatmentPlanClient] = relationship(back_populates='level_of_care_history')
+
+
+class TreatmentPlanRecord(Base):
+    __tablename__ = 'treatment_plan_records'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey('treatment_plan_clients.id'), index=True)
+    plan_kind: Mapped[TreatmentPlanKind] = mapped_column(Enum(TreatmentPlanKind), index=True)
+    document_date: Mapped[str] = mapped_column(String(40), default='')
+    staff_signature_date: Mapped[str] = mapped_column(String(40), default='')
+    client_signature_date: Mapped[str] = mapped_column(String(40), default='')
+    source_evidence: Mapped[str] = mapped_column(Text, default='')
+    source_document_id: Mapped[str] = mapped_column(String(120), default='')
+    source_note_set_id: Mapped[int] = mapped_column(ForeignKey('patient_note_sets.id'), nullable=True, index=True)
+    is_valid: Mapped[bool] = mapped_column(Boolean, default=True)
+    conflict_note: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    client: Mapped[TreatmentPlanClient] = relationship(back_populates='treatment_plans')
+
+
+class TreatmentPlanOverride(Base):
+    __tablename__ = 'treatment_plan_overrides'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey('treatment_plan_clients.id'), index=True)
+    field_name: Mapped[str] = mapped_column(String(120), default='')
+    original_value: Mapped[str] = mapped_column(Text, default='')
+    new_value: Mapped[str] = mapped_column(Text, default='')
+    reason: Mapped[str] = mapped_column(Text, default='')
+    affected_rule: Mapped[str] = mapped_column(String(120), default='')
+    created_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    client: Mapped[TreatmentPlanClient] = relationship(back_populates='overrides')
+    created_by: Mapped[User] = relationship()

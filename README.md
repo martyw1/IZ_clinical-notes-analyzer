@@ -238,6 +238,7 @@ Admins can open `Settings` to review:
 - organization label
 - access-intelligence settings
 - optional LLM settings
+- Treatment Plan Timeliness LOC-change update window setting
 - future EMR/FHIR connector settings
 - runtime readiness
 - EMR profile
@@ -626,6 +627,10 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
+The `Treatment plans` tab provides the first Treatment Plan Timeliness Tracker surface. It shows active clients, current level of care, counselor, admission date, last valid treatment-plan review date, next calculated due date, days until due, status, rule used, source evidence summary, detail records, manual overrides, and recent audit history.
+
+Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
+
 The deterministic rules profile is configured here:
 
 ```text
@@ -656,6 +661,7 @@ Rules-file guardrails:
 - keep vendor credentials out of YAML rules files
 - treat YAML rules as deterministic business logic, not LLM prompts
 - add future workflows as versioned rules profiles under `config\rules`
+- keep LOC aliases such as `IOP5`, `IOP-5`, `IOP 5`, `IOP-19`, `IOP-3`, and `OP` configurable in rules/config files
 
 Open blocker:
 

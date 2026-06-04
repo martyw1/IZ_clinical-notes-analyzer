@@ -181,6 +181,8 @@ function appSettingsPayload() {
     emr_smart_client_secret_configured: false,
     emr_smart_scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     emr_api_timeout_seconds: 10,
+    treatment_plan_loc_change_window_days: null,
+    treatment_plan_loc_change_window_validated: false,
     updated_by_id: 1,
     updated_at: '2026-03-08T13:00:00Z',
   }
@@ -218,6 +220,99 @@ function readinessPayload() {
   }
 }
 
+function timelinessDashboardPayload() {
+  return {
+    total_active_clients: 1,
+    compliant: 0,
+    due_soon: 1,
+    urgent: 0,
+    overdue: 0,
+    needs_review: 0,
+    missing_data: 0,
+    compliance_percentage: 0,
+    loc_change_window_days: null,
+    loc_change_window_validated: false,
+    items: [
+      {
+        id: 21,
+        patient_id: 'PAT-TP-001',
+        permitted_name: 'Synthetic Client',
+        current_level_of_care: 'IOP-5',
+        counselor_name: 'Counselor One',
+        admission_date: '2026-02-26',
+        last_valid_review_date: '2026-04-02',
+        next_due_date: '2026-06-01',
+        days_until_due: 9,
+        status: 'Due Soon',
+        rule_used: 'TP-REVIEW-60',
+        evidence_summary: 'Latest valid staff/therapist review signature was 2026-04-02 using IOP-5 60-day recurrence.',
+        last_checked_at: '2026-05-23T12:00:00Z',
+        last_imported_at: '2026-05-23T11:00:00Z',
+      },
+    ],
+  }
+}
+
+function timelinessDetailPayload() {
+  return {
+    ...timelinessDashboardPayload().items[0],
+    is_active: true,
+    source_evidence: 'Synthetic spreadsheet row',
+    rule_results: [
+      {
+        rule_id: 'TP-REVIEW-60',
+        label: 'Ongoing Treatment Plan Review',
+        due_date: '2026-06-01',
+        status: 'Due Soon',
+        evidence_summary: 'Latest valid staff/therapist review signature was 2026-04-02 using IOP-5 60-day recurrence.',
+      },
+      {
+        rule_id: 'TP-LOC-CHANGE-UNVALIDATED',
+        label: 'Level-of-care change update',
+        due_date: '2026-03-30',
+        status: 'Needs Review',
+        evidence_summary: 'LOC-change update window is not validated by R3/Marleigh; manual review is required.',
+      },
+    ],
+    level_of_care_history: [
+      { id: 31, level_of_care: 'PHP', effective_date: '2026-02-26', source_evidence: 'Synthetic admission LOC' },
+      { id: 32, level_of_care: 'IOP-5', effective_date: '2026-03-30', source_evidence: 'Synthetic LOC update' },
+    ],
+    treatment_plans: [
+      {
+        id: 41,
+        plan_kind: 'review',
+        document_date: '2026-04-02',
+        staff_signature_date: '2026-04-02',
+        client_signature_date: '',
+        source_evidence: 'Synthetic Treatment Plan Review',
+        source_document_id: 'doc-41',
+        is_valid: true,
+        conflict_note: '',
+      },
+    ],
+    overrides: [],
+    audit_history: [
+      {
+        event_id: 'evt-tp-1',
+        timestamp_utc: '2026-05-23T12:00:00Z',
+        actor_username: 'admin',
+        actor_role: 'admin',
+        actor_type: 'human',
+        source_ip: '127.0.0.1',
+        request_id: 'req-tp-1',
+        event_category: 'workflow',
+        action: 'timeliness.client.read',
+        patient_id: 'PAT-TP-001',
+        message: 'Treatment Plan Timeliness client PAT-TP-001 viewed.',
+        details: '{}',
+        outcome_status: 'success',
+        severity: 'info',
+      },
+    ],
+  }
+}
+
 function signIn() {
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'admin' } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'r3!@analyzer#123' } })
@@ -250,6 +345,74 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
+  })
+
+  it('shows treatment plan timeliness detail and records a manual override', async () => {
+    let overrideSaved = false
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-tp', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': () => ({
+        body: {
+          ...timelinessDetailPayload(),
+          overrides: overrideSaved
+            ? [
+                {
+                  id: 99,
+                  field_name: 'status',
+                  original_value: 'Due Soon',
+                  new_value: 'Needs Review',
+                  reason: 'Synthetic manager review.',
+                  affected_rule: 'TP-REVIEW-60',
+                  created_by_id: 1,
+                  created_at: '2026-05-23T12:30:00Z',
+                },
+              ]
+            : [],
+        },
+      }),
+      'POST /api/timeliness/clients/21/overrides': (_path: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body || '{}'))
+        overrideSaved = true
+        return {
+          body: {
+            id: 99,
+            field_name: body.field_name,
+            original_value: body.original_value,
+            new_value: body.new_value,
+            reason: body.reason,
+            affected_rule: body.affected_rule,
+            created_by_id: 1,
+            created_at: '2026-05-23T12:30:00Z',
+          },
+        }
+      },
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.getByText('Synthetic Client')).toBeInTheDocument()
+    expect(screen.getByText(/Unvalidated by R3\/Marleigh/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Synthetic manager review.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save override' }))
+
+    await waitFor(() => expect(screen.getByText('Treatment plan override recorded for patient PAT-TP-001.')).toBeInTheDocument())
+    expect(screen.getByText(/Synthetic manager review/i)).toBeInTheDocument()
   })
 
   it('uploads a note binder and opens the generated automated review', async () => {
@@ -380,6 +543,8 @@ describe('App turnkey workflow', () => {
             emr_smart_client_secret_configured: Boolean(body.emr_smart_client_secret),
             emr_smart_scopes: body.emr_smart_scopes,
             emr_api_timeout_seconds: body.emr_api_timeout_seconds,
+            treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
+            treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
           },
         }
       },

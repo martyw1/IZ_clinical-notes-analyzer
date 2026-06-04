@@ -26,6 +26,7 @@ from app.models.models import (
     PatientNoteDocument,
     PatientNoteSet,
     Role,
+    TreatmentPlanClient,
     User,
     WorkflowState,
     WorkflowTransition,
@@ -50,6 +51,11 @@ from app.schemas.schemas import (
     PatientNoteSetDetailOut,
     PatientNoteSetSummaryOut,
     ReadinessOut,
+    TimelinessClientDetailOut,
+    TimelinessClientUpsert,
+    TimelinessDashboardOut,
+    TimelinessOverrideInput,
+    TimelinessOverrideOut,
     Token,
     TransitionInput,
     UserCreate,
@@ -67,6 +73,16 @@ from app.services.evaluation import apply_report_to_chart, generate_evaluation_r
 from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, sanitize_filename, store_upload_file
 from app.services.runtime_checks import readiness_payload
 from app.services.secure_storage import encrypt_text_secret, read_secure_file
+from app.services.timeliness import (
+    add_override,
+    detail_payload as timeliness_detail_payload,
+    evaluate_client,
+    get_client as get_timeliness_client,
+    list_clients as list_timeliness_clients,
+    summary_payload as timeliness_summary_payload,
+    sync_from_note_set,
+    upsert_client as upsert_timeliness_client,
+)
 
 router = APIRouter(prefix='/api')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
@@ -76,6 +92,15 @@ REQUIRED_EMR_READ_SCOPES = {'patient/Patient.rs', 'patient/DocumentReference.rs'
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _parse_evaluation_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value.strip(), '%Y-%m-%d').date()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='evaluation_date must use YYYY-MM-DD') from exc
 
 
 def _is_bootstrap_admin(user: User) -> bool:
@@ -278,6 +303,8 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
         'emr_smart_scopes': settings_row.emr_smart_scopes,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
+        'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
+        'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
     }
 
@@ -932,7 +959,9 @@ def update_app_settings(
     if payload.access_lookup_timeout_seconds is not None:
         settings_row.access_lookup_timeout_seconds = payload.access_lookup_timeout_seconds
     if payload.access_reputation_api_key is not None:
-        settings_row.access_reputation_api_key = payload.access_reputation_api_key.strip()
+        candidate_key = payload.access_reputation_api_key.strip()
+        if candidate_key:
+            settings_row.access_reputation_api_key = encrypt_text_secret(candidate_key)
     if payload.clear_access_reputation_api_key:
         settings_row.access_reputation_api_key = ''
     if payload.llm_enabled is not None:
@@ -944,7 +973,9 @@ def update_app_settings(
     if payload.llm_model is not None:
         settings_row.llm_model = payload.llm_model.strip() or settings_row.llm_model
     if payload.llm_api_key is not None:
-        settings_row.llm_api_key = payload.llm_api_key.strip()
+        candidate_key = payload.llm_api_key.strip()
+        if candidate_key:
+            settings_row.llm_api_key = encrypt_text_secret(candidate_key)
     if payload.clear_llm_api_key:
         settings_row.llm_api_key = ''
     if payload.llm_use_for_access_review is not None:
@@ -971,6 +1002,10 @@ def update_app_settings(
         settings_row.emr_smart_scopes = ' '.join(payload.emr_smart_scopes.split())
     if payload.emr_api_timeout_seconds is not None:
         settings_row.emr_api_timeout_seconds = payload.emr_api_timeout_seconds
+    if payload.treatment_plan_loc_change_window_days is not None:
+        settings_row.treatment_plan_loc_change_window_days = payload.treatment_plan_loc_change_window_days
+    if payload.treatment_plan_loc_change_window_validated is not None:
+        settings_row.treatment_plan_loc_change_window_validated = payload.treatment_plan_loc_change_window_validated
     _validate_emr_enablement(settings_row)
 
     touch_app_settings(settings_row, actor=user)
@@ -1084,6 +1119,183 @@ def get_emr_import_plan(
         message='EMR DocumentReference import plan viewed.',
     )
     return plan
+
+
+@router.get('/timeliness/dashboard', response_model=TimelinessDashboardOut)
+def get_timeliness_dashboard(
+    request: Request,
+    evaluation_date: str | None = Query(default=None),
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    app_settings = get_or_create_app_settings(db)
+    as_of = _parse_evaluation_date(evaluation_date)
+    evaluations = [evaluate_client(client, app_settings, evaluation_date=as_of) for client in list_timeliness_clients(db)]
+    status_counts = {
+        'Compliant': 0,
+        'Due Soon': 0,
+        'Urgent': 0,
+        'Overdue': 0,
+        'Needs Review': 0,
+        'Missing Data': 0,
+    }
+    for evaluation in evaluations:
+        status_counts[evaluation.status] = status_counts.get(evaluation.status, 0) + 1
+    total = len(evaluations)
+    compliance_percentage = round((status_counts['Compliant'] / total) * 100, 1) if total else 0.0
+    items = sorted(
+        [timeliness_summary_payload(evaluation) for evaluation in evaluations],
+        key=lambda item: (
+            ['Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data', 'Compliant'].index(str(item['status'])),
+            item['next_due_date'] or '9999-12-31',
+            item['patient_id'],
+        ),
+    )
+    log_event(
+        db,
+        request,
+        'timeliness.dashboard.read',
+        actor=user,
+        event_category='workflow',
+        target_entity='treatment_plan_timeliness',
+        target_entity_type='timeliness_dashboard',
+        details={'count': total, 'evaluation_date': evaluation_date or ''},
+        message='Treatment Plan Timeliness dashboard viewed.',
+    )
+    return {
+        'total_active_clients': total,
+        'compliant': status_counts['Compliant'],
+        'due_soon': status_counts['Due Soon'],
+        'urgent': status_counts['Urgent'],
+        'overdue': status_counts['Overdue'],
+        'needs_review': status_counts['Needs Review'],
+        'missing_data': status_counts['Missing Data'],
+        'compliance_percentage': compliance_percentage,
+        'loc_change_window_days': app_settings.treatment_plan_loc_change_window_days,
+        'loc_change_window_validated': app_settings.treatment_plan_loc_change_window_validated,
+        'items': items,
+    }
+
+
+@router.post('/timeliness/clients', response_model=TimelinessClientDetailOut)
+def upsert_timeliness_client_endpoint(
+    payload: TimelinessClientUpsert,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    db: Session = Depends(get_db),
+):
+    if not payload.patient_id.strip():
+        raise HTTPException(status_code=400, detail='patient_id is required')
+    before = None
+    existing = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == payload.patient_id.strip())).scalar_one_or_none()
+    if existing is not None:
+        before = {'patient_id': existing.patient_id, 'current_level_of_care': existing.current_level_of_care, 'admission_date': existing.admission_date}
+    client = upsert_timeliness_client(db, payload)
+    db.commit()
+    db.refresh(client)
+    client = get_timeliness_client(db, client.id)
+    app_settings = get_or_create_app_settings(db)
+    evaluation = evaluate_client(client, app_settings)
+    log_event(
+        db,
+        request,
+        'timeliness.client.upsert',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'treatment_plan_client:{client.id}',
+        target_entity_type='treatment_plan_client',
+        target_entity_id=str(client.id),
+        patient_id=client.patient_id,
+        details={'patient_id': client.patient_id, 'has_before_state': before is not None},
+        before_state=before,
+        message=f'Treatment Plan Timeliness client {client.patient_id} saved.',
+    )
+    return timeliness_detail_payload(evaluation, [])
+
+
+@router.get('/timeliness/clients/{client_id}', response_model=TimelinessClientDetailOut)
+def get_timeliness_client_detail(
+    client_id: int,
+    request: Request,
+    evaluation_date: str | None = Query(default=None),
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    client = get_timeliness_client(db, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
+    app_settings = get_or_create_app_settings(db)
+    evaluation = evaluate_client(client, app_settings, evaluation_date=_parse_evaluation_date(evaluation_date))
+    audit_history = list(
+        db.execute(
+            select(AuditLog)
+            .where(AuditLog.patient_id == client.patient_id)
+            .order_by(AuditLog.timestamp_utc.desc(), AuditLog.id.desc())
+            .limit(25)
+        ).scalars()
+    )
+    log_event(
+        db,
+        request,
+        'timeliness.client.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'treatment_plan_client:{client.id}',
+        target_entity_type='treatment_plan_client',
+        target_entity_id=str(client.id),
+        patient_id=client.patient_id,
+        details={'patient_id': client.patient_id},
+        message=f'Treatment Plan Timeliness client {client.patient_id} viewed.',
+    )
+    return timeliness_detail_payload(evaluation, audit_history)
+
+
+@router.post('/timeliness/clients/{client_id}/overrides', response_model=TimelinessOverrideOut)
+def create_timeliness_override(
+    client_id: int,
+    payload: TimelinessOverrideInput,
+    request: Request,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    client = get_timeliness_client(db, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
+    if user.role not in {Role.admin, Role.manager}:
+        log_event(
+            db,
+            request,
+            'timeliness.override.denied',
+            actor=user,
+            event_category='authorization',
+            target_entity=f'treatment_plan_client:{client.id}',
+            target_entity_type='treatment_plan_client',
+            target_entity_id=str(client.id),
+            patient_id=client.patient_id,
+            details={'field_name': payload.field_name, 'affected_rule': payload.affected_rule},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=403,
+            message=f'Treatment Plan Timeliness override denied for {client.patient_id}.',
+        )
+        raise HTTPException(status_code=403, detail='Only administrators and office managers can create timeliness overrides')
+    override = add_override(db, client, payload, actor=user)
+    db.commit()
+    db.refresh(override)
+    log_event(
+        db,
+        request,
+        'timeliness.override.created',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'treatment_plan_override:{override.id}',
+        target_entity_type='treatment_plan_override',
+        target_entity_id=str(override.id),
+        patient_id=client.patient_id,
+        details={'field_name': override.field_name, 'affected_rule': override.affected_rule},
+        message=f'Treatment Plan Timeliness override {override.id} created.',
+    )
+    return override
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
@@ -1502,6 +1714,7 @@ async def upload_patient_note_set(
         db.flush()
 
         note_set.documents[:] = created_documents
+        sync_from_note_set(db, note_set)
         report = generate_evaluation_report(note_set, app_settings=get_or_create_app_settings(db))
         apply_report_to_chart(chart, report)
         chart.notes = note_set.upload_notes

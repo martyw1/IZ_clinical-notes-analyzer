@@ -670,6 +670,48 @@ label {
   gap: 0.85rem;
 }
 
+.timeliness-table {
+  display: grid;
+  border: 1px solid #d4dde1;
+  overflow-x: auto;
+}
+
+.timeliness-table__head,
+.timeliness-table__row {
+  display: grid;
+  grid-template-columns: 0.8fr 0.8fr minmax(220px, 1.6fr);
+  gap: 0;
+  min-width: 620px;
+}
+
+.timeliness-table--wide .timeliness-table__head,
+.timeliness-table--wide .timeliness-table__row {
+  grid-template-columns: 0.7fr 0.8fr 0.8fr 0.8fr minmax(180px, 1.3fr);
+  min-width: 760px;
+}
+
+.timeliness-table__head {
+  background: #e7eef1;
+  color: #263940;
+  font-weight: 700;
+}
+
+.timeliness-table__head span,
+.timeliness-table__row span {
+  padding: 0.55rem 0.65rem;
+  border-right: 1px solid #d4dde1;
+  overflow-wrap: anywhere;
+}
+
+.timeliness-table__row {
+  border-top: 1px solid #d4dde1;
+}
+
+.timeliness-table__head span:last-child,
+.timeliness-table__row span:last-child {
+  border-right: 0;
+}
+
 .log-row__details {
   display: flex;
   gap: 0.85rem;

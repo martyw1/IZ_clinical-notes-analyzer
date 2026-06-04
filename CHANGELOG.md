@@ -4,16 +4,20 @@
 
 ### Added
 - Added S0 codebase map, cleanup audit, open blocker register, and S1 removal log for the v0.5.0 Treatment Plan Timeliness Tracker workflow.
+- Added first-class Treatment Plan Timeliness Tracker backend models, APIs, rule evaluation service, upload metadata sync, manual override audit trail, and React dashboard/detail UI.
+- Added configurable LOC aliases for `IOP-5`, `IOP-19`, `IOP-3`, and `OP`, plus timeliness edge-case coverage for missing data, override RBAC, upload sync, and the unvalidated LOC-change blocker.
 
 ### Changed
 - Expanded project `AGENTS.md` with R3 architecture, PHI/synthetic-data boundaries, direct API harness limits, Windows target assumptions, and the unvalidated LOC-change blocker.
 - Tightened `.gitignore` for local SQLite files, logs, coverage output, caches, local PRD duplicates, and walkthrough exports.
 - Updated README/PRD notes to keep the LOC-change update window configurable and visibly unvalidated.
+- Encrypted LLM and access reputation API keys saved through the main settings API instead of storing those values directly.
 
 ### Verified
-- Backend tests passed with `54 passed` using Python 3.11 from a temporary local validation venv.
+- Backend tests passed with `59 passed` using Python 3.11 from a temporary local validation venv.
+- Focused S2 backend timeliness/schema tests passed with `8 passed`.
 - Frontend production build passed after repairing missing local optional native packages in `node_modules`.
-- Frontend Vitest did not complete locally because the Vitest worker pool timed out before importing tests; this is documented as a local validation blocker.
+- Frontend Vitest and direct `tsc --noEmit` did not complete locally because their worker/process execution hung before test import or diagnostics; this is documented as a local validation blocker.
 
 ## 0.4.1 - 2026-06-03
 

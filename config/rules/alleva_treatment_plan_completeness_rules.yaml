@@ -41,9 +41,33 @@ levels_of_care:
     treatment_plan_update_interval_days: 60
     required_individual_sessions_per_week: 1
     required_group_sessions_per_week: "chart_defined"
+  IOP-5:
+    display_name: "Intensive Outpatient Program - 5 Day"
+    aliases: ["IOP-5", "IOP5", "IOP 5", "Intensive Outpatient 5"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
+  IOP-19:
+    display_name: "Intensive Outpatient Program - 19"
+    aliases: ["IOP-19", "IOP19", "IOP 19", "Intensive Outpatient 19"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
+  IOP-3:
+    display_name: "Intensive Outpatient Program - 3 Day"
+    aliases: ["IOP-3", "IOP3", "IOP 3", "Intensive Outpatient 3"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
   OUTPATIENT:
     display_name: "Outpatient"
     aliases: ["Outpatient", "OP", "OUTPATIENT"]
+    treatment_plan_update_interval_days: 60
+    required_individual_sessions_per_week: 1
+    required_group_sessions_per_week: "chart_defined"
+  OP:
+    display_name: "Outpatient"
+    aliases: ["OP", "O/P", "Outpatient", "OUTPATIENT"]
     treatment_plan_update_interval_days: 60
     required_individual_sessions_per_week: 1
     required_group_sessions_per_week: "chart_defined"

@@ -12,7 +12,7 @@ This map summarizes the current source checkout before v0.5.0 implementation wor
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, and local audit logs under per-user app data. Docker and PostgreSQL exist for developer/server scenarios, but are not acceptable as ordinary Windows 10/11 Home requirements.
 
-Current implementation is still centered on clinical-note binder upload and chart-audit review. The Treatment Plan Timeliness Tracker exists as PRD/rules direction and partial YAML logic, but there is not yet a first-class timeliness tracker domain with active clients, LOC history, treatment-plan records, override records, dashboard statuses, and detail pages.
+Current implementation includes clinical-note binder upload, chart-audit review, and the S2 first-class Treatment Plan Timeliness Tracker. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Workflow CRUD/versioning and full Windows packaging remain later v0.5.0 stations.
 
 ## Backend Entrypoints
 
@@ -20,7 +20,7 @@ Current implementation is still centered on clinical-note binder upload and char
 |---|---|
 | `backend/app/main.py` | FastAPI app factory, startup readiness/schema/admin bootstrap, CORS/trusted-host/security headers, health/readiness/version, primary API routers. |
 | `backend/app/desktop_main.py` | Desktop runtime wrapper. Includes rules API, API configuration UI, clinical-notes intake UI, and serves `frontend/dist` when built. |
-| `backend/app/api/routes.py` | Main authenticated API: auth, users, settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, audit logs. |
+| `backend/app/api/routes.py` | Main authenticated API: auth, users, settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, timeliness dashboard/detail/override APIs, audit logs. |
 | `backend/app/api/api_config_routes.py` | Direct API harness for API configuration, local sample OpenAPI, OpenAPI/Swagger discovery, and selected operation testing. |
 | `backend/app/api/rules_routes.py` | Rules profile and ad hoc rules evaluation API. |
 | `backend/app/api/api_config_ui_routes.py` | Standalone HTML page for API configuration/testing. |
@@ -30,12 +30,13 @@ Current implementation is still centered on clinical-note binder upload and char
 
 | Area | Files | Current behavior |
 |---|---|---|
-| Models | `backend/app/models/models.py` | Users, app settings, charts, patient note sets/documents, workflow transitions, audit item responses, audit logs. No dedicated active-client, LOC history, treatment-plan record, override, workflow-definition, or timeliness-result tables yet. |
-| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit-log APIs. No timeliness dashboard/detail/override schemas yet. |
+| Models | `backend/app/models/models.py` | Users, app settings, charts, patient note sets/documents, workflow transitions, audit item responses, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. Workflow-definition/version tables are not implemented yet. |
+| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit-log APIs plus timeliness dashboard/detail/override schemas. |
 | Config | `backend/app/core/config.py` | SQLite-first defaults; relative DB/upload/log paths resolve into OS-local app data; local PostgreSQL only allowed for supported developer/server modes. |
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, password hashing/policy, role checks, password-reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File type/count/size validation, safe filenames, patient ID detection, encrypted file writes, path traversal prevention, encrypted text helper. |
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM gap analysis hooks. |
+| Timeliness | `backend/app/services/timeliness.py` | Deterministic treatment-plan due-date evaluation, LOC alias mapping, missing/conflict handling, LOC-change-unvalidated rule, upload metadata sync, and summary/detail payload generation. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules supporting field checks, lookup, date add/compare, days-until, numeric compare, and result serialization. |
 | API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/emr_fhir.py` | OpenAPI/Swagger discovery, operation testing, SMART/FHIR/Alleva import planning. Live import is gated. |
 | Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF/FHIR AuditEvent payloads, fallback JSONL log. |
@@ -46,12 +47,12 @@ Current implementation is still centered on clinical-note binder upload and char
 | Entrypoint | Purpose |
 |---|---|
 | `frontend/src/main.tsx` | Mounts React app. |
-| `frontend/src/App.tsx` | Single large UI component with auth, dashboard, review queue, upload form, profile, user management, settings, logs, and API/EMR operations. |
+| `frontend/src/App.tsx` | Single large UI component with auth, dashboard, review queue, Treatment Plans tracker, upload form, profile, user management, settings, logs, and API/EMR operations. |
 | `frontend/src/app.css` | Application styling. |
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `uploads`, `profile`, `users`, `logs`, and `settings`. There is no dedicated Treatment Plan Timeliness dashboard or client detail route yet.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history.
 
 ## Scripts and Launchers
 
@@ -114,9 +115,9 @@ Boundary: this harness is for configuration, testing, OpenAPI discovery, and fut
 1. `Settings.rules_config_file` resolves the YAML file.
 2. `load_rules_config` reads YAML and `validate_rules_config` checks required structure.
 3. `evaluate_rules` maps current LOC aliases, derives effective treatment-plan date, calculates due dates, and emits rule findings/statuses.
-4. Current YAML has draft Treatment Plan Tracking rules for active scope, current LOC presence/mapping, treatment-plan existence/date, 30/60-day recurrence by broad LOC family, warning window, and attendance checks.
+4. Current YAML has draft Treatment Plan Tracking rules for active scope, current LOC presence/mapping, treatment-plan existence/date, 30/60-day recurrence, warning window, attendance checks, and configurable aliases for PHP, IOP-5, IOP-19, IOP-3, and OP.
 
-Gap against v0.5.0 PRD: current YAML has PHP/IOP/OUTPATIENT families, but does not yet model IOP-5, IOP-19, IOP-3, OP aliases, initial/master plan signature rules, unvalidated LOC-change window, status priority Overdue/Urgent/Due Soon/Needs Review/Missing Data/Compliant, source evidence conflicts, or manual overrides.
+S2 status: the dedicated timeliness service now models initial/master signature rules, ongoing 30/60-day review recurrences, unvalidated LOC-change `Needs Review`, status priority, source conflicts, missing data, and manual override audit records. S5 still needs generic workflow CRUD/versioning.
 
 ## Audit and Logging Flow
 
@@ -175,9 +176,9 @@ For v0.5.0, Windows Home validation remains a release blocker until ordinary-use
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Timeliness MVP not yet implemented as first-class workflow | Models/schemas/frontend remain chart-audit and note-set centered. | S2 requires new/extended entities, APIs, UI, tests, and docs. |
+| Generic workflow CRUD/versioning not yet implemented | Timeliness tracker is first-class, but workflow definition/version models are not present. | S5 must add admin-managed workflow definitions beyond the MVP tracker. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
-| Saved secrets are not uniformly encrypted | API configuration route encrypts API key, but general settings route stores LLM/access reputation keys directly. | S2/S3 hardening needed before real secrets. |
+| Direct API harness still needs S4 hardening | Main settings secrets are encrypted after S2; API harness still needs full offline OpenAPI/redaction coverage. | S4 must prove direct API testing stays credential-safe. |
 | Current audit/log messages may include patient IDs and filenames | Upload/download and chart messages include patient ID/document filename. | Requires minimum-necessary logging review and PHI policy decision. |
 | Live Alleva import is intentionally gated | EMR profile/import plan exists, but no approved endpoint mapping/tenant credentials. | Do not build fake live import. |
 | OneDrive checkout has local untracked artifacts | `Product Requirements Document.docx` and `walkthroughs/` are untracked. | Do not delete without explicit S1 decision. |

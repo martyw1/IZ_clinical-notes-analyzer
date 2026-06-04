@@ -16,7 +16,20 @@ from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
-from app.models.models import AppSetting, AuditItemResponse, AuditLog, Chart, PatientNoteDocument, PatientNoteSet, User, WorkflowTransition
+from app.models.models import (
+    AppSetting,
+    AuditItemResponse,
+    AuditLog,
+    Chart,
+    LevelOfCareHistory,
+    PatientNoteDocument,
+    PatientNoteSet,
+    TreatmentPlanClient,
+    TreatmentPlanOverride,
+    TreatmentPlanRecord,
+    User,
+    WorkflowTransition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +37,19 @@ DEFAULT_DEVICE_VENDOR = 'OpenAI'
 DEFAULT_DEVICE_PRODUCT = 'IZ Clinical Notes Analyzer'
 DEFAULT_DEVICE_VERSION = '1'
 FALLBACK_LOG_PATH = settings.log_dir_path / 'forensic-audit-fallback.jsonl'
-TRACKED_MODELS = (User, AppSetting, Chart, WorkflowTransition, AuditItemResponse, PatientNoteSet, PatientNoteDocument)
+TRACKED_MODELS = (
+    User,
+    AppSetting,
+    Chart,
+    WorkflowTransition,
+    AuditItemResponse,
+    PatientNoteSet,
+    PatientNoteDocument,
+    TreatmentPlanClient,
+    LevelOfCareHistory,
+    TreatmentPlanRecord,
+    TreatmentPlanOverride,
+)
 SENSITIVE_FIELDS: dict[str, set[str]] = {
     'User': {'password_hash'},
     'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'emr_smart_client_secret'},
@@ -32,6 +57,10 @@ SENSITIVE_FIELDS: dict[str, set[str]] = {
     'AuditItemResponse': {'notes', 'evidence_location'},
     'PatientNoteSet': {'upload_notes'},
     'PatientNoteDocument': {'original_filename', 'description'},
+    'TreatmentPlanClient': {'permitted_name', 'source_evidence'},
+    'LevelOfCareHistory': {'source_evidence'},
+    'TreatmentPlanRecord': {'source_evidence', 'conflict_note'},
+    'TreatmentPlanOverride': {'original_value', 'new_value', 'reason'},
 }
 _audit_context_var: ContextVar['AuditContext | None'] = ContextVar('audit_context', default=None)
 

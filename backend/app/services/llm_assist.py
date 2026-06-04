@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from app.models.models import AppSetting
+from app.services.secure_storage import decrypt_text_secret
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,10 @@ logger = logging.getLogger(__name__)
 def llm_is_configured(app_settings: AppSetting | None) -> bool:
     if app_settings is None:
         return False
+    llm_key = decrypt_text_secret(app_settings.llm_api_key)
     return bool(
         app_settings.llm_enabled
-        and app_settings.llm_api_key.strip()
+        and llm_key.strip()
         and app_settings.llm_base_url.strip()
         and app_settings.llm_model.strip()
     )
@@ -53,6 +55,7 @@ def call_llm_text(
     if not llm_is_configured(app_settings):
         return None
 
+    llm_key = decrypt_text_secret(app_settings.llm_api_key)
     endpoint = f"{app_settings.llm_base_url.rstrip('/')}/chat/completions"
     payload = {
         'model': app_settings.llm_model,
@@ -64,7 +67,7 @@ def call_llm_text(
         'max_tokens': max_tokens,
     }
     headers = {
-        'Authorization': f'Bearer {app_settings.llm_api_key}',
+        'Authorization': f'Bearer {llm_key}',
         'Content-Type': 'application/json',
     }
 

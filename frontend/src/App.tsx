@@ -14,7 +14,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'dashboard' | 'reviews' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
+type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
 
 type VersionInfo = {
   app_name: string
@@ -152,6 +152,87 @@ type AuditLogRecord = {
   severity: string
 }
 
+type TimelinessStatus = 'Overdue' | 'Urgent' | 'Due Soon' | 'Needs Review' | 'Missing Data' | 'Compliant'
+
+type TimelinessClientSummary = {
+  id: number
+  patient_id: string
+  permitted_name: string
+  current_level_of_care: string
+  counselor_name: string
+  admission_date: string
+  last_valid_review_date: string | null
+  next_due_date: string | null
+  days_until_due: number | null
+  status: TimelinessStatus
+  rule_used: string
+  evidence_summary: string
+  last_checked_at: string
+  last_imported_at: string | null
+}
+
+type TimelinessDashboard = {
+  total_active_clients: number
+  compliant: number
+  due_soon: number
+  urgent: number
+  overdue: number
+  needs_review: number
+  missing_data: number
+  compliance_percentage: number
+  loc_change_window_days: number | null
+  loc_change_window_validated: boolean
+  items: TimelinessClientSummary[]
+}
+
+type TimelinessRuleResult = {
+  rule_id: string
+  label: string
+  due_date: string | null
+  status: TimelinessStatus
+  evidence_summary: string
+}
+
+type TimelinessLevelOfCare = {
+  id: number
+  level_of_care: string
+  effective_date: string
+  source_evidence: string
+}
+
+type TimelinessTreatmentPlan = {
+  id: number
+  plan_kind: string
+  document_date: string
+  staff_signature_date: string
+  client_signature_date: string
+  source_evidence: string
+  source_document_id: string
+  is_valid: boolean
+  conflict_note: string
+}
+
+type TimelinessOverride = {
+  id: number
+  field_name: string
+  original_value: string
+  new_value: string
+  reason: string
+  affected_rule: string
+  created_by_id: number
+  created_at: string
+}
+
+type TimelinessClientDetail = TimelinessClientSummary & {
+  is_active: boolean
+  source_evidence: string
+  rule_results: TimelinessRuleResult[]
+  level_of_care_history: TimelinessLevelOfCare[]
+  treatment_plans: TimelinessTreatmentPlan[]
+  overrides: TimelinessOverride[]
+  audit_history: AuditLogRecord[]
+}
+
 type AppSettings = {
   organization_name: string
   access_intel_enabled: boolean
@@ -174,6 +255,8 @@ type AppSettings = {
   emr_smart_client_secret_configured: boolean
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  treatment_plan_loc_change_window_days: number | null
+  treatment_plan_loc_change_window_validated: boolean
   updated_by_id: number | null
   updated_at: string | null
 }
@@ -203,6 +286,8 @@ type AppSettingsForm = {
   clear_emr_smart_client_secret: boolean
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  treatment_plan_loc_change_window_days: number | null
+  treatment_plan_loc_change_window_validated: boolean
 }
 
 type UploadEntry = {
@@ -245,6 +330,14 @@ type UploadFormState = {
   primary_clinician: string
   upload_notes: string
   entries: UploadEntry[]
+}
+
+type TimelinessOverrideForm = {
+  field_name: string
+  original_value: string
+  new_value: string
+  reason: string
+  affected_rule: string
 }
 
 type PatientIdDetection = {
@@ -349,6 +442,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   dashboard: 'Chart audit',
   reviews: 'Review queue',
   uploads: 'Manual upload',
+  timeliness: 'Treatment plans',
   profile: 'My account',
   users: 'User management',
   logs: 'Forensic logs',
@@ -406,7 +500,7 @@ function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>)
 function viewFromUrl(): AppView {
   if (typeof window === 'undefined') return 'dashboard'
   const requested = new URLSearchParams(window.location.search).get('view') || window.location.hash.replace(/^#\/?/, '')
-  return ['dashboard', 'reviews', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
+  return ['dashboard', 'reviews', 'timeliness', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
 }
 
 function createSettingsForm(settings: AppSettings): AppSettingsForm {
@@ -435,6 +529,18 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     clear_emr_smart_client_secret: false,
     emr_smart_scopes: settings.emr_smart_scopes,
     emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
+    treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days,
+    treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
+  }
+}
+
+function createTimelinessOverrideForm(detail?: TimelinessClientDetail | null): TimelinessOverrideForm {
+  return {
+    field_name: 'status',
+    original_value: detail?.status || '',
+    new_value: 'Needs Review',
+    reason: '',
+    affected_rule: detail?.rule_used || '',
   }
 }
 
@@ -484,6 +590,18 @@ function workflowTone(state: string) {
   if (state === 'Approved by Office Manager') return 'success'
   if (state === 'Returned to Counselor') return 'danger'
   return 'neutral'
+}
+
+function timelinessTone(status: string) {
+  if (status === 'Compliant') return 'success'
+  if (status === 'Overdue') return 'danger'
+  if (status === 'Urgent' || status === 'Due Soon' || status === 'Needs Review') return 'warning'
+  if (status === 'Missing Data') return 'muted'
+  return 'neutral'
+}
+
+function signedLabel(value: string) {
+  return value ? value : 'Missing'
 }
 
 function checklistTone(status: ComplianceStatus) {
@@ -618,6 +736,11 @@ export function App() {
   const [noteSets, setNoteSets] = useState<PatientNoteSetSummary[]>([])
   const [selectedNoteSetId, setSelectedNoteSetId] = useState<number | null>(null)
   const [selectedNoteSet, setSelectedNoteSet] = useState<PatientNoteSetDetail | null>(null)
+  const [timelinessDashboard, setTimelinessDashboard] = useState<TimelinessDashboard | null>(null)
+  const [selectedTimelinessClientId, setSelectedTimelinessClientId] = useState<number | null>(null)
+  const [selectedTimelinessClient, setSelectedTimelinessClient] = useState<TimelinessClientDetail | null>(null)
+  const [timelinessEvaluationDate, setTimelinessEvaluationDate] = useState('')
+  const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
   const [uploadForm, setUploadForm] = useState<UploadFormState>(createUploadForm())
   const [patientIdDetection, setPatientIdDetection] = useState<PatientIdDetection | null>(null)
   const [patientIdTouched, setPatientIdTouched] = useState(false)
@@ -666,6 +789,7 @@ export function App() {
     return TRANSITIONS[user.role]?.[selectedChart.state] || []
   }, [selectedChart, user])
   const canEditCriteria = user?.role === 'admin' || user?.role === 'manager'
+  const canOverrideTimeliness = user?.role === 'admin' || user?.role === 'manager'
 
   const selectedManagedUser = useMemo(
     () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
@@ -815,6 +939,34 @@ export function App() {
     setSelectedNoteSetId(detail.id)
   }
 
+  function timelinessQueryString() {
+    const params = new URLSearchParams()
+    if (timelinessEvaluationDate.trim()) params.set('evaluation_date', timelinessEvaluationDate.trim())
+    const query = params.toString()
+    return query ? `?${query}` : ''
+  }
+
+  async function loadTimelinessClientDetail(clientId: number) {
+    const detail = await apiRequest<TimelinessClientDetail>(`/timeliness/clients/${clientId}${timelinessQueryString()}`)
+    setSelectedTimelinessClient(detail)
+    setSelectedTimelinessClientId(detail.id)
+    setTimelinessOverrideForm(createTimelinessOverrideForm(detail))
+  }
+
+  async function loadTimelinessDashboard(preferredId?: number | null) {
+    const payload = await apiRequest<TimelinessDashboard>(`/timeliness/dashboard${timelinessQueryString()}`)
+    setTimelinessDashboard(payload)
+    const preferred = preferredId ?? selectedTimelinessClientId
+    const nextId = preferred && payload.items.some((item) => item.id === preferred) ? preferred : payload.items[0]?.id ?? null
+    if (nextId) {
+      await loadTimelinessClientDetail(nextId)
+    } else {
+      setSelectedTimelinessClient(null)
+      setSelectedTimelinessClientId(null)
+      setTimelinessOverrideForm(createTimelinessOverrideForm())
+    }
+  }
+
   async function loadUsers(preferredId?: number | null) {
     if (user?.role !== 'admin') return
     const nextUsers = await apiRequest<User[]>('/users')
@@ -946,6 +1098,12 @@ export function App() {
   useEffect(() => {
     if (activeView === 'settings' && token && user?.role === 'admin' && !mustResetPassword) {
       void loadSettings()
+    }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'timeliness' && token && user && !mustResetPassword) {
+      void loadTimelinessDashboard()
     }
   }, [activeView, token, user, mustResetPassword])
 
@@ -1408,6 +1566,31 @@ export function App() {
     }
   }
 
+  async function handleTimelinessOverride(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedTimelinessClient || !canOverrideTimeliness) return
+    if (!timelinessOverrideForm.reason.trim()) {
+      setError('Enter an override reason before saving.')
+      return
+    }
+
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<TimelinessOverride>(`/timeliness/clients/${selectedTimelinessClient.id}/overrides`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timelinessOverrideForm),
+      })
+      await loadTimelinessDashboard(selectedTimelinessClient.id)
+      setStatus(`Treatment plan override recorded for patient ${selectedTimelinessClient.patient_id}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to save timeliness override')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function handleEmrDiscovery() {
     const fhirBaseUrl = settingsForm?.emr_fhir_base_url.trim() || ''
     if (!fhirBaseUrl) {
@@ -1476,6 +1659,10 @@ export function App() {
     setSelectedChartId(null)
     setSelectedNoteSet(null)
     setSelectedNoteSetId(null)
+    setTimelinessDashboard(null)
+    setSelectedTimelinessClient(null)
+    setSelectedTimelinessClientId(null)
+    setTimelinessOverrideForm(createTimelinessOverrideForm())
     setReadiness(null)
     setStatus('Signed out. Sign in to continue.')
     setError('')
@@ -1624,7 +1811,7 @@ export function App() {
           </section>
 
           <nav className='view-tabs'>
-            {(['dashboard', 'reviews', 'uploads', 'profile'] as AppView[]).map((view) => (
+            {(['dashboard', 'reviews', 'timeliness', 'uploads', 'profile'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -1651,8 +1838,8 @@ export function App() {
             </button>
           </nav>
 
-          {activeView === 'dashboard' ? (
-            <section className='dashboard-grid'>
+	          {activeView === 'dashboard' ? (
+	            <section className='dashboard-grid'>
               <section className='panel detail-panel'>
                 <div className='panel-heading'>
                   <div>
@@ -1700,6 +1887,9 @@ export function App() {
                     </button>
                     <button type='button' className='ghost-button' onClick={() => setActiveView('reviews')}>
                       Open review queue
+                    </button>
+                    <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
+                      Treatment plans
                     </button>
                     <button type='button' className='ghost-button' onClick={() => setActiveView('profile')}>
                       My account
@@ -1759,10 +1949,325 @@ export function App() {
                   </section>
                 ) : null}
               </aside>
-            </section>
-          ) : null}
+	            </section>
+	          ) : null}
 
-          {activeView === 'reviews' ? (
+	          {activeView === 'timeliness' ? (
+	            <section className='workspace-grid'>
+	              <aside className='panel queue-panel'>
+	                <div className='panel-heading'>
+	                  <div>
+	                    <h2>Treatment plan timeliness</h2>
+	                    <p>Active clients, due dates, and treatment-plan review status.</p>
+	                  </div>
+	                  <button type='button' className='ghost-button' onClick={() => void loadTimelinessDashboard()} disabled={isBusy}>
+	                    Refresh
+	                  </button>
+	                </div>
+
+	                <form
+	                  className='filter-row'
+	                  onSubmit={(event) => {
+	                    event.preventDefault()
+	                    void loadTimelinessDashboard()
+	                  }}
+	                >
+	                  <label>
+	                    Evaluation date
+	                    <input type='date' value={timelinessEvaluationDate} onChange={(event) => setTimelinessEvaluationDate(event.target.value)} />
+	                  </label>
+	                  <button type='submit' disabled={isBusy}>
+	                    Apply date
+	                  </button>
+	                </form>
+
+	                <div className='dashboard-metrics'>
+	                  <article className='mini-card'>
+	                    <span>Active clients</span>
+	                    <strong>{timelinessDashboard?.total_active_clients ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Compliance</span>
+	                    <strong>{timelinessDashboard ? `${timelinessDashboard.compliance_percentage}%` : '0%'}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Overdue</span>
+	                    <strong>{timelinessDashboard?.overdue ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Urgent</span>
+	                    <strong>{timelinessDashboard?.urgent ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Due soon</span>
+	                    <strong>{timelinessDashboard?.due_soon ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Needs review</span>
+	                    <strong>{timelinessDashboard?.needs_review ?? 0}</strong>
+	                  </article>
+	                </div>
+
+	                {timelinessDashboard && !timelinessDashboard.loc_change_window_validated ? (
+	                  <section className='panel-subsection admin-banner'>
+	                    <h3>LOC-change window</h3>
+	                    <p>
+	                      Unvalidated by R3/Marleigh. Current setting:{' '}
+	                      {timelinessDashboard.loc_change_window_days == null ? 'not set' : `${timelinessDashboard.loc_change_window_days} days`}.
+	                    </p>
+	                  </section>
+	                ) : null}
+
+	                {timelinessDashboard?.items.length ? (
+	                  <ul className='queue-list'>
+	                    {timelinessDashboard.items.map((item) => (
+	                      <li key={item.id}>
+	                        <button
+	                          type='button'
+	                          className={selectedTimelinessClientId === item.id ? 'queue-item queue-item--active' : 'queue-item'}
+	                          onClick={() => void loadTimelinessClientDetail(item.id)}
+	                        >
+	                          <div>
+	                            <strong>{item.permitted_name || item.patient_id}</strong>
+	                            <span>{item.patient_id}</span>
+	                            <span>{item.counselor_name || 'Counselor pending'}</span>
+	                          </div>
+	                          <div className='queue-item-meta'>
+	                            <span className={`pill pill--${timelinessTone(item.status)}`}>{item.status}</span>
+	                            <span>{item.next_due_date || 'No due date'}</span>
+	                          </div>
+	                        </button>
+	                      </li>
+	                    ))}
+	                  </ul>
+	                ) : (
+	                  <p className='empty-state'>No active treatment-plan clients are loaded.</p>
+	                )}
+	              </aside>
+
+	              <section className='panel detail-panel'>
+	                {selectedTimelinessClient ? (
+	                  <>
+	                    <div className='panel-heading'>
+	                      <div>
+	                        <h2>{selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id}</h2>
+	                        <p>{selectedTimelinessClient.patient_id}</p>
+	                      </div>
+	                      <span className={`pill pill--${timelinessTone(selectedTimelinessClient.status)}`}>{selectedTimelinessClient.status}</span>
+	                    </div>
+
+	                    <dl className='detail-grid'>
+	                      <div>
+	                        <dt>Level of care</dt>
+	                        <dd>{selectedTimelinessClient.current_level_of_care || 'Missing'}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Admission</dt>
+	                        <dd>{selectedTimelinessClient.admission_date || 'Missing'}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Last valid review</dt>
+	                        <dd>{selectedTimelinessClient.last_valid_review_date || 'Missing'}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Next due</dt>
+	                        <dd>{selectedTimelinessClient.next_due_date || 'Missing'}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Days until due</dt>
+	                        <dd>{selectedTimelinessClient.days_until_due ?? 'n/a'}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Rule used</dt>
+	                        <dd>{selectedTimelinessClient.rule_used}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Last import</dt>
+	                        <dd>{formatDateTime(selectedTimelinessClient.last_imported_at)}</dd>
+	                      </div>
+	                      <div>
+	                        <dt>Last checked</dt>
+	                        <dd>{formatDateTime(selectedTimelinessClient.last_checked_at)}</dd>
+	                      </div>
+	                    </dl>
+
+	                    <section className='panel-subsection'>
+	                      <h3>Rule results</h3>
+	                      <div className='finding-list'>
+	                        {selectedTimelinessClient.rule_results.map((result) => (
+	                          <article key={result.rule_id} className='finding-card'>
+	                            <div className='finding-card__header'>
+	                              <div>
+	                                <strong>{result.label}</strong>
+	                                <p>{result.rule_id}</p>
+	                              </div>
+	                              <span className={`pill pill--${timelinessTone(result.status)}`}>{result.status}</span>
+	                            </div>
+	                            <dl>
+	                              <div>
+	                                <dt>Due date</dt>
+	                                <dd>{result.due_date || 'Not calculated'}</dd>
+	                              </div>
+	                              <div>
+	                                <dt>Evidence</dt>
+	                                <dd>{result.evidence_summary}</dd>
+	                              </div>
+	                            </dl>
+	                          </article>
+	                        ))}
+	                      </div>
+	                    </section>
+
+	                    <section className='panel-subsection'>
+	                      <h3>Level-of-care history</h3>
+	                      {selectedTimelinessClient.level_of_care_history.length ? (
+	                        <div className='timeliness-table'>
+	                          <div className='timeliness-table__head'>
+	                            <span>LOC</span>
+	                            <span>Effective</span>
+	                            <span>Evidence</span>
+	                          </div>
+	                          {selectedTimelinessClient.level_of_care_history.map((entry) => (
+	                            <div key={entry.id} className='timeliness-table__row'>
+	                              <span>{entry.level_of_care}</span>
+	                              <span>{entry.effective_date || 'Missing'}</span>
+	                              <span>{entry.source_evidence || 'Not recorded'}</span>
+	                            </div>
+	                          ))}
+	                        </div>
+	                      ) : (
+	                        <p className='empty-state'>No level-of-care history is loaded.</p>
+	                      )}
+	                    </section>
+
+	                    <section className='panel-subsection'>
+	                      <h3>Treatment plan history</h3>
+	                      {selectedTimelinessClient.treatment_plans.length ? (
+	                        <div className='timeliness-table timeliness-table--wide'>
+	                          <div className='timeliness-table__head'>
+	                            <span>Kind</span>
+	                            <span>Document</span>
+	                            <span>Staff</span>
+	                            <span>Client</span>
+	                            <span>Status</span>
+	                          </div>
+	                          {selectedTimelinessClient.treatment_plans.map((plan) => (
+	                            <div key={plan.id} className='timeliness-table__row'>
+	                              <span>{plan.plan_kind}</span>
+	                              <span>{plan.document_date || 'Missing'}</span>
+	                              <span>{signedLabel(plan.staff_signature_date)}</span>
+	                              <span>{signedLabel(plan.client_signature_date)}</span>
+	                              <span>{plan.is_valid && !plan.conflict_note ? 'Valid' : plan.conflict_note || 'Needs review'}</span>
+	                            </div>
+	                          ))}
+	                        </div>
+	                      ) : (
+	                        <p className='empty-state'>No treatment plan records are loaded.</p>
+	                      )}
+	                    </section>
+
+	                    {canOverrideTimeliness ? (
+	                      <section className='panel-subsection'>
+	                        <h3>Manual override</h3>
+	                        <form className='form-grid' onSubmit={handleTimelinessOverride}>
+	                          <label>
+	                            Field
+	                            <select
+	                              value={timelinessOverrideForm.field_name}
+	                              onChange={(event) =>
+	                                setTimelinessOverrideForm((current) => ({ ...current, field_name: event.target.value }))
+	                              }
+	                            >
+	                              <option value='status'>Status</option>
+	                              <option value='next_due_date'>Next due date</option>
+	                              <option value='rule_used'>Rule used</option>
+	                            </select>
+	                          </label>
+	                          <label>
+	                            Original value
+	                            <input
+	                              value={timelinessOverrideForm.original_value}
+	                              onChange={(event) => setTimelinessOverrideForm((current) => ({ ...current, original_value: event.target.value }))}
+	                            />
+	                          </label>
+	                          <label>
+	                            New value
+	                            <input
+	                              value={timelinessOverrideForm.new_value}
+	                              onChange={(event) => setTimelinessOverrideForm((current) => ({ ...current, new_value: event.target.value }))}
+	                            />
+	                          </label>
+	                          <label>
+	                            Affected rule
+	                            <input
+	                              value={timelinessOverrideForm.affected_rule}
+	                              onChange={(event) => setTimelinessOverrideForm((current) => ({ ...current, affected_rule: event.target.value }))}
+	                            />
+	                          </label>
+	                          <label className='full-width'>
+	                            Reason
+	                            <textarea
+	                              value={timelinessOverrideForm.reason}
+	                              onChange={(event) => setTimelinessOverrideForm((current) => ({ ...current, reason: event.target.value }))}
+	                            />
+	                          </label>
+	                          <div className='full-width form-actions'>
+	                            <button type='submit' disabled={isBusy}>
+	                              Save override
+	                            </button>
+	                          </div>
+	                        </form>
+	                      </section>
+	                    ) : null}
+
+	                    <section className='panel-subsection'>
+	                      <h3>Overrides</h3>
+	                      {selectedTimelinessClient.overrides.length ? (
+	                        <div className='finding-list'>
+	                          {selectedTimelinessClient.overrides.map((override) => (
+	                            <article key={override.id} className='finding-card'>
+	                              <div className='finding-card__header'>
+	                                <strong>{override.field_name}</strong>
+	                                <span>{formatDateTime(override.created_at)}</span>
+	                              </div>
+	                              <p>
+	                                {override.original_value || 'blank'} to {override.new_value || 'blank'}; {override.reason}
+	                              </p>
+	                            </article>
+	                          ))}
+	                        </div>
+	                      ) : (
+	                        <p className='empty-state'>No manual overrides are recorded.</p>
+	                      )}
+	                    </section>
+
+	                    <section className='panel-subsection'>
+	                      <h3>Audit history</h3>
+	                      {selectedTimelinessClient.audit_history.length ? (
+	                        <div className='log-table'>
+	                          {selectedTimelinessClient.audit_history.slice(0, 6).map((entry) => (
+	                            <article key={entry.event_id} className='log-row'>
+	                              <div className='log-row__meta'>
+	                                <strong>{entry.action}</strong>
+	                                <span>{formatDateTime(entry.timestamp_utc)}</span>
+	                              </div>
+	                              <p>{entry.message}</p>
+	                            </article>
+	                          ))}
+	                        </div>
+	                      ) : (
+	                        <p className='empty-state'>No timeliness audit history is loaded.</p>
+	                      )}
+	                    </section>
+	                  </>
+	                ) : (
+	                  <p className='empty-state-block'>Select a treatment-plan client to review rule results, source evidence, and overrides.</p>
+	                )}
+	              </section>
+	            </section>
+	          ) : null}
+
+	          {activeView === 'reviews' ? (
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
                 <div className='panel-heading'>
@@ -2722,25 +3227,68 @@ export function App() {
                     <dt>EMR API</dt>
                     <dd>{appSettings?.emr_api_enabled ? 'Enabled' : 'Stub configured only'}</dd>
                   </div>
-                  <div>
-                    <dt>Runtime readiness</dt>
-                    <dd>{readiness ? `${readiness.status} (${readiness.failed} failed, ${readiness.warnings} warnings)` : 'Not loaded'}</dd>
-                  </div>
-                </div>
-              </aside>
+	                  <div>
+	                    <dt>Runtime readiness</dt>
+	                    <dd>{readiness ? `${readiness.status} (${readiness.failed} failed, ${readiness.warnings} warnings)` : 'Not loaded'}</dd>
+	                  </div>
+	                  <div>
+	                    <dt>LOC-change window</dt>
+	                    <dd>
+	                      {appSettings?.treatment_plan_loc_change_window_days == null
+	                        ? 'Not set'
+	                        : `${appSettings.treatment_plan_loc_change_window_days} days`}{' '}
+	                      ({appSettings?.treatment_plan_loc_change_window_validated ? 'validated' : 'unvalidated'})
+	                    </dd>
+	                  </div>
+	                </div>
+	              </aside>
 
               <section className='panel detail-panel'>
                 {settingsForm ? (
                   <form className='form-grid' onSubmit={handleSettingsSave}>
-                    <label className='full-width'>
-                      Organization name
-                      <input
-                        value={settingsForm.organization_name}
-                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, organization_name: event.target.value } : current))}
-                      />
-                    </label>
-                    <label className='checkbox-row'>
-                      <input
+	                    <label className='full-width'>
+	                      Organization name
+	                      <input
+	                        value={settingsForm.organization_name}
+	                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, organization_name: event.target.value } : current))}
+	                      />
+	                    </label>
+	                    <label>
+	                      LOC-change update window (days)
+	                      <input
+	                        type='number'
+	                        min={0}
+	                        max={365}
+	                        value={settingsForm.treatment_plan_loc_change_window_days ?? ''}
+	                        onChange={(event) =>
+	                          setSettingsForm((current) =>
+	                            current
+	                              ? {
+	                                  ...current,
+	                                  treatment_plan_loc_change_window_days: event.target.value === '' ? null : Number(event.target.value),
+	                                }
+	                              : current,
+	                          )
+	                        }
+	                      />
+	                    </label>
+	                    <label className='checkbox-row'>
+	                      <input
+	                        type='checkbox'
+	                        checked={settingsForm.treatment_plan_loc_change_window_validated}
+	                        onChange={(event) =>
+	                          setSettingsForm((current) =>
+	                            current ? { ...current, treatment_plan_loc_change_window_validated: event.target.checked } : current
+	                          )
+	                        }
+	                      />
+	                      R3/Marleigh validated LOC-change window
+	                    </label>
+	                    {!settingsForm.treatment_plan_loc_change_window_validated ? (
+	                      <p className='muted-text full-width'>LOC-change treatment plan update timing remains unvalidated.</p>
+	                    ) : null}
+	                    <label className='checkbox-row'>
+	                      <input
                         type='checkbox'
                         checked={settingsForm.access_intel_enabled}
                         onChange={(event) =>

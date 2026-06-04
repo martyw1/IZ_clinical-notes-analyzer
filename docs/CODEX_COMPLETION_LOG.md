@@ -9,6 +9,16 @@
 - Verification: backend tests passed with `54 passed` using Python 3.11 in `/tmp/iz-cna-backend-venv-311`; frontend production build passed after restoring missing local optional native packages for Rolldown and Lightning CSS.
 - Validation blocker: frontend Vitest worker pool timed out before importing tests on this macOS checkout under both Node 24 and Node 25. No test assertions ran; rerun on CI/Node 20 or after local Node/Vitest worker repair.
 
+## 2026-06-04 v0.5.0 S2 Treatment Plan Timeliness Tracker
+- Added first-class timeliness domain tables for active clients, LOC history, treatment plan records, and manual overrides, with schema bootstrap and initial migration coverage.
+- Added `backend/app/services/timeliness.py` for deterministic Initial, Master, ongoing review, LOC alias, missing-data, conflict, and LOC-change-unvalidated evaluation.
+- Added authenticated timeliness APIs for dashboard, client upsert/detail, and audited manual overrides; counselors can read but denied override attempts are blocked and logged.
+- Synced treatment plan metadata from uploaded patient note sets into the timeliness tracker without logging note text or PHI-bearing document content.
+- Added React Treatment Plans dashboard/detail UI, LOC-change blocker visibility in Settings, manual override form for admin/manager roles, and frontend mocked route coverage.
+- Encrypted LLM and access reputation API keys when saved through the main settings API; browser responses still return configured flags rather than secrets.
+- Verification: focused S2 backend tests passed with `8 passed`; full backend suite passed with `59 passed`; frontend production build passed.
+- Local validation blocker: frontend Vitest repeated the pre-import worker hang, and direct `tsc --noEmit` hung silently in this OneDrive checkout. Both processes were stopped; rerun on a repaired local Node/Vitest setup or CI/Node 20.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.

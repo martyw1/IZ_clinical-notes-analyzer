@@ -55,7 +55,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 
 | Duplicate/overlap | Files | Assessment |
 |---|---|---|
-| Settings/API credential editing | `backend/app/api/routes.py`, `backend/app/api/api_config_routes.py`, frontend settings UI | API config route encrypts saved API key material; general settings route directly assigns LLM and reputation API keys. Consolidate secret handling in S2/S3. |
+| Settings/API credential editing | `backend/app/api/routes.py`, `backend/app/api/api_config_routes.py`, frontend settings UI | S2 encrypts LLM and access reputation keys saved through the main settings route; S4 still needs direct API harness hardening and offline OpenAPI/redaction tests. |
 | API configuration UI | React settings view plus standalone `api_config_ui_routes.py` HTML page | Useful for desktop direct harness, but duplicate UX paths need consistency tests. |
 | Startup scripts | `startup-windows-local.ps1`, `start-desktop-local.ps1`, `startup-windows.ps1`, macOS/Ubuntu scripts | Keep all currently referenced scripts, but distinguish ordinary Windows local runtime from Docker/server launchers in docs. |
 | Health/readiness endpoints | `/health`, `/api/health`, `/api/readiness`, `/api/system/readiness` | Intentional compatibility overlap, but should be documented. |
@@ -175,5 +175,5 @@ Not safe to remove yet:
 4. Review `walkthroughs/` for PHI and decide whether it is local-only evidence, archive material, or safe synthetic documentation.
 5. Classify `scripts/startup-windows.ps1` as legacy/server-mode or remove it after references and product scope are resolved.
 6. Review `docker-compose.db-expose.yml` and either document it or remove it if truly unused.
-7. Consolidate settings/API secret storage so every saved API key/secret uses the encrypted text envelope and browser payloads only return configured flags.
+7. Continue S4 API harness hardening so every direct API test path has offline OpenAPI coverage, encrypted optional saved secrets, and redacted browser payloads.
 8. Keep `docs/open-blockers.md`, README, and PRD implementation notes current until the unvalidated LOC-change window is resolved.

@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
   emr_smart_client_secret VARCHAR(1024) NOT NULL DEFAULT '',
   emr_smart_scopes VARCHAR(500) NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
   emr_api_timeout_seconds INTEGER NOT NULL DEFAULT 10,
+  treatment_plan_loc_change_window_days INTEGER,
+  treatment_plan_loc_change_window_validated BOOLEAN NOT NULL DEFAULT FALSE,
   updated_by_id INTEGER REFERENCES users(id),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -182,6 +184,58 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   hash VARCHAR(128) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS treatment_plan_clients (
+  id SERIAL PRIMARY KEY,
+  patient_id VARCHAR(120) UNIQUE NOT NULL,
+  permitted_name VARCHAR(120) NOT NULL DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  current_level_of_care VARCHAR(120) NOT NULL DEFAULT '',
+  counselor_name VARCHAR(120) NOT NULL DEFAULT '',
+  admission_date VARCHAR(40) NOT NULL DEFAULT '',
+  source_evidence TEXT NOT NULL DEFAULT '',
+  source_note_set_id INTEGER REFERENCES patient_note_sets(id),
+  last_imported_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS level_of_care_history (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER NOT NULL REFERENCES treatment_plan_clients(id),
+  level_of_care VARCHAR(120) NOT NULL DEFAULT '',
+  effective_date VARCHAR(40) NOT NULL DEFAULT '',
+  source_evidence TEXT NOT NULL DEFAULT '',
+  source_note_set_id INTEGER REFERENCES patient_note_sets(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS treatment_plan_records (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER NOT NULL REFERENCES treatment_plan_clients(id),
+  plan_kind VARCHAR(20) NOT NULL,
+  document_date VARCHAR(40) NOT NULL DEFAULT '',
+  staff_signature_date VARCHAR(40) NOT NULL DEFAULT '',
+  client_signature_date VARCHAR(40) NOT NULL DEFAULT '',
+  source_evidence TEXT NOT NULL DEFAULT '',
+  source_document_id VARCHAR(120) NOT NULL DEFAULT '',
+  source_note_set_id INTEGER REFERENCES patient_note_sets(id),
+  is_valid BOOLEAN NOT NULL DEFAULT TRUE,
+  conflict_note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS treatment_plan_overrides (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER NOT NULL REFERENCES treatment_plan_clients(id),
+  field_name VARCHAR(120) NOT NULL DEFAULT '',
+  original_value TEXT NOT NULL DEFAULT '',
+  new_value TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  affected_rule VARCHAR(120) NOT NULL DEFAULT '',
+  created_by_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_charts_patient_id ON charts(patient_id);
 CREATE INDEX IF NOT EXISTS idx_charts_source_note_set_id ON charts(source_note_set_id);
@@ -198,3 +252,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_request_id ON audit_logs(request_id);
 CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category);
 CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_clients_patient_id ON treatment_plan_clients(patient_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_clients_is_active ON treatment_plan_clients(is_active);
+CREATE INDEX IF NOT EXISTS idx_level_of_care_history_client_id ON level_of_care_history(client_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_records_client_id ON treatment_plan_records(client_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_records_plan_kind ON treatment_plan_records(plan_kind);
+CREATE INDEX IF NOT EXISTS idx_treatment_plan_overrides_client_id ON treatment_plan_overrides(client_id);

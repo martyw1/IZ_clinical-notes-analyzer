@@ -96,6 +96,8 @@ class AppSettingsUpdate(BaseModel):
     clear_emr_smart_client_secret: bool = False
     emr_smart_scopes: str | None = Field(default=None, max_length=500)
     emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
+    treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
+    treatment_plan_loc_change_window_validated: bool | None = None
 
 
 class AppSettingsOut(BaseModel):
@@ -120,6 +122,8 @@ class AppSettingsOut(BaseModel):
     emr_smart_client_secret_configured: bool
     emr_smart_scopes: str
     emr_api_timeout_seconds: int
+    treatment_plan_loc_change_window_days: int | None = None
+    treatment_plan_loc_change_window_validated: bool
     updated_by_id: int | None = None
     updated_at: datetime | None = None
 
@@ -392,3 +396,119 @@ class AuditLogOut(BaseModel):
     severity: str
     prev_hash: str | None
     hash: str
+
+
+class TimelinessLevelOfCareInput(BaseModel):
+    level_of_care: str
+    effective_date: str = ''
+    source_evidence: str = ''
+
+
+class TimelinessTreatmentPlanInput(BaseModel):
+    plan_kind: str
+    document_date: str = ''
+    staff_signature_date: str = ''
+    client_signature_date: str = ''
+    source_evidence: str = ''
+    source_document_id: str = ''
+    is_valid: bool = True
+    conflict_note: str = ''
+
+
+class TimelinessClientUpsert(BaseModel):
+    patient_id: str
+    permitted_name: str = ''
+    is_active: bool = True
+    current_level_of_care: str = ''
+    counselor_name: str = ''
+    admission_date: str = ''
+    source_evidence: str = ''
+    level_of_care_history: list[TimelinessLevelOfCareInput] = Field(default_factory=list)
+    treatment_plans: list[TimelinessTreatmentPlanInput] = Field(default_factory=list)
+
+
+class TimelinessOverrideInput(BaseModel):
+    field_name: str = Field(min_length=1, max_length=120)
+    original_value: str = ''
+    new_value: str = ''
+    reason: str = Field(min_length=1, max_length=1000)
+    affected_rule: str = Field(default='', max_length=120)
+
+
+class TimelinessLevelOfCareOut(BaseModel):
+    id: int
+    level_of_care: str
+    effective_date: str
+    source_evidence: str
+
+
+class TimelinessTreatmentPlanOut(BaseModel):
+    id: int
+    plan_kind: str
+    document_date: str
+    staff_signature_date: str
+    client_signature_date: str
+    source_evidence: str
+    source_document_id: str
+    is_valid: bool
+    conflict_note: str
+
+
+class TimelinessOverrideOut(BaseModel):
+    id: int
+    field_name: str
+    original_value: str
+    new_value: str
+    reason: str
+    affected_rule: str
+    created_by_id: int
+    created_at: datetime
+
+
+class TimelinessRuleResultOut(BaseModel):
+    rule_id: str
+    label: str
+    due_date: str | None = None
+    status: str
+    evidence_summary: str
+
+
+class TimelinessClientSummaryOut(BaseModel):
+    id: int
+    patient_id: str
+    permitted_name: str
+    current_level_of_care: str
+    counselor_name: str
+    admission_date: str
+    last_valid_review_date: str | None = None
+    next_due_date: str | None = None
+    days_until_due: int | None = None
+    status: str
+    rule_used: str
+    evidence_summary: str
+    last_checked_at: datetime
+    last_imported_at: datetime | None = None
+
+
+class TimelinessDashboardOut(BaseModel):
+    total_active_clients: int
+    compliant: int
+    due_soon: int
+    urgent: int
+    overdue: int
+    needs_review: int
+    missing_data: int
+    compliance_percentage: float
+    loc_change_window_days: int | None = None
+    loc_change_window_validated: bool
+    items: list[TimelinessClientSummaryOut]
+
+
+class TimelinessClientDetailOut(TimelinessClientSummaryOut):
+    is_active: bool
+    source_evidence: str
+    rule_results: list[TimelinessRuleResultOut]
+    level_of_care_history: list[TimelinessLevelOfCareOut]
+    treatment_plans: list[TimelinessTreatmentPlanOut]
+    overrides: list[TimelinessOverrideOut]
+    audit_history: list[AuditLogOut]

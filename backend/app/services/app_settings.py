@@ -47,6 +47,8 @@ def app_settings_public_payload(settings_row: AppSetting) -> dict[str, object]:
         'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
         'emr_smart_scopes': settings_row.emr_smart_scopes,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
+        'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
+        'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
         'updated_at': settings_row.updated_at,
     }
