@@ -46,6 +46,15 @@
 - Updated `scripts/test-local-app-stack.ps1` so Windows source-checkout smoke checks `/api/version` and the workflow profile API after authenticated login.
 - Verification: focused smoke-script tests passed with `2 passed`; frontend production build passed; live desktop full-stack smoke passed on macOS against `app.desktop_main` with a temporary SQLite/env file on port `8765`.
 
+## 2026-06-04 v0.5.0 S7 Windows validation docs, workflow seed hardening, and version bump
+- Seeded fresh local databases with a published `Treatment Plan Timeliness Tracker` workflow profile and a synthetic, non-PHI definition snapshot.
+- Added workflow definition payload validation for step labels and transition roles, plus an admin-only delete route limited to unused draft-only profiles that were never published.
+- Added Settings UI support for deleting unused draft workflow profiles while preserving published/archived workflow history.
+- Added `docs/workflow-extensibility.md` for workflow profile data model, API, validation, audit behavior, seeded defaults, and current limits.
+- Added `docs/windows-dell-test-plan.md` with exact Dell Windows PowerShell commands, source-checkout validation steps, Option A packaged-release recommendation, and Option B source-checkout tradeoffs.
+- Updated README, PRD notes, blocker register, changelog, and version metadata to `0.5.0`.
+- Verification: full backend suite passed with `72 passed`; frontend production build passed; live desktop smoke passed on macOS against `app.desktop_main` with temporary SQLite/env data on port `8765`, `/api/version` reporting `0.5.0`, readiness `ok`, authenticated admin login, charts, and workflow profiles.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.

@@ -6,13 +6,13 @@ Baseline: `695080d`, tagged `baseline-pre-codex-20260604-164125`
 
 ## Scope
 
-This map summarizes the current source checkout before v0.5.0 implementation work. It is a read-only S0 architecture inventory plus risk map. It does not approve deletions or cleanup by itself.
+This map started as the S0 baseline inventory and now also notes the v0.5.0 implementation status reached on 2026-06-04. It does not approve deletions or cleanup by itself.
 
 ## Current Architecture
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, and local audit logs under per-user app data. Docker and PostgreSQL exist for developer/server scenarios, but are not acceptable as ordinary Windows 10/11 Home requirements.
 
-Current implementation includes clinical-note binder upload, chart-audit review, the S2 first-class Treatment Plan Timeliness Tracker, and S5 admin-managed workflow profile CRUD/versioning. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Full-stack/browser hardening and Windows packaging remain later v0.5.0 stations.
+Current implementation includes clinical-note binder upload, chart-audit review, the S2 first-class Treatment Plan Timeliness Tracker, S3 upload hardening, S4 direct API harness hardening, S5 admin-managed workflow profile CRUD/versioning with a seeded Treatment Plan Timeliness profile, and S6 expanded smoke coverage. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Windows installer packaging and target Dell validation remain release blockers.
 
 ## Backend Entrypoints
 
@@ -52,7 +52,7 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, and archiving.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, archiving, and unused draft-only deletion.
 
 ## Scripts and Launchers
 
@@ -117,7 +117,7 @@ Boundary: this harness is for configuration, testing, OpenAPI discovery, and fut
 3. `evaluate_rules` maps current LOC aliases, derives effective treatment-plan date, calculates due dates, and emits rule findings/statuses.
 4. Current YAML has draft Treatment Plan Tracking rules for active scope, current LOC presence/mapping, treatment-plan existence/date, 30/60-day recurrence, warning window, attendance checks, and configurable aliases for PHP, IOP-5, IOP-19, IOP-3, and OP.
 
-S2 status: the dedicated timeliness service now models initial/master signature rules, ongoing 30/60-day review recurrences, unvalidated LOC-change `Needs Review`, status priority, source conflicts, missing data, and manual override audit records. S5 status: generic workflow profile CRUD/versioning exists as admin-managed definitions with draft/published/archived versions, JSON definition snapshots, transition rules, role-gated APIs, and forensic audit events.
+S2 status: the dedicated timeliness service now models initial/master signature rules, ongoing 30/60-day review recurrences, unvalidated LOC-change `Needs Review`, status priority, source conflicts, missing data, and manual override audit records. S5 status: generic workflow profile CRUD/versioning exists as admin-managed definitions with draft/published/archived versions, JSON definition snapshots, transition rules, role-gated APIs, forensic audit events, default Treatment Plan Timeliness seeding, payload validation, and draft-only delete limits.
 
 ## Audit and Logging Flow
 

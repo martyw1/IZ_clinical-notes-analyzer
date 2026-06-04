@@ -22,6 +22,7 @@ from app.models.models import Role, User
 from app.services.audit import bind_request_context, log_event, log_request_completed, log_unhandled_exception, reset_audit_context, system_audit_context
 from app.services.runtime_checks import assert_startup_ready, readiness_payload
 from app.services.version import build_version_payload
+from app.services.workflow_definitions import ensure_default_workflow_definitions
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,15 @@ def initialize_database() -> None:
         try:
             admin = db.execute(select(User).where(User.username == settings.bootstrap_admin_username)).scalar_one_or_none()
             if not admin:
-                db.add(
-                    User(
-                        username=settings.bootstrap_admin_username,
-                        full_name='System Administrator',
-                        password_hash=hash_password(settings.bootstrap_admin_password),
-                        role=Role.admin,
-                        is_active=True,
-                        must_reset_password=False,
-                    )
+                admin = User(
+                    username=settings.bootstrap_admin_username,
+                    full_name='System Administrator',
+                    password_hash=hash_password(settings.bootstrap_admin_password),
+                    role=Role.admin,
+                    is_active=True,
+                    must_reset_password=False,
                 )
+                db.add(admin)
                 db.commit()
                 log_event(
                     action='system.bootstrap.admin.created',
@@ -71,6 +71,7 @@ def initialize_database() -> None:
                     details={'username': settings.bootstrap_admin_username},
                     message='Bootstrap admin account created during startup.',
                 )
+                db.refresh(admin)
             elif settings.reset_bootstrap_admin_on_startup:
                 admin.password_hash = hash_password(settings.bootstrap_admin_password)
                 admin.full_name = admin.full_name or 'System Administrator'
@@ -87,6 +88,18 @@ def initialize_database() -> None:
                     target_entity_id=settings.bootstrap_admin_username,
                     details={'username': settings.bootstrap_admin_username},
                     message='Bootstrap admin account reset during startup.',
+                )
+            seeded_workflow = ensure_default_workflow_definitions(db, actor_id=admin.id)
+            if seeded_workflow is not None:
+                db.commit()
+                log_event(
+                    action='system.workflow_definition.seeded',
+                    event_category='system',
+                    target_entity='workflow_definition',
+                    target_entity_type='workflow_definition',
+                    target_entity_id=seeded_workflow.workflow_key,
+                    details={'workflow_key': seeded_workflow.workflow_key, 'version': 1},
+                    message='Default Treatment Plan Timeliness workflow profile seeded during startup.',
                 )
         finally:
             db.close()

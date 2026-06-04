@@ -65,7 +65,9 @@ def test_admin_can_create_version_publish_and_archive_workflow_definition(app_wi
 
         listed = client.get('/api/workflow-definitions', headers=headers)
         assert listed.status_code == 200
-        assert [item['workflow_key'] for item in listed.json()] == ['treatment_plan_followup']
+        listed_keys = {item['workflow_key'] for item in listed.json()}
+        assert 'treatment_plan_timeliness' in listed_keys
+        assert 'treatment_plan_followup' in listed_keys
 
         first_version_id = definition['versions'][0]['id']
         published_first = client.post(f"/api/workflow-definitions/{definition['id']}/versions/{first_version_id}/publish", headers=headers)
@@ -77,7 +79,12 @@ def test_admin_can_create_version_publish_and_archive_workflow_definition(app_wi
             f"/api/workflow-definitions/{definition['id']}/versions",
             headers=headers,
             json={
-                'definition_snapshot': {'steps': [{'key': 'review_due_date'}, {'key': 'escalation'}]},
+                'definition_snapshot': {
+                    'steps': [
+                        {'key': 'review_due_date', 'label': 'Review due date'},
+                        {'key': 'escalation', 'label': 'Escalation'},
+                    ]
+                },
                 'transition_rules': [{'from': 'ready_for_review', 'to': 'escalated', 'roles': ['manager']}],
                 'version_notes': 'Adds manager escalation.',
             },
@@ -90,7 +97,13 @@ def test_admin_can_create_version_publish_and_archive_workflow_definition(app_wi
             f"/api/workflow-definitions/{definition['id']}/versions/{second_version_id}",
             headers=headers,
             json={
-                'definition_snapshot': {'steps': [{'key': 'review_due_date'}, {'key': 'escalation'}, {'key': 'close'}]},
+                'definition_snapshot': {
+                    'steps': [
+                        {'key': 'review_due_date', 'label': 'Review due date'},
+                        {'key': 'escalation', 'label': 'Escalation'},
+                        {'key': 'close', 'label': 'Close'},
+                    ]
+                },
                 'transition_rules': [{'from': 'escalated', 'to': 'closed', 'roles': ['admin']}],
                 'version_notes': 'Adds close step.',
             },
@@ -119,11 +132,12 @@ def test_admin_can_create_version_publish_and_archive_workflow_definition(app_wi
 
         active_only = client.get('/api/workflow-definitions', headers=headers)
         assert active_only.status_code == 200
-        assert active_only.json() == []
+        assert [item['workflow_key'] for item in active_only.json()] == ['treatment_plan_timeliness']
 
         include_archived = client.get('/api/workflow-definitions?include_archived=true', headers=headers)
         assert include_archived.status_code == 200
-        assert include_archived.json()[0]['workflow_key'] == 'treatment_plan_followup'
+        include_archived_keys = {item['workflow_key'] for item in include_archived.json()}
+        assert {'treatment_plan_timeliness', 'treatment_plan_followup'} <= include_archived_keys
 
     db = session_local()
     try:
@@ -166,7 +180,52 @@ def test_workflow_definition_role_gate_and_duplicate_key(app_with_sqlite):
 
         manager_list = client.get('/api/workflow-definitions', headers=manager_headers)
         assert manager_list.status_code == 200
-        assert manager_list.json()[0]['workflow_key'] == 'workflow_role_gate'
+        assert {item['workflow_key'] for item in manager_list.json()} == {'treatment_plan_timeliness', 'workflow_role_gate'}
 
         manager_create = client.post('/api/workflow-definitions', headers=manager_headers, json=_workflow_payload('manager_created'))
         assert manager_create.status_code == 403
+
+
+def test_default_workflow_is_seeded_and_unused_drafts_can_be_deleted(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        listed = client.get('/api/workflow-definitions', headers=headers)
+        assert listed.status_code == 200
+        default = next(item for item in listed.json() if item['workflow_key'] == 'treatment_plan_timeliness')
+        assert default['current_version']['status'] == 'published'
+        assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Active client scope'
+
+        delete_default = client.delete(f"/api/workflow-definitions/{default['id']}", headers=headers)
+        assert delete_default.status_code == 400
+
+        draft = client.post('/api/workflow-definitions', headers=headers, json=_workflow_payload('delete_me_draft'))
+        assert draft.status_code == 200
+        deleted = client.delete(f"/api/workflow-definitions/{draft.json()['id']}", headers=headers)
+        assert deleted.status_code == 200
+        assert deleted.json() == {'status': 'deleted', 'workflow_key': 'delete_me_draft'}
+
+        invalid = client.post(
+            '/api/workflow-definitions',
+            headers=headers,
+            json={
+                **_workflow_payload('invalid_steps'),
+                'initial_version': {
+                    'definition_snapshot': {'steps': [{'key': 'missing_label'}]},
+                    'transition_rules': [{'from': 'draft', 'to': 'active', 'roles': ['admin']}],
+                    'version_notes': '',
+                },
+            },
+        )
+        assert invalid.status_code == 400
+        assert 'label is required' in invalid.json()['detail']
+
+    db = session_local()
+    try:
+        delete_log = db.execute(select(AuditLog).where(AuditLog.action == 'workflow_definition.delete')).scalar_one()
+        assert 'delete_me_draft' in delete_log.details
+        seed_log = db.execute(select(AuditLog).where(AuditLog.action == 'system.workflow_definition.seeded')).scalar_one_or_none()
+        assert seed_log is not None
+    finally:
+        db.close()

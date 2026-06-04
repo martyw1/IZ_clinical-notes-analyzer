@@ -49,6 +49,8 @@ Current functionality:
 - Immutable binder versioning for later updates.
 - Secure download of stored source documents after authentication and authorization.
 - Deterministic YAML rules for Treatment Plan Tracking completeness checks.
+- Treatment Plan Timeliness dashboard/detail views for active clients, LOC history, treatment-plan dates, due status, source conflicts, and audited manual overrides.
+- Seeded versioned workflow profile for the Treatment Plan Timeliness Tracker, with admin Settings controls for future draft/publish/archive workflows.
 - Generated chart audit findings and checklist responses.
 - Manager approval and return-to-counselor workflow.
 - Admin-visible readiness checks.
@@ -78,6 +80,8 @@ For a source-code checkout, the Windows computer needs:
 4. Node.js LTS only if the browser UI has not already been built into `frontend\dist`.
 
 The ordinary local desktop run does not require Docker or PostgreSQL.
+
+For the current Windows validation path and packaging tradeoffs, see `docs\windows-dell-test-plan.md`. The recommended end-user target is a packaged signed `.exe` or `.msi` with bundled runtime and built frontend assets; the current source-checkout path is still a validation/development fallback.
 
 ### Step 1: Put the app in a local folder
 
@@ -678,6 +682,8 @@ Open blocker:
 
 Admins can manage versioned workflow profiles from Settings. A workflow profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
 
+Fresh databases seed a published `Treatment Plan Timeliness Tracker` profile. Admins can delete only unused draft-only profiles that were never published; published or archived history must be archived instead of hard-deleted.
+
 Workflow profile API:
 
 ```text
@@ -687,6 +693,7 @@ POST /api/workflow-definitions/{id}/versions
 PATCH /api/workflow-definitions/{id}/versions/{version_id}
 POST /api/workflow-definitions/{id}/versions/{version_id}/publish
 POST /api/workflow-definitions/{id}/archive
+DELETE /api/workflow-definitions/{id}
 ```
 
 Workflow profile tests:
@@ -977,6 +984,8 @@ flowchart LR
 | `docs\sample-clinical-notes` | Synthetic, non-PHI sample clinical notes |
 | `docs\api-configuration-and-connectivity.md` | API configuration details |
 | `docs\emr-integration-readiness.md` | EMR/FHIR readiness boundary |
+| `docs\workflow-extensibility.md` | Versioned workflow profile model, validation, audit, and current limits |
+| `docs\windows-dell-test-plan.md` | Dell Windows validation commands and packaging path |
 | `docs\runbook.md` | Technical operations notes |
 | `CHANGELOG.md` | Release history |
 | `VERSION` and `VERSION.json` | Version metadata shown by `/api/version` and UI footer |
@@ -986,7 +995,7 @@ flowchart LR
 The current app version is:
 
 ```text
-0.4.1
+0.5.0
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

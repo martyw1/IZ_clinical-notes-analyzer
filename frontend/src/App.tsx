@@ -895,6 +895,11 @@ export function App() {
     () => workflowDefinitions.find((definition) => definition.id === selectedWorkflowDefinitionId) || workflowDefinitions[0] || null,
     [selectedWorkflowDefinitionId, workflowDefinitions],
   )
+  const selectedWorkflowDefinitionCanDelete = Boolean(
+    selectedWorkflowDefinition &&
+      selectedWorkflowDefinition.current_version_id == null &&
+      selectedWorkflowDefinition.versions.every((version) => version.status === 'draft'),
+  )
   const selectedManagedUserIsBootstrap = isBootstrapAdmin(selectedManagedUser)
   const selectedManagedUserIsCurrentUser = selectedManagedUser?.id === user?.id
   const selectedManagedUserCanDelete = Boolean(selectedManagedUser && !selectedManagedUserIsBootstrap && !selectedManagedUserIsCurrentUser)
@@ -1770,6 +1775,23 @@ export function App() {
       setStatus(`Workflow profile ${selectedWorkflowDefinition.workflow_key} archived.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to archive workflow profile')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function deleteWorkflowDefinition() {
+    if (!selectedWorkflowDefinition || !selectedWorkflowDefinitionCanDelete) return
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<{ status: string; workflow_key: string }>(`/workflow-definitions/${selectedWorkflowDefinition.id}`, {
+        method: 'DELETE',
+      })
+      await loadWorkflowDefinitions(null)
+      setStatus(`Workflow profile ${selectedWorkflowDefinition.workflow_key} deleted.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete workflow profile')
     } finally {
       setIsBusy(false)
     }
@@ -3903,6 +3925,14 @@ export function App() {
                               <div className='form-actions'>
                                 <button type='button' className='danger-button' onClick={() => void archiveWorkflowDefinition()} disabled={isBusy || !selectedWorkflowDefinition.is_active}>
                                   Archive profile
+                                </button>
+                                <button
+                                  type='button'
+                                  className='ghost-button'
+                                  onClick={() => void deleteWorkflowDefinition()}
+                                  disabled={isBusy || !selectedWorkflowDefinitionCanDelete}
+                                >
+                                  Delete unused draft
                                 </button>
                               </div>
                             </>

@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "0.4.1",
-  "build": "2026.06.03.1",
+  "version": "0.5.0",
+  "build": "2026.06.04.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-06-03",
+  "release_date": "2026-06-04",
   "git_branch": "main",
-  "version_name": "Non-technical operator README refresh",
-  "description": "Expanded README with current functionality, Windows local installation, configuration, usage, security, troubleshooting, and sync guidance."
+  "version_name": "Treatment Plan Timeliness Tracker MVP hardening",
+  "description": "Adds timeliness tracking, upload and API harness hardening, seeded workflow profile versioning, expanded smoke validation, and Windows Dell validation guidance."
 }

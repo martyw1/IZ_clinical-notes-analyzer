@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-06-04
 
 ### Added
 - Added S0 codebase map, cleanup audit, open blocker register, and S1 removal log for the v0.5.0 Treatment Plan Timeliness Tracker workflow.
@@ -9,6 +9,8 @@
 - Added upload hardening tests for per-file size limits, binder total size limits, missing patient IDs, conflicting detected patient IDs, unauthorized downloads, encrypted storage, and PHI-safe audit logging.
 - Added redacted JSON report payloads for API definition pulls and selected OpenAPI operation tests.
 - Added admin-managed workflow definition/version tables, audited workflow profile CRUD/versioning APIs, and a Settings UI panel for creating, publishing, and archiving workflow profiles.
+- Added a seeded published Treatment Plan Timeliness Tracker workflow profile for fresh local databases.
+- Added Windows Dell validation guidance, packaging path recommendations, and workflow extensibility documentation.
 
 ### Changed
 - Expanded project `AGENTS.md` with R3 architecture, PHI/synthetic-data boundaries, direct API harness limits, Windows target assumptions, and the unvalidated LOC-change blocker.
@@ -18,15 +20,17 @@
 - Removed original filenames and note-derived detection reasons from patient-note upload/download audit details while preserving authenticated UI metadata and file hashes.
 - Redacted sensitive API response fields, bearer/API-key text, and token query parameters from direct API harness result payloads and reports.
 - Expanded local smoke coverage to check version metadata, runtime readiness, and workflow profile APIs in addition to health, login, profile, and chart loading.
+- Validated workflow profile definition snapshots and transition rules before saving, and limited hard delete to unused draft-only profiles that were never published.
 
 ### Verified
-- Backend tests passed with `71 passed` using Python 3.11 from a temporary local validation venv.
+- Backend tests passed with `72 passed` using Python 3.11 from a temporary local validation venv.
 - Focused S2 backend timeliness/schema tests passed with `8 passed`.
 - Focused S3 upload/security tests passed with `13 passed`.
 - Focused S4 API connectivity tests passed with `11 passed`.
 - Focused S5 workflow-definition/schema tests passed with `6 passed`.
+- Focused workflow-definition seed/delete/validation tests passed with `3 passed`.
 - Focused smoke-script tests passed with `2 passed`.
-- Live desktop full-stack smoke passed on macOS against `app.desktop_main` with temporary SQLite/env data on port `8765`.
+- Live desktop full-stack smoke passed on macOS against `app.desktop_main` with temporary SQLite/env data on port `8765`, including `/api/version` reporting `0.5.0`.
 - Frontend production build passed after repairing missing local optional native packages in `node_modules`.
 - Frontend Vitest and direct `tsc --noEmit` did not complete locally because their worker/process execution hung before test import or diagnostics; this is documented as a local validation blocker.
 

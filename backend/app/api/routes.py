@@ -91,6 +91,7 @@ from app.services.timeliness import (
     sync_from_note_set,
     upsert_client as upsert_timeliness_client,
 )
+from app.services.workflow_definitions import stable_json, validate_workflow_version_payload
 
 router = APIRouter(prefix='/api')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
@@ -295,10 +296,6 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
     }
 
 
-def _stable_json(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(',', ':'))
-
-
 def _load_json(raw_value: str, fallback: object) -> object:
     try:
         return json.loads(raw_value or '')
@@ -363,12 +360,15 @@ def _next_workflow_version_number(definition: WorkflowDefinition) -> int:
 
 
 def _create_workflow_version(definition: WorkflowDefinition, payload: WorkflowDefinitionVersionInput, user: User, db: Session) -> WorkflowDefinitionVersion:
+    validation_errors = validate_workflow_version_payload(payload.definition_snapshot, payload.transition_rules)
+    if validation_errors:
+        raise HTTPException(status_code=400, detail='; '.join(validation_errors))
     version = WorkflowDefinitionVersion(
         workflow_definition_id=definition.id,
         version=_next_workflow_version_number(definition),
         status=WorkflowDefinitionVersionStatus.draft,
-        definition_snapshot=_stable_json(payload.definition_snapshot),
-        transition_rules=_stable_json(payload.transition_rules),
+        definition_snapshot=stable_json(payload.definition_snapshot),
+        transition_rules=stable_json(payload.transition_rules),
         version_notes=payload.version_notes.strip(),
         created_by_id=user.id,
     )
@@ -1598,9 +1598,12 @@ def update_workflow_definition_version(
     version = _find_workflow_version(definition, version_id)
     if version.status != WorkflowDefinitionVersionStatus.draft:
         raise HTTPException(status_code=400, detail='Only draft workflow versions can be edited')
+    validation_errors = validate_workflow_version_payload(payload.definition_snapshot, payload.transition_rules)
+    if validation_errors:
+        raise HTTPException(status_code=400, detail='; '.join(validation_errors))
     before = _workflow_version_payload(version)
-    version.definition_snapshot = _stable_json(payload.definition_snapshot)
-    version.transition_rules = _stable_json(payload.transition_rules)
+    version.definition_snapshot = stable_json(payload.definition_snapshot)
+    version.transition_rules = stable_json(payload.transition_rules)
     version.version_notes = payload.version_notes.strip()
     definition.updated_by_id = user.id
     definition.updated_at = _utc_now()
@@ -1708,6 +1711,36 @@ def archive_workflow_definition(
         message=f'Workflow definition {definition.workflow_key} archived.',
     )
     return _workflow_definition_payload(definition)
+
+
+@router.delete('/workflow-definitions/{definition_id}')
+def delete_unused_workflow_definition(
+    definition_id: int,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    if definition.current_version_id is not None or any(version.status != WorkflowDefinitionVersionStatus.draft for version in definition.versions):
+        raise HTTPException(status_code=400, detail='Only draft-only workflow profiles that have never been published can be deleted')
+    before = _workflow_definition_snapshot(definition)
+    workflow_key = definition.workflow_key
+    db.delete(definition)
+    db.commit()
+    log_event(
+        db,
+        request,
+        'workflow_definition.delete',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition:{definition_id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition_id),
+        details={'workflow_key': workflow_key},
+        before_state=before,
+        message=f'Unused workflow definition {workflow_key} deleted.',
+    )
+    return {'status': 'deleted', 'workflow_key': workflow_key}
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
