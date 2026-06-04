@@ -1,5 +1,11 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-03 README/operator documentation refresh
+- Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
+- Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.
+- Added this completion-log entry and a `CHANGELOG.md` entry.
+- Verification: backend tests passed with `54 passed`; frontend tests passed with `6 passed`; frontend build passed; `npm audit --omit=dev --audit-level=high` reported `0 vulnerabilities`.
+
 ## Starting state
 - Starting commit: `328d443310ed9277f1829b08143e8dab4dd73dea`.
 - Local branch at start: `work` in `/workspace/IZ_clinical-notes-analyzer`.

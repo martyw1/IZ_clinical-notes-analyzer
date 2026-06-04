@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "0.4.0",
-  "build": "2026.05.14.1",
+  "version": "0.4.1",
+  "build": "2026.06.03.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-05-14",
+  "release_date": "2026-06-03",
   "git_branch": "main",
-  "version_name": "Windows local API connectivity and visible versioning",
-  "description": "Windows local runtime with dependency checks, API connectivity UI, and visible version labeling."
+  "version_name": "Non-technical operator README refresh",
+  "description": "Expanded README with current functionality, Windows local installation, configuration, usage, security, troubleshooting, and sync guidance."
 }

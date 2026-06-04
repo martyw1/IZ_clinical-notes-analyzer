@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 - 2026-06-03
+
+### Changed
+- Rewrote `README.md` as a non-technical operator guide covering current app functionality, Windows local installation, configuration, everyday use, backup/restore, API connectivity testing, EMR/FHIR boundaries, troubleshooting, Docker/server mode, architecture, and key files.
+
+### Verified
+- Backend tests passed with `54 passed`.
+- Frontend tests passed with `6 passed`.
+- Frontend production build passed.
+- Frontend production dependency audit reported `0 vulnerabilities`.
+
 ## 0.4.0 - 2026-05-14
 
 ### Added

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.core.config import REPO_ROOT
 from app.models.models import AppSetting
 from app.services.emr_fhir import map_document_reference_to_patient_note_metadata
 from app.services.secure_storage import text_secret_is_encrypted
@@ -120,6 +121,6 @@ def test_version_endpoint_reports_repo_version(app_with_sqlite):
         response = client.get('/api/version')
         assert response.status_code == 200
         payload = response.json()
-        assert payload['version'] == '0.4.0'
+        assert payload['version'] == (REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()
         assert payload['environment']
         assert payload['git_commit']
