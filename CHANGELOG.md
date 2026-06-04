@@ -17,6 +17,7 @@
 - Encrypted LLM and access reputation API keys saved through the main settings API instead of storing those values directly.
 - Removed original filenames and note-derived detection reasons from patient-note upload/download audit details while preserving authenticated UI metadata and file hashes.
 - Redacted sensitive API response fields, bearer/API-key text, and token query parameters from direct API harness result payloads and reports.
+- Expanded local smoke coverage to check version metadata, runtime readiness, and workflow profile APIs in addition to health, login, profile, and chart loading.
 
 ### Verified
 - Backend tests passed with `71 passed` using Python 3.11 from a temporary local validation venv.
@@ -24,6 +25,8 @@
 - Focused S3 upload/security tests passed with `13 passed`.
 - Focused S4 API connectivity tests passed with `11 passed`.
 - Focused S5 workflow-definition/schema tests passed with `6 passed`.
+- Focused smoke-script tests passed with `2 passed`.
+- Live desktop full-stack smoke passed on macOS against `app.desktop_main` with temporary SQLite/env data on port `8765`.
 - Frontend production build passed after repairing missing local optional native packages in `node_modules`.
 - Frontend Vitest and direct `tsc --noEmit` did not complete locally because their worker/process execution hung before test import or diagnostics; this is documented as a local validation blocker.
 

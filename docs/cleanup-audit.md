@@ -175,5 +175,5 @@ Not safe to remove yet:
 4. Review `walkthroughs/` for PHI and decide whether it is local-only evidence, archive material, or safe synthetic documentation.
 5. Classify `scripts/startup-windows.ps1` as legacy/server-mode or remove it after references and product scope are resolved.
 6. Review `docker-compose.db-expose.yml` and either document it or remove it if truly unused.
-7. Continue S6 browser/full-stack validation and Windows rerunnable script hardening now that S5 workflow CRUD/versioning is modeled, versioned, and audited.
+7. Continue S7 Windows Home packaging, installer/repair/uninstall planning, and target Dell validation now that S6 smoke coverage is hardened.
 8. Keep `docs/open-blockers.md`, README, and PRD implementation notes current until the unvalidated LOC-change window is resolved.

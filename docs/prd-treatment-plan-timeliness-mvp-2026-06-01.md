@@ -367,11 +367,11 @@ Reuse the existing FastAPI backend, React/Vite frontend, SQLite-first local runt
 
 The level-of-care change treatment-plan update window remains unvalidated. Keep it configurable, visibly mark it unvalidated in admin/settings UI and documentation, and do not hard-code a final value until `docs/open-blockers.md` is resolved.
 
-S2-S5 implementation status on 2026-06-04: backend timeliness tables, APIs, deterministic evaluation, upload metadata sync, settings fields, manual override audit logging, React dashboard/detail UI, clinical upload hardening, direct API harness redaction/report hardening, and admin-managed workflow profile CRUD/versioning are implemented on `refactor/codex-v0.5.0`. Remaining stations still need full-stack/e2e test hardening, Windows packaging decisions, and target Dell validation before release.
+S2-S6 implementation status on 2026-06-04: backend timeliness tables, APIs, deterministic evaluation, upload metadata sync, settings fields, manual override audit logging, React dashboard/detail UI, clinical upload hardening, direct API harness redaction/report hardening, admin-managed workflow profile CRUD/versioning, and expanded full-stack smoke coverage are implemented on `refactor/codex-v0.5.0`. Remaining stations still need browser e2e/Vitest recovery, Windows packaging decisions, and target Dell validation before release.
 
 Expected implementation work:
 
-1. Complete browser/full-stack validation and Windows rerunnable scripts.
+1. Recover browser e2e/Vitest validation locally or in CI.
 2. Complete Windows Home packaging decision and Dell validation.
 3. Add structured import templates.
 4. Add robust Windows Home installer/repair/uninstall flow.

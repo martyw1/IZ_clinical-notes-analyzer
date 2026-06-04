@@ -57,6 +57,10 @@ if method == 'GET' and path == '/':
     print('<html><body>ok</body></html>', end='')
 elif method == 'GET' and path == '/api/health':
     print(json.dumps({'status': 'ok'}), end='')
+elif method == 'GET' and path == '/api/version':
+    print(json.dumps({'version': '0.5.0-test', 'environment': 'test'}), end='')
+elif method == 'GET' and path == '/api/readiness':
+    print(json.dumps({'status': 'ok', 'failed': 0, 'warnings': 0, 'checks': []}), end='')
 elif method == 'POST' and path == '/api/auth/login':
     request = json.loads(payload or '{}')
     if request.get('username') != 'admin' or request.get('password') != state['current_password']:
@@ -100,6 +104,12 @@ elif method == 'GET' and path == '/api/charts':
     if f"Authorization: Bearer {state['token']}" not in sys.argv[1:]:
         fail(json.dumps({'detail': 'Unauthorized'}))
 
+    print('[]', end='')
+elif method == 'GET' and path == '/api/workflow-definitions':
+    if f"Authorization: Bearer {state['token']}" not in sys.argv[1:]:
+        fail(json.dumps({'detail': 'Unauthorized'}))
+
+    state['workflow_calls'] = state.get('workflow_calls', 0) + 1
     print('[]', end='')
 else:
     fail(json.dumps({'detail': f'Unhandled request {method} {path}'}))
@@ -154,13 +164,17 @@ def test_smoke_does_not_reset_password_by_default(tmp_path: Path):
             'reset_calls': 0,
             'last_reset_password': None,
             'token': 'smoke-token',
+            'workflow_calls': 0,
         },
     )
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert final_state['reset_calls'] == 0
+    assert final_state['workflow_calls'] == 0
     assert 'without mutating credentials' in result.stdout
     assert 'skipping chart load in read-only mode' in result.stdout
+    assert '[smoke] Version 0.5.0-test' in result.stdout
+    assert '[smoke] Readiness ok' in result.stdout
 
 
 def test_smoke_can_reset_password_when_explicitly_enabled(tmp_path: Path):
@@ -172,6 +186,7 @@ def test_smoke_can_reset_password_when_explicitly_enabled(tmp_path: Path):
             'reset_calls': 0,
             'last_reset_password': None,
             'token': 'smoke-token',
+            'workflow_calls': 0,
         },
         {
             'SMOKE_RESET_PASSWORD': 'true',
@@ -181,6 +196,8 @@ def test_smoke_can_reset_password_when_explicitly_enabled(tmp_path: Path):
 
     assert result.returncode == 0, result.stderr or result.stdout
     assert final_state['reset_calls'] == 1
+    assert final_state['workflow_calls'] == 1
     assert final_state['last_reset_password'] == 'replacement-pass-1234'
     assert final_state['current_password'] == 'replacement-pass-1234'
     assert '[smoke] Loading charts' in result.stdout
+    assert '[smoke] Loading workflow profiles' in result.stdout

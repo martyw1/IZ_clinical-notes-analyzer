@@ -41,6 +41,14 @@ echo "[smoke] Checking API health via frontend proxy"
 HEALTH_JSON="$(curl -fsS "${BASE_URL}/api/health")"
 python3 -c 'import json,sys; data=json.loads(sys.argv[1]); assert data.get("status")=="ok", data' "$HEALTH_JSON"
 
+echo "[smoke] Checking API version"
+VERSION_JSON="$(curl -fsS "${BASE_URL}/api/version")"
+python3 -c 'import json,sys; data=json.loads(sys.argv[1]); assert data.get("version"), data; print("[smoke] Version", data["version"])' "$VERSION_JSON"
+
+echo "[smoke] Checking runtime readiness"
+READINESS_JSON="$(curl -fsS "${BASE_URL}/api/readiness")"
+python3 -c 'import json,sys; data=json.loads(sys.argv[1]); assert data.get("status")!="fail", data; print("[smoke] Readiness", data.get("status"))' "$READINESS_JSON"
+
 echo "[smoke] Logging in via frontend proxy"
 LOGIN_JSON="$(curl -fsS -X POST "${BASE_URL}/api/auth/login" -H 'Content-Type: application/json' -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}")"
 TOKEN="$(python3 -c 'import json,sys; data=json.loads(sys.argv[1]); tok=data.get("access_token"); assert tok, data; print(tok)' "$LOGIN_JSON")"
@@ -73,6 +81,9 @@ if [[ "$MUST_RESET" == 'true' ]]; then
 else
   echo "[smoke] Loading charts"
   curl -fsS "${BASE_URL}/api/charts" -H "Authorization: Bearer ${TOKEN}" >/dev/null
+
+  echo "[smoke] Loading workflow profiles"
+  curl -fsS "${BASE_URL}/api/workflow-definitions?include_archived=true" -H "Authorization: Bearer ${TOKEN}" >/dev/null
 fi
 
 if [[ "$RESETTED_ACCOUNT" == 'true' ]]; then

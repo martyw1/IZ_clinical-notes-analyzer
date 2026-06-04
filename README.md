@@ -499,9 +499,11 @@ This script:
 6. Starts a test server.
 7. Checks `/api/health`.
 8. Checks `/api/readiness`.
-9. Logs in as the generated test admin.
-10. Calls `/api/users/me`.
-11. Stops the test server.
+9. Checks `/api/version`.
+10. Logs in as the generated test admin.
+11. Calls `/api/users/me`.
+12. Calls `/api/workflow-definitions?include_archived=true`.
+13. Stops the test server.
 
 Focused API configuration smoke test:
 
@@ -547,6 +549,8 @@ Local smoke script after a server is running:
 ```bash
 ./scripts/smoke.sh
 ```
+
+The local smoke script checks frontend HTML, `/api/health`, `/api/version`, `/api/readiness`, login, `/api/users/me`, `/api/charts`, and `/api/workflow-definitions?include_archived=true` when the signed-in account is past the password-reset gate.
 
 ## Manual Local Startup For Debugging
 

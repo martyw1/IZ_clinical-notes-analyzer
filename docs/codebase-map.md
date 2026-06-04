@@ -176,7 +176,7 @@ For v0.5.0, Windows Home validation remains a release blocker until ordinary-use
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Workflow profile UI is source-checkout validated only | S5 added workflow definition/version models, APIs, admin Settings UI, tests, and build validation on this macOS checkout. | Browser/e2e and Windows validation still need a repaired local Vitest/Node path or CI plus target Windows machine. |
+| Browser/full-stack smoke is source-checkout validated only | S6 expanded smoke checks and passed a live `app.desktop_main` smoke on macOS against temporary SQLite/env data, including frontend HTML, version, readiness, login, charts, and workflow profiles. | Windows validation still needs the target machine; Vitest/tsc remains a local Node worker blocker in this OneDrive checkout. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

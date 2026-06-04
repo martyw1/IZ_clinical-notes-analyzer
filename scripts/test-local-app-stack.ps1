@@ -137,10 +137,17 @@ EMR_API_ENABLED=false
         $readiness = Invoke-RestMethod -Uri "http://localhost:$Port/api/readiness" -TimeoutSec 10
         if ($readiness.status -eq 'fail') { throw "Readiness failed: $($readiness | ConvertTo-Json -Depth 6)" }
 
+        Write-Step 'Checking version endpoint.'
+        $version = Invoke-RestMethod -Uri "http://localhost:$Port/api/version" -TimeoutSec 10
+        if (!$version.version) { throw "Version endpoint did not return version metadata: $($version | ConvertTo-Json -Depth 6)" }
+
         Write-Step 'Checking login and authenticated profile call.'
         $login = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/auth/login" -ContentType 'application/json' -Body (@{ username='admin'; password=$adminPassword } | ConvertTo-Json)
         $headers = @{ Authorization = "Bearer $($login.access_token)" }
         Invoke-RestMethod -Uri "http://localhost:$Port/api/users/me" -Headers $headers -TimeoutSec 10 | Out-Null
+
+        Write-Step 'Checking workflow profile API.'
+        Invoke-RestMethod -Uri "http://localhost:$Port/api/workflow-definitions?include_archived=true" -Headers $headers -TimeoutSec 10 | Out-Null
 
         Write-Step 'Local stack smoke test passed.'
     }
