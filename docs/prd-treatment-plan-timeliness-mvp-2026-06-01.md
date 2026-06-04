@@ -119,7 +119,7 @@ Level-of-care aliases such as IOP5, IOP-5, and IOP 5 must be configurable after 
 
 ### Level-of-Care Change
 
-A treatment plan update is required after a level-of-care change within a configurable window. Placeholder default: same calendar day as the level-of-care effective date until R3 confirms otherwise.
+A treatment plan update is required after a level-of-care change within a configurable window. The window is not confirmed by R3/Marleigh, so the MVP must mark it unvalidated, keep it configurable, and avoid treating any placeholder as final.
 
 ### Alerts and Status Priority
 
@@ -364,6 +364,8 @@ Official Alleva API/FHIR registration, read-only DocumentReference/Binary import
 ## 23. Implementation Notes for Existing Repo
 
 Reuse the existing FastAPI backend, React/Vite frontend, SQLite-first local runtime, encrypted local upload storage, YAML rules engine, readiness checks, user/role model, audit logging, API configuration, and future EMR/FHIR boundary.
+
+The level-of-care change treatment-plan update window remains unvalidated. Keep it configurable, visibly mark it unvalidated in admin/settings UI and documentation, and do not hard-code a final value until `docs/open-blockers.md` is resolved.
 
 Expected implementation work:
 

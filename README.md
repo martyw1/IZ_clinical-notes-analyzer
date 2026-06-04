@@ -657,6 +657,10 @@ Rules-file guardrails:
 - treat YAML rules as deterministic business logic, not LLM prompts
 - add future workflows as versioned rules profiles under `config\rules`
 
+Open blocker:
+
+- the level-of-care change treatment-plan update window is not confirmed by R3/Marleigh; keep it configurable, mark it unvalidated in admin/settings UI and docs, and do not hard-code a final value until `docs/open-blockers.md` is resolved
+
 ## Security And Privacy Rules
 
 Never commit or share:

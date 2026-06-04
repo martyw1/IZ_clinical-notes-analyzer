@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Added S0 codebase map, cleanup audit, open blocker register, and S1 removal log for the v0.5.0 Treatment Plan Timeliness Tracker workflow.
+
+### Changed
+- Expanded project `AGENTS.md` with R3 architecture, PHI/synthetic-data boundaries, direct API harness limits, Windows target assumptions, and the unvalidated LOC-change blocker.
+- Tightened `.gitignore` for local SQLite files, logs, coverage output, caches, local PRD duplicates, and walkthrough exports.
+- Updated README/PRD notes to keep the LOC-change update window configurable and visibly unvalidated.
+
+### Verified
+- Backend tests passed with `54 passed` using Python 3.11 from a temporary local validation venv.
+- Frontend production build passed after repairing missing local optional native packages in `node_modules`.
+- Frontend Vitest did not complete locally because the Vitest worker pool timed out before importing tests; this is documented as a local validation blocker.
+
 ## 0.4.1 - 2026-06-03
 
 ### Changed

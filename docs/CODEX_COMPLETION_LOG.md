@@ -1,5 +1,14 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-04 v0.5.0 S0/S1 audit and conservative cleanup
+- Synced `main` to `695080d`, created baseline tag `baseline-pre-codex-20260604-164125`, and worked on `refactor/codex-v0.5.0`.
+- Added `docs/codebase-map.md`, `docs/cleanup-audit.md`, `docs/open-blockers.md`, and `docs/removal-log.md`.
+- Updated `AGENTS.md`, README, and PRD notes to preserve R3 architecture guidance, PHI/synthetic-data boundaries, direct API harness limits, Windows assumptions, and the unvalidated LOC-change treatment-plan update window.
+- Updated `.gitignore` for runtime SQLite files, logs, temporary files, coverage output, caches, local PRD duplicates, and walkthrough exports.
+- Removed ignored/generated local artifacts: `docs/First sign-in credentials.txt`, corrupted pytest cache, and Vite cache/build output.
+- Verification: backend tests passed with `54 passed` using Python 3.11 in `/tmp/iz-cna-backend-venv-311`; frontend production build passed after restoring missing local optional native packages for Rolldown and Lightning CSS.
+- Validation blocker: frontend Vitest worker pool timed out before importing tests on this macOS checkout under both Node 24 and Node 25. No test assertions ran; rerun on CI/Node 20 or after local Node/Vitest worker repair.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.
