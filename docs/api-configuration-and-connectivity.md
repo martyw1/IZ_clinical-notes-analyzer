@@ -27,7 +27,7 @@ The API configuration page lets an admin:
 5. Test connectivity from inside the running app.
 6. Pick any operation found in the loaded API definition and test that specific API call.
 7. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
-8. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, and operation-test responses.
+8. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, operation-test responses, and redacted JSON report payloads.
 
 ## Operation test workbench
 
@@ -39,11 +39,11 @@ After a definition is loaded, the page builds an operation picker from the OpenA
 - top-level JSON request-body fields
 - required flags, types, enums, defaults, descriptions, and date formats where present
 
-When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, one-time API key, or saved encrypted API key. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys are injected into the outbound request but are not returned in the test result.
+When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, one-time API key, or saved encrypted API key. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys are injected into the outbound request but are not returned in the test result. Sensitive response field names such as tokens, secrets, passwords, authorization values, and API keys are redacted before display.
 
 ## Secret handling
 
-API keys are never returned to the browser after save and are not written into audit-log details. Saved API keys are encrypted with the app's existing local secret-encryption envelope and stored in the local application database. The page may also use a pasted one-time API key without saving it.
+API keys are never returned to the browser after save and are not written into audit-log details. Saved API keys are encrypted with the app's existing local secret-encryption envelope and stored in the local application database. The page may also use a pasted one-time API key without saving it. Generated report payloads redact saved keys, one-time keys, bearer strings, token-like query parameters, and sensitive fields from external API responses.
 
 ## Backend endpoints
 
@@ -70,6 +70,7 @@ The API configuration workflow uses the app's existing forensic audit service. I
 - Definition-pull attempts and outcomes.
 - Specific API operation test attempts and non-secret outcomes.
 - Probe count and selected definition URL when found.
+- Generated report metadata without API keys, bearer tokens, passwords, or external response secrets.
 
 The low-level connectivity service also emits standard Python logger warnings for request failures or HTTP errors.
 
@@ -79,7 +80,7 @@ The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the exi
 
 ## Offline validation path
 
-The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, OpenAPI summary extraction, operation-form extraction, required-field validation, and selected-operation request execution without calling the live Alleva API.
+The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, OpenAPI summary extraction, operation-form extraction, required-field validation, selected-operation request execution, timeout/error handling, report generation, saved-key encryption, and result/audit redaction without calling the live Alleva API.
 
 Run backend tests from a configured repo checkout with:
 

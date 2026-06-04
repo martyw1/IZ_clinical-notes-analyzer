@@ -4,8 +4,9 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -16,6 +17,8 @@ DEFAULT_TIMEOUT_SECONDS = 10
 MAX_BODY_SNIPPET_CHARS = 600
 MAX_PATHS_RETURNED = 40
 HTTP_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
+REDACTED = '[redacted]'
+SENSITIVE_NAME_PARTS = ('authorization', 'api_key', 'apikey', 'access_token', 'refresh_token', 'bearer', 'client_secret', 'secret', 'password', 'token')
 
 
 @dataclass
@@ -37,7 +40,7 @@ class ProbeResult:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            'url': self.url,
+            'url': redact_url(self.url),
             'kind': self.kind,
             'status_code': self.status_code,
             'ok': self.ok,
@@ -68,6 +71,42 @@ def _origin(url: str) -> str:
 def _is_http_url(url: str) -> bool:
     parsed = urlparse(url)
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
+
+
+def _is_sensitive_name(value: str) -> bool:
+    normalized = re.sub(r'[^a-z0-9]+', '_', value.lower()).strip('_')
+    return any(part in normalized for part in SENSITIVE_NAME_PARTS)
+
+
+def redact_sensitive_text(value: str) -> str:
+    redacted = re.sub(r'(?i)(bearer\s+)[A-Za-z0-9._~+/\-=]+', rf'\1{REDACTED}', value)
+    return re.sub(
+        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|secret|token|bearer)([\"']?\s*[:=]\s*[\"']?)[^\"',\s}]+",
+        rf'\1\2{REDACTED}',
+        redacted,
+    )
+
+
+def redact_sensitive_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            redacted[key_text] = REDACTED if _is_sensitive_name(key_text) else redact_sensitive_value(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_sensitive_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    return value
+
+
+def redact_url(value: str) -> str:
+    parsed = urlparse(value)
+    if not parsed.query:
+        return value
+    redacted_query = urlencode([(key, REDACTED if _is_sensitive_name(key) else val) for key, val in parse_qsl(parsed.query, keep_blank_values=True)])
+    return urlunparse(parsed._replace(query=redacted_query))
 
 
 def _safe_candidates(*urls: str | None) -> list[str]:
@@ -312,11 +351,11 @@ def _probe_get(client: httpx.Client, url: str, *, kind: str, headers: dict[str, 
         body_text = response.text[:MAX_BODY_SNIPPET_CHARS]
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        result.message = f'HTTP {exc.response.status_code}: {exc.response.text[:MAX_BODY_SNIPPET_CHARS]}'
+        result.message = redact_sensitive_text(f'HTTP {exc.response.status_code}: {exc.response.text[:MAX_BODY_SNIPPET_CHARS]}')
         logger.warning('API probe received HTTP error for %s: %s', url, result.message)
         return result, None, ''
     except httpx.RequestError as exc:
-        result.message = f'{exc.__class__.__name__}: {exc}'
+        result.message = redact_sensitive_text(f'{exc.__class__.__name__}: {exc}')
         logger.warning('API probe request failed for %s: %s', url, exc)
         return result, None, ''
 
@@ -403,6 +442,15 @@ def pull_api_definitions(
     }
 
 
+def build_api_connectivity_report(*, report_type: str, request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'report_type': report_type,
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'request': redact_sensitive_value(request),
+        'result': redact_sensitive_value(result),
+    }
+
+
 def _base_url_for_operation(*, api_base_url: str | None, definition: dict[str, Any], selected_definition_url: str | None) -> str:
     configured = _clean_url(api_base_url).rstrip('/')
     if configured and _is_http_url(configured):
@@ -469,7 +517,7 @@ def execute_openapi_operation(
     started_result: dict[str, Any] = {
         'status': 'fail',
         'method': method.upper(),
-        'url': url,
+        'url': redact_url(url),
         'request_body_sent': request_body is not None and method.upper() not in {'GET', 'HEAD'},
     }
     try:
@@ -482,18 +530,18 @@ def execute_openapi_operation(
             )
             response.read()
     except httpx.RequestError as exc:
-        return {**started_result, 'message': f'{exc.__class__.__name__}: {exc}'}
+        return {**started_result, 'message': redact_sensitive_text(f'{exc.__class__.__name__}: {exc}')}
 
     try:
         elapsed_ms = int(response.elapsed.total_seconds() * 1000)
     except RuntimeError:
         elapsed_ms = None
     content_type = response.headers.get('content-type', '')
-    body_text = response.text[:MAX_BODY_SNIPPET_CHARS]
+    body_text = redact_sensitive_text(response.text[:MAX_BODY_SNIPPET_CHARS])
     parsed_json: Any | None = None
     if 'json' in content_type.lower():
         try:
-            parsed_json = response.json()
+            parsed_json = redact_sensitive_value(response.json())
         except json.JSONDecodeError:
             parsed_json = None
     return {

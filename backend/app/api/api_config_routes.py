@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.models import AppSetting, Role, User
-from app.services.api_connectivity import DEFAULT_ALLEVA_SWAGGER_UI_URL, execute_openapi_operation, pull_api_definitions
+from app.services.api_connectivity import DEFAULT_ALLEVA_SWAGGER_UI_URL, build_api_connectivity_report, execute_openapi_operation, pull_api_definitions, redact_url
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
@@ -294,6 +294,18 @@ def pull_api_configuration_definitions(
         api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
         timeout_seconds=timeout_seconds,
     )
+    result['report'] = build_api_connectivity_report(
+        report_type='api_definition_pull',
+        request={
+            'swagger_ui_url': swagger_ui_url,
+            'api_base_url': api_base_url,
+            'openapi_url': openapi_url,
+            'api_key': api_key,
+            'api_key_source': 'inline' if supplied_key else ('saved' if saved_key else 'none'),
+            'timeout_seconds': timeout_seconds,
+        },
+        result=result,
+    )
     status = result.get('status')
     log_event(
         db,
@@ -303,13 +315,13 @@ def pull_api_configuration_definitions(
         event_category='api_connectivity',
         target_entity='api_definition',
         target_entity_type='external_api',
-        target_entity_id=result.get('selected_definition_url') or swagger_ui_url,
+        target_entity_id=redact_url(str(result.get('selected_definition_url') or swagger_ui_url)),
         details={
             'status': status,
             'vendor_name': settings_row.emr_vendor_name,
-            'swagger_ui_url': swagger_ui_url,
-            'api_base_url': api_base_url,
-            'openapi_url': openapi_url,
+            'swagger_ui_url': redact_url(swagger_ui_url),
+            'api_base_url': redact_url(api_base_url),
+            'openapi_url': redact_url(openapi_url),
             'api_key_used': bool(api_key),
             'api_key_source': 'inline' if supplied_key else ('saved' if saved_key else 'none'),
             'probe_count': len(result.get('probes', [])),
@@ -354,6 +366,21 @@ def test_api_configuration_operation(
         api_key=api_key,
         api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
         timeout_seconds=payload.timeout_seconds or settings_row.emr_api_timeout_seconds,
+    )
+    result['report'] = build_api_connectivity_report(
+        report_type='api_operation_test',
+        request={
+            'method': payload.method.upper(),
+            'path': payload.path,
+            'api_base_url': _strip(payload.api_base_url) or settings_row.emr_fhir_base_url,
+            'selected_definition_url': _strip(payload.selected_definition_url),
+            'api_key': api_key,
+            'api_key_source': 'inline' if supplied_key else ('saved' if saved_key else 'none'),
+            'timeout_seconds': payload.timeout_seconds or settings_row.emr_api_timeout_seconds,
+            'parameters': payload.parameters,
+            'request_body': payload.request_body,
+        },
+        result=result,
     )
     status = result.get('status')
     log_event(

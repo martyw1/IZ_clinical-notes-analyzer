@@ -178,7 +178,7 @@ For v0.5.0, Windows Home validation remains a release blocker until ordinary-use
 |---|---|---|
 | Generic workflow CRUD/versioning not yet implemented | Timeliness tracker is first-class, but workflow definition/version models are not present. | S5 must add admin-managed workflow definitions beyond the MVP tracker. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
-| Direct API harness still needs S4 hardening | Main settings secrets are encrypted after S2; API harness still needs full offline OpenAPI/redaction coverage. | S4 must prove direct API testing stays credential-safe. |
+| Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
 | Live Alleva import is intentionally gated | EMR profile/import plan exists, but no approved endpoint mapping/tenant credentials. | Do not build fake live import. |
 | OneDrive checkout has local untracked artifacts | `Product Requirements Document.docx` and `walkthroughs/` are untracked. | Do not delete without explicit S1 decision. |

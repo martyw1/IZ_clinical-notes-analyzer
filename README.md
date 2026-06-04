@@ -349,13 +349,14 @@ This page can:
 - test base connectivity
 - choose an operation from the loaded OpenAPI definition
 - build a test form from path, query, header, and JSON body fields
-- show non-secret results such as HTTP status, selected definition URL, title/version, path counts, schema counts, security scheme names, sample paths, content type, and response preview
+- show non-secret results such as HTTP status, selected definition URL, title/version, path counts, schema counts, security scheme names, sample paths, content type, response preview, and redacted JSON reports
 
 Secret handling:
 
 - saved API keys are encrypted
 - saved API keys are never returned to the browser
 - API keys are not written into audit-log details
+- one-time keys, saved keys, bearer strings, token query parameters, and sensitive response fields are redacted from reports/results
 - pasted one-time keys can be used without saving them
 
 Backend routes:

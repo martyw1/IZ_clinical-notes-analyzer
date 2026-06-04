@@ -26,6 +26,12 @@
 - Added regression tests for too-large file, binder total limit, missing patient ID, conflicting detected patient IDs, unauthorized download, encrypted storage, and no note text/original filename in audit logs.
 - Verification: focused upload/security tests passed with `13 passed`; full backend suite passed with `64 passed`.
 
+## 2026-06-04 v0.5.0 S4 direct API test harness hardening
+- Added redacted JSON report payloads for API definition pulls and selected OpenAPI operation tests.
+- Redacted sensitive API result fields, bearer/API-key text, token query parameters, probe messages, operation URLs, and report request/result payloads before returning direct API harness results to the browser.
+- Extended API connectivity tests for invalid URLs, request timeout handling, saved-key encryption, route-level inline/saved key redaction, operation response redaction, audit-log secret redaction, and report generation.
+- Verification: focused API connectivity tests passed with `11 passed`; full backend suite passed with `68 passed`.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.
