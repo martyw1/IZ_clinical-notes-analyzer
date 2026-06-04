@@ -19,6 +19,13 @@
 - Verification: focused S2 backend tests passed with `8 passed`; full backend suite passed with `59 passed`; frontend production build passed.
 - Local validation blocker: frontend Vitest repeated the pre-import worker hang, and direct `tsc --noEmit` hung silently in this OneDrive checkout. Both processes were stopped; rerun on a repaired local Node/Vitest setup or CI/Node 20.
 
+## 2026-06-04 v0.5.0 S3 clinical upload hardening
+- Enforced binder total size from streamed stored byte counts in addition to preflight upload metadata, so uploads remain bounded even when request size metadata is absent.
+- Kept supported extension, file count, per-file size, encrypted storage, metadata capture, patient ID auto-detection, conflict detection, immutable binder versioning, authenticated download, and counselor access boundaries covered by tests.
+- Removed original filenames and note-derived detection reasons from upload/download audit details and messages; audit events retain minimum-necessary IDs, hashes, sizes, bucket, status, and request metadata.
+- Added regression tests for too-large file, binder total limit, missing patient ID, conflicting detected patient IDs, unauthorized download, encrypted storage, and no note text/original filename in audit logs.
+- Verification: focused upload/security tests passed with `13 passed`; full backend suite passed with `64 passed`.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.

@@ -3,15 +3,20 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet
+from app.core.security import hash_password
+from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet, Role, User
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
 
-def _auth_headers(client: TestClient) -> dict[str, str]:
-    login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
+def _login_headers(client: TestClient, username: str = 'admin', password: str = BOOTSTRAP_ADMIN_PASSWORD) -> dict[str, str]:
+    login = client.post('/api/auth/login', json={'username': username, 'password': password})
     assert login.status_code == 200
     return {'Authorization': f"Bearer {login.json()['access_token']}"}
+
+
+def _auth_headers(client: TestClient) -> dict[str, str]:
+    return _login_headers(client)
 
 
 def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label: str, content: bytes | None = None):
@@ -128,8 +133,47 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         eval_log = db.execute(select(AuditLog).where(AuditLog.action == 'chart.system_evaluated')).scalar_one_or_none()
         assert eval_log is not None
         assert eval_log.patient_id == 'PAT-100'
+
+        for audit_log in db.execute(select(AuditLog)).scalars().all():
+            serialized = f'{audit_log.message} {audit_log.details}'
+            assert 'Intake packet completed' not in serialized
+            assert 'Primary clinician assigned' not in serialized
+            assert 'intake-packet.pdf' not in serialized
     finally:
         db.close()
+
+
+def test_download_requires_access_to_note_set(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        admin_headers = _auth_headers(client)
+        data, files = _upload_payload('PAT-SECURE-DL', upload_mode='initial', file_name='secure-download.txt', label='Secure Download')
+        uploaded = client.post('/api/patient-note-sets', headers=admin_headers, data=data, files=files)
+        assert uploaded.status_code == 200
+
+        db = session_local()
+        try:
+            db.add(
+                User(
+                    username='other-counselor',
+                    full_name='Other Counselor',
+                    password_hash=hash_password('other-counselor-pass-1234'),
+                    role=Role.counselor,
+                    is_active=True,
+                    must_reset_password=False,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        counselor_headers = _login_headers(client, 'other-counselor', 'other-counselor-pass-1234')
+        blocked = client.get(
+            f"/api/patient-note-sets/{uploaded.json()['id']}/documents/{uploaded.json()['documents'][0]['id']}/download",
+            headers=counselor_headers,
+        )
+        assert blocked.status_code == 403
 
 
 def test_patient_note_update_creates_new_version_and_supersedes_previous_set(app_with_sqlite):

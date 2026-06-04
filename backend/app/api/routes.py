@@ -1545,14 +1545,13 @@ async def detect_patient_id_for_uploads(
         details={
             'file_count': len(files),
             'confidence': detection.confidence,
-            'source_filename': detection.source_filename,
             'source_kind': detection.source_kind,
             'matched': bool(detection.match_text),
-            'reason': detection.reason,
+            'result': 'detected' if detection.patient_id else 'not_detected',
         },
         outcome_status='success' if detection.patient_id else 'failure',
         severity='info' if detection.patient_id else 'warning',
-        message=detection.reason,
+        message='Patient ID detection completed for uploaded clinical notes.',
         http_status_code=200,
     )
     return _patient_id_detection_payload(
@@ -1599,11 +1598,10 @@ async def upload_patient_note_set(
             patient_id=normalized_patient_id,
             details={
                 'confidence': detection.confidence,
-                'source_filename': detection.source_filename,
                 'source_kind': detection.source_kind,
                 'matched': bool(detection.match_text),
             },
-            message=f'Patient ID {normalized_patient_id} was auto-filled from the uploaded files during upload.',
+            message='Patient ID was auto-filled from uploaded clinical notes during upload.',
             http_status_code=200,
         )
     if not normalized_patient_id:
@@ -1653,6 +1651,7 @@ async def upload_patient_note_set(
 
     created_documents: list[PatientNoteDocument] = []
     stored_paths: list[str] = []
+    stored_total_bytes = 0
     try:
         if existing_active:
             existing_active.status = NoteSetStatus.superseded
@@ -1690,11 +1689,15 @@ async def upload_patient_note_set(
 
         for upload, document in zip(files, created_documents):
             stored = await store_upload_file(upload, patient_id=normalized_patient_id, note_set_id=note_set.id, document_id=document.id)
+            stored_paths.append(stored.storage_path)
+            stored_total_bytes += stored.size_bytes
+            if stored_total_bytes > settings.max_upload_total_bytes:
+                limit_mb = settings.max_upload_total_bytes // (1024 * 1024)
+                raise HTTPException(status_code=413, detail=f'Upload exceeds the {limit_mb}MB total binder limit')
             document.storage_path = stored.storage_path
             document.content_type = stored.content_type
             document.size_bytes = stored.size_bytes
             document.sha256 = stored.sha256
-            stored_paths.append(stored.storage_path)
 
         chart = Chart(
             source_note_set_id=note_set.id,
@@ -1744,7 +1747,7 @@ async def upload_patient_note_set(
             details={'file_count': len(files), 'reason': exc.__class__.__name__},
             outcome_status='failure',
             severity='error',
-            message=f'Patient note upload failed for {normalized_patient_id}.',
+            message='Patient note upload failed.',
             http_status_code=500 if not isinstance(exc, HTTPException) else exc.status_code,
         )
         if isinstance(exc, HTTPException):
@@ -1766,7 +1769,7 @@ async def upload_patient_note_set(
         target_entity_id=str(note_set.id),
         patient_id=note_set.patient_id,
         details={'version': note_set.version, 'file_count': len(note_set.documents), 'upload_mode': note_set.upload_mode.value},
-        message=f'Patient note set {note_set.id} uploaded for patient {note_set.patient_id}.',
+        message=f'Patient note set {note_set.id} uploaded.',
     )
     for document in note_set.documents:
         log_event(
@@ -1781,12 +1784,11 @@ async def upload_patient_note_set(
             patient_id=note_set.patient_id,
             details={
                 'note_set_id': note_set.id,
-                'filename': document.original_filename,
                 'sha256': document.sha256,
                 'size_bytes': document.size_bytes,
                 'alleva_bucket': document.alleva_bucket.value,
             },
-            message=f'Clinical note document {document.id} stored for patient {note_set.patient_id}.',
+            message=f'Clinical note document {document.id} stored.',
         )
     if review_chart is not None:
         log_event(
@@ -1837,7 +1839,7 @@ def download_patient_note_document(
         target_entity_type='patient_note_document',
         target_entity_id=str(document.id),
         patient_id=note_set.patient_id,
-        details={'note_set_id': note_set.id, 'filename': document.original_filename},
+        details={'note_set_id': note_set.id, 'size_bytes': document.size_bytes, 'sha256': document.sha256},
         message=f'Clinical note document {document.id} downloaded by {user.username}.',
     )
     safe_download_name = (Path(document.original_filename).name or 'clinical-note').replace('"', '')

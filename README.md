@@ -192,6 +192,8 @@ Useful local pages:
 
 The app stores the binder, encrypts uploaded files, extracts readable text where possible, creates or updates the review chart, and runs configured completeness checks.
 
+Upload guardrails block unsupported extensions, empty files, per-file uploads over `50MB`, binders over `250MB`, more than `40` files, missing patient IDs, and conflicting detected patient IDs. Upload/download audit logs keep hashes, sizes, bucket/status metadata, and request context, but not uploaded note text or original filenames.
+
 ### Review a chart
 
 1. Open `Review queue` or `Chart audit`.
