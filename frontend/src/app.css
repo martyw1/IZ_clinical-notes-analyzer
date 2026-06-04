@@ -690,6 +690,12 @@ label {
   min-width: 760px;
 }
 
+.timeliness-table--workflow .timeliness-table__head,
+.timeliness-table--workflow .timeliness-table__row {
+  grid-template-columns: 0.45fr 0.7fr minmax(220px, 1.5fr) minmax(150px, 0.8fr);
+  min-width: 760px;
+}
+
 .timeliness-table__head {
   background: #e7eef1;
   color: #263940;
@@ -736,6 +742,24 @@ label {
   background: #761b29;
 }
 
+.workflow-admin-panel {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.workflow-admin-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.code-textarea {
+  min-height: 150px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+}
+
 ol {
   margin: 0;
   padding-left: 1.2rem;
@@ -757,6 +781,7 @@ ol {
   .detail-grid,
   .trend-grid,
   .criteria-grid,
+  .workflow-admin-grid,
   .file-editor-row__fields,
   .form-grid {
     grid-template-columns: 1fr 1fr;

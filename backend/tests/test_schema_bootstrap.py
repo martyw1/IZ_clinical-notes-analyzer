@@ -73,3 +73,22 @@ def test_ensure_schema_compatibility_adds_app_settings_columns(tmp_path):
     assert 'llm_model' in columns
     assert 'treatment_plan_loc_change_window_days' in columns
     assert 'treatment_plan_loc_change_window_validated' in columns
+
+
+def test_ensure_schema_compatibility_adds_workflow_definition_columns(tmp_path):
+    db_path = tmp_path / 'legacy-workflows.db'
+    engine = create_engine(f'sqlite:///{db_path}')
+
+    with engine.begin() as connection:
+        connection.execute(text('CREATE TABLE workflow_definitions (id INTEGER PRIMARY KEY)'))
+        connection.execute(text('CREATE TABLE workflow_definition_versions (id INTEGER PRIMARY KEY)'))
+
+    ensure_schema_compatibility(engine)
+
+    definition_columns = {column['name'] for column in inspect(engine).get_columns('workflow_definitions')}
+    version_columns = {column['name'] for column in inspect(engine).get_columns('workflow_definition_versions')}
+    assert 'workflow_key' in definition_columns
+    assert 'current_version_id' in definition_columns
+    assert 'definition_snapshot' in version_columns
+    assert 'transition_rules' in version_columns
+    assert 'published_at' in version_columns

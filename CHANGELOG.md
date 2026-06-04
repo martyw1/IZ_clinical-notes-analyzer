@@ -8,6 +8,7 @@
 - Added configurable LOC aliases for `IOP-5`, `IOP-19`, `IOP-3`, and `OP`, plus timeliness edge-case coverage for missing data, override RBAC, upload sync, and the unvalidated LOC-change blocker.
 - Added upload hardening tests for per-file size limits, binder total size limits, missing patient IDs, conflicting detected patient IDs, unauthorized downloads, encrypted storage, and PHI-safe audit logging.
 - Added redacted JSON report payloads for API definition pulls and selected OpenAPI operation tests.
+- Added admin-managed workflow definition/version tables, audited workflow profile CRUD/versioning APIs, and a Settings UI panel for creating, publishing, and archiving workflow profiles.
 
 ### Changed
 - Expanded project `AGENTS.md` with R3 architecture, PHI/synthetic-data boundaries, direct API harness limits, Windows target assumptions, and the unvalidated LOC-change blocker.
@@ -18,10 +19,11 @@
 - Redacted sensitive API response fields, bearer/API-key text, and token query parameters from direct API harness result payloads and reports.
 
 ### Verified
-- Backend tests passed with `68 passed` using Python 3.11 from a temporary local validation venv.
+- Backend tests passed with `71 passed` using Python 3.11 from a temporary local validation venv.
 - Focused S2 backend timeliness/schema tests passed with `8 passed`.
 - Focused S3 upload/security tests passed with `13 passed`.
 - Focused S4 API connectivity tests passed with `11 passed`.
+- Focused S5 workflow-definition/schema tests passed with `6 passed`.
 - Frontend production build passed after repairing missing local optional native packages in `node_modules`.
 - Frontend Vitest and direct `tsc --noEmit` did not complete locally because their worker/process execution hung before test import or diagnostics; this is documented as a local validation blocker.
 

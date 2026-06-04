@@ -32,6 +32,14 @@
 - Extended API connectivity tests for invalid URLs, request timeout handling, saved-key encryption, route-level inline/saved key redaction, operation response redaction, audit-log secret redaction, and report generation.
 - Verification: focused API connectivity tests passed with `11 passed`; full backend suite passed with `68 passed`.
 
+## 2026-06-04 v0.5.0 S5 workflow CRUD/versioning
+- Added workflow definition and workflow definition version tables with draft/published/archived status, JSON definition snapshots, transition rules, schema bootstrap compatibility, and user-deletion blockers for workflow ownership/history.
+- Added admin-only create/update/version/publish/archive APIs plus admin/manager read APIs, all with forensic audit events and no hard-delete path.
+- Added a Settings workflow profile panel for admins to view profile/version status, create profiles, create draft versions, publish drafts, and archive active profiles.
+- Added focused backend tests for workflow lifecycle, duplicate-key handling, role gates, immutable published versions, audit records, and legacy schema bootstrap.
+- Verification: focused workflow/schema tests passed with `6 passed`; full backend suite passed with `71 passed`; frontend production build passed.
+- Local validation blocker: a single-file `tsc --noEmit src/App.test.tsx` check also hung silently and was killed, matching the existing local Vitest/tsc worker issue in this OneDrive checkout.
+
 ## 2026-06-03 README/operator documentation refresh
 - Rewrote `README.md` as a current non-technical operator guide for Windows 10/11 local desktop use, including functionality, install/startup, configuration, everyday workflows, backup/restore, API connectivity, EMR/FHIR readiness boundaries, security guardrails, troubleshooting, Docker/server mode, architecture, and key files.
 - Updated version metadata to `0.4.1` / build `2026.06.03.1` so `/api/version` and the UI footer can show the documentation refresh.

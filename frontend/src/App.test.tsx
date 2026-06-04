@@ -220,6 +220,41 @@ function readinessPayload() {
   }
 }
 
+function workflowDefinitionsPayload() {
+  const currentVersion = {
+    id: 61,
+    workflow_definition_id: 51,
+    version: 1,
+    status: 'published',
+    definition_snapshot: { steps: [{ key: 'review_due_date', label: 'Review due date' }] },
+    transition_rules: [{ from: 'draft', to: 'ready_for_review', roles: ['admin'] }],
+    version_notes: 'Initial workflow profile.',
+    created_by_id: 1,
+    published_by_id: 1,
+    archived_by_id: null,
+    created_at: '2026-05-23T11:00:00Z',
+    published_at: '2026-05-23T11:05:00Z',
+    archived_at: null,
+  }
+  return [
+    {
+      id: 51,
+      workflow_key: 'treatment_plan_followup',
+      display_name: 'Treatment Plan Follow-up',
+      description: 'Synthetic workflow profile for due-date follow-up.',
+      category: 'treatment_plan',
+      is_active: true,
+      current_version_id: 61,
+      created_by_id: 1,
+      updated_by_id: 1,
+      created_at: '2026-05-23T11:00:00Z',
+      updated_at: '2026-05-23T11:05:00Z',
+      current_version: currentVersion,
+      versions: [currentVersion],
+    },
+  ]
+}
+
 function timelinessDashboardPayload() {
   return {
     total_active_clients: 1,
@@ -336,6 +371,7 @@ describe('App turnkey workflow', () => {
       'GET /api/settings': appSettingsPayload(),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
     })
 
     render(<App />)
@@ -360,6 +396,7 @@ describe('App turnkey workflow', () => {
       'GET /api/settings': appSettingsPayload(),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
       'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
       'GET /api/timeliness/clients/21': () => ({
         body: {
@@ -525,6 +562,7 @@ describe('App turnkey workflow', () => {
       'GET /api/settings': appSettingsPayload(),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
       'PATCH /api/settings': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         return {
@@ -637,6 +675,8 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: 'Alleva import profile' })).toBeInTheDocument()
     expect(screen.getByText('alleva-smart-fhir-document-manager')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument()
+    expect(screen.getByText('treatment_plan_followup')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
     fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
@@ -667,6 +707,7 @@ describe('App turnkey workflow', () => {
       'GET /api/settings': appSettingsPayload(),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
       'PATCH /api/users/2': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
         directory = directory.map((entry) =>

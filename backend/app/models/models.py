@@ -74,6 +74,12 @@ class TreatmentPlanKind(str, enum.Enum):
     loc_update = 'loc_update'
 
 
+class WorkflowDefinitionVersionStatus(str, enum.Enum):
+    draft = 'draft'
+    published = 'published'
+    archived = 'archived'
+
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -226,6 +232,59 @@ class WorkflowTransition(Base):
     to_state: Mapped[str] = mapped_column(String(64))
     comment: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowDefinition(Base):
+    __tablename__ = 'workflow_definitions'
+    __table_args__ = (UniqueConstraint('workflow_key', name='uq_workflow_definitions_workflow_key'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_key: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(120), default='')
+    description: Mapped[str] = mapped_column(Text, default='')
+    category: Mapped[str] = mapped_column(String(80), default='clinical_review')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    current_version_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
+    updated_by: Mapped[User] = relationship(foreign_keys=[updated_by_id])
+    versions: Mapped[list['WorkflowDefinitionVersion']] = relationship(
+        back_populates='definition',
+        cascade='all, delete-orphan',
+        foreign_keys='WorkflowDefinitionVersion.workflow_definition_id',
+    )
+
+
+class WorkflowDefinitionVersion(Base):
+    __tablename__ = 'workflow_definition_versions'
+    __table_args__ = (UniqueConstraint('workflow_definition_id', 'version', name='uq_workflow_definition_versions_definition_version'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_definition_id: Mapped[int] = mapped_column(ForeignKey('workflow_definitions.id'), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[WorkflowDefinitionVersionStatus] = mapped_column(
+        Enum(WorkflowDefinitionVersionStatus),
+        default=WorkflowDefinitionVersionStatus.draft,
+        index=True,
+    )
+    definition_snapshot: Mapped[str] = mapped_column(Text, default='{}')
+    transition_rules: Mapped[str] = mapped_column(Text, default='[]')
+    version_notes: Mapped[str] = mapped_column(Text, default='')
+    created_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    published_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    archived_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    definition: Mapped[WorkflowDefinition] = relationship(back_populates='versions', foreign_keys=[workflow_definition_id])
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
+    published_by: Mapped[User] = relationship(foreign_keys=[published_by_id])
+    archived_by: Mapped[User] = relationship(foreign_keys=[archived_by_id])
 
 
 class AuditItemResponse(Base):

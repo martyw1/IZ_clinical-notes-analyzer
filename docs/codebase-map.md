@@ -12,7 +12,7 @@ This map summarizes the current source checkout before v0.5.0 implementation wor
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, and local audit logs under per-user app data. Docker and PostgreSQL exist for developer/server scenarios, but are not acceptable as ordinary Windows 10/11 Home requirements.
 
-Current implementation includes clinical-note binder upload, chart-audit review, and the S2 first-class Treatment Plan Timeliness Tracker. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Workflow CRUD/versioning and full Windows packaging remain later v0.5.0 stations.
+Current implementation includes clinical-note binder upload, chart-audit review, the S2 first-class Treatment Plan Timeliness Tracker, and S5 admin-managed workflow profile CRUD/versioning. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Full-stack/browser hardening and Windows packaging remain later v0.5.0 stations.
 
 ## Backend Entrypoints
 
@@ -30,8 +30,8 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 
 | Area | Files | Current behavior |
 |---|---|---|
-| Models | `backend/app/models/models.py` | Users, app settings, charts, patient note sets/documents, workflow transitions, audit item responses, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. Workflow-definition/version tables are not implemented yet. |
-| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit-log APIs plus timeliness dashboard/detail/override schemas. |
+| Models | `backend/app/models/models.py` | Users, app settings, charts, patient note sets/documents, workflow transitions, workflow definitions/versions, audit item responses, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. |
+| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit-log APIs plus timeliness dashboard/detail/override and workflow definition/version schemas. |
 | Config | `backend/app/core/config.py` | SQLite-first defaults; relative DB/upload/log paths resolve into OS-local app data; local PostgreSQL only allowed for supported developer/server modes. |
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, password hashing/policy, role checks, password-reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File type/count/size validation, safe filenames, patient ID detection, encrypted file writes, path traversal prevention, encrypted text helper. |
@@ -47,12 +47,12 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | Entrypoint | Purpose |
 |---|---|
 | `frontend/src/main.tsx` | Mounts React app. |
-| `frontend/src/App.tsx` | Single large UI component with auth, dashboard, review queue, Treatment Plans tracker, upload form, profile, user management, settings, logs, and API/EMR operations. |
+| `frontend/src/App.tsx` | Single large UI component with auth, dashboard, review queue, Treatment Plans tracker, upload form, profile, user management, settings, workflow profiles, logs, and API/EMR operations. |
 | `frontend/src/app.css` | Application styling. |
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, and archiving.
 
 ## Scripts and Launchers
 
@@ -117,7 +117,7 @@ Boundary: this harness is for configuration, testing, OpenAPI discovery, and fut
 3. `evaluate_rules` maps current LOC aliases, derives effective treatment-plan date, calculates due dates, and emits rule findings/statuses.
 4. Current YAML has draft Treatment Plan Tracking rules for active scope, current LOC presence/mapping, treatment-plan existence/date, 30/60-day recurrence, warning window, attendance checks, and configurable aliases for PHP, IOP-5, IOP-19, IOP-3, and OP.
 
-S2 status: the dedicated timeliness service now models initial/master signature rules, ongoing 30/60-day review recurrences, unvalidated LOC-change `Needs Review`, status priority, source conflicts, missing data, and manual override audit records. S5 still needs generic workflow CRUD/versioning.
+S2 status: the dedicated timeliness service now models initial/master signature rules, ongoing 30/60-day review recurrences, unvalidated LOC-change `Needs Review`, status priority, source conflicts, missing data, and manual override audit records. S5 status: generic workflow profile CRUD/versioning exists as admin-managed definitions with draft/published/archived versions, JSON definition snapshots, transition rules, role-gated APIs, and forensic audit events.
 
 ## Audit and Logging Flow
 
@@ -176,7 +176,7 @@ For v0.5.0, Windows Home validation remains a release blocker until ordinary-use
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Generic workflow CRUD/versioning not yet implemented | Timeliness tracker is first-class, but workflow definition/version models are not present. | S5 must add admin-managed workflow definitions beyond the MVP tracker. |
+| Workflow profile UI is source-checkout validated only | S5 added workflow definition/version models, APIs, admin Settings UI, tests, and build validation on this macOS checkout. | Browser/e2e and Windows validation still need a repaired local Vitest/Node path or CI plus target Windows machine. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

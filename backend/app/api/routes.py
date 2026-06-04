@@ -28,6 +28,9 @@ from app.models.models import (
     Role,
     TreatmentPlanClient,
     User,
+    WorkflowDefinition,
+    WorkflowDefinitionVersion,
+    WorkflowDefinitionVersionStatus,
     WorkflowState,
     WorkflowTransition,
 )
@@ -64,6 +67,11 @@ from app.schemas.schemas import (
     UserPasswordResetAdmin,
     UserSelfUpdate,
     UserUpdate,
+    WorkflowDefinitionCreate,
+    WorkflowDefinitionOut,
+    WorkflowDefinitionUpdate,
+    WorkflowDefinitionVersionInput,
+    WorkflowDefinitionVersionOut,
 )
 from app.services.audit import log_event
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
@@ -159,6 +167,10 @@ def _note_set_stmt():
     )
 
 
+def _workflow_definition_stmt():
+    return select(WorkflowDefinition).options(selectinload(WorkflowDefinition.versions))
+
+
 def _ensure_chart_access(chart: Chart | None, user: User) -> Chart:
     if not chart:
         raise HTTPException(status_code=404, detail='Chart not found')
@@ -183,6 +195,20 @@ def _ensure_note_set_access(note_set: PatientNoteSet | None, user: User) -> Pati
 def _find_note_set(note_set_id: int, user: User, db: Session) -> PatientNoteSet:
     note_set = db.execute(_note_set_stmt().where(PatientNoteSet.id == note_set_id)).scalar_one_or_none()
     return _ensure_note_set_access(note_set, user)
+
+
+def _find_workflow_definition(definition_id: int, db: Session) -> WorkflowDefinition:
+    definition = db.execute(_workflow_definition_stmt().where(WorkflowDefinition.id == definition_id)).scalar_one_or_none()
+    if definition is None:
+        raise HTTPException(status_code=404, detail='Workflow definition not found')
+    return definition
+
+
+def _find_workflow_version(definition: WorkflowDefinition, version_id: int) -> WorkflowDefinitionVersion:
+    for version in definition.versions:
+        if version.id == version_id:
+            return version
+    raise HTTPException(status_code=404, detail='Workflow definition version not found')
 
 
 def _ensure_all_responses(chart: Chart) -> None:
@@ -267,6 +293,91 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
             for document in documents
         ],
     }
+
+
+def _stable_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(',', ':'))
+
+
+def _load_json(raw_value: str, fallback: object) -> object:
+    try:
+        return json.loads(raw_value or '')
+    except (TypeError, json.JSONDecodeError):
+        return fallback
+
+
+def _workflow_version_payload(version: WorkflowDefinitionVersion) -> dict[str, object]:
+    return {
+        'id': version.id,
+        'workflow_definition_id': version.workflow_definition_id,
+        'version': version.version,
+        'status': version.status,
+        'definition_snapshot': _load_json(version.definition_snapshot, {}),
+        'transition_rules': _load_json(version.transition_rules, []),
+        'version_notes': version.version_notes,
+        'created_by_id': version.created_by_id,
+        'published_by_id': version.published_by_id,
+        'archived_by_id': version.archived_by_id,
+        'created_at': version.created_at,
+        'published_at': version.published_at,
+        'archived_at': version.archived_at,
+    }
+
+
+def _workflow_definition_payload(definition: WorkflowDefinition) -> dict[str, object]:
+    versions = sorted(definition.versions, key=lambda item: item.version, reverse=True)
+    current_version = next((version for version in versions if version.id == definition.current_version_id), None)
+    return {
+        'id': definition.id,
+        'workflow_key': definition.workflow_key,
+        'display_name': definition.display_name,
+        'description': definition.description,
+        'category': definition.category,
+        'is_active': definition.is_active,
+        'current_version_id': definition.current_version_id,
+        'created_by_id': definition.created_by_id,
+        'updated_by_id': definition.updated_by_id,
+        'created_at': definition.created_at,
+        'updated_at': definition.updated_at,
+        'current_version': _workflow_version_payload(current_version) if current_version else None,
+        'versions': [_workflow_version_payload(version) for version in versions],
+    }
+
+
+def _workflow_definition_snapshot(definition: WorkflowDefinition) -> dict[str, object]:
+    return {
+        'id': definition.id,
+        'workflow_key': definition.workflow_key,
+        'display_name': definition.display_name,
+        'category': definition.category,
+        'is_active': definition.is_active,
+        'current_version_id': definition.current_version_id,
+        'version_count': len(definition.versions),
+    }
+
+
+def _next_workflow_version_number(definition: WorkflowDefinition) -> int:
+    if not definition.versions:
+        return 1
+    return max(version.version for version in definition.versions) + 1
+
+
+def _create_workflow_version(definition: WorkflowDefinition, payload: WorkflowDefinitionVersionInput, user: User, db: Session) -> WorkflowDefinitionVersion:
+    version = WorkflowDefinitionVersion(
+        workflow_definition_id=definition.id,
+        version=_next_workflow_version_number(definition),
+        status=WorkflowDefinitionVersionStatus.draft,
+        definition_snapshot=_stable_json(payload.definition_snapshot),
+        transition_rules=_stable_json(payload.transition_rules),
+        version_notes=payload.version_notes.strip(),
+        created_by_id=user.id,
+    )
+    db.add(version)
+    db.flush()
+    definition.updated_by_id = user.id
+    definition.updated_at = _utc_now()
+    definition.versions.append(version)
+    return version
 
 
 def _patient_id_detection_payload(patient_id: str | None, confidence: str, source_filename: str | None, source_kind: str | None, match_text: str | None, reason: str):
@@ -511,6 +622,11 @@ def _user_delete_blockers(user_id: int, db: Session) -> list[str]:
         ('reviewed charts', select(Chart.id).where(Chart.reviewed_by_id == user_id).limit(1)),
         ('uploaded patient note sets', select(PatientNoteSet.id).where(PatientNoteSet.uploaded_by_id == user_id).limit(1)),
         ('workflow transitions', select(WorkflowTransition.id).where(WorkflowTransition.actor_id == user_id).limit(1)),
+        ('workflow definitions', select(WorkflowDefinition.id).where(WorkflowDefinition.created_by_id == user_id).limit(1)),
+        ('workflow definition updates', select(WorkflowDefinition.id).where(WorkflowDefinition.updated_by_id == user_id).limit(1)),
+        ('workflow definition versions', select(WorkflowDefinitionVersion.id).where(WorkflowDefinitionVersion.created_by_id == user_id).limit(1)),
+        ('workflow definition publications', select(WorkflowDefinitionVersion.id).where(WorkflowDefinitionVersion.published_by_id == user_id).limit(1)),
+        ('workflow definition archives', select(WorkflowDefinitionVersion.id).where(WorkflowDefinitionVersion.archived_by_id == user_id).limit(1)),
         ('application settings updates', select(AppSetting.id).where(AppSetting.updated_by_id == user_id).limit(1)),
         ('forensic audit history', select(AuditLog.id).where(AuditLog.actor_id == user_id).limit(1)),
     ]
@@ -1296,6 +1412,302 @@ def create_timeliness_override(
         message=f'Treatment Plan Timeliness override {override.id} created.',
     )
     return override
+
+
+@router.get('/workflow-definitions', response_model=list[WorkflowDefinitionOut])
+def list_workflow_definitions(
+    request: Request,
+    include_archived: bool = Query(default=False),
+    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    db: Session = Depends(get_db),
+):
+    stmt = _workflow_definition_stmt().order_by(WorkflowDefinition.display_name, WorkflowDefinition.id)
+    if not include_archived:
+        stmt = stmt.where(WorkflowDefinition.is_active.is_(True))
+    definitions = list(db.execute(stmt).scalars().unique().all())
+    log_event(
+        db,
+        request,
+        'workflow_definition.list.read',
+        actor=user,
+        event_category='data_access',
+        target_entity='workflow_definitions',
+        target_entity_type='workflow_definition',
+        details={'count': len(definitions), 'include_archived': include_archived},
+        message='Workflow definition list viewed.',
+    )
+    return [_workflow_definition_payload(definition) for definition in definitions]
+
+
+@router.post('/workflow-definitions', response_model=WorkflowDefinitionOut)
+def create_workflow_definition(
+    payload: WorkflowDefinitionCreate,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    workflow_key = payload.workflow_key.strip().lower()
+    existing = db.execute(select(WorkflowDefinition).where(WorkflowDefinition.workflow_key == workflow_key)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=400, detail='Workflow key already exists')
+
+    definition = WorkflowDefinition(
+        workflow_key=workflow_key,
+        display_name=payload.display_name.strip(),
+        description=payload.description.strip(),
+        category=payload.category.strip() or 'clinical_review',
+        is_active=payload.is_active,
+        created_by_id=user.id,
+        updated_by_id=user.id,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    db.add(definition)
+    db.flush()
+    initial_version = payload.initial_version or WorkflowDefinitionVersionInput(
+        definition_snapshot={
+            'workflow_key': workflow_key,
+            'display_name': definition.display_name,
+            'category': definition.category,
+        },
+        transition_rules=[],
+        version_notes='Initial draft created with the workflow definition.',
+    )
+    _create_workflow_version(definition, initial_version, user, db)
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    after = _workflow_definition_snapshot(definition)
+    log_event(
+        db,
+        request,
+        'workflow_definition.create',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition:{definition.id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition.id),
+        details={'workflow_key': definition.workflow_key, 'version_count': len(definition.versions)},
+        after_state=after,
+        message=f'Workflow definition {definition.workflow_key} created.',
+    )
+    return _workflow_definition_payload(definition)
+
+
+@router.get('/workflow-definitions/{definition_id}', response_model=WorkflowDefinitionOut)
+def get_workflow_definition(
+    definition_id: int,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    log_event(
+        db,
+        request,
+        'workflow_definition.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'workflow_definition:{definition.id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition.id),
+        details={'workflow_key': definition.workflow_key},
+        message=f'Workflow definition {definition.workflow_key} viewed.',
+    )
+    return _workflow_definition_payload(definition)
+
+
+@router.patch('/workflow-definitions/{definition_id}', response_model=WorkflowDefinitionOut)
+def update_workflow_definition(
+    definition_id: int,
+    payload: WorkflowDefinitionUpdate,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    before = _workflow_definition_snapshot(definition)
+    if payload.display_name is not None:
+        definition.display_name = payload.display_name.strip()
+    if payload.description is not None:
+        definition.description = payload.description.strip()
+    if payload.category is not None:
+        definition.category = payload.category.strip() or definition.category
+    if payload.is_active is not None:
+        definition.is_active = payload.is_active
+    definition.updated_by_id = user.id
+    definition.updated_at = _utc_now()
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    after = _workflow_definition_snapshot(definition)
+    log_event(
+        db,
+        request,
+        'workflow_definition.update',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition:{definition.id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition.id),
+        details={'workflow_key': definition.workflow_key},
+        before_state=before,
+        after_state=after,
+        message=f'Workflow definition {definition.workflow_key} updated.',
+    )
+    return _workflow_definition_payload(definition)
+
+
+@router.post('/workflow-definitions/{definition_id}/versions', response_model=WorkflowDefinitionVersionOut)
+def create_workflow_definition_version(
+    definition_id: int,
+    payload: WorkflowDefinitionVersionInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    version = _create_workflow_version(definition, payload, user, db)
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    version = _find_workflow_version(definition, version.id)
+    log_event(
+        db,
+        request,
+        'workflow_definition.version.create',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition_version:{version.id}',
+        target_entity_type='workflow_definition_version',
+        target_entity_id=str(version.id),
+        details={'workflow_key': definition.workflow_key, 'version': version.version, 'status': version.status.value},
+        after_state=_workflow_version_payload(version),
+        message=f'Workflow definition {definition.workflow_key} version {version.version} created.',
+    )
+    return _workflow_version_payload(version)
+
+
+@router.patch('/workflow-definitions/{definition_id}/versions/{version_id}', response_model=WorkflowDefinitionVersionOut)
+def update_workflow_definition_version(
+    definition_id: int,
+    version_id: int,
+    payload: WorkflowDefinitionVersionInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    version = _find_workflow_version(definition, version_id)
+    if version.status != WorkflowDefinitionVersionStatus.draft:
+        raise HTTPException(status_code=400, detail='Only draft workflow versions can be edited')
+    before = _workflow_version_payload(version)
+    version.definition_snapshot = _stable_json(payload.definition_snapshot)
+    version.transition_rules = _stable_json(payload.transition_rules)
+    version.version_notes = payload.version_notes.strip()
+    definition.updated_by_id = user.id
+    definition.updated_at = _utc_now()
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    version = _find_workflow_version(definition, version.id)
+    log_event(
+        db,
+        request,
+        'workflow_definition.version.update',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition_version:{version.id}',
+        target_entity_type='workflow_definition_version',
+        target_entity_id=str(version.id),
+        details={'workflow_key': definition.workflow_key, 'version': version.version},
+        before_state=before,
+        after_state=_workflow_version_payload(version),
+        message=f'Workflow definition {definition.workflow_key} version {version.version} updated.',
+    )
+    return _workflow_version_payload(version)
+
+
+@router.post('/workflow-definitions/{definition_id}/versions/{version_id}/publish', response_model=WorkflowDefinitionOut)
+def publish_workflow_definition_version(
+    definition_id: int,
+    version_id: int,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    version = _find_workflow_version(definition, version_id)
+    before = _workflow_definition_snapshot(definition)
+    now = _utc_now()
+    for existing_version in definition.versions:
+        if existing_version.id == version.id:
+            continue
+        if existing_version.status == WorkflowDefinitionVersionStatus.published:
+            existing_version.status = WorkflowDefinitionVersionStatus.archived
+            existing_version.archived_by_id = user.id
+            existing_version.archived_at = now
+    version.status = WorkflowDefinitionVersionStatus.published
+    version.published_by_id = user.id
+    version.published_at = now
+    version.archived_by_id = None
+    version.archived_at = None
+    definition.current_version_id = version.id
+    definition.is_active = True
+    definition.updated_by_id = user.id
+    definition.updated_at = now
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    after = _workflow_definition_snapshot(definition)
+    log_event(
+        db,
+        request,
+        'workflow_definition.version.publish',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition:{definition.id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition.id),
+        details={'workflow_key': definition.workflow_key, 'published_version_id': version_id},
+        before_state=before,
+        after_state=after,
+        message=f'Workflow definition {definition.workflow_key} version published.',
+    )
+    return _workflow_definition_payload(definition)
+
+
+@router.post('/workflow-definitions/{definition_id}/archive', response_model=WorkflowDefinitionOut)
+def archive_workflow_definition(
+    definition_id: int,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    definition = _find_workflow_definition(definition_id, db)
+    before = _workflow_definition_snapshot(definition)
+    now = _utc_now()
+    definition.is_active = False
+    definition.updated_by_id = user.id
+    definition.updated_at = now
+    for version in definition.versions:
+        if version.status == WorkflowDefinitionVersionStatus.published:
+            version.status = WorkflowDefinitionVersionStatus.archived
+            version.archived_by_id = user.id
+            version.archived_at = now
+    db.commit()
+    definition = _find_workflow_definition(definition.id, db)
+    after = _workflow_definition_snapshot(definition)
+    log_event(
+        db,
+        request,
+        'workflow_definition.archive',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'workflow_definition:{definition.id}',
+        target_entity_type='workflow_definition',
+        target_entity_id=str(definition.id),
+        details={'workflow_key': definition.workflow_key},
+        before_state=before,
+        after_state=after,
+        message=f'Workflow definition {definition.workflow_key} archived.',
+    )
+    return _workflow_definition_payload(definition)
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])

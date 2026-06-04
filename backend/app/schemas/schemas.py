@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,7 @@ from app.models.models import (
     NoteSetStatus,
     NoteSetUploadMode,
     Role,
+    WorkflowDefinitionVersionStatus,
     WorkflowState,
 )
 
@@ -279,6 +281,60 @@ class ChartUpdate(BaseModel):
 class TransitionInput(BaseModel):
     to_state: WorkflowState
     comment: str = ''
+
+
+class WorkflowDefinitionVersionInput(BaseModel):
+    definition_snapshot: dict[str, Any] = Field(default_factory=dict)
+    transition_rules: list[dict[str, Any]] = Field(default_factory=list)
+    version_notes: str = Field(default='', max_length=2000)
+
+
+class WorkflowDefinitionCreate(BaseModel):
+    workflow_key: str = Field(min_length=3, max_length=80, pattern=r'^[a-z0-9][a-z0-9_-]*$')
+    display_name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default='', max_length=2000)
+    category: str = Field(default='clinical_review', max_length=80)
+    is_active: bool = True
+    initial_version: WorkflowDefinitionVersionInput | None = None
+
+
+class WorkflowDefinitionUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=2000)
+    category: str | None = Field(default=None, max_length=80)
+    is_active: bool | None = None
+
+
+class WorkflowDefinitionVersionOut(BaseModel):
+    id: int
+    workflow_definition_id: int
+    version: int
+    status: WorkflowDefinitionVersionStatus
+    definition_snapshot: dict[str, Any]
+    transition_rules: list[dict[str, Any]]
+    version_notes: str
+    created_by_id: int
+    published_by_id: int | None = None
+    archived_by_id: int | None = None
+    created_at: datetime
+    published_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+class WorkflowDefinitionOut(BaseModel):
+    id: int
+    workflow_key: str
+    display_name: str
+    description: str
+    category: str
+    is_active: bool
+    current_version_id: int | None = None
+    created_by_id: int
+    updated_by_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    current_version: WorkflowDefinitionVersionOut | None = None
+    versions: list[WorkflowDefinitionVersionOut] = Field(default_factory=list)
 
 
 class PatientNoteDocumentUploadInput(BaseModel):

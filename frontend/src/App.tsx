@@ -290,6 +290,56 @@ type AppSettingsForm = {
   treatment_plan_loc_change_window_validated: boolean
 }
 
+type WorkflowDefinitionVersionStatus = 'draft' | 'published' | 'archived'
+
+type WorkflowDefinitionVersion = {
+  id: number
+  workflow_definition_id: number
+  version: number
+  status: WorkflowDefinitionVersionStatus
+  definition_snapshot: Record<string, unknown>
+  transition_rules: Record<string, unknown>[]
+  version_notes: string
+  created_by_id: number
+  published_by_id: number | null
+  archived_by_id: number | null
+  created_at: string
+  published_at: string | null
+  archived_at: string | null
+}
+
+type WorkflowDefinition = {
+  id: number
+  workflow_key: string
+  display_name: string
+  description: string
+  category: string
+  is_active: boolean
+  current_version_id: number | null
+  created_by_id: number
+  updated_by_id: number | null
+  created_at: string
+  updated_at: string
+  current_version: WorkflowDefinitionVersion | null
+  versions: WorkflowDefinitionVersion[]
+}
+
+type WorkflowDefinitionForm = {
+  workflow_key: string
+  display_name: string
+  description: string
+  category: string
+  version_notes: string
+  definition_snapshot_text: string
+  transition_rules_text: string
+}
+
+type WorkflowVersionForm = {
+  version_notes: string
+  definition_snapshot_text: string
+  transition_rules_text: string
+}
+
 type UploadEntry = {
   file: File
   document_label: string
@@ -534,6 +584,48 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
   }
 }
 
+function createWorkflowDefinitionForm(): WorkflowDefinitionForm {
+  return {
+    workflow_key: '',
+    display_name: '',
+    description: '',
+    category: 'clinical_review',
+    version_notes: '',
+    definition_snapshot_text: JSON.stringify({ steps: [], owner_roles: ['admin', 'manager'] }, null, 2),
+    transition_rules_text: JSON.stringify([], null, 2),
+  }
+}
+
+function createWorkflowVersionForm(definition?: WorkflowDefinition | null): WorkflowVersionForm {
+  return {
+    version_notes: '',
+    definition_snapshot_text: JSON.stringify(definition?.current_version?.definition_snapshot || { steps: [], owner_roles: ['admin', 'manager'] }, null, 2),
+    transition_rules_text: JSON.stringify(definition?.current_version?.transition_rules || [], null, 2),
+  }
+}
+
+function parseWorkflowVersionInput(form: WorkflowDefinitionForm | WorkflowVersionForm) {
+  const definitionSnapshot = JSON.parse(form.definition_snapshot_text || '{}')
+  const transitionRules = JSON.parse(form.transition_rules_text || '[]')
+  if (!definitionSnapshot || Array.isArray(definitionSnapshot) || typeof definitionSnapshot !== 'object') {
+    throw new Error('Workflow definition JSON must be an object.')
+  }
+  if (!Array.isArray(transitionRules)) {
+    throw new Error('Transition rules JSON must be an array.')
+  }
+  return {
+    definition_snapshot: definitionSnapshot as Record<string, unknown>,
+    transition_rules: transitionRules as Record<string, unknown>[],
+    version_notes: form.version_notes,
+  }
+}
+
+function workflowVersionTone(status: WorkflowDefinitionVersionStatus) {
+  if (status === 'published') return 'success'
+  if (status === 'draft') return 'warning'
+  return 'neutral'
+}
+
 function createTimelinessOverrideForm(detail?: TimelinessClientDetail | null): TimelinessOverrideForm {
   return {
     field_name: 'status',
@@ -771,6 +863,10 @@ export function App() {
   const [emrDiscovery, setEmrDiscovery] = useState<EmrDiscovery | null>(null)
   const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
   const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
+  const [workflowDefinitions, setWorkflowDefinitions] = useState<WorkflowDefinition[]>([])
+  const [selectedWorkflowDefinitionId, setSelectedWorkflowDefinitionId] = useState<number | null>(null)
+  const [workflowDefinitionForm, setWorkflowDefinitionForm] = useState<WorkflowDefinitionForm>(createWorkflowDefinitionForm())
+  const [workflowVersionForm, setWorkflowVersionForm] = useState<WorkflowVersionForm>(createWorkflowVersionForm())
 
   const [profileForm, setProfileForm] = useState<ProfileForm>({ full_name: '' })
   const [passwordChangeForm, setPasswordChangeForm] = useState<PasswordChangeForm>({ current_password: '', new_password: '' })
@@ -794,6 +890,10 @@ export function App() {
   const selectedManagedUser = useMemo(
     () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
     [users, selectedManagedUserId],
+  )
+  const selectedWorkflowDefinition = useMemo(
+    () => workflowDefinitions.find((definition) => definition.id === selectedWorkflowDefinitionId) || workflowDefinitions[0] || null,
+    [selectedWorkflowDefinitionId, workflowDefinitions],
   )
   const selectedManagedUserIsBootstrap = isBootstrapAdmin(selectedManagedUser)
   const selectedManagedUserIsCurrentUser = selectedManagedUser?.id === user?.id
@@ -861,6 +961,11 @@ export function App() {
   const activeUserCount = useMemo(() => users.filter((entry) => entry.is_active).length, [users])
   const lockedUserCount = useMemo(() => users.filter((entry) => entry.is_locked).length, [users])
   const resetRequiredCount = useMemo(() => users.filter((entry) => entry.must_reset_password).length, [users])
+  const activeWorkflowDefinitionCount = useMemo(() => workflowDefinitions.filter((definition) => definition.is_active).length, [workflowDefinitions])
+  const draftWorkflowVersionCount = useMemo(
+    () => workflowDefinitions.reduce((total, definition) => total + definition.versions.filter((version) => version.status === 'draft').length, 0),
+    [workflowDefinitions],
+  )
 
   const newEvaluationTrend = useMemo(
     () => buildTrend(charts.map((chart) => chart.system_generated_at || chart.created_at)),
@@ -909,6 +1014,20 @@ export function App() {
         : null,
     )
     setDeleteUserConfirmation('')
+  }
+
+  function syncWorkflowDefinitions(nextDefinitions: WorkflowDefinition[], preferredId?: number | null) {
+    setWorkflowDefinitions(nextDefinitions)
+    const selectedId = preferredId ?? selectedWorkflowDefinitionId ?? nextDefinitions[0]?.id ?? null
+    const selected = nextDefinitions.find((definition) => definition.id === selectedId) || nextDefinitions[0] || null
+    setSelectedWorkflowDefinitionId(selected?.id ?? null)
+    setWorkflowVersionForm(createWorkflowVersionForm(selected))
+  }
+
+  async function loadWorkflowDefinitions(preferredId?: number | null) {
+    if (user?.role !== 'admin') return
+    const payload = await apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true')
+    syncWorkflowDefinitions(payload, preferredId)
   }
 
   async function loadChartDetail(chartId: number) {
@@ -976,10 +1095,15 @@ export function App() {
 
   async function loadSettings() {
     if (user?.role !== 'admin') return
-    const [payload, profile] = await Promise.all([apiRequest<AppSettings>('/settings'), apiRequest<EmrProfile>('/emr/profile')])
+    const [payload, profile, definitions] = await Promise.all([
+      apiRequest<AppSettings>('/settings'),
+      apiRequest<EmrProfile>('/emr/profile'),
+      apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true'),
+    ])
     setAppSettings(payload)
     setSettingsForm(createSettingsForm(payload))
     setEmrProfile(profile)
+    syncWorkflowDefinitions(definitions)
   }
 
   async function loadReadiness() {
@@ -1016,11 +1140,12 @@ export function App() {
       setNoteSets(noteSetList)
 
       if (profile.role === 'admin') {
-        const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile] = await Promise.all([
+        const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile, definitions] = await Promise.all([
           apiRequest<User[]>('/users'),
           apiRequest<AppSettings>('/settings'),
           apiRequest<RuntimeReadiness>('/system/readiness'),
           apiRequest<EmrProfile>('/emr/profile'),
+          apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true'),
         ])
         setUsers(directory)
         syncSelectedManagedUser(directory, selectedManagedUserId)
@@ -1028,6 +1153,7 @@ export function App() {
         setSettingsForm(createSettingsForm(configuredSettings))
         setReadiness(runtimeReadiness)
         setEmrProfile(configuredEmrProfile)
+        syncWorkflowDefinitions(definitions, selectedWorkflowDefinitionId)
       } else {
         setUsers([])
         setSelectedManagedUserId(null)
@@ -1038,6 +1164,7 @@ export function App() {
         setEmrProfile(null)
         setEmrDiscovery(null)
         setEmrImportPlan(null)
+        syncWorkflowDefinitions([])
         setDeleteUserConfirmation('')
       }
 
@@ -1561,6 +1688,88 @@ export function App() {
       setStatus('Application settings have been updated.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleWorkflowDefinitionCreate(event: FormEvent) {
+    event.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      const versionPayload = parseWorkflowVersionInput(workflowDefinitionForm)
+      const created = await apiRequest<WorkflowDefinition>('/workflow-definitions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflow_key: workflowDefinitionForm.workflow_key.trim(),
+          display_name: workflowDefinitionForm.display_name.trim(),
+          description: workflowDefinitionForm.description.trim(),
+          category: workflowDefinitionForm.category.trim() || 'clinical_review',
+          initial_version: versionPayload,
+        }),
+      })
+      setWorkflowDefinitionForm(createWorkflowDefinitionForm())
+      await loadWorkflowDefinitions(created.id)
+      setStatus(`Workflow profile ${created.workflow_key} created.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to create workflow profile')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleWorkflowVersionCreate(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedWorkflowDefinition) return
+    setIsBusy(true)
+    setError('')
+    try {
+      const versionPayload = parseWorkflowVersionInput(workflowVersionForm)
+      await apiRequest<WorkflowDefinitionVersion>(`/workflow-definitions/${selectedWorkflowDefinition.id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(versionPayload),
+      })
+      await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
+      setStatus(`Draft workflow version created for ${selectedWorkflowDefinition.workflow_key}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to create workflow version')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function publishWorkflowVersion(versionId: number) {
+    if (!selectedWorkflowDefinition) return
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<WorkflowDefinition>(`/workflow-definitions/${selectedWorkflowDefinition.id}/versions/${versionId}/publish`, {
+        method: 'POST',
+      })
+      await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
+      setStatus(`Workflow version published for ${selectedWorkflowDefinition.workflow_key}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to publish workflow version')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function archiveWorkflowDefinition() {
+    if (!selectedWorkflowDefinition) return
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest<WorkflowDefinition>(`/workflow-definitions/${selectedWorkflowDefinition.id}/archive`, {
+        method: 'POST',
+      })
+      await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
+      setStatus(`Workflow profile ${selectedWorkflowDefinition.workflow_key} archived.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to archive workflow profile')
     } finally {
       setIsBusy(false)
     }
@@ -3245,7 +3454,8 @@ export function App() {
 
               <section className='panel detail-panel'>
                 {settingsForm ? (
-                  <form className='form-grid' onSubmit={handleSettingsSave}>
+                  <>
+                    <form className='form-grid' onSubmit={handleSettingsSave}>
 	                    <label className='full-width'>
 	                      Organization name
 	                      <input
@@ -3586,7 +3796,224 @@ export function App() {
                         Recheck readiness
                       </button>
                     </div>
-                  </form>
+	                  </form>
+                    <section className='panel-subsection workflow-admin-panel'>
+                      <div className='panel-heading'>
+                        <div>
+                          <h3>Workflow profiles</h3>
+                          <p>Versioned clinical workflow definitions and transition rules.</p>
+                        </div>
+                        <button type='button' className='ghost-button' onClick={() => void loadWorkflowDefinitions(selectedWorkflowDefinitionId)} disabled={isBusy}>
+                          Refresh profiles
+                        </button>
+                      </div>
+
+                      <div className='dashboard-metrics'>
+                        <article className='mini-card'>
+                          <span>Workflow profiles</span>
+                          <strong>{workflowDefinitions.length}</strong>
+                        </article>
+                        <article className='mini-card'>
+                          <span>Active profiles</span>
+                          <strong>{activeWorkflowDefinitionCount}</strong>
+                        </article>
+                        <article className='mini-card'>
+                          <span>Draft versions</span>
+                          <strong>{draftWorkflowVersionCount}</strong>
+                        </article>
+                      </div>
+
+                      <div className='workflow-admin-grid'>
+                        <section className='panel-subsection'>
+                          <h4>Profiles</h4>
+                          {workflowDefinitions.length ? (
+                            <div className='queue-list'>
+                              {workflowDefinitions.map((definition) => (
+                                <button
+                                  type='button'
+                                  key={definition.id}
+                                  className={selectedWorkflowDefinition?.id === definition.id ? 'queue-item queue-item--active' : 'queue-item'}
+                                  onClick={() => {
+                                    setSelectedWorkflowDefinitionId(definition.id)
+                                    setWorkflowVersionForm(createWorkflowVersionForm(definition))
+                                  }}
+                                >
+                                  <div>
+                                    <strong>{definition.display_name}</strong>
+                                    <span>{definition.workflow_key}</span>
+                                  </div>
+                                  <div className='queue-item-meta'>
+                                    <span className={`pill pill--${definition.is_active ? 'success' : 'neutral'}`}>
+                                      {definition.is_active ? 'active' : 'archived'}
+                                    </span>
+                                    <span>{definition.current_version ? `v${definition.current_version.version}` : 'no published version'}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className='empty-state'>No workflow profiles are configured.</p>
+                          )}
+                        </section>
+
+                        <section className='panel-subsection'>
+                          <h4>{selectedWorkflowDefinition?.display_name || 'Selected profile'}</h4>
+                          {selectedWorkflowDefinition ? (
+                            <>
+                              <div className='fact-list'>
+                                <div>
+                                  <dt>Category</dt>
+                                  <dd>{selectedWorkflowDefinition.category}</dd>
+                                </div>
+                                <div>
+                                  <dt>Current version</dt>
+                                  <dd>{selectedWorkflowDefinition.current_version ? `Version ${selectedWorkflowDefinition.current_version.version}` : 'Draft only'}</dd>
+                                </div>
+                                <div>
+                                  <dt>Updated</dt>
+                                  <dd>{formatDateTime(selectedWorkflowDefinition.updated_at)}</dd>
+                                </div>
+                              </div>
+                              <div className='timeliness-table timeliness-table--workflow'>
+                                <div className='timeliness-table__head'>
+                                  <span>Version</span>
+                                  <span>Status</span>
+                                  <span>Notes</span>
+                                  <span>Action</span>
+                                </div>
+                                {selectedWorkflowDefinition.versions.map((version) => (
+                                  <div key={version.id} className='timeliness-table__row'>
+                                    <span>v{version.version}</span>
+                                    <span>
+                                      <span className={`pill pill--${workflowVersionTone(version.status)}`}>{version.status}</span>
+                                    </span>
+                                    <span>{version.version_notes || 'No notes'}</span>
+                                    <span>
+                                      {version.status === 'draft' ? (
+                                        <button type='button' className='ghost-button' onClick={() => void publishWorkflowVersion(version.id)} disabled={isBusy}>
+                                          Publish
+                                        </button>
+                                      ) : (
+                                        formatDateTime(version.published_at || version.archived_at)
+                                      )}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className='form-actions'>
+                                <button type='button' className='danger-button' onClick={() => void archiveWorkflowDefinition()} disabled={isBusy || !selectedWorkflowDefinition.is_active}>
+                                  Archive profile
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <p className='empty-state'>Select or create a workflow profile.</p>
+                          )}
+                        </section>
+                      </div>
+
+                      <section className='panel-subsection'>
+                        <h4>Create workflow profile</h4>
+                        <form className='form-grid' onSubmit={handleWorkflowDefinitionCreate}>
+                          <label>
+                            Workflow key
+                            <input
+                              required
+                              pattern='[a-z0-9][a-z0-9_-]*'
+                              value={workflowDefinitionForm.workflow_key}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, workflow_key: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Display name
+                            <input
+                              required
+                              value={workflowDefinitionForm.display_name}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, display_name: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Category
+                            <input
+                              value={workflowDefinitionForm.category}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, category: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Version notes
+                            <input
+                              value={workflowDefinitionForm.version_notes}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, version_notes: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            Description
+                            <textarea
+                              value={workflowDefinitionForm.description}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, description: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            Definition JSON
+                            <textarea
+                              className='code-textarea'
+                              value={workflowDefinitionForm.definition_snapshot_text}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            Transition rules JSON
+                            <textarea
+                              className='code-textarea'
+                              value={workflowDefinitionForm.transition_rules_text}
+                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                            />
+                          </label>
+                          <div className='full-width form-actions'>
+                            <button type='submit' disabled={isBusy}>
+                              Create profile
+                            </button>
+                          </div>
+                        </form>
+                      </section>
+
+                      {selectedWorkflowDefinition ? (
+                        <section className='panel-subsection'>
+                          <h4>Create draft version</h4>
+                          <form className='form-grid' onSubmit={handleWorkflowVersionCreate}>
+                            <label className='full-width'>
+                              Version notes
+                              <input
+                                value={workflowVersionForm.version_notes}
+                                onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, version_notes: event.target.value }))}
+                              />
+                            </label>
+                            <label className='full-width'>
+                              Definition JSON
+                              <textarea
+                                className='code-textarea'
+                                value={workflowVersionForm.definition_snapshot_text}
+                                onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                              />
+                            </label>
+                            <label className='full-width'>
+                              Transition rules JSON
+                              <textarea
+                                className='code-textarea'
+                                value={workflowVersionForm.transition_rules_text}
+                                onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                              />
+                            </label>
+                            <div className='full-width form-actions'>
+                              <button type='submit' disabled={isBusy}>
+                                Create draft version
+                              </button>
+                            </div>
+                          </form>
+                        </section>
+                      ) : null}
+                    </section>
+                  </>
                 ) : (
                   <p className='empty-state'>Settings are loading.</p>
                 )}

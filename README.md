@@ -663,12 +663,33 @@ Rules-file guardrails:
 - keep PHI out of YAML rules files
 - keep vendor credentials out of YAML rules files
 - treat YAML rules as deterministic business logic, not LLM prompts
-- add future workflows as versioned rules profiles under `config\rules`
+- manage future workflow profiles through admin Settings and the versioned workflow-definition API; keep deterministic YAML rules under `config\rules`
 - keep LOC aliases such as `IOP5`, `IOP-5`, `IOP 5`, `IOP-19`, `IOP-3`, and `OP` configurable in rules/config files
 
 Open blocker:
 
 - the level-of-care change treatment-plan update window is not confirmed by R3/Marleigh; keep it configurable, mark it unvalidated in admin/settings UI and docs, and do not hard-code a final value until `docs/open-blockers.md` is resolved
+
+## Workflow Profiles
+
+Admins can manage versioned workflow profiles from Settings. A workflow profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
+
+Workflow profile API:
+
+```text
+GET/POST /api/workflow-definitions
+GET/PATCH /api/workflow-definitions/{id}
+POST /api/workflow-definitions/{id}/versions
+PATCH /api/workflow-definitions/{id}/versions/{version_id}
+POST /api/workflow-definitions/{id}/versions/{version_id}/publish
+POST /api/workflow-definitions/{id}/archive
+```
+
+Workflow profile tests:
+
+```text
+backend\tests\test_workflow_definitions.py
+```
 
 ## Security And Privacy Rules
 
@@ -942,6 +963,7 @@ flowchart LR
 | `backend\app\services\patient_notes.py` | Patient-note upload storage and detection helpers |
 | `backend\app\services\rules_engine.py` | Deterministic YAML rules engine |
 | `backend\app\api\rules_routes.py` | Rules API boundary |
+| `backend\tests\test_workflow_definitions.py` | Workflow profile CRUD/versioning regression tests |
 | `backend\app\api\api_config_routes.py` | API configuration JSON routes |
 | `backend\app\api\api_config_ui_routes.py` | API configuration browser page |
 | `backend\app\api\clinical_notes_ui_routes.py` | Manual/API intake guide page |
