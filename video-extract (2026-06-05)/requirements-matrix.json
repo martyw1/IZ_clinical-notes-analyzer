@@ -1,0 +1,59 @@
+{
+  "source_video": {
+    "title": "Treatment plan timelines",
+    "presenter": "Marleigh Johnson",
+    "duration_seconds": 255.466,
+    "loom_id": "bb01b72bdebf4585bed02e456c43b0e7"
+  },
+  "rules": [
+    {
+      "id": "initial-at-admission",
+      "timestamps": ["00:06.63", "00:16.00", "00:28.20"],
+      "requirement": "Initial treatment plan must be signed by staff and client at admission/intake date.",
+      "status_when_missing_or_conflicting": "Needs Review or Missing Data"
+    },
+    {
+      "id": "master-within-30-days",
+      "timestamps": ["00:34.50", "00:45.28", "00:53.28", "01:02.10"],
+      "requirement": "Master treatment plan must be completed within 30 days of admission and signed by client and therapist/staff.",
+      "status_when_missing_or_conflicting": "Needs Review or Missing Data"
+    },
+    {
+      "id": "reviews-from-treatment-plan-reviews",
+      "timestamps": ["01:11.52", "01:20.00", "01:27.34", "01:33.08"],
+      "requirement": "Ongoing updates should be tracked from Treatment Plan Reviews, not the Treatment Plan version history.",
+      "status_when_missing_or_conflicting": "Missing Data"
+    },
+    {
+      "id": "loc-cadence",
+      "timestamps": ["01:42.94", "01:48.84", "02:04.94", "02:12.30"],
+      "requirement": "PHP uses a 30-day cadence and IOP-5 uses a 60-day cadence; active LOC is inferred from no discharge date.",
+      "status_when_missing_or_conflicting": "Needs Review or Missing Data"
+    },
+    {
+      "id": "review-staff-signature",
+      "timestamps": ["02:53.78", "02:59.90"],
+      "requirement": "Treatment plan review completion should track therapist/staff signature date; client signature is not always required.",
+      "status_when_missing_or_conflicting": "Missing Data"
+    },
+    {
+      "id": "due-date-cross-check",
+      "timestamps": ["02:45.14", "03:25.20", "03:36.62"],
+      "requirement": "Compare document-provided next due date with calculated cadence due date and surface mismatches.",
+      "status_when_missing_or_conflicting": "Needs Review"
+    },
+    {
+      "id": "asana-replacement",
+      "timestamps": ["03:45.16", "03:56.18", "04:03.10"],
+      "requirement": "Replace manual Asana date tracking for nearly 60 clients with an in-app reliable due-date queue.",
+      "status_when_missing_or_conflicting": "Not applicable"
+    }
+  ],
+  "open_questions": [
+    "Is the IOP-5 due date anchored to LOC effective date, review signature date, created date, or the document Next Review Due field?",
+    "Are recurrence intervals calendar days or business days?",
+    "Should document-provided Next Review Due be authoritative or only a cross-check?",
+    "When does reviewer signature matter?",
+    "What exact LOC-change update window should be configured?"
+  ]
+}

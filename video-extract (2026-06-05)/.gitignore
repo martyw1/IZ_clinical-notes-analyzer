@@ -1,0 +1,9 @@
+# Raw video/capture assets may contain PHI-like chart data from the source screen recording.
+# Keep them local for extraction review only; do not stage or commit them.
+captures/
+reference-assets/source-video.mp4
+reference-assets/preview.mp4
+reference-assets/thumbnail.*
+reference-assets/transcript.json
+reference-assets/captions.vtt
+reference-assets/source-video-ffprobe.json

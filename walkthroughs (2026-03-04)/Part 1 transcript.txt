@@ -1,0 +1,28 @@
+R3 Recovery Services
+Video - Chart Audit Tool Overview and Key Areas to Review
+Video Transcript
+
+0:01 Hi guys, I'm gonna test using this Loom app to go over the chart audit tool and go over the areas of the chart that I would pull that stuff from.
+0:11 I'm gonna send you one video, I think I can do five minute clips to start, so I'm gonna send you one.
+0:16 This video, you guys can test this, let me know if this will work, and then I will do that for the rest of the chart audit.
+0:22 So, what I'm looking at here is this first part where it says client name, level of care, admission date, discharge date, and primary clinician.
+0:31 Um, so. So, What we would pull this from here, I'm gonna go into Eliva. This is a client's chart right here.
+0:37 I have a test client open right now. This information would pull from right here is where the client's name is.
+0:46 And then we have our admission date and our- or discharge date right here. If you scroll down on this main page of the chart, you can see different levels of care that a client would be in.
+0:56 That would be listed right here. It will show me the date the- er, sorry, it will show me the level of care the client was in.
+1:02 It will show me the date that they were admitted to. So when you come up to this chart audit tool, this level of care could have multiple options.
+1:12 It could say, IOP, outpatient, PHP. It could say a few different things. The admission date should just be the original date that they were admitted to.
+1:20 The program and the discharge date should be the original date that they were discharged from the program, which, again, would be pulling from these two spots of the chart right here.
+1:31 So if I come down here then, and we just go over this first area, I'll, Um, we're looking at emergency contact.
+1:38 We want to know that the emergency contact was completed at admission, and it was re-signed at one year. So where I would pull that from is right here where it says contacts.
+1:49 You can see I have an example in here. There's an emergency contact. It says file, it says EC. If I open this up, I can see that I have an active release here.
+2:03 And that my emergency contact information has been filled out. I can see the emergency contact information to be disclosed right here.
+2:13 Umm, and it is signed by both me and the client. I am. We would also want to look at here, I believe, so it ends on 529, 2026, so we would want to know if that has expired.
+2:37 That would be something important for us to know. Okay, under releases, review all releases to ensure boxes are appropriately checked.
+2:47 If other is checked, there should be a statement about what other information is shared. Okay. So I'm going to come over here.
+2:56 This is all. I'm going come out of the document manager section, which is over here. And there's something in here called intake packet.
+3:05 Um, each client should have an intake packet. This is an example, so this one is not signed or completed, but I'm still going to go through and show you what I am looking for.
+3:13 This is a packet of a bunch of different releases together. So right here, I'm looking that for every release, they've read, acknowledged, and accepted the above.
+3:23 Um, it could say I decline, but in general, one of these two boxes needs to be checked. Hey, I'm recording myself for coming.
+3:31 I'm sorry. It's okay. I don't know how to session it. Yeah, hold on. I don't know how to stop it.
+3:38 Have you used this Loom thing yet? Sorry. It's okay. Other. there.

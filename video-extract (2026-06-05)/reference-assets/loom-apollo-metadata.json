@@ -1,0 +1,22 @@
+{
+  "loom_id": "bb01b72bdebf4585bed02e456c43b0e7",
+  "title": "Treatment plan timelines ",
+  "owner": "Marleigh Johnson",
+  "createdAt": "2026-05-19T14:52:29.445Z",
+  "duration_seconds": 255,
+  "playable_duration": 255.466,
+  "recording_type": "screen_cam",
+  "width": 1856,
+  "height": 1080,
+  "microphone_enabled": true,
+  "show_transcript_to_viewer": true,
+  "downloadable": true,
+  "thumbnail_static": "https://cdn.loom.com/sessions/thumbnails/bb01b72bdebf4585bed02e456c43b0e7-51885af5b71a5932.jpg",
+  "thumbnail_gif": "https://cdn.loom.com/sessions/thumbnails/bb01b72bdebf4585bed02e456c43b0e7-51885af5b71a5932.gif",
+  "animated_preview": "https://cdn.loom.com/sessions/thumbnails/bb01b72bdebf4585bed02e456c43b0e7-51885af5b71a5932.mp4",
+  "transcription_status": "success",
+  "language": "en",
+  "hls_path": "https://luna.loom.com/id/bb01b72bdebf4585bed02e456c43b0e7/rev/8d62c7e97977e361e5623a2e461373f937e5e59b8ae0e218776bb469ba167327f/resource/hls/playlist-multibitrate.m3u8?REDACTED_SIGNED_QUERY",
+  "transcript_source_path": "https://cdn.loom.com/mediametadata/transcription/bb01b72bdebf4585bed02e456c43b0e7-2.json?REDACTED_SIGNED_QUERY",
+  "captions_source_path": "https://cdn.loom.com/mediametadata/captions/bb01b72bdebf4585bed02e456c43b0e7-2.vtt?REDACTED_SIGNED_QUERY"
+}

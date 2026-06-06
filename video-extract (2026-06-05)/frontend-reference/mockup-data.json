@@ -1,0 +1,50 @@
+{
+  "client": {
+    "displayName": "Synthetic Client",
+    "age": 41,
+    "status": "Active",
+    "admissionDate": "2026-02-26",
+    "currentLevelOfCare": "IOP 5",
+    "primaryClinician": "Synthetic Therapist",
+    "program": "R3 Recovery Services"
+  },
+  "levelOfCareHistory": [
+    {
+      "levelOfCare": "PHP",
+      "effectiveDate": "2026-02-26",
+      "dischargeDate": "2026-03-30",
+      "intervalDays": 30
+    },
+    {
+      "levelOfCare": "IOP 5",
+      "effectiveDate": "2026-03-30",
+      "dischargeDate": null,
+      "intervalDays": 60
+    }
+  ],
+  "treatmentPlans": [
+    {
+      "kind": "Initial",
+      "documentDate": "2026-02-26",
+      "staffSignatureDate": "2026-02-26",
+      "clientSignatureDate": "2026-02-26",
+      "status": "Compliant"
+    },
+    {
+      "kind": "Master",
+      "documentDate": "2026-03-03",
+      "staffSignatureDate": "2026-03-03",
+      "clientSignatureDate": "2026-03-03",
+      "status": "Compliant"
+    },
+    {
+      "kind": "Review",
+      "documentDate": "2026-04-02",
+      "staffSignatureDate": "2026-04-02",
+      "clientSignatureDate": null,
+      "displayedNextDueDate": "2026-05-29",
+      "calculatedFromSignatureDate": "2026-06-01",
+      "status": "Needs Review"
+    }
+  ]
+}
