@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.0.0",
-  "build": "2026.06.09.1",
+  "version": "1.0.1",
+  "build": "2026.06.09.2",
   "release_channel": "local-desktop",
   "release_date": "2026-06-09",
   "git_branch": "main",
-  "version_name": "Version 1 Windows readiness",
-  "description": "Adds the canonical Treatment Plan Checklist Version 1, mock API/upload source discovery, dashboard checklist visibility, CSV/JSON exports, Windows preflight, release packaging scripts, and Version 1 operator documentation."
+  "version_name": "Version 1 patch",
+  "description": "Windows startup reliability and documentation update."
 }
