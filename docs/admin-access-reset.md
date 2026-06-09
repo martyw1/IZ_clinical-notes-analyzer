@@ -2,7 +2,7 @@
 
 Date: 2026-06-09
 
-Applies to: IZ Clinical Notes Analyzer Version 1.0.1 local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version 1.0.2 local Windows desktop runtime.
 
 ## Purpose
 
@@ -21,19 +21,38 @@ Use this path when at least one working admin account can sign in.
 7. Communicate any one-time credential only through an R3-approved secure channel.
 8. Confirm the action appears in `Forensic logs` without exposing the credential value.
 
-## Bootstrap admin path when locked out
+## Local utility path when locked out
 
-Use this only for a local Windows desktop install when no working admin account can sign in.
+Use this path when no working admin account can sign in on a local Windows desktop install.
 
 1. Close the app browser tab and app command window.
-2. Open the local settings file in Notepad: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env`.
-3. Update the bootstrap admin credential value in that local settings file.
-4. Confirm the bootstrap admin reset-on-startup setting is enabled in the same local settings file.
-5. Save the file.
-6. Start the app again with `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`.
-7. Sign in as `admin` using the updated local value.
-8. Immediately set the desired long-term admin access state according to R3 policy.
-9. Confirm `Forensic logs` show the bootstrap admin reset event.
+2. Open PowerShell from the repo root.
+3. Run:
+
+```powershell
+.\scripts\update-local-admin.ps1
+```
+
+4. Save the generated value shown in the PowerShell window.
+5. Start the app again with:
+
+```powershell
+.\scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+6. Sign in as `admin` using the generated local value.
+7. Immediately set the desired long-term admin access state according to R3 policy.
+8. Confirm `Forensic logs` show the bootstrap admin reset event.
+
+## Manual local settings path
+
+If the utility is unavailable, an authorized administrator can edit the local settings file directly:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
+```
+
+Update the bootstrap admin credential value, confirm the reset-on-startup setting is enabled, save the file, restart the app, and sign in locally as `admin`.
 
 ## Security notes
 
@@ -52,4 +71,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected patch version: `1.0.1`.
+Expected patch version: `1.0.2`.
