@@ -41,12 +41,11 @@ function New-RandomSecret {
     param([int]$Length = 64)
     $bytes = New-Object byte[] $Length
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try {
-        $rng.GetBytes($bytes)
-    } finally {
+    try { $rng.GetBytes($bytes) }
+    finally {
         if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() }
     }
-    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+=' 
     return -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
 }
 
@@ -60,12 +59,8 @@ function Find-Python {
     foreach ($candidate in $candidates) {
         try {
             $versionText = & $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null
-            if ($LASTEXITCODE -eq 0 -and [version]$versionText -ge [version]'3.11.0') {
-                return $candidate
-            }
-        } catch {
-            continue
-        }
+            if ($LASTEXITCODE -eq 0 -and [version]$versionText -ge [version]'3.11.0') { return $candidate }
+        } catch { continue }
     }
     return $null
 }
@@ -137,6 +132,36 @@ EMR_API_ENABLED=false
     Add-Check 'first_sign_in' 'warn' 'First sign-in password was generated in the local .env file.' 'Username: admin. Store the generated password securely.'
 }
 
+function Test-BackendDependencyImports {
+    if (-not (Test-Path $VenvPython)) { return $false }
+    $code = @'
+import importlib.util
+import sys
+required = {
+    "fastapi": "fastapi",
+    "uvicorn": "uvicorn",
+    "sqlalchemy": "SQLAlchemy",
+    "jose": "python-jose",
+    "passlib": "passlib",
+    "bcrypt": "bcrypt",
+    "multipart": "python-multipart",
+    "pydantic_settings": "pydantic-settings",
+    "email_validator": "email-validator",
+    "pypdf": "pypdf",
+    "cryptography": "cryptography",
+    "yaml": "PyYAML",
+    "httpx": "httpx",
+}
+missing = [package for module, package in required.items() if importlib.util.find_spec(module) is None]
+if missing:
+    print("Missing Python packages: " + ", ".join(missing))
+    raise SystemExit(1)
+print("Python dependency check passed for " + sys.executable)
+'@
+    & $VenvPython -c $code
+    return $LASTEXITCODE -eq 0
+}
+
 function Ensure-Venv {
     param([string]$PythonExe)
     if (-not $PythonExe) { return }
@@ -152,17 +177,20 @@ function Ensure-Venv {
 
     $requirements = Join-Path $RootDir 'backend\requirements-windows-local.txt'
     if (-not (Test-Path $requirements)) { $requirements = Join-Path $RootDir 'backend\requirements.txt' }
-    $check = & $VenvPython -c "import fastapi, sqlalchemy, yaml, cryptography, httpx, pypdf" 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-BackendDependencyImports) {
         Add-Check 'backend_dependencies' 'ok' 'Backend runtime dependencies import successfully.' ''
         return
     }
     Add-Check 'backend_dependencies' 'warn' 'Installing backend runtime dependencies.' $requirements
     & $VenvPython -m pip install -r $requirements
-    if ($LASTEXITCODE -eq 0) {
-        Add-Check 'backend_dependencies' 'ok' 'Backend runtime dependencies installed.' ''
-    } else {
+    if ($LASTEXITCODE -ne 0) {
         Add-Check 'backend_dependencies' 'fail' 'Backend dependency installation failed.' "exit=$LASTEXITCODE"
+        return
+    }
+    if (Test-BackendDependencyImports) {
+        Add-Check 'backend_dependencies' 'ok' 'Backend runtime dependencies installed and validated.' ''
+    } else {
+        Add-Check 'backend_dependencies' 'fail' 'Backend dependency installation completed, but imports still failed.' 'Review the Python output above.'
     }
 }
 
@@ -199,9 +227,7 @@ function Ensure-Frontend {
         Add-Check 'frontend_build' 'ok' 'Frontend build completed.' $indexFile
     } catch {
         Add-Check 'frontend_build' 'fail' 'Frontend build failed.' $_.Exception.Message
-    } finally {
-        Pop-Location
-    }
+    } finally { Pop-Location }
 }
 
 function Test-Port {
