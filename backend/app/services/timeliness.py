@@ -52,6 +52,21 @@ class RuleResult:
 
 
 @dataclass(frozen=True)
+class EvidenceComparison:
+    document_next_due_date: str | None
+    signature_anchor_due_date: str | None
+    loc_anchor_due_date: str | None
+    final_status: str
+    conflict_explanation: str
+    source_evidence: str
+    staff_signature_date: str | None
+    loc_effective_date: str | None
+    interval_days: int | None
+    loc_change_window_days: int | None
+    loc_change_rule_validated: bool
+
+
+@dataclass(frozen=True)
 class TimelinessEvaluation:
     client: TreatmentPlanClient
     status: str
@@ -62,6 +77,9 @@ class TimelinessEvaluation:
     evidence_summary: str
     last_checked_at: datetime
     rule_results: list[RuleResult]
+    evidence_comparison: EvidenceComparison
+    evidence_completeness_percent: int
+    missing_evidence_fields: list[str]
 
 
 def _utc_now() -> datetime:
@@ -88,6 +106,12 @@ def _days_until(due_date: date | None, evaluation_date: date) -> int | None:
     if due_date is None:
         return None
     return (due_date - evaluation_date).days
+
+
+def _add_days(anchor: date | None, days: int | None) -> date | None:
+    if anchor is None or days is None:
+        return None
+    return date.fromordinal(anchor.toordinal() + days)
 
 
 def _status_from_due_date(due_date: date | None, evaluation_date: date) -> tuple[str | None, int | None]:
@@ -136,6 +160,18 @@ def _latest_plan(plans: list[TreatmentPlanRecord], kind: TreatmentPlanKind) -> T
     return matching[0] if matching else None
 
 
+def _latest_review_plan(plans: list[TreatmentPlanRecord]) -> TreatmentPlanRecord | None:
+    matching = [plan for plan in plans if plan.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}]
+    matching.sort(
+        key=lambda plan: (
+            _date(plan.staff_signature_date) or _date(plan.document_date) or _date(plan.displayed_next_due_date) or date.min,
+            plan.id or 0,
+        ),
+        reverse=True,
+    )
+    return matching[0] if matching else None
+
+
 def _valid_review_date(plans: list[TreatmentPlanRecord]) -> date | None:
     candidates: list[date] = []
     for plan in plans:
@@ -158,6 +194,11 @@ def _result(rule_id: str, label: str, due_date: date | None, status: str, eviden
 
 
 def _select_overall(rule_results: list[RuleResult], evaluation_date: date) -> tuple[str, str | None, int | None, str]:
+    blocking_conflict = next((result for result in rule_results if result.rule_id == 'TP-DUE-DATE-CONFLICT'), None)
+    if blocking_conflict is not None:
+        due = _date(blocking_conflict.due_date)
+        return TimelinessStatus.needs_review.value, _date_str(due), _days_until(due, evaluation_date), blocking_conflict.rule_id
+
     due_candidates: list[tuple[date, int, RuleResult]] = []
     for result in rule_results:
         due = _date(result.due_date)
@@ -177,6 +218,80 @@ def _select_overall(rule_results: list[RuleResult], evaluation_date: date) -> tu
     return selected.status, _date_str(due), days_until, selected.rule_id
 
 
+def _active_level_of_care(loc_history: list[LevelOfCareHistory]) -> LevelOfCareHistory | None:
+    if not loc_history:
+        return None
+    sorted_history = sorted(loc_history, key=lambda item: (_date(item.effective_date) or date.min, item.id or 0))
+    active = [item for item in sorted_history if not item.discharge_date.strip()]
+    return active[-1] if active else sorted_history[-1]
+
+
+def _describe_due_date_comparison(
+    *,
+    document_due: date | None,
+    signature_due: date | None,
+    loc_due: date | None,
+    staff_signature: date | None,
+    loc_effective: date | None,
+    interval_days: int | None,
+    loc_change_validated: bool,
+) -> str:
+    parts = []
+    if document_due:
+        parts.append(f'source document Next Review Due is {document_due.isoformat()}')
+    else:
+        parts.append('source document Next Review Due is not recorded')
+    if signature_due:
+        parts.append(
+            f'staff signature anchor is {signature_due.isoformat()}'
+            f' ({staff_signature.isoformat()} + {interval_days} days)' if staff_signature and interval_days else f'staff signature anchor is {signature_due.isoformat()}'
+        )
+    else:
+        parts.append('staff signature anchor could not be calculated')
+    if loc_due:
+        parts.append(
+            f'LOC effective-date anchor is {loc_due.isoformat()}'
+            f' ({loc_effective.isoformat()} + {interval_days} days)' if loc_effective and interval_days else f'LOC effective-date anchor is {loc_due.isoformat()}'
+        )
+    else:
+        parts.append('LOC effective-date anchor could not be calculated')
+    if not loc_change_validated:
+        parts.append('LOC-change anchor/window is unvalidated by R3/Marleigh')
+    return '; '.join(parts) + '.'
+
+
+def _comparison_source_evidence(latest_review: TreatmentPlanRecord | None, active_loc: LevelOfCareHistory | None) -> str:
+    sources = []
+    if latest_review and latest_review.source_evidence.strip():
+        sources.append(latest_review.source_evidence.strip())
+    if active_loc and active_loc.source_evidence.strip():
+        sources.append(active_loc.source_evidence.strip())
+    return '; '.join(sources)
+
+
+def _evidence_completeness(
+    client: TreatmentPlanClient,
+    *,
+    latest_review: TreatmentPlanRecord | None,
+    active_loc: LevelOfCareHistory | None,
+    mapped_loc: str | None,
+    interval_days: int | None,
+    document_due: date | None,
+) -> tuple[int, list[str]]:
+    checks = [
+        ('Admission date', _date(client.admission_date) is not None),
+        ('Current level of care', bool(mapped_loc and interval_days is not None)),
+        ('Level-of-care effective date', bool(active_loc and _date(active_loc.effective_date))),
+        ('Treatment Plan Review staff signature', bool(latest_review and _date(latest_review.staff_signature_date))),
+        ('Treatment Plan Review source evidence', bool(latest_review and latest_review.source_evidence.strip())),
+        ('Source-document Next Review Due', document_due is not None),
+    ]
+    complete = sum(1 for _label, is_complete in checks if is_complete)
+    score = round((complete / len(checks)) * 100) if checks else 0
+    missing = [label for label, is_complete in checks if not is_complete]
+    return score, missing
+
+
 def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, evaluation_date: date | None = None) -> TimelinessEvaluation:
     checked_at = _utc_now()
     today = evaluation_date or checked_at.date()
@@ -187,6 +302,23 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     admission = _date(client.admission_date)
     mapped_loc, interval_days = map_level_of_care(client.current_level_of_care)
     has_conflict = any(plan.conflict_note.strip() for plan in plans)
+    latest_review = _latest_review_plan(plans)
+    active_loc = _active_level_of_care(loc_history)
+    document_due = _date(latest_review.displayed_next_due_date) if latest_review else None
+    staff_signature = _date(latest_review.staff_signature_date) if latest_review else None
+    loc_effective = _date(active_loc.effective_date) if active_loc else None
+    signature_anchor_due = _add_days(staff_signature, interval_days)
+    loc_anchor_due = _add_days(loc_effective, interval_days) if len(loc_history) > 1 else None
+    due_dates_for_comparison = {item for item in (document_due, signature_anchor_due, loc_anchor_due) if item is not None}
+    comparison_explanation = _describe_due_date_comparison(
+        document_due=document_due,
+        signature_due=signature_anchor_due,
+        loc_due=loc_anchor_due,
+        staff_signature=staff_signature,
+        loc_effective=loc_effective,
+        interval_days=interval_days,
+        loc_change_validated=app_settings.treatment_plan_loc_change_window_validated,
+    )
 
     if admission is None:
         rule_results.append(_result('TP-MISSING-ADMISSION', 'Admission date', None, TimelinessStatus.missing_data.value, 'Admission date is missing or unreadable.'))
@@ -247,6 +379,17 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     elif mapped_loc:
         rule_results.append(_result('TP-REVIEW-MISSING', 'Ongoing Treatment Plan Review', None, TimelinessStatus.missing_data.value, 'No valid staff/therapist review signature date was found.'))
 
+    if len(due_dates_for_comparison) > 1:
+        rule_results.append(
+            _result(
+                'TP-DUE-DATE-CONFLICT',
+                'Displayed and calculated due dates',
+                min(due_dates_for_comparison),
+                TimelinessStatus.needs_review.value,
+                f'Due-date evidence conflicts: {comparison_explanation}',
+            )
+        )
+
     if len(loc_history) > 1:
         latest_loc = loc_history[-1]
         loc_effective = _date(latest_loc.effective_date)
@@ -275,6 +418,27 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
 
     status, next_due_date, days_until_due, rule_used = _select_overall(rule_results, today)
     evidence_summary = '; '.join(result.evidence_summary for result in rule_results[:3])
+    evidence_completeness_percent, missing_evidence_fields = _evidence_completeness(
+        client,
+        latest_review=latest_review,
+        active_loc=active_loc,
+        mapped_loc=mapped_loc,
+        interval_days=interval_days,
+        document_due=document_due,
+    )
+    evidence_comparison = EvidenceComparison(
+        document_next_due_date=_date_str(document_due),
+        signature_anchor_due_date=_date_str(signature_anchor_due),
+        loc_anchor_due_date=_date_str(loc_anchor_due),
+        final_status=status,
+        conflict_explanation=comparison_explanation,
+        source_evidence=_comparison_source_evidence(latest_review, active_loc),
+        staff_signature_date=_date_str(staff_signature),
+        loc_effective_date=_date_str(loc_effective),
+        interval_days=interval_days,
+        loc_change_window_days=app_settings.treatment_plan_loc_change_window_days,
+        loc_change_rule_validated=app_settings.treatment_plan_loc_change_window_validated,
+    )
     return TimelinessEvaluation(
         client=client,
         status=status,
@@ -285,6 +449,9 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
         evidence_summary=evidence_summary,
         last_checked_at=checked_at,
         rule_results=rule_results,
+        evidence_comparison=evidence_comparison,
+        evidence_completeness_percent=evidence_completeness_percent,
+        missing_evidence_fields=missing_evidence_fields,
     )
 
 
@@ -328,7 +495,9 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
     client.level_of_care_history[:] = [
         LevelOfCareHistory(
             level_of_care=item.level_of_care.strip(),
+            facility=item.facility.strip(),
             effective_date=item.effective_date.strip(),
+            discharge_date=item.discharge_date.strip(),
             source_evidence=item.source_evidence.strip(),
             source_note_set_id=source_note_set_id,
         )
@@ -341,7 +510,10 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
             document_date=item.document_date.strip(),
             staff_signature_date=item.staff_signature_date.strip(),
             client_signature_date=item.client_signature_date.strip(),
+            reviewer_signature_date=item.reviewer_signature_date.strip(),
+            displayed_next_due_date=item.displayed_next_due_date.strip(),
             source_evidence=item.source_evidence.strip(),
+            source_section=item.source_section.strip(),
             source_document_id=item.source_document_id.strip(),
             source_note_set_id=source_note_set_id,
             is_valid=item.is_valid,
@@ -404,7 +576,9 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
         client.level_of_care_history.append(
             LevelOfCareHistory(
                 level_of_care=note_set.level_of_care,
+                facility=note_set.source_system,
                 effective_date=note_set.admission_date,
+                discharge_date=note_set.discharge_date,
                 source_evidence=f'Upload metadata from note set {note_set.id}',
                 source_note_set_id=note_set.id,
             )
@@ -422,6 +596,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
                 staff_signature_date=signature_date if document.staff_signed else '',
                 client_signature_date=signature_date if document.client_signed else '',
                 source_evidence=f'{document.document_label or document.original_filename} from note set {note_set.id}',
+                source_section=document.alleva_bucket.value,
                 source_document_id=document.source_document_id or document.source_document_reference_id or str(document.id),
                 source_note_set_id=note_set.id,
                 is_valid=document.completion_status.value == 'completed',
@@ -447,6 +622,8 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
         'status': evaluation.status,
         'rule_used': evaluation.rule_used,
         'evidence_summary': evaluation.evidence_summary,
+        'evidence_completeness_percent': evaluation.evidence_completeness_percent,
+        'missing_evidence_fields': evaluation.missing_evidence_fields,
         'last_checked_at': evaluation.last_checked_at,
         'last_imported_at': client.last_imported_at,
     }
@@ -458,9 +635,19 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
         **summary_payload(evaluation),
         'is_active': client.is_active,
         'source_evidence': client.source_evidence,
+        'evidence_comparison': evaluation.evidence_comparison.__dict__,
         'rule_results': [result.__dict__ for result in evaluation.rule_results],
         'level_of_care_history': [
-            {'id': item.id, 'level_of_care': item.level_of_care, 'effective_date': item.effective_date, 'source_evidence': item.source_evidence}
+            {
+                'id': item.id,
+                'level_of_care': item.level_of_care,
+                'facility': item.facility,
+                'effective_date': item.effective_date,
+                'discharge_date': item.discharge_date,
+                'interval_days': map_level_of_care(item.level_of_care)[1],
+                'is_current': item.id == (_active_level_of_care(list(client.level_of_care_history)).id if _active_level_of_care(list(client.level_of_care_history)) else None),
+                'source_evidence': item.source_evidence,
+            }
             for item in sorted(client.level_of_care_history, key=lambda item: _date(item.effective_date) or date.min)
         ],
         'treatment_plans': [
@@ -470,7 +657,10 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
                 'document_date': item.document_date,
                 'staff_signature_date': item.staff_signature_date,
                 'client_signature_date': item.client_signature_date,
+                'reviewer_signature_date': item.reviewer_signature_date,
+                'displayed_next_due_date': item.displayed_next_due_date,
                 'source_evidence': item.source_evidence,
+                'source_section': item.source_section,
                 'source_document_id': item.source_document_id,
                 'is_valid': item.is_valid,
                 'conflict_note': item.conflict_note,

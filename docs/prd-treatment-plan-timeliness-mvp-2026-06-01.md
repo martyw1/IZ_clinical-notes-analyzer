@@ -12,6 +12,8 @@ This PRD defines the first MVP for a Treatment Plan Timeliness Tracker inside th
 
 This is not the full future clinical notes analyzer. The first release should solve the operational problem of trusted treatment-plan timeline tracking.
 
+Implementation note 2026-06-09: the production `Treatment plans` tab now uses a compact work queue with quick status filters, selected-client evidence detail, date-anchor comparison, LOC history, evidence preview, and task-list copy/export for manual Asana tracking. Because the LOC-change anchor/window is still unvalidated, source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date are shown side by side; conflicts remain `Needs Review`.
+
 ## 2. MVP Positioning
 
 Use the product label **Treatment Plan Timeliness Tracker** in screens and planning. The broader repo can remain IZ Clinical Notes Analyzer, but this MVP should not imply broad clinical-note content scoring or AI judgment.

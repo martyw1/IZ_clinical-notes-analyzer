@@ -153,6 +153,7 @@ type AuditLogRecord = {
 }
 
 type TimelinessStatus = 'Overdue' | 'Urgent' | 'Due Soon' | 'Needs Review' | 'Missing Data' | 'Compliant'
+type TimelinessFilter = 'All' | TimelinessStatus
 
 type TimelinessClientSummary = {
   id: number
@@ -167,6 +168,8 @@ type TimelinessClientSummary = {
   status: TimelinessStatus
   rule_used: string
   evidence_summary: string
+  evidence_completeness_percent: number
+  missing_evidence_fields: string[]
   last_checked_at: string
   last_imported_at: string | null
 }
@@ -196,7 +199,11 @@ type TimelinessRuleResult = {
 type TimelinessLevelOfCare = {
   id: number
   level_of_care: string
+  facility: string
   effective_date: string
+  discharge_date: string
+  interval_days: number | null
+  is_current: boolean
   source_evidence: string
 }
 
@@ -206,7 +213,10 @@ type TimelinessTreatmentPlan = {
   document_date: string
   staff_signature_date: string
   client_signature_date: string
+  reviewer_signature_date: string
+  displayed_next_due_date: string
   source_evidence: string
+  source_section: string
   source_document_id: string
   is_valid: boolean
   conflict_note: string
@@ -223,9 +233,24 @@ type TimelinessOverride = {
   created_at: string
 }
 
+type TimelinessEvidenceComparison = {
+  document_next_due_date: string | null
+  signature_anchor_due_date: string | null
+  loc_anchor_due_date: string | null
+  final_status: TimelinessStatus
+  conflict_explanation: string
+  source_evidence: string
+  staff_signature_date: string | null
+  loc_effective_date: string | null
+  interval_days: number | null
+  loc_change_window_days: number | null
+  loc_change_rule_validated: boolean
+}
+
 type TimelinessClientDetail = TimelinessClientSummary & {
   is_active: boolean
   source_evidence: string
+  evidence_comparison: TimelinessEvidenceComparison
   rule_results: TimelinessRuleResult[]
   level_of_care_history: TimelinessLevelOfCare[]
   treatment_plans: TimelinessTreatmentPlan[]
@@ -435,6 +460,24 @@ type PasswordChangeForm = {
   new_password: string
 }
 
+type EvidencePreviewField = {
+  label: string
+  value: string
+  emphasis?: boolean
+}
+
+type EvidencePreview = {
+  title: string
+  subtitle: string
+  fields: EvidencePreviewField[]
+  note: string
+}
+
+type AppDialog = {
+  title: string
+  message: string
+}
+
 type TrendPoint = {
   label: string
   count: number
@@ -531,6 +574,9 @@ const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
   active: 'Current binder',
   superseded: 'Superseded',
 }
+
+const TIMELINESS_FILTERS: TimelinessFilter[] = ['All', 'Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data', 'Compliant']
+const TIMELINESS_TASK_STATUSES = new Set<TimelinessStatus>(['Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data'])
 
 const VIEW_LABELS: Record<AppView, string> = {
   dashboard: 'Chart audit',
@@ -740,6 +786,27 @@ function downloadTextFile(filename: string, content: string, contentType: string
   URL.revokeObjectURL(url)
 }
 
+function timelinessTaskItems(items: TimelinessClientSummary[]) {
+  return items.filter((item) => TIMELINESS_TASK_STATUSES.has(item.status))
+}
+
+function buildTimelinessTaskList(items: TimelinessClientSummary[]) {
+  const header = ['client_label', 'due_date', 'status', 'current_loc', 'primary_clinician', 'reason']
+  const rows = timelinessTaskItems(items).map((item) =>
+    [
+      item.permitted_name || item.patient_id,
+      item.next_due_date || 'Not calculated',
+      item.status,
+      item.current_level_of_care || 'Missing',
+      item.counselor_name || 'Unassigned',
+      item.evidence_summary || item.rule_used,
+    ]
+      .map(csvCell)
+      .join(','),
+  )
+  return [header.map(csvCell).join(','), ...rows].join('\n')
+}
+
 function workflowTone(state: string) {
   if (state === 'Approved by Office Manager') return 'success'
   if (state === 'Returned to Counselor') return 'danger'
@@ -749,9 +816,36 @@ function workflowTone(state: string) {
 function timelinessTone(status: string) {
   if (status === 'Compliant') return 'success'
   if (status === 'Overdue') return 'danger'
-  if (status === 'Urgent' || status === 'Due Soon' || status === 'Needs Review') return 'warning'
+  if (status === 'Needs Review') return 'attention'
+  if (status === 'Urgent' || status === 'Due Soon') return 'warning'
   if (status === 'Missing Data') return 'muted'
   return 'neutral'
+}
+
+function timelinessFilterCount(dashboard: TimelinessDashboard | null, filter: TimelinessFilter) {
+  if (!dashboard) return 0
+  if (filter === 'All') return dashboard.items.length
+  return dashboard.items.filter((item) => item.status === filter).length
+}
+
+function planKindLabel(kind: string) {
+  if (kind === 'initial') return 'Initial'
+  if (kind === 'master') return 'Master'
+  if (kind === 'review') return 'Review'
+  if (kind === 'loc_update') return 'LOC update'
+  return kind || 'Plan'
+}
+
+function planKindTone(kind: string) {
+  if (kind === 'initial') return 'success'
+  if (kind === 'master') return 'neutral'
+  if (kind === 'review') return 'attention'
+  if (kind === 'loc_update') return 'warning'
+  return 'muted'
+}
+
+function displayDate(value: string | null | undefined) {
+  return value || 'Not recorded'
 }
 
 function signedLabel(value: string) {
@@ -894,7 +988,11 @@ export function App() {
   const [selectedTimelinessClientId, setSelectedTimelinessClientId] = useState<number | null>(null)
   const [selectedTimelinessClient, setSelectedTimelinessClient] = useState<TimelinessClientDetail | null>(null)
   const [timelinessEvaluationDate, setTimelinessEvaluationDate] = useState('')
+  const [timelinessStatusFilter, setTimelinessStatusFilter] = useState<TimelinessFilter>('All')
+  const [timelinessSearch, setTimelinessSearch] = useState('')
   const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
+  const [evidencePreview, setEvidencePreview] = useState<EvidencePreview | null>(null)
+  const [appDialog, setAppDialog] = useState<AppDialog | null>(null)
   const [uploadForm, setUploadForm] = useState<UploadFormState>(createUploadForm())
   const [patientIdDetection, setPatientIdDetection] = useState<PatientIdDetection | null>(null)
   const [patientIdTouched, setPatientIdTouched] = useState(false)
@@ -981,6 +1079,26 @@ export function App() {
 
   const accessAttemptLogs = useMemo(() => logs.filter((entry) => entry.event_category === 'access_attempt'), [logs])
 
+  const filteredTimelinessItems = useMemo(() => {
+    const query = timelinessSearch.trim().toLowerCase()
+    const items = timelinessDashboard?.items || []
+    return items.filter((item) => {
+      const matchesStatus = timelinessStatusFilter === 'All' || item.status === timelinessStatusFilter
+      const matchesQuery =
+        !query ||
+        item.patient_id.toLowerCase().includes(query) ||
+        item.permitted_name.toLowerCase().includes(query) ||
+        item.current_level_of_care.toLowerCase().includes(query) ||
+        item.counselor_name.toLowerCase().includes(query)
+      return matchesStatus && matchesQuery
+    })
+  }, [timelinessDashboard, timelinessSearch, timelinessStatusFilter])
+
+  const exportableTimelinessTaskCount = useMemo(
+    () => timelinessTaskItems(timelinessDashboard?.items || []).length,
+    [timelinessDashboard],
+  )
+
   const versionLabel = versionInfo
     ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
@@ -991,6 +1109,12 @@ export function App() {
     current.searchParams.set('view', activeView)
     window.history.replaceState(null, '', `${current.pathname}?${current.searchParams.toString()}`)
   }, [activeView])
+
+  useEffect(() => {
+    if (error) {
+      setAppDialog({ title: 'Action could not be completed', message: error })
+    }
+  }, [error])
 
   useEffect(() => {
     let isMounted = true
@@ -1632,6 +1756,101 @@ export function App() {
     setStatus(`Exported treatment-plan report for patient ${selectedTimelinessClient.patient_id}.`)
   }
 
+  function exportTimelinessTaskList() {
+    const items = timelinessDashboard?.items || []
+    const taskCount = timelinessTaskItems(items).length
+    if (!taskCount) {
+      setAppDialog({
+        title: 'No task rows to export',
+        message: 'There are no overdue, urgent, due soon, needs review, or missing data treatment-plan items in the current queue.',
+      })
+      return
+    }
+    downloadTextFile('treatment-plan-task-list.csv', buildTimelinessTaskList(items), 'text/csv')
+    setStatus(`Exported ${taskCount} treatment-plan task rows for manual tracking.`)
+  }
+
+  async function copyTimelinessTaskList() {
+    const items = timelinessDashboard?.items || []
+    const taskCount = timelinessTaskItems(items).length
+    if (!taskCount) {
+      setAppDialog({
+        title: 'No task rows to copy',
+        message: 'There are no overdue, urgent, due soon, needs review, or missing data treatment-plan items in the current queue.',
+      })
+      return
+    }
+    const taskList = buildTimelinessTaskList(items)
+    try {
+      if (!navigator.clipboard?.writeText) {
+        downloadTextFile('treatment-plan-task-list.csv', taskList, 'text/csv')
+        setAppDialog({
+          title: 'Clipboard unavailable',
+          message: 'The browser clipboard is not available, so the task list was exported as a CSV file instead.',
+        })
+        return
+      }
+      await navigator.clipboard.writeText(taskList)
+      setStatus(`Copied ${taskCount} treatment-plan task rows for manual tracking.`)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'The browser could not copy the task list.'
+      setAppDialog({ title: 'Copy task list failed', message })
+    }
+  }
+
+  function openComparisonEvidence() {
+    if (!selectedTimelinessClient) return
+    const comparison = selectedTimelinessClient.evidence_comparison
+    setEvidencePreview({
+      title: 'Review due-date evidence',
+      subtitle: selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id,
+      fields: [
+        { label: 'Source-document Next Review Due', value: displayDate(comparison.document_next_due_date), emphasis: true },
+        { label: 'Staff signature date', value: displayDate(comparison.staff_signature_date), emphasis: true },
+        { label: 'Staff signature + LOC cadence', value: displayDate(comparison.signature_anchor_due_date) },
+        { label: 'Current LOC effective date', value: displayDate(comparison.loc_effective_date), emphasis: true },
+        { label: 'LOC effective date + cadence', value: displayDate(comparison.loc_anchor_due_date) },
+        { label: 'Cadence interval', value: comparison.interval_days == null ? 'Not configured' : `${comparison.interval_days} days` },
+        { label: 'Source evidence', value: comparison.source_evidence || selectedTimelinessClient.source_evidence || 'Not recorded' },
+      ],
+      note: comparison.conflict_explanation || 'No due-date comparison detail is available.',
+    })
+  }
+
+  function openPlanEvidence(plan: TimelinessTreatmentPlan) {
+    setEvidencePreview({
+      title: `${planKindLabel(plan.plan_kind)} treatment-plan evidence`,
+      subtitle: plan.source_section || plan.source_evidence || 'Treatment plan source',
+      fields: [
+        { label: 'Document date', value: displayDate(plan.document_date) },
+        { label: 'Staff / therapist signature', value: signedLabel(plan.staff_signature_date), emphasis: true },
+        { label: 'Client signature', value: plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional for ongoing reviews' : 'Missing') },
+        { label: 'Reviewer signature', value: displayDate(plan.reviewer_signature_date) },
+        { label: 'Displayed Next Review Due', value: displayDate(plan.displayed_next_due_date), emphasis: Boolean(plan.displayed_next_due_date) },
+        { label: 'Source document ID', value: plan.source_document_id || 'Not recorded' },
+        { label: 'Source evidence', value: plan.source_evidence || 'Not recorded' },
+      ],
+      note: plan.conflict_note || 'Evidence preview shows date/signature metadata only; raw clinical document text is not displayed here.',
+    })
+  }
+
+  function openLocEvidence(entry: TimelinessLevelOfCare) {
+    setEvidencePreview({
+      title: 'Level-of-care evidence',
+      subtitle: entry.source_evidence || entry.level_of_care || 'LOC source',
+      fields: [
+        { label: 'Level of care', value: entry.level_of_care || 'Missing', emphasis: true },
+        { label: 'Facility', value: entry.facility || 'Not recorded' },
+        { label: 'Effective / admission date', value: displayDate(entry.effective_date), emphasis: true },
+        { label: 'Discharge / stepdown date', value: displayDate(entry.discharge_date) },
+        { label: 'Cadence interval', value: entry.interval_days == null ? 'Not configured' : `${entry.interval_days} days` },
+        { label: 'State', value: entry.is_current ? 'Current' : 'Ended' },
+        { label: 'Source evidence', value: entry.source_evidence || 'Not recorded' },
+      ],
+      note: entry.is_current ? 'This is treated as the current LOC row because it has no discharge/stepdown date.' : 'Ended LOC rows explain historical cadence windows.',
+    })
+  }
+
   async function handleSaveReviewChanges() {
     if (!selectedChart || !canEditCriteria) return
     setIsBusy(true)
@@ -2035,7 +2254,11 @@ export function App() {
     setTimelinessDashboard(null)
     setSelectedTimelinessClient(null)
     setSelectedTimelinessClientId(null)
+    setTimelinessStatusFilter('All')
+    setTimelinessSearch('')
     setTimelinessOverrideForm(createTimelinessOverrideForm())
+    setEvidencePreview(null)
+    setAppDialog(null)
     setReadiness(null)
     setStatus('Signed out. Sign in to continue.')
     setError('')
@@ -2368,20 +2591,28 @@ export function App() {
 	          ) : null}
 
 	          {activeView === 'timeliness' ? (
-	            <section className='workspace-grid'>
-	              <aside className='panel queue-panel'>
+	            <section className='timeliness-workspace'>
+	              <aside className='panel queue-panel timeliness-queue-panel'>
 	                <div className='panel-heading'>
 	                  <div>
 	                    <h2>Treatment plan timeliness</h2>
-	                    <p>Active clients, due dates, and treatment-plan review status.</p>
+	                    <p>Evidence-first work queue sorted by due status, missing evidence, and review ambiguity.</p>
 	                  </div>
-	                  <button type='button' className='ghost-button' onClick={() => void loadTimelinessDashboard()} disabled={isBusy}>
-	                    Refresh
-	                  </button>
+	                  <div className='button-row'>
+	                    <button type='button' className='ghost-button' onClick={() => void copyTimelinessTaskList()} disabled={isBusy}>
+	                      Copy task list
+	                    </button>
+	                    <button type='button' className='ghost-button' onClick={exportTimelinessTaskList} disabled={isBusy}>
+	                      Export task list
+	                    </button>
+	                    <button type='button' className='ghost-button' onClick={() => void loadTimelinessDashboard()} disabled={isBusy}>
+	                      Refresh
+	                    </button>
+	                  </div>
 	                </div>
 
 	                <form
-	                  className='filter-row'
+	                  className='filter-row timeliness-filter-row'
 	                  onSubmit={(event) => {
 	                    event.preventDefault()
 	                    void loadTimelinessDashboard()
@@ -2391,76 +2622,123 @@ export function App() {
 	                    Evaluation date
 	                    <input type='date' value={timelinessEvaluationDate} onChange={(event) => setTimelinessEvaluationDate(event.target.value)} />
 	                  </label>
+	                  <label>
+	                    Search queue
+	                    <input
+	                      type='search'
+	                      value={timelinessSearch}
+	                      onChange={(event) => setTimelinessSearch(event.target.value)}
+	                      placeholder='Client, LOC, clinician'
+	                    />
+	                  </label>
 	                  <button type='submit' disabled={isBusy}>
 	                    Apply date
 	                  </button>
 	                </form>
 
-	                <div className='dashboard-metrics'>
+	                <div className='dashboard-metrics timeliness-metrics'>
 	                  <article className='mini-card'>
 	                    <span>Active clients</span>
 	                    <strong>{timelinessDashboard?.total_active_clients ?? 0}</strong>
 	                  </article>
 	                  <article className='mini-card'>
-	                    <span>Compliance</span>
-	                    <strong>{timelinessDashboard ? `${timelinessDashboard.compliance_percentage}%` : '0%'}</strong>
+	                    <span>Task rows</span>
+	                    <strong>{exportableTimelinessTaskCount}</strong>
 	                  </article>
-	                  <article className='mini-card'>
+	                  <article className='mini-card mini-card--danger'>
 	                    <span>Overdue</span>
 	                    <strong>{timelinessDashboard?.overdue ?? 0}</strong>
 	                  </article>
-	                  <article className='mini-card'>
+	                  <article className='mini-card mini-card--warning'>
 	                    <span>Urgent</span>
 	                    <strong>{timelinessDashboard?.urgent ?? 0}</strong>
 	                  </article>
-	                  <article className='mini-card'>
-	                    <span>Due soon</span>
-	                    <strong>{timelinessDashboard?.due_soon ?? 0}</strong>
-	                  </article>
-	                  <article className='mini-card'>
+	                  <article className='mini-card mini-card--attention'>
 	                    <span>Needs review</span>
 	                    <strong>{timelinessDashboard?.needs_review ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card mini-card--muted'>
+	                    <span>Missing data</span>
+	                    <strong>{timelinessDashboard?.missing_data ?? 0}</strong>
 	                  </article>
 	                </div>
 
 	                {timelinessDashboard && !timelinessDashboard.loc_change_window_validated ? (
-	                  <section className='panel-subsection admin-banner'>
-	                    <h3>LOC-change window</h3>
+	                  <section className='panel-subsection admin-banner timeliness-loc-warning'>
+	                    <h3>Unvalidated LOC-change rule</h3>
 	                    <p>
-	                      Unvalidated by R3/Marleigh. Current setting:{' '}
+	                      The level-of-care change anchor/window is still unvalidated by R3/Marleigh. Current setting:{' '}
 	                      {timelinessDashboard.loc_change_window_days == null ? 'not set' : `${timelinessDashboard.loc_change_window_days} days`}.
 	                    </p>
 	                  </section>
 	                ) : null}
 
+	                <div className='timeliness-filter-strip' aria-label='Timeliness status filters'>
+	                  {TIMELINESS_FILTERS.map((filter) => (
+	                    <button
+	                      key={filter}
+	                      type='button'
+	                      className={timelinessStatusFilter === filter ? 'status-filter status-filter--active' : 'status-filter'}
+	                      aria-pressed={timelinessStatusFilter === filter}
+	                      onClick={() => setTimelinessStatusFilter(filter)}
+	                    >
+	                      <span>{filter}</span>
+	                      <strong>{timelinessFilterCount(timelinessDashboard, filter)}</strong>
+	                    </button>
+	                  ))}
+	                </div>
+
 	                {timelinessDashboard?.items.length ? (
-	                  <ul className='queue-list'>
-	                    {timelinessDashboard.items.map((item) => (
-	                      <li key={item.id}>
+	                  <div className='timeliness-queue-table' role='table' aria-label='Treatment plan timeliness queue'>
+	                    <div className='timeliness-queue-table__head' role='row'>
+	                      <span>Client</span>
+	                      <span>Status</span>
+	                      <span>Next due</span>
+	                      <span>LOC</span>
+	                      <span>Evidence</span>
+	                    </div>
+	                    {filteredTimelinessItems.length ? (
+	                      filteredTimelinessItems.map((item) => (
 	                        <button
 	                          type='button'
-	                          className={selectedTimelinessClientId === item.id ? 'queue-item queue-item--active' : 'queue-item'}
+	                          key={item.id}
+	                          className={
+	                            selectedTimelinessClientId === item.id
+	                              ? 'timeliness-queue-table__row timeliness-queue-table__row--active'
+	                              : 'timeliness-queue-table__row'
+	                          }
 	                          onClick={() => void loadTimelinessClientDetail(item.id)}
+	                          aria-label={`Open ${item.permitted_name || item.patient_id} treatment plan evidence`}
 	                        >
-	                          <div>
+	                          <span>
 	                            <strong>{item.permitted_name || item.patient_id}</strong>
-	                            <span>{item.patient_id}</span>
-	                            <span>{item.counselor_name || 'Counselor pending'}</span>
-	                          </div>
-	                          <div className='queue-item-meta'>
+	                            <small>{item.patient_id}</small>
+	                            <small>{item.counselor_name || 'Primary clinician pending'}</small>
+	                          </span>
+	                          <span>
 	                            <span className={`pill pill--${timelinessTone(item.status)}`}>{item.status}</span>
-	                            <span>{item.next_due_date || 'No due date'}</span>
-	                          </div>
+	                          </span>
+	                          <span>
+	                            <strong>{item.next_due_date || 'Missing'}</strong>
+	                            <small>{item.days_until_due == null ? 'days n/a' : `${item.days_until_due} days`}</small>
+	                          </span>
+	                          <span>{item.current_level_of_care || 'Missing'}</span>
+	                          <span>
+	                            <strong>{item.evidence_completeness_percent}%</strong>
+	                            <small>{item.rule_used}</small>
+	                          </span>
 	                        </button>
-	                      </li>
-	                    ))}
-	                  </ul>
+	                      ))
+	                    ) : (
+	                      <p className='empty-state'>No treatment-plan clients match the current filter.</p>
+	                    )}
+	                  </div>
 	                ) : (
 	                  <p className='empty-state'>No active treatment-plan clients are loaded.</p>
 	                )}
 	              </aside>
 
-	              <section className='panel detail-panel'>
+	              <section className='panel detail-panel timeliness-detail-panel'>
 	                {selectedTimelinessClient ? (
 	                  <>
 	                    <div className='panel-heading'>
@@ -2479,46 +2757,88 @@ export function App() {
 	                      </div>
 	                    </div>
 
-	                    <dl className='detail-grid'>
+	                    <section className='timeliness-client-summary' aria-label='Selected treatment plan client summary'>
 	                      <div>
-	                        <dt>Level of care</dt>
-	                        <dd>{selectedTimelinessClient.current_level_of_care || 'Missing'}</dd>
+	                        <span>Next review due</span>
+	                        <strong>{selectedTimelinessClient.next_due_date || 'Missing'}</strong>
+	                        <small>{selectedTimelinessClient.days_until_due == null ? 'No day count' : `${selectedTimelinessClient.days_until_due} days from evaluation date`}</small>
 	                      </div>
-	                      <div>
-	                        <dt>Admission</dt>
-	                        <dd>{selectedTimelinessClient.admission_date || 'Missing'}</dd>
+	                      <dl>
+	                        <div>
+	                          <dt>Admission date</dt>
+	                          <dd>{selectedTimelinessClient.admission_date || 'Missing'}</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Current LOC</dt>
+	                          <dd>{selectedTimelinessClient.current_level_of_care || 'Missing'}</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Primary clinician</dt>
+	                          <dd>{selectedTimelinessClient.counselor_name || 'Not recorded'}</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Evidence completeness</dt>
+	                          <dd>
+	                            <span className='evidence-meter' aria-label={`Evidence completeness ${selectedTimelinessClient.evidence_completeness_percent}%`}>
+	                              <span style={{ width: `${selectedTimelinessClient.evidence_completeness_percent}%` }} />
+	                            </span>
+	                            {selectedTimelinessClient.evidence_completeness_percent}%
+	                          </dd>
+	                        </div>
+	                      </dl>
+	                      {selectedTimelinessClient.missing_evidence_fields.length ? (
+	                        <p>Missing: {selectedTimelinessClient.missing_evidence_fields.join(', ')}</p>
+	                      ) : (
+	                        <p>Required evidence fields are present for this calculation.</p>
+	                      )}
+	                    </section>
+
+	                    <section className='panel-subsection evidence-comparison-panel'>
+	                      <div className='panel-heading'>
+	                        <div>
+	                          <h3>Evidence comparison</h3>
+	                          <p>Document due date, signature calculation, and LOC-anchor calculation are shown together.</p>
+	                        </div>
+	                        <button type='button' className='ghost-button' onClick={openComparisonEvidence}>
+	                          View evidence
+	                        </button>
 	                      </div>
-	                      <div>
-	                        <dt>Last valid review</dt>
-	                        <dd>{selectedTimelinessClient.last_valid_review_date || 'Missing'}</dd>
+	                      <div className='comparison-grid'>
+	                        <article>
+	                          <span>Source-document Next Review Due</span>
+	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.document_next_due_date)}</strong>
+	                        </article>
+	                        <article>
+	                          <span>Staff signature + LOC interval</span>
+	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.signature_anchor_due_date)}</strong>
+	                          <small>{displayDate(selectedTimelinessClient.evidence_comparison.staff_signature_date)} staff signature</small>
+	                        </article>
+	                        <article>
+	                          <span>Current LOC effective date + interval</span>
+	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.loc_anchor_due_date)}</strong>
+	                          <small>{displayDate(selectedTimelinessClient.evidence_comparison.loc_effective_date)} LOC effective</small>
+	                        </article>
+	                        <article>
+	                          <span>Final status</span>
+	                          <strong>{selectedTimelinessClient.evidence_comparison.final_status}</strong>
+	                          <small>{selectedTimelinessClient.rule_used}</small>
+	                        </article>
 	                      </div>
-	                      <div>
-	                        <dt>Next due</dt>
-	                        <dd>{selectedTimelinessClient.next_due_date || 'Missing'}</dd>
+	                      <div className='rule-alert'>
+	                        <strong>
+	                          {selectedTimelinessClient.evidence_comparison.loc_change_rule_validated
+	                            ? 'Validated LOC-change setting'
+	                            : 'Unvalidated LOC-change rule'}
+	                        </strong>
+	                        <p>{selectedTimelinessClient.evidence_comparison.conflict_explanation}</p>
 	                      </div>
-	                      <div>
-	                        <dt>Days until due</dt>
-	                        <dd>{selectedTimelinessClient.days_until_due ?? 'n/a'}</dd>
-	                      </div>
-	                      <div>
-	                        <dt>Rule used</dt>
-	                        <dd>{selectedTimelinessClient.rule_used}</dd>
-	                      </div>
-	                      <div>
-	                        <dt>Last import</dt>
-	                        <dd>{formatDateTime(selectedTimelinessClient.last_imported_at)}</dd>
-	                      </div>
-	                      <div>
-	                        <dt>Last checked</dt>
-	                        <dd>{formatDateTime(selectedTimelinessClient.last_checked_at)}</dd>
-	                      </div>
-	                    </dl>
+	                    </section>
 
 	                    <section className='panel-subsection'>
 	                      <h3>Rule results</h3>
 	                      <div className='finding-list'>
 	                        {selectedTimelinessClient.rule_results.map((result) => (
-	                          <article key={result.rule_id} className='finding-card'>
+	                          <article key={result.rule_id} className='finding-card finding-card--compact'>
 	                            <div className='finding-card__header'>
 	                              <div>
 	                                <strong>{result.label}</strong>
@@ -2544,17 +2864,31 @@ export function App() {
 	                    <section className='panel-subsection'>
 	                      <h3>Level-of-care history</h3>
 	                      {selectedTimelinessClient.level_of_care_history.length ? (
-	                        <div className='timeliness-table'>
+	                        <div className='timeliness-table timeliness-table--loc'>
 	                          <div className='timeliness-table__head'>
 	                            <span>LOC</span>
+	                            <span>Facility</span>
 	                            <span>Effective</span>
+	                            <span>Discharge</span>
+	                            <span>Cadence</span>
+	                            <span>State</span>
 	                            <span>Evidence</span>
 	                          </div>
 	                          {selectedTimelinessClient.level_of_care_history.map((entry) => (
 	                            <div key={entry.id} className='timeliness-table__row'>
 	                              <span>{entry.level_of_care}</span>
+	                              <span>{entry.facility || 'Not recorded'}</span>
 	                              <span>{entry.effective_date || 'Missing'}</span>
-	                              <span>{entry.source_evidence || 'Not recorded'}</span>
+	                              <span>{entry.discharge_date || 'Current'}</span>
+	                              <span>{entry.interval_days == null ? 'Not configured' : `${entry.interval_days} days`}</span>
+	                              <span>
+	                                <span className={`pill pill--${entry.is_current ? 'success' : 'neutral'}`}>{entry.is_current ? 'Current' : 'Ended'}</span>
+	                              </span>
+	                              <span>
+	                                <button type='button' className='table-action-button' onClick={() => openLocEvidence(entry)}>
+	                                  View
+	                                </button>
+	                              </span>
 	                            </div>
 	                          ))}
 	                        </div>
@@ -2564,23 +2898,35 @@ export function App() {
 	                    </section>
 
 	                    <section className='panel-subsection'>
-	                      <h3>Treatment plan history</h3>
+	                      <h3>Treatment plan evidence</h3>
 	                      {selectedTimelinessClient.treatment_plans.length ? (
-	                        <div className='timeliness-table timeliness-table--wide'>
+	                        <div className='timeliness-table timeliness-table--evidence'>
 	                          <div className='timeliness-table__head'>
-	                            <span>Kind</span>
+	                            <span>Type</span>
+	                            <span>Source</span>
 	                            <span>Document</span>
 	                            <span>Staff</span>
 	                            <span>Client</span>
+	                            <span>Next due</span>
 	                            <span>Status</span>
+	                            <span>Evidence</span>
 	                          </div>
 	                          {selectedTimelinessClient.treatment_plans.map((plan) => (
 	                            <div key={plan.id} className='timeliness-table__row'>
-	                              <span>{plan.plan_kind}</span>
+	                              <span>
+	                                <span className={`pill pill--${planKindTone(plan.plan_kind)}`}>{planKindLabel(plan.plan_kind)}</span>
+	                              </span>
+	                              <span>{plan.source_section || plan.source_evidence || 'Not recorded'}</span>
 	                              <span>{plan.document_date || 'Missing'}</span>
 	                              <span>{signedLabel(plan.staff_signature_date)}</span>
-	                              <span>{signedLabel(plan.client_signature_date)}</span>
+	                              <span>{plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional' : 'Missing')}</span>
+	                              <span>{plan.displayed_next_due_date || 'Not recorded'}</span>
 	                              <span>{plan.is_valid && !plan.conflict_note ? 'Valid' : plan.conflict_note || 'Needs review'}</span>
+	                              <span>
+	                                <button type='button' className='table-action-button' onClick={() => openPlanEvidence(plan)}>
+	                                  View
+	                                </button>
+	                              </span>
 	                            </div>
 	                          ))}
 	                        </div>
@@ -4446,6 +4792,48 @@ export function App() {
           ) : null}
         </>
       )}
+
+      {evidencePreview ? (
+        <div className='modal-backdrop' role='presentation'>
+          <section className='evidence-modal' role='dialog' aria-modal='true' aria-labelledby='evidence-modal-title'>
+            <div className='modal-title-row'>
+              <div>
+                <h2 id='evidence-modal-title'>{evidencePreview.title}</h2>
+                <p>{evidencePreview.subtitle}</p>
+              </div>
+              <button type='button' className='ghost-button' onClick={() => setEvidencePreview(null)}>
+                Close
+              </button>
+            </div>
+            <div className='evidence-modal__body'>
+              {evidencePreview.fields.map((field) => (
+                <div key={field.label} className={field.emphasis ? 'evidence-field evidence-field--emphasis' : 'evidence-field'}>
+                  <span>{field.label}</span>
+                  <strong>{field.value}</strong>
+                </div>
+              ))}
+            </div>
+            <div className='rule-alert'>
+              <strong>Source note</strong>
+              <p>{evidencePreview.note}</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {appDialog ? (
+        <div className='modal-backdrop' role='presentation'>
+          <section className='app-dialog' role='dialog' aria-modal='true' aria-labelledby='app-dialog-title'>
+            <h2 id='app-dialog-title'>{appDialog.title}</h2>
+            <p>{appDialog.message}</p>
+            <div className='form-actions'>
+              <button type='button' onClick={() => setAppDialog(null)}>
+                OK
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <footer className='app-footer' aria-label='Application version'>
         <span>IZ Clinical Notes Analyzer</span>

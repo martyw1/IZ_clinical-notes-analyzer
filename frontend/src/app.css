@@ -315,6 +315,11 @@ label {
   color: #7a5b0b;
 }
 
+.pill--attention {
+  background: #ede8ff;
+  color: #4b35a8;
+}
+
 .pill--neutral {
   background: #e7ece8;
   color: #33473d;
@@ -744,6 +749,369 @@ label {
   border-right: 0;
 }
 
+.timeliness-workspace {
+  display: grid;
+  grid-template-columns: minmax(430px, 0.82fr) minmax(0, 1.18fr);
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.timeliness-queue-panel,
+.timeliness-detail-panel {
+  min-width: 0;
+}
+
+.timeliness-filter-row label {
+  min-width: 170px;
+  flex: 1;
+}
+
+.timeliness-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mini-card--danger {
+  border-left: 3px solid #c94a3d;
+}
+
+.mini-card--warning {
+  border-left: 3px solid #d89b22;
+}
+
+.mini-card--attention {
+  border-left: 3px solid #7058f4;
+}
+
+.mini-card--muted {
+  border-left: 3px solid #7b858b;
+}
+
+.timeliness-loc-warning {
+  border-left: 4px solid #7058f4;
+}
+
+.timeliness-filter-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.status-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-height: 36px;
+  border: 1px solid #b9c7ce;
+  border-left: 3px solid transparent;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #263940;
+  padding: 0.45rem 0.55rem;
+}
+
+.status-filter--active {
+  border-left-color: #f27d62;
+  background: #eef7f8;
+}
+
+.status-filter strong {
+  font-size: 0.9rem;
+}
+
+.timeliness-queue-table {
+  display: grid;
+  border: 1px solid #d4dde1;
+  overflow-x: auto;
+}
+
+.timeliness-queue-table__head,
+.timeliness-queue-table__row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.45fr) minmax(110px, 0.78fr) minmax(105px, 0.72fr) minmax(90px, 0.62fr) minmax(95px, 0.68fr);
+  align-items: stretch;
+  min-width: 690px;
+}
+
+.timeliness-queue-table__head {
+  min-height: 38px;
+  background: #b9b9b9;
+  color: #ffffff;
+  font-weight: 700;
+  border-bottom: 2px solid #8ed4dd;
+}
+
+.timeliness-queue-table__row {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid #d4dde1;
+  background: #ffffff;
+  color: #263940;
+  padding: 0;
+  text-align: left;
+}
+
+.timeliness-queue-table__row:hover,
+.timeliness-queue-table__row--active {
+  background: #f1fafb;
+}
+
+.timeliness-queue-table__row--active {
+  box-shadow: inset 4px 0 0 #0b6f86;
+}
+
+.timeliness-queue-table__head span,
+.timeliness-queue-table__row > span {
+  display: grid;
+  align-content: center;
+  gap: 0.1rem;
+  padding: 0.48rem 0.55rem;
+  border-right: 1px solid #d4dde1;
+  overflow-wrap: anywhere;
+}
+
+.timeliness-queue-table__head span:last-child,
+.timeliness-queue-table__row > span:last-child {
+  border-right: 0;
+}
+
+.timeliness-queue-table small {
+  color: #62736b;
+  font-size: 0.76rem;
+}
+
+.timeliness-client-summary {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.35fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid #d4dde1;
+  border-top: 4px solid #0b6f86;
+  background: #f9fbfc;
+}
+
+.timeliness-client-summary > div:first-child {
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  border-right: 1px solid #d4dde1;
+  padding-right: 1rem;
+}
+
+.timeliness-client-summary span,
+.timeliness-client-summary small {
+  color: #62736b;
+}
+
+.timeliness-client-summary strong {
+  font-size: 1.45rem;
+  color: #263940;
+}
+
+.timeliness-client-summary dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.timeliness-client-summary dt,
+.comparison-grid span,
+.evidence-field span {
+  color: #62736b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.timeliness-client-summary dd {
+  margin: 0.2rem 0 0;
+  color: #263940;
+  font-weight: 700;
+}
+
+.timeliness-client-summary p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #52646d;
+}
+
+.evidence-meter {
+  display: inline-flex;
+  width: min(100%, 110px);
+  height: 8px;
+  margin-right: 0.45rem;
+  border: 1px solid #b9c7ce;
+  background: #edf2f3;
+  vertical-align: middle;
+}
+
+.evidence-meter span {
+  display: block;
+  height: 100%;
+  background: #0b6f86;
+}
+
+.evidence-comparison-panel {
+  border-top: 2px solid #8ed4dd;
+  padding-top: 0.85rem;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #d4dde1;
+}
+
+.comparison-grid article {
+  display: grid;
+  gap: 0.2rem;
+  min-height: 82px;
+  padding: 0.75rem;
+  border-right: 1px solid #d4dde1;
+  background: #ffffff;
+}
+
+.comparison-grid article:last-child {
+  border-right: 0;
+}
+
+.comparison-grid strong {
+  font-size: 1.05rem;
+  color: #263940;
+}
+
+.comparison-grid small {
+  color: #62736b;
+}
+
+.rule-alert {
+  border: 1px solid rgba(112, 88, 244, 0.34);
+  border-left: 4px solid #7058f4;
+  background: rgba(112, 88, 244, 0.08);
+  padding: 0.75rem;
+}
+
+.rule-alert strong,
+.rule-alert p {
+  margin: 0;
+}
+
+.rule-alert p {
+  margin-top: 0.25rem;
+  color: #443f5d;
+}
+
+.finding-card--compact {
+  padding: 0.85rem;
+}
+
+.timeliness-table--loc .timeliness-table__head,
+.timeliness-table--loc .timeliness-table__row {
+  grid-template-columns: 0.75fr 1fr 0.85fr 0.85fr 0.75fr 0.75fr 0.6fr;
+  min-width: 920px;
+}
+
+.timeliness-table--evidence .timeliness-table__head,
+.timeliness-table--evidence .timeliness-table__row {
+  grid-template-columns: 0.7fr 1fr 0.78fr 0.78fr 0.78fr 0.78fr minmax(150px, 1fr) 0.58fr;
+  min-width: 1040px;
+}
+
+.table-action-button {
+  min-height: 28px;
+  border: 1px solid #b9c7ce;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #1f4550;
+  padding: 0.25rem 0.45rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(11, 47, 58, 0.42);
+}
+
+.evidence-modal,
+.app-dialog {
+  width: min(100%, 860px);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border: 1px solid #8ed4dd;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(6, 36, 45, 0.28);
+}
+
+.app-dialog {
+  width: min(100%, 520px);
+  padding: 1rem;
+}
+
+.app-dialog h2,
+.app-dialog p {
+  margin: 0;
+}
+
+.app-dialog p {
+  margin-top: 0.55rem;
+  color: #52646d;
+}
+
+.modal-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #d4dde1;
+  background: #f9fbfc;
+}
+
+.modal-title-row h2,
+.modal-title-row p {
+  margin: 0;
+}
+
+.modal-title-row p {
+  margin-top: 0.25rem;
+  color: #62736b;
+}
+
+.evidence-modal__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-bottom: 1px solid #d4dde1;
+}
+
+.evidence-field {
+  display: grid;
+  gap: 0.25rem;
+  min-height: 72px;
+  padding: 0.85rem 1rem;
+  border-right: 1px solid #d4dde1;
+  border-bottom: 1px solid #d4dde1;
+}
+
+.evidence-field:nth-child(2n) {
+  border-right: 0;
+}
+
+.evidence-field--emphasis {
+  background: #f1fafb;
+}
+
+.evidence-field strong {
+  color: #263940;
+}
+
 .log-row__details {
   display: flex;
   gap: 0.85rem;
@@ -798,7 +1166,8 @@ ol {
   .hero,
   .auth-grid,
   .workspace-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .timeliness-workspace {
     grid-template-columns: 1fr;
   }
 
@@ -813,8 +1182,16 @@ ol {
   .source-choice-grid,
   .checklist-step-card dl,
   .file-editor-row__fields,
-  .form-grid {
+  .form-grid,
+  .timeliness-client-summary,
+  .comparison-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .timeliness-client-summary > div:first-child {
+    border-right: 0;
+    border-bottom: 1px solid #d4dde1;
+    padding: 0 0 0.85rem;
   }
 }
 
@@ -833,7 +1210,13 @@ ol {
   .source-choice-grid,
   .checklist-step-card dl,
   .file-editor-row__fields,
-  .form-grid {
+  .form-grid,
+  .timeliness-metrics,
+  .timeliness-filter-strip,
+  .timeliness-client-summary,
+  .timeliness-client-summary dl,
+  .comparison-grid,
+  .evidence-modal__body {
     grid-template-columns: 1fr;
   }
 
@@ -842,9 +1225,19 @@ ol {
   .log-row__meta,
   .detection-card,
   .button-row,
-  .file-editor-row__title {
+  .file-editor-row__title,
+  .modal-title-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .timeliness-workspace {
+    padding: 0.75rem;
+  }
+
+  .comparison-grid article,
+  .evidence-field {
+    border-right: 0;
   }
 
   .queue-item-meta {

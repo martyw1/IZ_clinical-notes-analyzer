@@ -20,7 +20,13 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
     return _login_headers(client)
 
 
-def _client_payload(patient_id: str = 'PAT-TP-100', *, loc: str = 'IOP 5', review_date: str = '2026-04-02'):
+def _client_payload(
+    patient_id: str = 'PAT-TP-100',
+    *,
+    loc: str = 'IOP 5',
+    review_date: str = '2026-04-02',
+    displayed_next_due_date: str = '',
+):
     return {
         'patient_id': patient_id,
         'permitted_name': 'Synthetic Client',
@@ -30,8 +36,19 @@ def _client_payload(patient_id: str = 'PAT-TP-100', *, loc: str = 'IOP 5', revie
         'admission_date': '2026-02-26',
         'source_evidence': 'Synthetic spreadsheet row',
         'level_of_care_history': [
-            {'level_of_care': 'PHP', 'effective_date': '2026-02-26', 'source_evidence': 'Synthetic admission LOC'},
-            {'level_of_care': loc, 'effective_date': '2026-03-30', 'source_evidence': 'Synthetic LOC update'},
+            {
+                'level_of_care': 'PHP',
+                'facility': 'Synthetic Facility',
+                'effective_date': '2026-02-26',
+                'discharge_date': '2026-03-30',
+                'source_evidence': 'Synthetic admission LOC',
+            },
+            {
+                'level_of_care': loc,
+                'facility': 'Synthetic Facility',
+                'effective_date': '2026-03-30',
+                'source_evidence': 'Synthetic LOC update',
+            },
         ],
         'treatment_plans': [
             {
@@ -53,13 +70,15 @@ def _client_payload(patient_id: str = 'PAT-TP-100', *, loc: str = 'IOP 5', revie
                 'document_date': review_date,
                 'staff_signature_date': review_date,
                 'client_signature_date': '',
+                'displayed_next_due_date': displayed_next_due_date,
                 'source_evidence': 'Treatment Plan Review synthetic record',
+                'source_section': 'Treatment Plan Reviews',
             },
         ],
     }
 
 
-def test_timeliness_dashboard_calculates_iop_5_due_date_and_unvalidated_loc_change(app_with_sqlite):
+def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlite):
     app, _ = app_with_sqlite
 
     with TestClient(app) as client:
@@ -72,20 +91,50 @@ def test_timeliness_dashboard_calculates_iop_5_due_date_and_unvalidated_loc_chan
         assert dashboard.status_code == 200
         payload = dashboard.json()
         assert payload['total_active_clients'] == 1
-        assert payload['urgent'] == 1
+        assert payload['urgent'] == 0
+        assert payload['needs_review'] == 1
         assert payload['loc_change_window_validated'] is False
         item = payload['items'][0]
         assert item['patient_id'] == 'PAT-TP-100'
-        assert item['next_due_date'] == '2026-06-01'
-        assert item['days_until_due'] == 5
-        assert item['status'] == 'Urgent'
-        assert item['rule_used'] == 'TP-REVIEW-60'
+        assert item['next_due_date'] == '2026-05-29'
+        assert item['days_until_due'] == 2
+        assert item['status'] == 'Needs Review'
+        assert item['rule_used'] == 'TP-DUE-DATE-CONFLICT'
 
         detail = client.get(f"/api/timeliness/clients/{item['id']}?evaluation_date=2026-05-27", headers=headers)
         assert detail.status_code == 200
         detail_payload = detail.json()
         assert any(result['rule_id'] == 'TP-LOC-CHANGE-UNVALIDATED' for result in detail_payload['rule_results'])
+        assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in detail_payload['rule_results'])
         assert len(detail_payload['level_of_care_history']) == 2
+        assert detail_payload['evidence_comparison']['document_next_due_date'] is None
+        assert detail_payload['evidence_comparison']['signature_anchor_due_date'] == '2026-06-01'
+        assert detail_payload['evidence_comparison']['loc_anchor_due_date'] == '2026-05-29'
+
+
+def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/timeliness/clients',
+            headers=headers,
+            json=_client_payload(patient_id='PAT-TP-CONFLICT', displayed_next_due_date='2026-05-29'),
+        )
+        assert created.status_code == 200
+
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}?evaluation_date=2026-05-27", headers=headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload['status'] == 'Needs Review'
+        assert payload['next_due_date'] == '2026-05-29'
+        assert payload['rule_used'] == 'TP-DUE-DATE-CONFLICT'
+        assert payload['evidence_comparison']['document_next_due_date'] == '2026-05-29'
+        assert payload['evidence_comparison']['signature_anchor_due_date'] == '2026-06-01'
+        assert payload['evidence_comparison']['loc_anchor_due_date'] == '2026-05-29'
+        assert 'LOC-change anchor/window is unvalidated' in payload['evidence_comparison']['conflict_explanation']
+        assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
 
 
 def test_timeliness_missing_data_and_manual_override_are_audited(app_with_sqlite):

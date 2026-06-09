@@ -667,7 +667,7 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the first Treatment Plan Timeliness Tracker surface. It shows active clients, current level of care, counselor, admission date, last valid treatment-plan review date, next calculated due date, days until due, status, rule used, source evidence summary, detail records, manual overrides, and recent audit history.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. It shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
 

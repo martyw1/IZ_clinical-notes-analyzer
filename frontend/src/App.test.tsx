@@ -325,6 +325,8 @@ function timelinessDashboardPayload() {
         status: 'Due Soon',
         rule_used: 'TP-REVIEW-60',
         evidence_summary: 'Latest valid staff/therapist review signature was 2026-04-02 using IOP-5 60-day recurrence.',
+        evidence_completeness_percent: 83,
+        missing_evidence_fields: ['Source-document Next Review Due'],
         last_checked_at: '2026-05-23T12:00:00Z',
         last_imported_at: '2026-05-23T11:00:00Z',
       },
@@ -337,6 +339,20 @@ function timelinessDetailPayload() {
     ...timelinessDashboardPayload().items[0],
     is_active: true,
     source_evidence: 'Synthetic spreadsheet row',
+    evidence_comparison: {
+      document_next_due_date: null,
+      signature_anchor_due_date: '2026-06-01',
+      loc_anchor_due_date: '2026-05-29',
+      final_status: 'Due Soon',
+      conflict_explanation:
+        'source document Next Review Due is not recorded; staff signature anchor is 2026-06-01 (2026-04-02 + 60 days); LOC effective-date anchor is 2026-05-29 (2026-03-30 + 60 days); LOC-change anchor/window is unvalidated by R3/Marleigh.',
+      source_evidence: 'Treatment Plan Review synthetic record; Synthetic LOC update',
+      staff_signature_date: '2026-04-02',
+      loc_effective_date: '2026-03-30',
+      interval_days: 60,
+      loc_change_window_days: null,
+      loc_change_rule_validated: false,
+    },
     rule_results: [
       {
         rule_id: 'TP-REVIEW-60',
@@ -354,8 +370,26 @@ function timelinessDetailPayload() {
       },
     ],
     level_of_care_history: [
-      { id: 31, level_of_care: 'PHP', effective_date: '2026-02-26', source_evidence: 'Synthetic admission LOC' },
-      { id: 32, level_of_care: 'IOP-5', effective_date: '2026-03-30', source_evidence: 'Synthetic LOC update' },
+      {
+        id: 31,
+        level_of_care: 'PHP',
+        facility: 'Synthetic Facility',
+        effective_date: '2026-02-26',
+        discharge_date: '2026-03-30',
+        interval_days: 30,
+        is_current: false,
+        source_evidence: 'Synthetic admission LOC',
+      },
+      {
+        id: 32,
+        level_of_care: 'IOP-5',
+        facility: 'Synthetic Facility',
+        effective_date: '2026-03-30',
+        discharge_date: '',
+        interval_days: 60,
+        is_current: true,
+        source_evidence: 'Synthetic LOC update',
+      },
     ],
     treatment_plans: [
       {
@@ -364,7 +398,10 @@ function timelinessDetailPayload() {
         document_date: '2026-04-02',
         staff_signature_date: '2026-04-02',
         client_signature_date: '',
+        reviewer_signature_date: '',
+        displayed_next_due_date: '',
         source_evidence: 'Synthetic Treatment Plan Review',
+        source_section: 'Treatment Plan Reviews',
         source_document_id: 'doc-41',
         is_valid: true,
         conflict_note: '',
@@ -387,6 +424,64 @@ function timelinessDetailPayload() {
         details: '{}',
         outcome_status: 'success',
         severity: 'info',
+      },
+    ],
+  }
+}
+
+function timelinessConflictSummary() {
+  return {
+    id: 22,
+    patient_id: 'PAT-TP-AMBIG',
+    permitted_name: 'Ambiguous Review Client',
+    current_level_of_care: 'IOP-5',
+    counselor_name: 'Counselor Two',
+    admission_date: '2026-02-26',
+    last_valid_review_date: '2026-04-02',
+    next_due_date: '2026-05-29',
+    days_until_due: 2,
+    status: 'Needs Review',
+    rule_used: 'TP-DUE-DATE-CONFLICT',
+    evidence_summary: 'Displayed Next Review Due conflicts with the staff-signature anchor while LOC-change timing remains unvalidated.',
+    evidence_completeness_percent: 100,
+    missing_evidence_fields: [],
+    last_checked_at: '2026-05-27T12:00:00Z',
+    last_imported_at: '2026-05-27T11:00:00Z',
+  }
+}
+
+function timelinessConflictDetailPayload() {
+  return {
+    ...timelinessDetailPayload(),
+    ...timelinessConflictSummary(),
+    evidence_comparison: {
+      document_next_due_date: '2026-05-29',
+      signature_anchor_due_date: '2026-06-01',
+      loc_anchor_due_date: '2026-05-29',
+      final_status: 'Needs Review',
+      conflict_explanation:
+        'source document Next Review Due is 2026-05-29; staff signature anchor is 2026-06-01 (2026-04-02 + 60 days); LOC effective-date anchor is 2026-05-29 (2026-03-30 + 60 days); LOC-change anchor/window is unvalidated by R3/Marleigh.',
+      source_evidence: 'Treatment Plan Review synthetic record; Synthetic LOC update',
+      staff_signature_date: '2026-04-02',
+      loc_effective_date: '2026-03-30',
+      interval_days: 60,
+      loc_change_window_days: null,
+      loc_change_rule_validated: false,
+    },
+    rule_results: [
+      ...timelinessDetailPayload().rule_results,
+      {
+        rule_id: 'TP-DUE-DATE-CONFLICT',
+        label: 'Displayed and calculated due dates',
+        due_date: '2026-05-29',
+        status: 'Needs Review',
+        evidence_summary: 'Due-date evidence conflicts and needs manual review.',
+      },
+    ],
+    treatment_plans: [
+      {
+        ...timelinessDetailPayload().treatment_plans[0],
+        displayed_next_due_date: '2026-05-29',
       },
     ],
   }
@@ -523,7 +618,7 @@ describe('App turnkey workflow', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
     expect(screen.getAllByText('Synthetic Client').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Unvalidated by R3\/Marleigh/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Unvalidated by R3\/Marleigh/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Synthetic manager review.' } })
@@ -531,6 +626,90 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByText('Treatment plan override recorded for patient PAT-TP-001.')).toBeInTheDocument())
     expect(screen.getByText(/Synthetic manager review/i)).toBeInTheDocument()
+  })
+
+  it('filters the timeliness queue and opens date-conflict evidence', async () => {
+    const dashboard = {
+      ...timelinessDashboardPayload(),
+      total_active_clients: 2,
+      due_soon: 1,
+      needs_review: 1,
+      items: [timelinessDashboardPayload().items[0], timelinessConflictSummary()],
+    }
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-tp-filter', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/timeliness/dashboard': dashboard,
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+      'GET /api/timeliness/clients/22': timelinessConflictDetailPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Needs Review 1/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Open Ambiguous Review Client treatment plan evidence/i }))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Ambiguous Review Client' })).toBeInTheDocument())
+    expect(screen.getAllByText('2026-05-29').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('2026-06-01').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Unvalidated LOC-change rule/i).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'View evidence' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Review due-date evidence' })).toBeInTheDocument())
+    const evidenceDialog = within(screen.getByRole('dialog', { name: 'Review due-date evidence' }))
+    expect(evidenceDialog.getByText('Source-document Next Review Due')).toBeInTheDocument()
+    expect(evidenceDialog.getByText('Staff signature + LOC cadence')).toBeInTheDocument()
+  })
+
+  it('copies an Asana-ready timeliness task list', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-tp-copy', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy task list' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Copy task list' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0][0]).toContain('client_label')
+    expect(writeText.mock.calls[0][0]).toContain('Synthetic Client')
   })
 
   it('exports selected review and treatment plan reports as CSV and JSON', async () => {
@@ -565,12 +744,13 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Treatment plans' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Export task list' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
 
-    expect(createObjectUrl).toHaveBeenCalledTimes(4)
-    expect(anchorClick).toHaveBeenCalledTimes(4)
-    expect(revokeObjectUrl).toHaveBeenCalledTimes(4)
+    expect(createObjectUrl).toHaveBeenCalledTimes(5)
+    expect(anchorClick).toHaveBeenCalledTimes(5)
+    expect(revokeObjectUrl).toHaveBeenCalledTimes(5)
   })
 
   it('uploads a note binder and opens the generated automated review', async () => {

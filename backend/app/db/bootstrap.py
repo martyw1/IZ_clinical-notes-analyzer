@@ -149,6 +149,15 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'severity': "VARCHAR(20) NOT NULL DEFAULT 'info'",
         'prev_hash': 'VARCHAR(128)',
     },
+    'level_of_care_history': {
+        'facility': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'discharge_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+    },
+    'treatment_plan_records': {
+        'reviewer_signature_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'displayed_next_due_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'source_section': "VARCHAR(120) NOT NULL DEFAULT ''",
+    },
 }
 
 SQLITE_COLUMN_DEFS: Mapping[str, str] = {
@@ -260,6 +269,10 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'outcome_status': "TEXT NOT NULL DEFAULT 'success'",
     'severity': "TEXT NOT NULL DEFAULT 'info'",
     'prev_hash': 'TEXT',
+    'facility': "TEXT NOT NULL DEFAULT ''",
+    'displayed_next_due_date': "TEXT NOT NULL DEFAULT ''",
+    'reviewer_signature_date': "TEXT NOT NULL DEFAULT ''",
+    'source_section': "TEXT NOT NULL DEFAULT ''",
 }
 
 

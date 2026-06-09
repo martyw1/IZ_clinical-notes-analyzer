@@ -530,7 +530,9 @@ class AuditLogOut(BaseModel):
 
 class TimelinessLevelOfCareInput(BaseModel):
     level_of_care: str
+    facility: str = ''
     effective_date: str = ''
+    discharge_date: str = ''
     source_evidence: str = ''
 
 
@@ -539,7 +541,10 @@ class TimelinessTreatmentPlanInput(BaseModel):
     document_date: str = ''
     staff_signature_date: str = ''
     client_signature_date: str = ''
+    reviewer_signature_date: str = ''
+    displayed_next_due_date: str = ''
     source_evidence: str = ''
+    source_section: str = ''
     source_document_id: str = ''
     is_valid: bool = True
     conflict_note: str = ''
@@ -568,7 +573,11 @@ class TimelinessOverrideInput(BaseModel):
 class TimelinessLevelOfCareOut(BaseModel):
     id: int
     level_of_care: str
+    facility: str
     effective_date: str
+    discharge_date: str
+    interval_days: int | None = None
+    is_current: bool
     source_evidence: str
 
 
@@ -578,7 +587,10 @@ class TimelinessTreatmentPlanOut(BaseModel):
     document_date: str
     staff_signature_date: str
     client_signature_date: str
+    reviewer_signature_date: str
+    displayed_next_due_date: str
     source_evidence: str
+    source_section: str
     source_document_id: str
     is_valid: bool
     conflict_note: str
@@ -603,6 +615,20 @@ class TimelinessRuleResultOut(BaseModel):
     evidence_summary: str
 
 
+class TimelinessEvidenceComparisonOut(BaseModel):
+    document_next_due_date: str | None = None
+    signature_anchor_due_date: str | None = None
+    loc_anchor_due_date: str | None = None
+    final_status: str
+    conflict_explanation: str
+    source_evidence: str
+    staff_signature_date: str | None = None
+    loc_effective_date: str | None = None
+    interval_days: int | None = None
+    loc_change_window_days: int | None = None
+    loc_change_rule_validated: bool
+
+
 class TimelinessClientSummaryOut(BaseModel):
     id: int
     patient_id: str
@@ -616,6 +642,8 @@ class TimelinessClientSummaryOut(BaseModel):
     status: str
     rule_used: str
     evidence_summary: str
+    evidence_completeness_percent: int
+    missing_evidence_fields: list[str]
     last_checked_at: datetime
     last_imported_at: datetime | None = None
 
@@ -637,6 +665,7 @@ class TimelinessDashboardOut(BaseModel):
 class TimelinessClientDetailOut(TimelinessClientSummaryOut):
     is_active: bool
     source_evidence: str
+    evidence_comparison: TimelinessEvidenceComparisonOut
     rule_results: list[TimelinessRuleResultOut]
     level_of_care_history: list[TimelinessLevelOfCareOut]
     treatment_plans: list[TimelinessTreatmentPlanOut]
