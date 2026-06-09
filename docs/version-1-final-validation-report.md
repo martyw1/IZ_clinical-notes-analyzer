@@ -4,9 +4,9 @@ Date: 2026-06-09
 
 Branch validated: `version1/windows-ready-local-20260609-074037`
 
-Version: `1.0.0`
+Version: `1.0.3`
 
-Build: `2026.06.09.1`
+Build: `2026.06.09.4`
 
 ## Result
 
@@ -14,8 +14,8 @@ Version 1 is validated for local Windows laptop/desktop use with deterministic u
 
 ## Artifacts
 
-- Release folder: `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0`
-- Release zip: `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0.zip`
+- Release folder: `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3`
+- Release zip: `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3.zip`
 - Preflight report: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json`
 
 Generated release artifacts are intentionally ignored by Git.
@@ -32,8 +32,8 @@ Generated release artifacts are intentionally ignored by Git.
 
 ## Results
 
-- Backend tests: PASS, `74 passed, 2 skipped`.
-- Frontend UI tests: PASS, `9 passed`.
+- Backend tests: PASS, `75 passed, 2 skipped`.
+- Frontend UI tests: PASS, `11 passed`.
 - Frontend production build: PASS.
 - Frontend dependency audit: PASS, `0 vulnerabilities`.
 - Windows preflight: PASS.
@@ -53,7 +53,14 @@ The in-app browser exercised the desktop app on `http://127.0.0.1:8000`:
 - Uploaded a synthetic TXT binder through the local API, then verified the generated binder and review chart in the browser UI.
 - Saved a synthetic reviewer follow-up decision from the Criterion Review Workbench.
 - Verified chart-review and treatment-plan export controls are present; frontend tests click CSV/JSON export controls and verify the download path because the in-app browser does not support download events.
+- Verified the Treatment Plan Timeliness tab shows the updated evidence queue banner and exposes source-document, staff-signature, and LOC-effective due-date comparison.
 - Verified the authenticated review screen at `1366x768` has no horizontal overflow and keeps nav/export controls reachable.
+
+## 1.0.3 Patch Addendum
+
+Version `1.0.3` addresses the risk that a Windows source checkout can serve an older ignored `frontend\dist` bundle after React source changes. Preflight now detects stale frontend builds and rebuilds when npm is available, or warns clearly when it cannot refresh the served UI. UAT should confirm `/api/version`, the footer, and the Treatment Plan Timeliness banner all show `1.0.3`.
+
+Computer Use was attempted for the visible Windows UI smoke, but the local helper returned `native pipe is unavailable`. The same temporary localhost instance was then verified in the in-app browser with visible keyboard events: login, Treatment Plans navigation, `Updated evidence queue v1.0.3`, footer `v1.0.3`, synthetic client row, evidence completeness, `Needs Review`, and the 2026-05-29 / 2026-06-01 due-date comparison.
 
 ## Security Boundary
 

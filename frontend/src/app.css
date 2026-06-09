@@ -761,6 +761,25 @@ label {
   min-width: 0;
 }
 
+.timeliness-release-banner {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid #0b6f86;
+  border-left: 5px solid #f27d62;
+  background: #edf8fa;
+  color: #263940;
+  padding: 0.75rem 0.85rem;
+}
+
+.timeliness-release-banner strong {
+  font-size: 0.95rem;
+}
+
+.timeliness-release-banner span {
+  color: #52646d;
+  font-size: 0.86rem;
+}
+
 .timeliness-filter-row label {
   min-width: 170px;
   flex: 1;

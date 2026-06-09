@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.3 - 2026-06-09
+
+### Changed
+- Promoted version metadata to `1.0.3` / build `2026.06.09.4`.
+- Made the Treatment Plan Timeliness tab visibly identify the updated evidence queue so source-document due dates, staff-signature cadence, and LOC-effective cadence comparison are obvious to operators.
+- Updated Windows preflight so source-checkout launches detect stale `frontend\dist` assets instead of accepting any existing build.
+- Refreshed README, Windows operator/deployment/UAT docs, blocker notes, and validation logs for the 1.0.3 UI visibility and stale-build fix.
+
+### Verified
+- Backend test suite passed with `75 passed, 2 skipped`.
+- Frontend Vitest suite passed with `11 passed`, including the visible updated evidence queue marker.
+- Frontend production build passed and emitted fresh hashed assets.
+- Windows preflight passed and reported `frontend_build` as present and current.
+- Windows local stack smoke passed on a temporary port with synthetic data.
+- Computer Use was attempted twice, but the local native pipe was unavailable; the visible UI smoke was completed in the in-app browser with keyboard events against a temporary localhost instance.
+
 ## 1.0.0 - 2026-06-09
 
 ### Added

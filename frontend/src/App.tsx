@@ -1102,6 +1102,7 @@ export function App() {
   const versionLabel = versionInfo
     ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
+  const timelinessBuildLabel = versionInfo?.version ? `v${versionInfo.version}` : 'current build'
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2596,7 +2597,7 @@ export function App() {
 	                <div className='panel-heading'>
 	                  <div>
 	                    <h2>Treatment plan timeliness</h2>
-	                    <p>Evidence-first work queue sorted by due status, missing evidence, and review ambiguity.</p>
+	                    <p>Evidence-first work queue updated in {timelinessBuildLabel}; compare source due dates, staff signatures, and LOC anchors before acting.</p>
 	                  </div>
 	                  <div className='button-row'>
 	                    <button type='button' className='ghost-button' onClick={() => void copyTimelinessTaskList()} disabled={isBusy}>
@@ -2610,6 +2611,11 @@ export function App() {
 	                    </button>
 	                  </div>
 	                </div>
+
+	                <section className='timeliness-release-banner' role='status' aria-label='Treatment plan timeliness update status'>
+	                  <strong>Updated evidence queue {timelinessBuildLabel}</strong>
+	                  <span>Source-document Next Review Due, staff-signature cadence, and LOC-effective cadence are shown side by side in the selected-client detail.</span>
+	                </section>
 
 	                <form
 	                  className='filter-row timeliness-filter-row'

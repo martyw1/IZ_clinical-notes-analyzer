@@ -226,32 +226,85 @@ function Find-Npm {
     return $commands | Select-Object -First 1
 }
 
+function Get-LatestFrontendSourceWriteTime {
+    $frontendDir = Join-Path $RootDir 'frontend'
+    $paths = @(
+        (Join-Path $frontendDir 'src'),
+        (Join-Path $frontendDir 'index.html'),
+        (Join-Path $frontendDir 'package.json'),
+        (Join-Path $frontendDir 'package-lock.json'),
+        (Join-Path $frontendDir 'tsconfig.json'),
+        (Join-Path $frontendDir 'vite.config.ts')
+    )
+    $latest = [datetime]::MinValue
+    foreach ($path in $paths) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $items = @(Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue)
+        foreach ($item in $items) {
+            if ($item.LastWriteTimeUtc -gt $latest) { $latest = $item.LastWriteTimeUtc }
+        }
+    }
+    return $latest
+}
+
+function Get-OldestFrontendBuildWriteTime {
+    $distDir = Join-Path $RootDir 'frontend\dist'
+    $indexFile = Join-Path $distDir 'index.html'
+    $assetsDir = Join-Path $distDir 'assets'
+    if (-not (Test-Path -LiteralPath $indexFile)) { return $null }
+    $files = @((Get-Item -LiteralPath $indexFile))
+    if (Test-Path -LiteralPath $assetsDir) {
+        $files += @(Get-ChildItem -LiteralPath $assetsDir -Recurse -File -ErrorAction SilentlyContinue)
+    }
+    if (-not $files.Count) { return $null }
+    return ($files | Sort-Object LastWriteTimeUtc | Select-Object -First 1).LastWriteTimeUtc
+}
+
+function Invoke-FrontendBuild {
+    param([string]$Npm)
+
+    $indexFile = Join-Path $RootDir 'frontend\dist\index.html'
+    Push-Location (Join-Path $RootDir 'frontend')
+    try {
+        & $Npm install
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit $LASTEXITCODE" }
+        & $Npm run build
+        if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit $LASTEXITCODE" }
+        Add-Check 'frontend_build' 'ok' 'Frontend build completed.' $indexFile
+    } catch {
+        Add-Check 'frontend_build' 'fail' 'Frontend build failed.' $_.Exception.Message
+    } finally { Pop-Location }
+}
+
 function Ensure-Frontend {
     if ($SkipFrontendBuild) {
         Add-Check 'frontend_build' 'warn' 'Frontend build check skipped.' ''
         return
     }
     $indexFile = Join-Path $RootDir 'frontend\dist\index.html'
-    if (Test-Path $indexFile) {
-        Add-Check 'frontend_build' 'ok' 'Built browser UI is present.' $indexFile
+    $sourceLatest = Get-LatestFrontendSourceWriteTime
+    $buildOldest = Get-OldestFrontendBuildWriteTime
+    $buildExists = Test-Path -LiteralPath $indexFile
+    $buildIsStale = $buildExists -and $buildOldest -and ($sourceLatest -gt $buildOldest)
+    if ($buildExists -and -not $buildIsStale) {
+        Add-Check 'frontend_build' 'ok' 'Built browser UI is present and current.' $indexFile
         return
     }
     $npm = Find-Npm
     if (-not $npm) {
-        Add-Check 'frontend_build' 'warn' 'Frontend build missing and npm is not available.' 'Packaged releases should include frontend\dist.'
+        if ($buildExists) {
+            Add-Check 'frontend_build' 'warn' 'Frontend build may be stale and npm is not available to refresh it.' 'Install Node.js/npm or use a packaged release with rebuilt frontend assets.'
+        } else {
+            Add-Check 'frontend_build' 'warn' 'Frontend build missing and npm is not available.' 'Packaged releases should include frontend\dist.'
+        }
         return
     }
-    Add-Check 'frontend_build' 'warn' 'Building frontend because frontend\dist is missing.' ''
-    Push-Location (Join-Path $RootDir 'frontend')
-    try {
-        & $npm install
-        if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit $LASTEXITCODE" }
-        & $npm run build
-        if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit $LASTEXITCODE" }
-        Add-Check 'frontend_build' 'ok' 'Frontend build completed.' $indexFile
-    } catch {
-        Add-Check 'frontend_build' 'fail' 'Frontend build failed.' $_.Exception.Message
-    } finally { Pop-Location }
+    if ($buildIsStale) {
+        Add-Check 'frontend_build' 'warn' 'Rebuilding frontend because source files are newer than frontend\dist.' ''
+    } else {
+        Add-Check 'frontend_build' 'warn' 'Building frontend because frontend\dist is missing.' ''
+    }
+    Invoke-FrontendBuild -Npm $npm
 }
 
 function Test-Port {

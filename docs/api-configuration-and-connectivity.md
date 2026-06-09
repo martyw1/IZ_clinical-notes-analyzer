@@ -76,7 +76,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build `frontend/dist`, but the API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend/dist`; Version 1.0.3 preflight warns when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 

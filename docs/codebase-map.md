@@ -52,14 +52,14 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `timeliness`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides dashboard counts, active-client queue, detail rule results, LOC history, treatment-plan history, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, archiving, and unused draft-only deletion.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides the Version 1.0.3 updated evidence queue banner, status filters, search, dashboard counts, active-client queue, source/staff/LOC due-date comparison, detail rule results, LOC history, treatment-plan evidence history, task-list copy/export, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, archiving, and unused draft-only deletion.
 
 ## Scripts and Launchers
 
 | File | Purpose | Keep status |
 |---|---|---|
 | `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher; calls `startup-windows-local.ps1`. | Required for Windows target. |
-| `scripts/startup-windows-local.ps1` | Main ordinary Windows source-checkout startup; creates venv, installs dependencies, generates local `.env`, builds frontend, starts desktop backend. | Required for Windows target. |
+| `scripts/startup-windows-local.ps1` | Main ordinary Windows source-checkout startup; delegates preflight, creates/uses local AppData config, verifies runtime dependencies, detects stale frontend builds, and starts desktop backend. | Required for Windows target. |
 | `scripts/test-local-app-stack.ps1` | Windows local full-stack smoke test. | Required validation path. |
 | `scripts/test-api-configuration-local.ps1` | Windows API harness smoke test. | Required validation path. |
 | `scripts/test-alleva-api-connectivity.ps1` | External Swagger/OpenAPI/API probe script. | Keep for direct API readiness, but ensure no secret output. |
@@ -170,13 +170,13 @@ CI:
 
 The repo has Dockerfiles, Compose files, `pyinstaller` in backend requirements, and Windows source-checkout launchers. It does not yet contain a signed `.exe`/`.msi` installer, installer project, code-signing plan, repair/modify/uninstall implementation, or evidence from the target purchased Dell Windows 10/11 Home validation machine.
 
-For v0.5.0, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
+For Version 1.0.3, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
 
 ## Current Risks
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Browser/full-stack smoke is source-checkout validated only | S6 expanded smoke checks and passed a live `app.desktop_main` smoke on macOS against temporary SQLite/env data, including frontend HTML, version, readiness, login, charts, and workflow profiles. | Windows validation still needs the target machine; Vitest/tsc remains a local Node worker blocker in this OneDrive checkout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.0.3 adds a visible Treatment Plan Timeliness evidence-queue banner and stale `frontend\dist` detection; local browser/Computer Use checks can verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

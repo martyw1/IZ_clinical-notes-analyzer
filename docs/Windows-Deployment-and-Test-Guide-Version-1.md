@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current patch version: `1.0.1` / build `2026.06.09.2`.
+Current patch version: `1.0.3` / build `2026.06.09.4`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Version 1.0.1 is a Windows startup reliability patch. It keeps the Version 1 app features intact while fixing the source-checkout launch path so preflight runs once, validates the complete Windows runtime dependency set, and avoids the old false dependency-check failure after packages are already installed.
+Version 1.0.3 is a Windows UI visibility and stale-build patch. It keeps the Version 1 startup reliability fixes, makes the Treatment Plan Timeliness evidence queue visibly identifiable, and updates source-checkout preflight so it rebuilds or warns when `frontend\dist` is older than the React source.
 
 ## Prerequisites for Source Build
 
@@ -29,7 +29,7 @@ scripts\setup-windows.ps1 -AssumeYes
 scripts\preflight-windows.ps1 -AssumeYes
 ```
 
-Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates the full Windows runtime dependency set, validates rules and the Treatment Plan Checklist, confirms frontend build assets, checks the app port, and writes a JSON report.
+Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates the full Windows runtime dependency set, validates rules and the Treatment Plan Checklist, confirms frontend build assets, detects stale `frontend\dist` assets, checks the app port, and writes a JSON report.
 
 ## Local Launch
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Version 1.0.1 behavior: startup runs preflight once, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Version 1.0.3 behavior: startup runs preflight once, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Version 1.0.1 source metadata and scripts should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Version 1.0.3 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 

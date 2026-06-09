@@ -617,6 +617,7 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.getByText(/Updated evidence queue/)).toBeInTheDocument()
     expect(screen.getAllByText('Synthetic Client').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Unvalidated by R3\/Marleigh/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
@@ -660,6 +661,7 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.getByRole('status', { name: 'Treatment plan timeliness update status' })).toHaveTextContent(/Source-document Next Review Due/)
     fireEvent.click(screen.getByRole('button', { name: /Needs Review 1/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /Open Ambiguous Review Client treatment plan evidence/i }))

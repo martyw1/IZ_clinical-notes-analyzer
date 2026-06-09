@@ -126,3 +126,33 @@ Pass/fail status:
 Remaining gaps:
 - Complete final secret/PHI/PII scan.
 - Commit, merge into local `main`, rerun a post-merge smoke gate, and push `origin main` if safe.
+
+## 2026-06-09 1.0.3 Timeliness UI Visibility and Stale-Build Guard
+
+What changed:
+- Updated version metadata to `1.0.3` / build `2026.06.09.4`.
+- Added a visible `Updated evidence queue v1.0.3` marker to the Treatment Plan Timeliness tab.
+- Updated Windows preflight so it detects stale `frontend\dist` assets when React source files are newer than the served build.
+- Refreshed release-facing README, Windows user/deployment/UAT docs, blocker notes, and validation docs for the current patch.
+
+Validation target:
+- Confirm `/api/version`, the UI footer, and the Treatment Plan Timeliness banner all show `1.0.3`.
+- Use Computer Use against a real Windows browser window for the visible UI smoke when the helper is available.
+
+Commands run:
+- `$env:PYTHONPATH='backend'; backend\.venv\Scripts\python.exe -m pytest backend\tests -q`
+- `node .\node_modules\vitest\vitest.mjs run`
+- `node .\node_modules\vite\bin\vite.js build`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight-windows.ps1 -AssumeYes -Port 8017`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-local-app-stack.ps1 -Port 8018 -SkipDependencyInstall`
+- Computer Use bootstrap/list-app retry; blocked by local native pipe unavailable.
+- In-app browser visible smoke against `http://127.0.0.1:8020` with synthetic data.
+
+Pass/fail status:
+- PASS: Backend tests passed: 75 passed, 2 skipped.
+- PASS: Frontend tests passed: 11 passed.
+- PASS: Frontend production build passed and emitted fresh hashed assets.
+- PASS: Preflight reported the frontend build as present and current.
+- PASS: Local stack smoke passed.
+- PASS: Visible browser smoke confirmed `Updated evidence queue v1.0.3`, footer `v1.0.3`, synthetic timeliness client, `Needs Review`, evidence completeness, and source/staff/LOC due-date comparison.
+- BLOCKED: Computer Use native pipe was unavailable on this laptop during the validation attempt.

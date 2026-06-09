@@ -1,5 +1,13 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-09 v1.0.3 Treatment Plan Timeliness UI visibility patch
+- Updated app/version metadata to `1.0.3` / build `2026.06.09.4`.
+- Added a visible Treatment Plan Timeliness `Updated evidence queue` banner so operators can confirm the current UI is being served.
+- Updated Windows preflight to detect stale `frontend\dist` assets and rebuild or warn when source-checkout React files are newer than the built browser UI.
+- Updated release-facing README, changelog, Windows user/deployment/UAT docs, blocker notes, PRD implementation note, validation report, and completion log.
+- Validation passed backend tests, frontend tests/build, Windows preflight, Windows local stack smoke, and visible browser smoke against a temporary localhost instance with synthetic data.
+- Computer Use was attempted twice but was blocked because the local native pipe was unavailable on this laptop.
+
 ## 2026-06-04 v0.5.0 S0/S1 audit and conservative cleanup
 - Synced `main` to `695080d`, created baseline tag `baseline-pre-codex-20260604-164125`, and worked on `refactor/codex-v0.5.0`.
 - Added `docs/codebase-map.md`, `docs/cleanup-audit.md`, `docs/open-blockers.md`, and `docs/removal-log.md`.

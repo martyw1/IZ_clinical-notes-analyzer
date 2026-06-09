@@ -30,7 +30,8 @@ Current implementation state: Version 1 adds Windows preflight, setup/start wrap
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.0.2` on that machine.
+- `/api/version` and the UI footer show `1.0.3` on that machine.
+- The `Treatment plans` tab shows `Updated evidence queue v1.0.3`, proving the source/staff/LOC evidence-comparison UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 

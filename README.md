@@ -106,7 +106,7 @@ For a source-code checkout, the Windows computer needs:
 1. Windows 10 or Windows 11.
 2. Python 3.11 or newer.
 3. Internet access the first time Python packages are installed.
-4. Node.js LTS only if the browser UI has not already been built into `frontend\dist`.
+4. Node.js LTS only if the browser UI has not already been built into `frontend\dist`, or if source files are newer than the existing build.
 
 The ordinary local desktop run does not require Docker or PostgreSQL.
 
@@ -162,7 +162,7 @@ The Windows source-checkout runtime installs from:
 backend\requirements-windows-local.txt
 ```
 
-If `frontend\dist` is missing and Node.js/npm is available, the launcher may also ask before building the browser UI. Type `Y` to let it build.
+If `frontend\dist` is missing or older than the React source and Node.js/npm is available, preflight rebuilds the browser UI. If npm is not available, preflight warns that the served UI may be stale; use a packaged release or install Node.js/npm and rerun preflight before judging the UI.
 
 ### Step 4: Save the first admin password
 
@@ -495,8 +495,8 @@ The startup script:
 7. Asks before installing missing Python packages.
 8. Installs from `backend\requirements-windows-local.txt` for ordinary local runs.
 9. Validates the YAML Treatment Plan rules configuration without requiring pytest.
-10. Checks whether `frontend\dist` exists.
-11. Asks before using Node/npm to install and build frontend files when needed.
+10. Checks whether `frontend\dist` exists and whether it is older than the React source.
+11. Uses Node/npm to install and build frontend files when needed and available; otherwise it warns when the browser UI may be stale.
 12. Starts the local FastAPI desktop app on `http://localhost:8000`.
 13. Opens the browser unless started with `-NoBrowser`.
 
@@ -667,7 +667,7 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. It shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.0.3` adds a visible updated-evidence-queue banner so operators can confirm they are seeing the current UI. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
 
@@ -798,7 +798,7 @@ If installation fails, check:
 
 ### Browser UI is missing
 
-If `frontend\dist` is missing, the desktop backend still starts and shows an app-not-built page with useful local checks.
+If `frontend\dist` is missing, the desktop backend still starts and shows an app-not-built page with useful local checks. If `frontend\dist` exists but is older than `frontend\src`, the app can show an older UI until the frontend build is refreshed.
 
 For source checkout runs, build the browser UI:
 
@@ -1024,7 +1024,7 @@ flowchart LR
 The current app version is:
 
 ```text
-0.5.0
+1.0.3
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:
