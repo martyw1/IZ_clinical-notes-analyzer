@@ -37,6 +37,25 @@ function Add-Check {
     Write-Host "[$Status] $Name - $Message $Detail" -ForegroundColor $color
 }
 
+function Invoke-PythonSnippetFile {
+    param(
+        [string]$PythonExe,
+        [string]$Code
+    )
+
+    if (-not (Test-Path $PythonExe)) { return 9009 }
+    $scriptName = "iz-cna-preflight-$([guid]::NewGuid().ToString('N')).py"
+    $scriptPath = Join-Path $env:TEMP $scriptName
+    try {
+        Set-Content -Path $scriptPath -Value $Code -Encoding UTF8
+        & $PythonExe $scriptPath
+        return [int]$LASTEXITCODE
+    }
+    finally {
+        Remove-Item -Path $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function New-RandomSecret {
     param([int]$Length = 64)
     $bytes = New-Object byte[] $Length
@@ -58,7 +77,8 @@ function Find-Python {
 
     foreach ($candidate in $candidates) {
         try {
-            $versionText = & $candidate -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null
+            $versionCode = "import sys; print('{}.{}.{}'.format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))"
+            $versionText = & $candidate -c $versionCode 2>$null
             if ($LASTEXITCODE -eq 0 -and [version]$versionText -ge [version]'3.11.0') { return $candidate }
         } catch { continue }
     }
@@ -158,8 +178,8 @@ if missing:
     raise SystemExit(1)
 print("Python dependency check passed for " + sys.executable)
 '@
-    & $VenvPython -c $code
-    return $LASTEXITCODE -eq 0
+    $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code
+    return $exitCode -eq 0
 }
 
 function Ensure-Venv {
@@ -259,11 +279,11 @@ if len(checklist['steps']) != 20:
     raise SystemExit('Treatment Plan Checklist must contain 20 steps.')
 print('backend configuration ok')
 "@
-    & $VenvPython -c $code
-    if ($LASTEXITCODE -eq 0) {
+    $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code
+    if ($exitCode -eq 0) {
         Add-Check 'backend_config' 'ok' 'Rules and Treatment Plan Checklist validated.' ''
     } else {
-        Add-Check 'backend_config' 'fail' 'Rules or Treatment Plan Checklist validation failed.' "exit=$LASTEXITCODE"
+        Add-Check 'backend_config' 'fail' 'Rules or Treatment Plan Checklist validation failed.' "exit=$exitCode"
     }
 }
 
