@@ -23,14 +23,14 @@ Required resolution evidence:
 
 Status: in progress for Version 1.
 
-The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation.
+The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
 Current implementation state: Version 1 adds Windows preflight, setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, and AppData preflight reports. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.0.0` on that machine.
+- `/api/version` and the UI footer show `1.0.2` on that machine.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
