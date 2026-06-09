@@ -1,8 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
+Current patch version: `1.0.1` / build `2026.06.09.2`.
+
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
+
+Version 1.0.1 is a Windows startup reliability patch. It keeps the Version 1 app features intact while fixing the source-checkout launch path so preflight runs once, validates the complete Windows runtime dependency set, and avoids the old false dependency-check failure after packages are already installed.
 
 ## Prerequisites for Source Build
 
@@ -25,7 +29,7 @@ scripts\setup-windows.ps1 -AssumeYes
 scripts\preflight-windows.ps1 -AssumeYes
 ```
 
-Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates backend dependencies, validates rules and the Treatment Plan Checklist, confirms frontend build assets, checks the app port, and writes a JSON report.
+Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates the full Windows runtime dependency set, validates rules and the Treatment Plan Checklist, confirms frontend build assets, checks the app port, and writes a JSON report.
 
 ## Local Launch
 
@@ -38,6 +42,20 @@ The double-click launcher uses:
 ```cmd
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
+
+Expected Version 1.0.1 behavior: startup runs preflight once, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+
+## Admin Access Reset
+
+When at least one admin can sign in, use the app's `User management` screen to reset another user account.
+
+When no admin can sign in on a local Windows desktop install, follow:
+
+```text
+docs\admin-access-reset.md
+```
+
+Do not record credential values in Git, screenshots, email, support tickets, or chat.
 
 ## Tests
 
@@ -62,6 +80,14 @@ Windows preflight:
 scripts\preflight-windows.ps1 -AssumeYes
 ```
 
+Version checks after local launch:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8000/api/readiness
+Invoke-RestMethod http://127.0.0.1:8000/api/version
+```
+
 Release package:
 
 ```powershell
@@ -83,6 +109,8 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
+Note: the Version 1.0.1 source metadata and scripts should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+
 ## Security Checks
 
 Before commit or push:
@@ -101,3 +129,4 @@ Review every result. Synthetic placeholder words in code and docs are allowed on
 - The LOC-change treatment-plan update window is unvalidated and must stay configurable.
 - OCR quality depends on source document readability.
 - LLM assistance is optional and disabled by default.
+- The package is not yet a signed MSI/MSIX; a signed installer remains the recommended long-term endpoint for non-technical deployment.
