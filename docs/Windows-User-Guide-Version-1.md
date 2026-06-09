@@ -2,6 +2,10 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
+Current patch version: `1.0.1` / build `2026.06.09.2`.
+
+Version 1.0.1 fixes the Windows source-checkout startup path so the launcher runs preflight once, validates the full runtime dependency set, and avoids the legacy false dependency-check failure message after packages are already installed.
+
 ## Install
 
 1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0`.
@@ -18,6 +22,12 @@ The installer is per-user and installs under `%LOCALAPPDATA%\Programs\IZ Clinica
 3. Sign in as `admin`.
 4. Use the generated first password from the local `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env` file.
 5. Change or protect that password according to R3 policy.
+
+## Admin Access Reset
+
+When a working admin account can sign in, use `User management` to reset another user account and require a new credential at next sign-in when available.
+
+When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`. That guide explains how an authorized R3 administrator can update the local bootstrap admin access value in the local settings file and restart the app without putting credentials into Git, screenshots, email, support tickets, or chat.
 
 ## Main Screens
 
@@ -42,9 +52,11 @@ Supported file types are shown in the upload screen. Use synthetic data for test
 - Preflight report: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json`
 - Startup logs: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs`
 - Local settings: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env`
+- Admin access reset guide: `docs\admin-access-reset.md`
 - App URL: `http://localhost:8000`
 - Health check: `http://localhost:8000/api/health`
 - Readiness check: `http://localhost:8000/api/readiness`
+- Version check: `http://localhost:8000/api/version`
 
 ## Uninstall
 
