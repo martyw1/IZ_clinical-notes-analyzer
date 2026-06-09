@@ -1,18 +1,27 @@
-# Windows startup dependency-check known issue
+# Windows Startup Note
 
-The Windows source-checkout startup script can incorrectly report that packages are missing after pip has already confirmed that all packages are installed. This is caused by PowerShell function return behavior mixing process output with boolean return values.
+Status: resolved in Version `1.0.1` / build `2026.06.09.2`.
 
-Temporary workaround:
+## Original behavior
+
+The Windows source-checkout launch path could incorrectly report a package-check problem after pip had already confirmed that all required packages were installed.
+
+## Resolution
+
+Version `1.0.1` changes the local Windows launch path so:
+
+- `scripts\startup-windows-local.ps1` runs `scripts\preflight-windows.ps1` once before launch.
+- `scripts\preflight-windows.ps1` validates the complete Windows runtime package set.
+- `scripts\start-windows-local.ps1` is a thin wrapper around `startup-windows-local.ps1`, so preflight is not run twice.
+
+## Validation commands
 
 ```powershell
-cd D:\OneDrive\local-apps\IZ_clinical-notes-analyzer
-$env:IZ_CNA_ENV_FILE = "$env:LOCALAPPDATA\IZ Clinical Notes Analyzer\.env"
-$env:PYTHONPATH = "$PWD\backend"
-.\backend\.venv\Scripts\python.exe -m uvicorn app.desktop_main:app --app-dir backend --host 127.0.0.1 --port 8000
+scripts\preflight-windows.ps1 -AssumeYes
+scripts\start-windows-local.ps1 -AssumeYes
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8000/api/readiness
+Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Then open:
-
-```text
-http://localhost:8000
-```
+The expected app version after this patch is `1.0.1`.
