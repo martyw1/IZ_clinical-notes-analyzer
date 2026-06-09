@@ -48,8 +48,12 @@ function Invoke-PythonSnippetFile {
     $scriptPath = Join-Path $env:TEMP $scriptName
     try {
         Set-Content -Path $scriptPath -Value $Code -Encoding UTF8
-        & $PythonExe $scriptPath
-        return [int]$LASTEXITCODE
+        $output = & $PythonExe $scriptPath 2>&1
+        $exitCode = [int]$LASTEXITCODE
+        foreach ($line in $output) {
+            if ($null -ne $line -and "$line".Length -gt 0) { Write-Host $line }
+        }
+        return $exitCode
     }
     finally {
         Remove-Item -Path $scriptPath -Force -ErrorAction SilentlyContinue
@@ -179,7 +183,7 @@ if missing:
 print("Python dependency check passed for " + sys.executable)
 '@
     $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code
-    return $exitCode -eq 0
+    return ([int]$exitCode -eq 0)
 }
 
 function Ensure-Venv {
@@ -280,7 +284,7 @@ if len(checklist['steps']) != 20:
 print('backend configuration ok')
 "@
     $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code
-    if ($exitCode -eq 0) {
+    if ([int]$exitCode -eq 0) {
         Add-Check 'backend_config' 'ok' 'Rules and Treatment Plan Checklist validated.' ''
     } else {
         Add-Check 'backend_config' 'fail' 'Rules or Treatment Plan Checklist validation failed.' "exit=$exitCode"
