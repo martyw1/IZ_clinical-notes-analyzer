@@ -1,12 +1,12 @@
 # Open Blockers
 
-Date: 2026-06-04
+Date: 2026-06-09
 
 ## LOC-Change Treatment-Plan Update Window
 
 Status: unvalidated.
 
-The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The v0.5.0 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/settings UI and operator documentation.
+The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
 
 Current implementation state: the setting exists in the database and admin Settings UI, and the timeliness dashboard/detail output marks LOC-change cases as `Needs Review` while this blocker remains unresolved.
 
@@ -19,28 +19,28 @@ Required resolution evidence:
 - R3 confirms whether the trigger date is the LOC-change date, signed review date, admission date, or another source evidence date.
 - R3 confirms the user-visible label and default status for overdue LOC-change updates.
 
-## Windows Packaging and Dell Validation
+## Windows Packaging and Validation
 
-Status: not validated on target Windows hardware.
+Status: in progress for Version 1.
 
-The recommended end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation. The current repository still provides source-checkout launch and test scripts, not a finished installer.
+The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation.
 
-Current implementation state: `docs/windows-dell-test-plan.md` gives exact Dell PowerShell validation commands and separates Option A packaged release from Option B source-checkout validation. The macOS validation environment cannot prove Windows 10/11 Home behavior, SmartScreen/code-signing behavior, installer repair/uninstall behavior, or target Dell performance.
+Current implementation state: Version 1 adds Windows preflight, setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, and AppData preflight reports. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
-- Source checkout validation passes on the purchased Dell Windows 10/11 Home laptop.
-- `/api/version` and the UI footer show `0.5.0` on that machine.
+- Source checkout validation passes on the target Windows 10/11 laptop.
+- `/api/version` and the UI footer show `1.0.0` on that machine.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
-- A real installer or MSI exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
+- A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
 ## Frontend Vitest and Direct TypeScript Check
 
-Status: blocked in this OneDrive checkout.
+Status: resolved for Vitest on this Windows 11 laptop.
 
-Frontend production builds pass, but local Vitest and direct `tsc --noEmit` checks hang before useful diagnostics in this macOS OneDrive checkout. Treat this as a local toolchain/workspace blocker, not a passing frontend test result.
+Frontend Vitest and production build completed locally on 2026-06-09 after installing Node.js LTS through `winget`. Direct `tsc --noEmit` is not a defined package script in Version 1; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
 
 Required resolution evidence:
 
-- `npm run test -- --run` completes under CI or a repaired local Node/Vitest setup.
-- A direct TypeScript check completes or is replaced by the project-supported CI frontend job.
+- Keep `npm test -- --run` passing locally and in CI.
+- Keep `npm run build` passing locally and in CI.

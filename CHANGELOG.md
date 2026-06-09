@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.0 - 2026-06-09
+
+### Added
+- Added the canonical Treatment Plan Checklist Version 1 JSON source, backend validator, readiness check, API endpoint, and React Checklist tab.
+- Added review-source discovery for mock API readiness and manual uploads while keeping live Alleva import disabled until credentials, mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval are complete.
+- Added dashboard review-source cards, checklist version visibility, and CSV/JSON export controls for chart review and treatment-plan detail reports.
+- Added Windows preflight, setup, local start, smoke, API-configuration smoke, and release package scripts for a normal Windows 10/11 laptop or desktop.
+- Added Version 1 Windows user, deployment/test, UAT, checklist, completion, and validation documentation.
+
+### Changed
+- Promoted version metadata to `1.0.0` / build `2026.06.09.1`.
+- Seeded the default treatment-plan workflow from the canonical checklist snapshot.
+- Kept the LOC-change treatment-plan update window configurable and visibly unvalidated in UI/docs.
+- Hardened Windows smoke scripts for paths with spaces and `127.0.0.1` localhost binding behavior.
+- Excluded generated release output, local virtualenvs, node modules, logs, uploads, and archived walkthrough/video folders from the Windows release package.
+
+### Verified
+- Backend test suite passed with `74 passed, 2 skipped`.
+- Frontend user-oriented Vitest suite passed with `9 passed`, including upload, review save, checklist, settings, and CSV/JSON export coverage.
+- Frontend production build passed.
+- Windows preflight passed and wrote a local AppData JSON report.
+- Windows release builder produced `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0` and `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0.zip`.
+- Windows local stack smoke passed health, readiness, version, login/profile, and workflow profile API checks.
+- Windows API configuration smoke passed focused API connectivity tests, encrypted API-key save, sample OpenAPI pull, and API configuration page load.
+- Real in-app browser smoke passed login, dashboard, checklist, manual upload form, live synthetic upload via local API, generated review queue/detail, reviewer decision save, treatment-plan tracker, and 1366x768 laptop viewport checks.
+
 ## 0.5.0 - 2026-06-04
 
 ### Added

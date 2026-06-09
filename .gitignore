@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 node_modules/
 frontend/dist/
+dist/
 *.db
 *.sqlite
 *.sqlite3
@@ -21,6 +22,7 @@ htmlcov/
 frontend/coverage/
 
 .venv-*
+backend/.venv/
 backend/.venv-*
 
 # Never commit local credential notes

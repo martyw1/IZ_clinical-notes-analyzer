@@ -1,0 +1,422 @@
+{
+  "checklist_id": "treatment-plan-v1",
+  "version": "1.0.0",
+  "display_name": "Treatment Plan Checklist Version 1",
+  "organization": "R3 Recovery Services",
+  "status": "version_1_ready_with_loc_change_blocker",
+  "last_updated": "2026-06-09",
+  "source_of_truth": "config/checklists/treatment-plan-v1.json",
+  "review_owner_roles": ["admin", "manager"],
+  "viewer_roles": ["admin", "manager", "counselor"],
+  "acronyms": [
+    {
+      "term": "API",
+      "definition": "Application Programming Interface",
+      "validation_status": "standard"
+    },
+    {
+      "term": "EMR",
+      "definition": "Electronic Medical Record",
+      "validation_status": "standard"
+    },
+    {
+      "term": "PHI",
+      "definition": "Protected Health Information",
+      "validation_status": "standard"
+    },
+    {
+      "term": "PII",
+      "definition": "Personally Identifiable Information",
+      "validation_status": "standard"
+    },
+    {
+      "term": "OCR",
+      "definition": "Optical Character Recognition",
+      "validation_status": "standard"
+    },
+    {
+      "term": "LLM",
+      "definition": "Large Language Model",
+      "validation_status": "standard"
+    },
+    {
+      "term": "TP",
+      "definition": "Treatment Plan",
+      "validation_status": "facility_review_requested"
+    },
+    {
+      "term": "SUD",
+      "definition": "Substance Use Disorder",
+      "validation_status": "facility_review_requested"
+    },
+    {
+      "term": "LOC",
+      "definition": "Level of Care",
+      "validation_status": "facility_review_requested"
+    },
+    {
+      "term": "ASAM",
+      "definition": "American Society of Addiction Medicine criteria, if used by the facility/workflow",
+      "validation_status": "facility_review_requested"
+    },
+    {
+      "term": "SMART",
+      "definition": "Specific, Measurable, Achievable, Relevant, Time-bound",
+      "validation_status": "facility_review_requested"
+    }
+  ],
+  "review_statuses": [
+    {
+      "key": "not_reviewed",
+      "label": "Not Reviewed",
+      "description": "The item is known to the app but no review has started."
+    },
+    {
+      "key": "ready_for_review",
+      "label": "Ready for Review",
+      "description": "Required source material is present enough for reviewer selection."
+    },
+    {
+      "key": "in_review",
+      "label": "In Review",
+      "description": "A reviewer or automated deterministic pass is actively evaluating the item."
+    },
+    {
+      "key": "needs_human_review",
+      "label": "Needs Human Review",
+      "description": "The app found missing, conflicting, unreadable, or clinically judgment-dependent evidence."
+    },
+    {
+      "key": "passed",
+      "label": "Passed",
+      "description": "The reviewed item satisfied the configured checklist evidence."
+    },
+    {
+      "key": "failed",
+      "label": "Failed",
+      "description": "The reviewed item has confirmed checklist failures."
+    },
+    {
+      "key": "missing_required_data",
+      "label": "Missing Required Data",
+      "description": "The app cannot determine compliance because required metadata or evidence is absent."
+    },
+    {
+      "key": "error",
+      "label": "Error",
+      "description": "A technical or parsing error prevented review completion."
+    },
+    {
+      "key": "finalized",
+      "label": "Finalized",
+      "description": "The reviewer completed disposition and the item should not return to unreviewed unless it changes, expires, or is reopened."
+    }
+  ],
+  "loc_change_blocker": {
+    "status": "unvalidated",
+    "owner": "R3/Marleigh",
+    "message": "The treatment-plan update window after a level-of-care change is not confirmed. Keep this configurable and mark LOC-change results as needs human review until validated."
+  },
+  "steps": [
+    {
+      "step": 1,
+      "key": "select_review_source",
+      "title": "Select review source",
+      "source_modes": ["api", "upload"],
+      "objective": "The reviewer chooses either EMR/API access or manual upload before a treatment plan or clinical note set is evaluated.",
+      "required_metadata": ["source_type", "source_system_or_file", "reviewer"],
+      "required_documents": [],
+      "checks": ["Confirm source choice is recorded.", "Route API and upload items into the same checklist workflow."],
+      "finding_examples": ["Source was not selected.", "Item was created outside the common checklist workflow."],
+      "remediation_suggestions": ["Choose EMR/API access or manual upload and restart the review case."],
+      "evidence_fields": ["source_type", "source_system_or_file"],
+      "automation_level": "system_required",
+      "severity_default": "high"
+    },
+    {
+      "step": 2,
+      "key": "api_source_discovery",
+      "title": "API source discovery",
+      "source_modes": ["api"],
+      "objective": "If API access is configured, periodically query the EMR/API, identify available notes and treatment plans, classify review status, and show filtered items needing review.",
+      "required_metadata": ["api_base_url_configured", "auth_method_configured", "last_refresh_at", "source_item_id"],
+      "required_documents": ["treatment_plan", "clinical_notes"],
+      "checks": ["Use saved encrypted credentials only.", "Do not expose API keys or tokens to the browser.", "Show mock/stub discovery when live import is not approved."],
+      "finding_examples": ["API credentials are absent.", "Discovery failed.", "Live import attempted without approval."],
+      "remediation_suggestions": ["Configure API settings, use mock discovery, or upload a local export until live import is approved."],
+      "evidence_fields": ["api_connectivity_status", "last_refresh_at", "source_item_id"],
+      "automation_level": "stub_until_live_approval",
+      "severity_default": "warning"
+    },
+    {
+      "step": 3,
+      "key": "upload_source_intake",
+      "title": "Upload source intake",
+      "source_modes": ["upload"],
+      "objective": "Accept supported files, validate file type and size, extract text where possible, and create a review case using the common checklist workflow.",
+      "required_metadata": ["patient_id", "file_count", "file_types", "total_size_bytes"],
+      "required_documents": ["uploaded_binder_or_export"],
+      "checks": ["Block unsupported extensions.", "Block empty or oversized files.", "Store uploads encrypted at rest.", "Avoid logging uploaded note text."],
+      "finding_examples": ["Unsupported upload type.", "Missing patient ID.", "Unreadable or empty document."],
+      "remediation_suggestions": ["Upload supported synthetic or exported files and enter the patient identifier when it cannot be detected."],
+      "evidence_fields": ["file_manifest", "sha256", "upload_validation_status"],
+      "automation_level": "deterministic",
+      "severity_default": "high"
+    },
+    {
+      "step": 4,
+      "key": "review_item_status_classification",
+      "title": "Review item status classification",
+      "source_modes": ["api", "upload"],
+      "objective": "Assign a clear status such as Not Reviewed, Ready for Review, In Review, Needs Human Review, Passed, Failed, Missing Required Data, Error, or Finalized.",
+      "required_metadata": ["review_status", "status_reason", "last_status_change_at"],
+      "required_documents": [],
+      "checks": ["Use deterministic Missing Required Data and Needs Human Review states.", "Do not silently guess compliance."],
+      "finding_examples": ["Status is blank.", "Missing evidence was marked passed.", "Error state has no recovery message."],
+      "remediation_suggestions": ["Reclassify the item and document the reason for the status."],
+      "evidence_fields": ["review_status", "status_reason"],
+      "automation_level": "deterministic_with_reviewer_override",
+      "severity_default": "high"
+    },
+    {
+      "step": 5,
+      "key": "required_metadata_capture",
+      "title": "Required metadata capture",
+      "source_modes": ["api", "upload"],
+      "objective": "Capture or extract client identifier, document type, provider or staff, service date, plan date, review period, program/location, and source system or file.",
+      "required_metadata": ["client_identifier", "document_type", "provider_staff", "service_date", "plan_date", "review_period", "program_location", "source_system_or_file"],
+      "required_documents": [],
+      "checks": ["Flag missing admission date, LOC, signature date, and source evidence.", "Flag conflicting identifiers or dates."],
+      "finding_examples": ["Client identifier missing.", "Provider missing.", "Plan date conflicts with source document date."],
+      "remediation_suggestions": ["Correct metadata in the source export or add reviewer notes that identify the source evidence."],
+      "evidence_fields": ["metadata_fields", "source_document", "source_date"],
+      "automation_level": "deterministic",
+      "severity_default": "critical"
+    },
+    {
+      "step": 6,
+      "key": "required_document_set_check",
+      "title": "Required document set check",
+      "source_modes": ["api", "upload"],
+      "objective": "Verify whether expected treatment plan, progress notes, assessments, signatures, reviews, and supporting documents are present or missing.",
+      "required_metadata": ["expected_document_types", "found_document_types"],
+      "required_documents": ["treatment_plan", "progress_notes", "assessments", "signatures", "reviews", "supporting_documents"],
+      "checks": ["Flag missing treatment plans.", "Flag missing progress-note evidence.", "Flag missing assessments or signatures."],
+      "finding_examples": ["Treatment plan missing.", "No supporting assessment found.", "Review document missing."],
+      "remediation_suggestions": ["Upload or import the missing document set before final disposition."],
+      "evidence_fields": ["document_manifest", "document_presence_map"],
+      "automation_level": "deterministic",
+      "severity_default": "critical"
+    },
+    {
+      "step": 7,
+      "key": "treatment_plan_structure_check",
+      "title": "Treatment plan structure check",
+      "source_modes": ["api", "upload"],
+      "objective": "Identify problem areas, diagnoses or clinical needs, goals, objectives, interventions, target dates, review dates, staff responsibilities, client participation, and signatures.",
+      "required_metadata": ["problem_areas", "diagnoses_or_needs", "goals", "objectives", "interventions", "target_dates", "review_dates", "staff_responsibilities", "client_participation", "signatures"],
+      "required_documents": ["treatment_plan"],
+      "checks": ["Flag blank structural sections.", "Flag missing client or staff signatures.", "Flag missing target or review dates."],
+      "finding_examples": ["No measurable objectives.", "No staff responsibility listed.", "Client participation absent."],
+      "remediation_suggestions": ["Update the treatment plan so all required structural sections are explicit."],
+      "evidence_fields": ["treatment_plan_section", "signature_dates", "document_excerpt"],
+      "automation_level": "deterministic_with_human_confirmation",
+      "severity_default": "critical"
+    },
+    {
+      "step": 8,
+      "key": "timeliness_check",
+      "title": "Timeliness check",
+      "source_modes": ["api", "upload"],
+      "objective": "Check whether the treatment plan was created, reviewed, updated, and signed within the required timeframe and flag expired, late, missing, or future-dated items.",
+      "required_metadata": ["admission_date", "level_of_care", "plan_date", "review_date", "signature_date", "configured_timeframes"],
+      "required_documents": ["treatment_plan", "treatment_plan_review", "signature_page"],
+      "checks": ["Apply configured LOC recurrence rules.", "Keep LOC-change window unvalidated until R3 confirms it.", "Flag future-dated signatures."],
+      "finding_examples": ["Expired plan.", "Late signature.", "Future-dated review.", "LOC-change review window unvalidated."],
+      "remediation_suggestions": ["Correct dates, obtain signatures, or document manual review when the LOC-change rule is unresolved."],
+      "evidence_fields": ["due_date", "signature_date", "rule_used", "source_evidence"],
+      "automation_level": "deterministic",
+      "severity_default": "critical"
+    },
+    {
+      "step": 9,
+      "key": "completeness_check",
+      "title": "Completeness check",
+      "source_modes": ["api", "upload"],
+      "objective": "Flag missing sections, blank fields, placeholder text, missing signatures, missing credentials, missing dates, generic language, and incomplete goals/objectives/interventions.",
+      "required_metadata": ["required_sections", "required_fields", "signature_status", "credential_status"],
+      "required_documents": ["treatment_plan", "supporting_documents"],
+      "checks": ["Detect blank or placeholder values.", "Flag missing credentials.", "Flag generic goal/objective/intervention language."],
+      "finding_examples": ["TBD appears in the plan.", "Staff credential missing.", "Objective is incomplete."],
+      "remediation_suggestions": ["Complete missing fields and replace placeholders with individualized clinical content."],
+      "evidence_fields": ["section_name", "field_name", "evidence_excerpt"],
+      "automation_level": "deterministic_with_human_confirmation",
+      "severity_default": "high"
+    },
+    {
+      "step": 10,
+      "key": "goal_objective_quality_check",
+      "title": "Goal/objective quality check",
+      "source_modes": ["api", "upload"],
+      "objective": "Evaluate whether goals and objectives are individualized and SMART enough to support clinical review.",
+      "required_metadata": ["goals", "objectives", "target_dates", "measurement_terms"],
+      "required_documents": ["treatment_plan"],
+      "checks": ["Flag goals that are not individualized.", "Flag objectives without measurable criteria.", "Flag missing target dates."],
+      "finding_examples": ["Generic recovery goal only.", "Objective has no measurable behavior.", "No target date."],
+      "remediation_suggestions": ["Rewrite goals and objectives with individualized, measurable, time-bound language."],
+      "evidence_fields": ["goal_text", "objective_text", "target_date"],
+      "automation_level": "human_review_recommended",
+      "severity_default": "high"
+    },
+    {
+      "step": 11,
+      "key": "medical_necessity_clinical_rationale_check",
+      "title": "Medical necessity / clinical rationale check",
+      "source_modes": ["api", "upload"],
+      "objective": "Check whether diagnosis, symptoms, level of care, risks, needs, and planned services are logically connected.",
+      "required_metadata": ["diagnosis", "symptoms", "level_of_care", "risks", "needs", "planned_services"],
+      "required_documents": ["assessment", "treatment_plan", "supporting_clinical_notes"],
+      "checks": ["Flag missing diagnosis or symptom linkage.", "Flag services unsupported by documented needs.", "Flag LOC mismatch."],
+      "finding_examples": ["Planned service not connected to diagnosis.", "LOC not supported by source evidence.", "Risk documented with no plan response."],
+      "remediation_suggestions": ["Add clinical rationale that links diagnoses, risks, LOC, and planned services."],
+      "evidence_fields": ["diagnosis", "clinical_need", "planned_service", "source_excerpt"],
+      "automation_level": "human_review_recommended",
+      "severity_default": "high"
+    },
+    {
+      "step": 12,
+      "key": "progress_note_alignment_check",
+      "title": "Progress note alignment check",
+      "source_modes": ["api", "upload"],
+      "objective": "Check whether progress notes and services connect back to active treatment plan goals, objectives, interventions, frequency, duration, and modality.",
+      "required_metadata": ["progress_note_dates", "services", "active_goals", "active_objectives", "interventions", "frequency", "duration", "modality"],
+      "required_documents": ["progress_notes", "treatment_plan"],
+      "checks": ["Flag notes before plan creation.", "Flag billed or documented service not tied to the plan.", "Flag unsupported frequency or modality."],
+      "finding_examples": ["Group note does not map to an active objective.", "Service occurred before plan creation.", "Frequency exceeds plan."],
+      "remediation_suggestions": ["Update progress note linkage or revise the treatment plan before final approval."],
+      "evidence_fields": ["progress_note", "service_date", "goal_reference", "modality"],
+      "automation_level": "deterministic_with_human_confirmation",
+      "severity_default": "critical"
+    },
+    {
+      "step": 13,
+      "key": "consistency_check",
+      "title": "Consistency check",
+      "source_modes": ["api", "upload"],
+      "objective": "Flag contradictions across notes and plans, including inconsistent dates, provider names, diagnosis, level of care, service frequency, client identifiers, or plan version.",
+      "required_metadata": ["dates", "provider_names", "diagnoses", "levels_of_care", "service_frequencies", "client_identifiers", "plan_versions"],
+      "required_documents": ["treatment_plan", "progress_notes", "assessments"],
+      "checks": ["Flag conflicting patient identifiers.", "Flag provider/date/LOC contradictions.", "Flag plan-version conflicts."],
+      "finding_examples": ["Different LOC values across documents.", "Service date conflicts with plan date.", "Client ID mismatch."],
+      "remediation_suggestions": ["Resolve contradictions in the source record or document why one source is authoritative."],
+      "evidence_fields": ["conflicting_field", "source_document", "conflicting_value"],
+      "automation_level": "deterministic",
+      "severity_default": "high"
+    },
+    {
+      "step": 14,
+      "key": "high_risk_issue_detection",
+      "title": "High-risk issue detection",
+      "source_modes": ["api", "upload"],
+      "objective": "Specifically flag missing treatment plan, expired plan, unsigned plan, notes before plan creation, billed/documented service not tied to plan, no measurable objective, no progress update, and unsupported service frequency.",
+      "required_metadata": ["risk_flags", "source_evidence"],
+      "required_documents": ["treatment_plan", "progress_notes", "service_records"],
+      "checks": ["Emit a high-risk finding for each configured risk.", "Never downgrade high-risk missing data to pass."],
+      "finding_examples": ["Missing treatment plan.", "Unsigned plan.", "No measurable objective.", "Unsupported service frequency."],
+      "remediation_suggestions": ["Escalate for human review and correct source documentation before finalizing."],
+      "evidence_fields": ["risk_type", "source_document", "evidence_excerpt"],
+      "automation_level": "deterministic",
+      "severity_default": "critical"
+    },
+    {
+      "step": 15,
+      "key": "evidence_capture",
+      "title": "Evidence capture",
+      "source_modes": ["api", "upload"],
+      "objective": "For each finding, store a plain-English explanation, severity, checklist step, source document, date, and a short evidence excerpt if safely available.",
+      "required_metadata": ["finding_message", "severity", "checklist_step", "source_document", "evidence_date"],
+      "required_documents": [],
+      "checks": ["Keep excerpts short.", "Do not log uploaded note text.", "Avoid PHI in tests, docs, screenshots, and examples."],
+      "finding_examples": ["Finding lacks source evidence.", "Evidence excerpt too long.", "Severity missing."],
+      "remediation_suggestions": ["Add source location, date, severity, and a safe short evidence note."],
+      "evidence_fields": ["finding_message", "severity", "source_document", "evidence_excerpt"],
+      "automation_level": "system_required",
+      "severity_default": "high"
+    },
+    {
+      "step": 16,
+      "key": "human_review_and_override",
+      "title": "Human review and override",
+      "source_modes": ["api", "upload"],
+      "objective": "Marleigh or another authorized reviewer can mark findings as confirmed, dismissed, needs follow-up, or corrected, with comments and audit logging.",
+      "required_metadata": ["reviewer", "review_action", "comment", "audit_event"],
+      "required_documents": [],
+      "checks": ["Restrict changes to authorized roles.", "Require comments for follow-up or dismissal.", "Write audit logs without secrets or clinical text."],
+      "finding_examples": ["Override lacks reason.", "Unauthorized reviewer changed disposition.", "No audit event recorded."],
+      "remediation_suggestions": ["Record reviewer comment and ensure the audit trail captures the disposition."],
+      "evidence_fields": ["reviewer", "review_action", "comment", "audit_event_id"],
+      "automation_level": "human_required",
+      "severity_default": "high"
+    },
+    {
+      "step": 17,
+      "key": "output_and_export",
+      "title": "Output and export",
+      "source_modes": ["api", "upload"],
+      "objective": "Produce a clear summary with pass/fail/needs-review status, severity counts, finding details, remediation suggestions, and export options such as CSV or JSON as appropriate.",
+      "required_metadata": ["overall_status", "severity_counts", "finding_details", "export_format"],
+      "required_documents": [],
+      "checks": ["Show a human-readable report in the app.", "Allow CSV or JSON export.", "Exclude secrets from exports."],
+      "finding_examples": ["No export path.", "Summary lacks severity counts.", "Export includes secret configuration."],
+      "remediation_suggestions": ["Use the report/export controls and review exported content before sharing."],
+      "evidence_fields": ["report_summary", "severity_counts", "export_path"],
+      "automation_level": "system_required",
+      "severity_default": "warning"
+    },
+    {
+      "step": 18,
+      "key": "status_persistence",
+      "title": "Status persistence",
+      "source_modes": ["api", "upload"],
+      "objective": "Save review status so the same note or plan does not appear as unreviewed again unless it changes, expires, or is manually reopened.",
+      "required_metadata": ["review_item_id", "current_status", "source_version", "last_finalized_at"],
+      "required_documents": [],
+      "checks": ["Persist status by source item and version.", "Reopen on changed source, expiration, or manual action."],
+      "finding_examples": ["Finalized item returned as unreviewed.", "Changed item did not reopen.", "Manual reopen reason missing."],
+      "remediation_suggestions": ["Verify item identity, source version, and final disposition are saved."],
+      "evidence_fields": ["review_item_id", "source_version", "last_status_change"],
+      "automation_level": "system_required",
+      "severity_default": "high"
+    },
+    {
+      "step": 19,
+      "key": "periodic_monitoring",
+      "title": "Periodic monitoring",
+      "source_modes": ["api"],
+      "objective": "In API mode, periodically refresh note/plan status and surface new, changed, overdue, failed, or needs-review items.",
+      "required_metadata": ["refresh_interval", "last_refresh_at", "changed_item_count", "error_count"],
+      "required_documents": ["api_discovered_items"],
+      "checks": ["Use mock periodic refresh when live import is disabled.", "Show API errors in non-technical language.", "Do not retry forever without surfacing errors."],
+      "finding_examples": ["Refresh never ran.", "API failure hidden from dashboard.", "Changed item not surfaced."],
+      "remediation_suggestions": ["Run a manual refresh, test API connectivity, or use upload mode while API access is unavailable."],
+      "evidence_fields": ["last_refresh_at", "refresh_status", "changed_items"],
+      "automation_level": "stub_until_live_approval",
+      "severity_default": "warning"
+    },
+    {
+      "step": 20,
+      "key": "audit_and_traceability",
+      "title": "Audit and traceability",
+      "source_modes": ["api", "upload"],
+      "objective": "Record when a review was created, by whom, source type, checklist version, app version, model/rules version where applicable, and final disposition.",
+      "required_metadata": ["created_at", "created_by", "source_type", "checklist_version", "app_version", "rules_version", "final_disposition"],
+      "required_documents": [],
+      "checks": ["Write audit events for review creation, findings, override, export, and disposition.", "Do not include credentials or uploaded note text in audit details."],
+      "finding_examples": ["Missing checklist version.", "No final disposition audit event.", "Audit detail contains sensitive text."],
+      "remediation_suggestions": ["Re-run the review or record final disposition with audit logging enabled."],
+      "evidence_fields": ["audit_event_id", "checklist_version", "app_version", "final_disposition"],
+      "automation_level": "system_required",
+      "severity_default": "critical"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer API Config Test'
 $EnvFile = Join-Path $AppDataRoot '.env'
 $LogDir = Join-Path $AppDataRoot 'logs'
+$BaseUrl = "http://127.0.0.1:$Port"
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 function Write-Step($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" }
@@ -77,8 +78,8 @@ LOCAL_SQLITE_DB_PATH=$AppDataRoot\api-config-test.sqlite3
 DATABASE_URL=
 SECRET_KEY=$(New-RandomSecret 64)
 DATA_ENCRYPTION_KEY=$(New-RandomSecret 64)
-FRONTEND_ORIGIN=http://localhost:$Port
-FRONTEND_ORIGINS=http://localhost:$Port,http://localhost:5173
+FRONTEND_ORIGIN=$BaseUrl
+FRONTEND_ORIGINS=$BaseUrl,http://localhost:$Port,http://localhost:5173
 ALLOWED_HOSTS=localhost,127.0.0.1,::1,testserver
 UPLOAD_DIR=$AppDataRoot\uploads
 LOG_DIR=$LogDir
@@ -97,50 +98,52 @@ EMR_API_ENABLED=false
     & $python -m pytest (Join-Path $RootDir 'backend\tests\test_api_connectivity.py') -q
     if ($LASTEXITCODE -ne 0) { throw 'API connectivity unit tests failed.' }
 
-    Write-Step "Starting desktop app test server on http://localhost:$Port ."
-    $server = Start-Process -FilePath $python -ArgumentList @('-m','uvicorn','app.desktop_main:app','--app-dir',(Join-Path $RootDir 'backend'),'--host','127.0.0.1','--port',"$Port") -PassThru -WindowStyle Hidden
+    Write-Step "Starting desktop app test server on $BaseUrl ."
+    $appDir = Join-Path $RootDir 'backend'
+    $uvicornArgs = "-m uvicorn app.desktop_main:app --app-dir `"$appDir`" --host 127.0.0.1 --port $Port"
+    $server = Start-Process -FilePath $python -ArgumentList $uvicornArgs -WorkingDirectory $RootDir -PassThru -WindowStyle Hidden
     try {
         $ready = $false
         for ($i = 0; $i -lt 40; $i++) {
             try {
-                $health = Invoke-RestMethod -Uri "http://localhost:$Port/api/health" -TimeoutSec 2
+                $health = Invoke-RestMethod -Uri "$BaseUrl/api/health" -TimeoutSec 2
                 if ($health.status -eq 'ok') { $ready = $true; break }
             } catch { Start-Sleep -Seconds 1 }
         }
         if (!$ready) { throw 'API health endpoint did not become ready.' }
 
         Write-Step 'Checking API configuration page.'
-        $page = Invoke-WebRequest -Uri "http://localhost:$Port/api-configuration" -TimeoutSec 10
+        $page = Invoke-WebRequest -Uri "$BaseUrl/api-configuration" -TimeoutSec 10 -UseBasicParsing
         if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'API Configuration and Connectivity Test') {
             throw 'API configuration page did not load as expected.'
         }
 
         Write-Step 'Signing in as bootstrap admin.'
         $loginBody = @{ username = 'admin'; password = $adminPassword } | ConvertTo-Json
-        $login = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/auth/login" -ContentType 'application/json' -Body $loginBody
+        $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body $loginBody
         $headers = @{ Authorization = "Bearer $($login.access_token)" }
 
         Write-Step 'Saving API configuration and encrypted API key placeholder.'
         $configBody = @{
             vendor_name = 'Local Test API'
-            api_base_url = "http://localhost:$Port"
+            api_base_url = $BaseUrl
             api_key = (New-RandomSecret 20)
             timeout_seconds = 5
             api_enabled = $false
         } | ConvertTo-Json
-        $config = Invoke-RestMethod -Method Patch -Uri "http://localhost:$Port/api/api-configuration" -Headers $headers -ContentType 'application/json' -Body $configBody
+        $config = Invoke-RestMethod -Method Patch -Uri "$BaseUrl/api/api-configuration" -Headers $headers -ContentType 'application/json' -Body $configBody
         if (-not $config.api_key_configured) { throw 'Saved API key was not reported as configured.' }
 
         Write-Step 'Pulling local sample API definition through the in-app tester.'
         $definitionBody = @{
-            swagger_ui_url = "http://localhost:$Port/api/api-configuration/sample-openapi.json"
-            openapi_url = "http://localhost:$Port/api/api-configuration/sample-openapi.json"
-            api_base_url = "http://localhost:$Port"
+            swagger_ui_url = "$BaseUrl/api/api-configuration/sample-openapi.json"
+            openapi_url = "$BaseUrl/api/api-configuration/sample-openapi.json"
+            api_base_url = $BaseUrl
             use_saved_api_key = $true
             api_key_header_name = 'x-api-key'
             timeout_seconds = 5
         } | ConvertTo-Json
-        $definition = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/api-configuration/pull-definitions" -Headers $headers -ContentType 'application/json' -Body $definitionBody
+        $definition = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/api-configuration/pull-definitions" -Headers $headers -ContentType 'application/json' -Body $definitionBody
         if ($definition.status -ne 'ok') { throw "API definition pull did not pass: $($definition | ConvertTo-Json -Depth 8)" }
         if ($definition.definition_summary.title -notmatch 'Connectivity Test Definition') { throw 'API definition summary was not returned as expected.' }
 

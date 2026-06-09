@@ -14,7 +14,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
+type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'checklist' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
 
 type VersionInfo = {
   app_name: string
@@ -471,6 +471,50 @@ type EmrImportPlan = {
   attachment_handling: string
 }
 
+type TreatmentPlanChecklistAcronym = {
+  term: string
+  definition: string
+  validation_status: string
+}
+
+type TreatmentPlanChecklistStatus = {
+  key: string
+  label: string
+  description: string
+}
+
+type TreatmentPlanChecklistStep = {
+  step: number
+  key: string
+  title: string
+  source_modes: string[]
+  objective: string
+  required_metadata: string[]
+  required_documents: string[]
+  checks: string[]
+  finding_examples: string[]
+  remediation_suggestions: string[]
+  evidence_fields: string[]
+  automation_level: string
+  severity_default: string
+}
+
+type TreatmentPlanChecklist = {
+  checklist_id: string
+  version: string
+  display_name: string
+  organization: string
+  status: string
+  last_updated: string
+  source_of_truth: string
+  review_owner_roles: string[]
+  viewer_roles: string[]
+  acronyms: TreatmentPlanChecklistAcronym[]
+  review_statuses: TreatmentPlanChecklistStatus[]
+  loc_change_blocker: { status: string; owner: string; message: string }
+  steps: TreatmentPlanChecklistStep[]
+}
+
 // Keep the browser-side upload gate aligned with backend ALLOWED_EXTENSIONS.
 const ACCEPTED_UPLOAD_TYPES = '.pdf,.doc,.docx,.txt,.csv,.rtf,.jpg,.jpeg,.png,.zip'
 const MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024
@@ -493,6 +537,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   reviews: 'Review queue',
   uploads: 'Manual upload',
   timeliness: 'Treatment plans',
+  checklist: 'Checklist',
   profile: 'My account',
   users: 'User management',
   logs: 'Forensic logs',
@@ -550,7 +595,7 @@ function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>)
 function viewFromUrl(): AppView {
   if (typeof window === 'undefined') return 'dashboard'
   const requested = new URLSearchParams(window.location.search).get('view') || window.location.hash.replace(/^#\/?/, '')
-  return ['dashboard', 'reviews', 'timeliness', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
+  return ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
 }
 
 function createSettingsForm(settings: AppSettings): AppSettingsForm {
@@ -676,6 +721,23 @@ function parseLogDetails(details: string) {
 
 function shortHash(value: string) {
   return value.length > 12 ? `${value.slice(0, 12)}...` : value
+}
+
+function csvCell(value: unknown) {
+  const raw = value == null ? '' : String(value)
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+function downloadTextFile(filename: string, content: string, contentType: string) {
+  const blob = new Blob([content], { type: contentType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function workflowTone(state: string) {
@@ -863,6 +925,7 @@ export function App() {
   const [emrDiscovery, setEmrDiscovery] = useState<EmrDiscovery | null>(null)
   const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
   const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
+  const [treatmentPlanChecklist, setTreatmentPlanChecklist] = useState<TreatmentPlanChecklist | null>(null)
   const [workflowDefinitions, setWorkflowDefinitions] = useState<WorkflowDefinition[]>([])
   const [selectedWorkflowDefinitionId, setSelectedWorkflowDefinitionId] = useState<number | null>(null)
   const [workflowDefinitionForm, setWorkflowDefinitionForm] = useState<WorkflowDefinitionForm>(createWorkflowDefinitionForm())
@@ -1033,6 +1096,11 @@ export function App() {
     if (user?.role !== 'admin') return
     const payload = await apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true')
     syncWorkflowDefinitions(payload, preferredId)
+  }
+
+  async function loadTreatmentPlanChecklist() {
+    const payload = await apiRequest<TreatmentPlanChecklist>('/treatment-plan-checklist')
+    setTreatmentPlanChecklist(payload)
   }
 
   async function loadChartDetail(chartId: number) {
@@ -1238,6 +1306,12 @@ export function App() {
       void loadTimelinessDashboard()
     }
   }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'checklist' && token && user && !mustResetPassword && !treatmentPlanChecklist) {
+      void loadTreatmentPlanChecklist().catch((caught) => setError(caught instanceof Error ? caught.message : 'Failed to load Treatment Plan Checklist'))
+    }
+  }, [activeView, token, user, mustResetPassword, treatmentPlanChecklist])
 
   useEffect(() => {
     uploadPatientIdRef.current = uploadForm.patient_id
@@ -1488,6 +1562,74 @@ export function App() {
     } finally {
       setIsBusy(false)
     }
+  }
+
+  function exportSelectedChart(format: 'json' | 'csv') {
+    if (!selectedChart) {
+      setError('Select a review before exporting a report.')
+      return
+    }
+    const safePatientId = selectedChart.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
+    const checklistVersion = treatmentPlanChecklist?.version || '1.0.0'
+    if (format === 'json') {
+      downloadTextFile(
+        `review-report-${safePatientId}.json`,
+        JSON.stringify(
+          {
+            report_type: 'chart_review',
+            checklist_id: treatmentPlanChecklist?.checklist_id || 'treatment-plan-v1',
+            checklist_version: checklistVersion,
+            generated_at: new Date().toISOString(),
+            chart: selectedChart,
+          },
+          null,
+          2,
+        ),
+        'application/json',
+      )
+    } else {
+      const header = ['step', 'section', 'label', 'status', 'notes', 'evidence_location', 'evidence_date', 'expiration_date', 'instructions']
+      const rows = selectedChart.checklist_items.map((item) =>
+        [item.step, item.section, item.label, STATUS_LABELS[item.status], item.notes, item.evidence_location, item.evidence_date, item.expiration_date, item.instructions]
+          .map(csvCell)
+          .join(','),
+      )
+      downloadTextFile(`review-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows].join('\n'), 'text/csv')
+    }
+    setStatus(`Exported review report for patient ${selectedChart.patient_id}.`)
+  }
+
+  function exportSelectedTimeliness(format: 'json' | 'csv') {
+    if (!selectedTimelinessClient) {
+      setError('Select a treatment-plan item before exporting a report.')
+      return
+    }
+    const safePatientId = selectedTimelinessClient.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
+    const checklistVersion = treatmentPlanChecklist?.version || '1.0.0'
+    if (format === 'json') {
+      downloadTextFile(
+        `treatment-plan-report-${safePatientId}.json`,
+        JSON.stringify(
+          {
+            report_type: 'treatment_plan_timeliness',
+            checklist_id: treatmentPlanChecklist?.checklist_id || 'treatment-plan-v1',
+            checklist_version: checklistVersion,
+            generated_at: new Date().toISOString(),
+            client: selectedTimelinessClient,
+          },
+          null,
+          2,
+        ),
+        'application/json',
+      )
+    } else {
+      const header = ['rule_id', 'label', 'status', 'due_date', 'evidence_summary']
+      const rows = selectedTimelinessClient.rule_results.map((result) =>
+        [result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary].map(csvCell).join(','),
+      )
+      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows].join('\n'), 'text/csv')
+    }
+    setStatus(`Exported treatment-plan report for patient ${selectedTimelinessClient.patient_id}.`)
   }
 
   async function handleSaveReviewChanges() {
@@ -2042,7 +2184,7 @@ export function App() {
           </section>
 
           <nav className='view-tabs'>
-            {(['dashboard', 'reviews', 'timeliness', 'uploads', 'profile'] as AppView[]).map((view) => (
+            {(['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -2099,6 +2241,10 @@ export function App() {
                     <span>Current user</span>
                     <strong>{user?.full_name || user?.username}</strong>
                   </article>
+                  <article className='mini-card'>
+                    <span>Checklist</span>
+                    <strong>v{treatmentPlanChecklist?.version || '1.0.0'}</strong>
+                  </article>
                 </div>
 
                 <div className='trend-grid'>
@@ -2107,6 +2253,41 @@ export function App() {
                   {renderTrendCard('Re-verification queue', reverificationTrend)}
                   {renderTrendCard('Binder uploads', uploadTrend)}
                 </div>
+
+                <section className='panel-subsection'>
+                  <h3>Review source</h3>
+                  <div className='source-choice-grid'>
+                    <article className='finding-card'>
+                      <div className='finding-card__header'>
+                        <strong>EMR/API access</strong>
+                        <span className='pill pill--warning'>Mock ready</span>
+                      </div>
+                      <p>API discovery stays in mock/readiness mode until vendor credentials, endpoint mapping, and compliance approval are complete.</p>
+                      <div className='decision-actions'>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
+                          Open treatment plans
+                        </button>
+                        {user?.role === 'admin' ? (
+                          <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                            API settings
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                    <article className='finding-card'>
+                      <div className='finding-card__header'>
+                        <strong>Manual upload</strong>
+                        <span className='pill pill--success'>Available</span>
+                      </div>
+                      <p>Upload exported treatment plans and clinical note binders, then review findings using the same checklist workflow.</p>
+                      <div className='decision-actions'>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('uploads')}>
+                          Upload binder
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                </section>
               </section>
 
               <aside className='panel queue-panel'>
@@ -2121,6 +2302,9 @@ export function App() {
                     </button>
                     <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
                       Treatment plans
+                    </button>
+                    <button type='button' className='ghost-button' onClick={() => setActiveView('checklist')}>
+                      Checklist v1
                     </button>
                     <button type='button' className='ghost-button' onClick={() => setActiveView('profile')}>
                       My account
@@ -2284,7 +2468,15 @@ export function App() {
 	                        <h2>{selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id}</h2>
 	                        <p>{selectedTimelinessClient.patient_id}</p>
 	                      </div>
-	                      <span className={`pill pill--${timelinessTone(selectedTimelinessClient.status)}`}>{selectedTimelinessClient.status}</span>
+	                      <div className='button-row'>
+	                        <button type='button' className='ghost-button' onClick={() => exportSelectedTimeliness('csv')}>
+	                          Export CSV
+	                        </button>
+	                        <button type='button' className='ghost-button' onClick={() => exportSelectedTimeliness('json')}>
+	                          Export JSON
+	                        </button>
+	                        <span className={`pill pill--${timelinessTone(selectedTimelinessClient.status)}`}>{selectedTimelinessClient.status}</span>
+	                      </div>
 	                    </div>
 
 	                    <dl className='detail-grid'>
@@ -2498,6 +2690,105 @@ export function App() {
 	            </section>
 	          ) : null}
 
+          {activeView === 'checklist' ? (
+            <section className='panel detail-panel'>
+              <div className='panel-heading'>
+                <div>
+                  <h2>{treatmentPlanChecklist?.display_name || 'Treatment Plan Checklist Version 1'}</h2>
+                  <p>
+                    {treatmentPlanChecklist
+                      ? `Version ${treatmentPlanChecklist.version} from ${treatmentPlanChecklist.source_of_truth}`
+                      : 'Loading canonical checklist...'}
+                  </p>
+                </div>
+                <button type='button' className='ghost-button' onClick={() => void loadTreatmentPlanChecklist()} disabled={isBusy}>
+                  Refresh
+                </button>
+              </div>
+
+              {treatmentPlanChecklist ? (
+                <>
+                  <section className='panel-subsection'>
+                    <h3>Acronym definitions</h3>
+                    <div className='acronym-grid'>
+                      {treatmentPlanChecklist.acronyms.map((item) => (
+                        <article key={item.term} className='mini-card'>
+                          <span>{item.term}</span>
+                          <strong>{item.definition}</strong>
+                          <small>{item.validation_status.replace(/_/g, ' ')}</small>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className='panel-subsection admin-banner'>
+                    <h3>LOC-change blocker</h3>
+                    <p>{treatmentPlanChecklist.loc_change_blocker.message}</p>
+                  </section>
+
+                  <section className='panel-subsection'>
+                    <h3>Review statuses</h3>
+                    <div className='status-vocabulary'>
+                      {treatmentPlanChecklist.review_statuses.map((status) => (
+                        <article key={status.key} className='finding-card'>
+                          <div className='finding-card__header'>
+                            <strong>{status.label}</strong>
+                          </div>
+                          <p>{status.description}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className='panel-subsection'>
+                    <h3>Checklist steps</h3>
+                    <div className='finding-list'>
+                      {treatmentPlanChecklist.steps.map((step) => (
+                        <article key={step.key} className='finding-card checklist-step-card'>
+                          <div className='finding-card__header'>
+                            <div>
+                              <strong>
+                                Step {step.step}. {step.title}
+                              </strong>
+                              <p>{step.key}</p>
+                            </div>
+                            <span className='pill pill--neutral'>{step.severity_default}</span>
+                          </div>
+                          <p>{step.objective}</p>
+                          <dl>
+                            <div>
+                              <dt>Source modes</dt>
+                              <dd>{step.source_modes.join(', ')}</dd>
+                            </div>
+                            <div>
+                              <dt>Automation</dt>
+                              <dd>{step.automation_level.replace(/_/g, ' ')}</dd>
+                            </div>
+                            <div>
+                              <dt>Metadata</dt>
+                              <dd>{step.required_metadata.length ? step.required_metadata.join(', ') : 'None'}</dd>
+                            </div>
+                            <div>
+                              <dt>Documents</dt>
+                              <dd>{step.required_documents.length ? step.required_documents.join(', ') : 'None'}</dd>
+                            </div>
+                          </dl>
+                          <ul className='compact-list'>
+                            {step.checks.map((check) => (
+                              <li key={check}>{check}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <p className='empty-state-block'>Treatment Plan Checklist Version 1 is loading.</p>
+              )}
+            </section>
+          ) : null}
+
 	          {activeView === 'reviews' ? (
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
@@ -2541,7 +2832,15 @@ export function App() {
                         <h2>Patient {selectedChart.patient_id}</h2>
                         <p>{selectedChart.system_summary}</p>
                       </div>
-                      <span className={`pill pill--${workflowTone(selectedChart.state)}`}>{selectedChart.state}</span>
+                      <div className='button-row'>
+                        <button type='button' className='ghost-button' onClick={() => exportSelectedChart('csv')}>
+                          Export CSV
+                        </button>
+                        <button type='button' className='ghost-button' onClick={() => exportSelectedChart('json')}>
+                          Export JSON
+                        </button>
+                        <span className={`pill pill--${workflowTone(selectedChart.state)}`}>{selectedChart.state}</span>
+                      </div>
                     </div>
 
                     <div className='detail-grid'>

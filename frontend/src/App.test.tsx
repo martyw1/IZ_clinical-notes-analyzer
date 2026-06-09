@@ -255,6 +255,50 @@ function workflowDefinitionsPayload() {
   ]
 }
 
+function treatmentPlanChecklistPayload() {
+  return {
+    checklist_id: 'treatment-plan-v1',
+    version: '1.0.0',
+    display_name: 'Treatment Plan Checklist Version 1',
+    organization: 'R3 Recovery Services',
+    status: 'version_1_ready_with_loc_change_blocker',
+    last_updated: '2026-06-09',
+    source_of_truth: 'config/checklists/treatment-plan-v1.json',
+    review_owner_roles: ['admin', 'manager'],
+    viewer_roles: ['admin', 'manager', 'counselor'],
+    acronyms: [
+      { term: 'API', definition: 'Application Programming Interface', validation_status: 'standard' },
+      { term: 'EMR', definition: 'Electronic Medical Record', validation_status: 'standard' },
+      { term: 'PHI', definition: 'Protected Health Information', validation_status: 'standard' },
+    ],
+    review_statuses: [
+      { key: 'not_reviewed', label: 'Not Reviewed', description: 'The item is known but not reviewed.' },
+      { key: 'needs_human_review', label: 'Needs Human Review', description: 'The item needs a reviewer.' },
+      { key: 'finalized', label: 'Finalized', description: 'The final disposition is saved.' },
+    ],
+    loc_change_blocker: {
+      status: 'unvalidated',
+      owner: 'R3/Marleigh',
+      message: 'The treatment-plan update window after a level-of-care change is not confirmed.',
+    },
+    steps: Array.from({ length: 20 }, (_unused, index) => ({
+      step: index + 1,
+      key: index === 0 ? 'select_review_source' : index === 19 ? 'audit_and_traceability' : `step_${index + 1}`,
+      title: index === 0 ? 'Select review source' : index === 19 ? 'Audit and traceability' : `Checklist step ${index + 1}`,
+      source_modes: ['api', 'upload'],
+      objective: 'Synthetic checklist objective.',
+      required_metadata: ['patient_id'],
+      required_documents: [],
+      checks: ['Synthetic deterministic check.'],
+      finding_examples: ['Synthetic finding.'],
+      remediation_suggestions: ['Synthetic remediation.'],
+      evidence_fields: ['source_document'],
+      automation_level: 'deterministic',
+      severity_default: 'high',
+    })),
+  }
+}
+
 function timelinessDashboardPayload() {
   return {
     total_active_clients: 1,
@@ -356,7 +400,16 @@ function signIn() {
 
 describe('App turnkey workflow', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     window.history.replaceState(null, '', '/')
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:synthetic-export'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    })
   })
 
   it('renders the summary dashboard and admin tools for administrators', async () => {
@@ -381,6 +434,34 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
+  })
+
+  it('shows the canonical Treatment Plan Checklist Version 1', async () => {
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-checklist', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/treatment-plan-checklist': treatmentPlanChecklistPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Checklist' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment Plan Checklist Version 1' })).toBeInTheDocument())
+    expect(screen.getByText('Application Programming Interface')).toBeInTheDocument()
+    expect(screen.getByText(/Select review source/)).toBeInTheDocument()
+    expect(screen.getByText(/Audit and traceability/)).toBeInTheDocument()
   })
 
   it('shows treatment plan timeliness detail and records a manual override', async () => {
@@ -441,7 +522,7 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
-    expect(screen.getByText('Synthetic Client')).toBeInTheDocument()
+    expect(screen.getAllByText('Synthetic Client').length).toBeGreaterThan(0)
     expect(screen.getByText(/Unvalidated by R3\/Marleigh/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
 
@@ -450,6 +531,46 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByText('Treatment plan override recorded for patient PAT-TP-001.')).toBeInTheDocument())
     expect(screen.getByText(/Synthetic manager review/i)).toBeInTheDocument()
+  })
+
+  it('exports selected review and treatment plan reports as CSV and JSON', async () => {
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const createObjectUrl = vi.mocked(URL.createObjectURL)
+    const revokeObjectUrl = vi.mocked(URL.revokeObjectURL)
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-export', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient PAT-001' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment plans' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(4)
+    expect(anchorClick).toHaveBeenCalledTimes(4)
+    expect(revokeObjectUrl).toHaveBeenCalledTimes(4)
   })
 
   it('uploads a note binder and opens the generated automated review', async () => {

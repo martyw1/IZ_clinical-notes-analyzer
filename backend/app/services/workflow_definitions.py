@@ -8,27 +8,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.models import WorkflowDefinition, WorkflowDefinitionVersion, WorkflowDefinitionVersionStatus
+from app.services.treatment_plan_checklist import treatment_plan_workflow_snapshot
 
 DEFAULT_TREATMENT_PLAN_WORKFLOW_KEY = 'treatment_plan_timeliness'
 
 
-DEFAULT_TREATMENT_PLAN_DEFINITION = {
-    'steps': [
-        {'key': 'active_client_scope', 'label': 'Active client scope'},
-        {'key': 'initial_treatment_plan', 'label': 'Initial Treatment Plan'},
-        {'key': 'master_treatment_plan', 'label': 'Master Treatment Plan'},
-        {'key': 'ongoing_review', 'label': 'Ongoing Treatment Plan Review'},
-        {'key': 'loc_change_review', 'label': 'Level-of-care change review'},
-        {'key': 'manual_override', 'label': 'Manual override review'},
-    ],
-    'owner_roles': ['admin', 'manager'],
-    'source': 'docs/prd-treatment-plan-timeliness-mvp-2026-06-01.md',
-}
-
-
 DEFAULT_TREATMENT_PLAN_TRANSITIONS = [
-    {'from': 'draft', 'to': 'active', 'roles': ['admin']},
-    {'from': 'active', 'to': 'archived', 'roles': ['admin']},
+    {'from': 'not_reviewed', 'to': 'ready_for_review', 'roles': ['admin', 'manager']},
+    {'from': 'ready_for_review', 'to': 'in_review', 'roles': ['admin', 'manager']},
+    {'from': 'in_review', 'to': 'needs_human_review', 'roles': ['admin', 'manager']},
+    {'from': 'in_review', 'to': 'passed', 'roles': ['admin', 'manager']},
+    {'from': 'in_review', 'to': 'failed', 'roles': ['admin', 'manager']},
+    {'from': 'needs_human_review', 'to': 'finalized', 'roles': ['admin', 'manager']},
+    {'from': 'passed', 'to': 'finalized', 'roles': ['admin', 'manager']},
+    {'from': 'failed', 'to': 'finalized', 'roles': ['admin', 'manager']},
+    {'from': 'finalized', 'to': 'ready_for_review', 'roles': ['admin'], 'reason_required': True},
 ]
 
 
@@ -96,7 +90,7 @@ def ensure_default_workflow_definitions(db: Session, *, actor_id: int) -> Workfl
         workflow_definition_id=definition.id,
         version=1,
         status=WorkflowDefinitionVersionStatus.published,
-        definition_snapshot=stable_json(DEFAULT_TREATMENT_PLAN_DEFINITION),
+        definition_snapshot=stable_json(treatment_plan_workflow_snapshot()),
         transition_rules=stable_json(DEFAULT_TREATMENT_PLAN_TRANSITIONS),
         version_notes='Seeded default Treatment Plan Timeliness Tracker workflow profile.',
         created_by_id=actor_id,

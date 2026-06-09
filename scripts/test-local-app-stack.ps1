@@ -9,6 +9,7 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer Test'
 $EnvFile = Join-Path $AppDataRoot '.env'
 $LogDir = Join-Path $AppDataRoot 'logs'
+$BaseUrl = "http://127.0.0.1:$Port"
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 function Write-Step($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" }
@@ -100,8 +101,8 @@ LOCAL_SQLITE_DB_PATH=$AppDataRoot\test-clinical-notes-analyzer.sqlite3
 DATABASE_URL=
 SECRET_KEY=$secretKey
 DATA_ENCRYPTION_KEY=$encryptionKey
-FRONTEND_ORIGIN=http://localhost:$Port
-FRONTEND_ORIGINS=http://localhost:$Port,http://localhost:5173
+FRONTEND_ORIGIN=$BaseUrl
+FRONTEND_ORIGINS=$BaseUrl,http://localhost:$Port,http://localhost:5173
 ALLOWED_HOSTS=localhost,127.0.0.1,::1,testserver
 UPLOAD_DIR=$AppDataRoot\uploads
 LOG_DIR=$LogDir
@@ -120,34 +121,35 @@ EMR_API_ENABLED=false
     & $python -m pytest (Join-Path $RootDir 'backend\tests') -q
     if ($LASTEXITCODE -ne 0) { throw 'Backend unit tests failed.' }
 
-    $uvicornArgs = @('-m', 'uvicorn', 'app.main:app', '--app-dir', (Join-Path $RootDir 'backend'), '--host', '127.0.0.1', '--port', "$Port")
-    Write-Step "Starting test server on http://localhost:$Port ."
-    $server = Start-Process -FilePath $python -ArgumentList $uvicornArgs -PassThru -WindowStyle Hidden
+    $appDir = Join-Path $RootDir 'backend'
+    $uvicornArgs = "-m uvicorn app.main:app --app-dir `"$appDir`" --host 127.0.0.1 --port $Port"
+    Write-Step "Starting test server on $BaseUrl ."
+    $server = Start-Process -FilePath $python -ArgumentList $uvicornArgs -WorkingDirectory $RootDir -PassThru -WindowStyle Hidden
     try {
         $ready = $false
         for ($i = 0; $i -lt 40; $i++) {
             try {
-                $health = Invoke-RestMethod -Uri "http://localhost:$Port/api/health" -TimeoutSec 2
+                $health = Invoke-RestMethod -Uri "$BaseUrl/api/health" -TimeoutSec 2
                 if ($health.status -eq 'ok') { $ready = $true; break }
             } catch { Start-Sleep -Seconds 1 }
         }
         if (!$ready) { throw 'API health endpoint did not become ready.' }
 
         Write-Step 'Checking runtime readiness endpoint.'
-        $readiness = Invoke-RestMethod -Uri "http://localhost:$Port/api/readiness" -TimeoutSec 10
+        $readiness = Invoke-RestMethod -Uri "$BaseUrl/api/readiness" -TimeoutSec 10
         if ($readiness.status -eq 'fail') { throw "Readiness failed: $($readiness | ConvertTo-Json -Depth 6)" }
 
         Write-Step 'Checking version endpoint.'
-        $version = Invoke-RestMethod -Uri "http://localhost:$Port/api/version" -TimeoutSec 10
+        $version = Invoke-RestMethod -Uri "$BaseUrl/api/version" -TimeoutSec 10
         if (!$version.version) { throw "Version endpoint did not return version metadata: $($version | ConvertTo-Json -Depth 6)" }
 
         Write-Step 'Checking login and authenticated profile call.'
-        $login = Invoke-RestMethod -Method Post -Uri "http://localhost:$Port/api/auth/login" -ContentType 'application/json' -Body (@{ username='admin'; password=$adminPassword } | ConvertTo-Json)
+        $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body (@{ username='admin'; password=$adminPassword } | ConvertTo-Json)
         $headers = @{ Authorization = "Bearer $($login.access_token)" }
-        Invoke-RestMethod -Uri "http://localhost:$Port/api/users/me" -Headers $headers -TimeoutSec 10 | Out-Null
+        Invoke-RestMethod -Uri "$BaseUrl/api/users/me" -Headers $headers -TimeoutSec 10 | Out-Null
 
         Write-Step 'Checking workflow profile API.'
-        Invoke-RestMethod -Uri "http://localhost:$Port/api/workflow-definitions?include_archived=true" -Headers $headers -TimeoutSec 10 | Out-Null
+        Invoke-RestMethod -Uri "$BaseUrl/api/workflow-definitions?include_archived=true" -Headers $headers -TimeoutSec 10 | Out-Null
 
         Write-Step 'Local stack smoke test passed.'
     }

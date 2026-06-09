@@ -203,6 +203,80 @@ class AuditTemplateSectionOut(BaseModel):
     items: list[AuditTemplateItemOut]
 
 
+class TreatmentPlanChecklistAcronymOut(BaseModel):
+    term: str
+    definition: str
+    validation_status: str
+
+
+class TreatmentPlanChecklistStatusOut(BaseModel):
+    key: str
+    label: str
+    description: str
+
+
+class TreatmentPlanChecklistStepOut(BaseModel):
+    step: int
+    key: str
+    title: str
+    source_modes: list[str]
+    objective: str
+    required_metadata: list[str]
+    required_documents: list[str]
+    checks: list[str]
+    finding_examples: list[str]
+    remediation_suggestions: list[str]
+    evidence_fields: list[str]
+    automation_level: str
+    severity_default: str
+
+
+class TreatmentPlanChecklistOut(BaseModel):
+    checklist_id: str
+    version: str
+    display_name: str
+    organization: str
+    status: str
+    last_updated: str
+    source_of_truth: str
+    review_owner_roles: list[str]
+    viewer_roles: list[str]
+    acronyms: list[TreatmentPlanChecklistAcronymOut]
+    review_statuses: list[TreatmentPlanChecklistStatusOut]
+    loc_change_blocker: dict[str, str]
+    steps: list[TreatmentPlanChecklistStepOut]
+
+
+class ReviewSourceItemOut(BaseModel):
+    source_type: str
+    source_item_id: str
+    patient_id: str
+    display_name: str
+    document_type: str
+    source_system_or_file: str
+    review_status: str
+    status_reason: str
+    service_date: str
+    plan_date: str
+    provider_staff: str
+    program_location: str
+    last_changed_at: str
+    review_chart_id: int | None = None
+    timeliness_client_id: int | None = None
+
+
+class ReviewSourceDiscoveryOut(BaseModel):
+    checklist_id: str
+    checklist_version: str
+    last_refreshed_at: str
+    live_import_enabled: bool
+    live_import_status: str
+    api_configured: bool
+    refresh_mode: str
+    status_counts: dict[str, int]
+    items: list[ReviewSourceItemOut]
+
+
 class AuditItemUpdate(BaseModel):
     item_key: str
     status: ComplianceStatus = ComplianceStatus.pending

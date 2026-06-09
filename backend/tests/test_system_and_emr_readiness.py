@@ -56,6 +56,20 @@ def test_emr_profile_and_import_plan_are_fhir_r4_oriented(app_with_sqlite):
         assert 'Binary.contentType' in payload['attachment_handling']
 
 
+def test_review_source_discovery_provides_mock_api_queue_without_live_import(app_with_sqlite):
+    app, _session_local = app_with_sqlite
+    with TestClient(app) as client:
+        response = client.get('/api/review-source-discovery', headers=_auth_headers(client))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['checklist_id'] == 'treatment-plan-v1'
+    assert payload['live_import_enabled'] is False
+    assert payload['live_import_status'] == 'disabled_until_vendor_credentials_mapping_and_compliance_approval'
+    assert any(item['source_type'] == 'api' and item['patient_id'].startswith('SYNTH-') for item in payload['items'])
+    assert 'Ready for Review' in payload['status_counts']
+
+
 def test_alleva_document_reference_mapping_preserves_source_traceability():
     mapped = map_document_reference_to_patient_note_metadata(
         {

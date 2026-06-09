@@ -54,6 +54,8 @@ from app.schemas.schemas import (
     PatientNoteSetDetailOut,
     PatientNoteSetSummaryOut,
     ReadinessOut,
+    ReviewSourceDiscoveryOut,
+    TreatmentPlanChecklistOut,
     TimelinessClientDetailOut,
     TimelinessClientUpsert,
     TimelinessDashboardOut,
@@ -80,7 +82,9 @@ from app.services.emr_fhir import build_document_reference_import_plan, discover
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, sanitize_filename, store_upload_file
 from app.services.runtime_checks import readiness_payload
+from app.services.review_source_discovery import discovery_payload as review_source_discovery_payload
 from app.services.secure_storage import encrypt_text_secret, read_secure_file
+from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.timeliness import (
     add_override,
     detail_payload as timeliness_detail_payload,
@@ -1237,6 +1241,36 @@ def get_emr_import_plan(
     return plan
 
 
+@router.get('/review-source-discovery', response_model=ReviewSourceDiscoveryOut)
+def get_review_source_discovery(
+    request: Request,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    note_set_stmt = _note_set_stmt().where(PatientNoteSet.status == NoteSetStatus.active)
+    if user.role == Role.counselor:
+        note_set_stmt = note_set_stmt.where(PatientNoteSet.uploaded_by_id == user.id)
+    note_sets = list(db.execute(note_set_stmt.order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())).scalars().unique().all())
+    payload = review_source_discovery_payload(db, settings_row, note_sets)
+    log_event(
+        db,
+        request,
+        'review_source.discovery.read',
+        actor=user,
+        event_category='data_access',
+        target_entity='review_source_discovery',
+        target_entity_type='review_source_discovery',
+        details={
+            'item_count': len(payload['items']),
+            'api_configured': payload['api_configured'],
+            'live_import_status': payload['live_import_status'],
+        },
+        message='Review-source discovery queue viewed.',
+    )
+    return payload
+
+
 @router.get('/timeliness/dashboard', response_model=TimelinessDashboardOut)
 def get_timeliness_dashboard(
     request: Request,
@@ -1758,6 +1792,24 @@ def get_audit_template(request: Request, user: User = Depends(get_current_user),
         message='Audit checklist template viewed.',
     )
     return sections
+
+
+@router.get('/treatment-plan-checklist', response_model=TreatmentPlanChecklistOut)
+def get_treatment_plan_checklist(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    checklist = load_treatment_plan_checklist()
+    log_event(
+        db,
+        request,
+        'treatment_plan_checklist.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=checklist['checklist_id'],
+        target_entity_type='treatment_plan_checklist',
+        target_entity_id=checklist['version'],
+        details={'checklist_id': checklist['checklist_id'], 'version': checklist['version'], 'step_count': len(checklist['steps'])},
+        message=f"Treatment Plan Checklist {checklist['version']} viewed by {user.username}.",
+    )
+    return checklist
 
 
 @router.get('/charts', response_model=list[ChartSummaryOut])

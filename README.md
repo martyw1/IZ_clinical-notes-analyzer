@@ -4,6 +4,30 @@ IZ Clinical Notes Analyzer is a local-first clinical chart-review app for checki
 
 The normal user path does not require Docker, PostgreSQL, cloud hosting, or a database administrator. The app runs on the user's own computer at `http://localhost:8000`.
 
+## Version 1 Windows Release Path
+
+Version 1 is focused on a typical Windows 10/11 laptop or desktop used by non-technical R3 staff.
+
+Version 1 includes:
+
+- Treatment Plan Checklist Version 1 as a canonical source of truth in `config\checklists\treatment-plan-v1.json`.
+- A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 20 checklist steps.
+- Dashboard review-source choices for EMR/API access and manual upload.
+- Mock API/source discovery through `GET /api/review-source-discovery`; live Alleva import remains disabled until official vendor and compliance approval exists.
+- Manual upload, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
+- Treatment-plan timeliness dashboard/detail views, manual overrides, and CSV/JSON exports.
+- Windows preflight, setup/start wrappers, and release-folder packaging scripts.
+
+Version 1 does not yet include a signed MSI/MSIX or live Alleva patient import. The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable.
+
+Primary Version 1 docs:
+
+- `docs\treatment-plan-checklist-v1.md`
+- `docs\Windows-User-Guide-Version-1.md`
+- `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
+- `docs\UAT-Version-1-Marleigh.md`
+- `docs\open-blockers.md`
+
 ## Plain-English Summary
 
 Use this app to:
@@ -39,6 +63,8 @@ Current functionality:
 - Local Windows desktop launch through `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`.
 - FastAPI desktop runtime served from one local URL.
 - React UI for sign-in, dashboard, review queue, manual uploads, user management, settings, forensic logs, profile, and version footer.
+- Treatment Plan Checklist Version 1 tab and dashboard checklist version visibility.
+- Review-source dashboard choices for EMR/API access and manual upload.
 - Bootstrap local admin account on first startup.
 - Required password reset flow.
 - Role-based access for `admin`, `manager`, and `counselor`.
@@ -59,11 +85,14 @@ Current functionality:
 - OpenAPI/Swagger definition discovery and sample offline OpenAPI test endpoint.
 - Operation test workbench for selected OpenAPI operations.
 - EMR/FHIR readiness endpoints for future SMART/FHIR integration planning.
+- Mock review-source discovery endpoint for API/upload queues while live import remains gated.
+- CSV/JSON report exports from review and timeliness detail views.
 - Forensic audit logs with request metadata, actor identity, event categories, CEF payloads, FHIR AuditEvent JSON, and tamper-evident hash chaining.
 - Runtime fallback JSONL audit log if database logging fails.
 - Local encrypted storage for uploaded clinical files and saved API secrets.
 - Synthetic sample clinical notes under `docs\sample-clinical-notes`.
 - Windows PowerShell smoke scripts for local stack, API configuration, and Alleva/OpenAPI reachability.
+- Windows preflight and release-folder builder: `scripts\preflight-windows.ps1`, `scripts\setup-windows.ps1`, `scripts\start-windows-local.ps1`, and `scripts\build-windows-installer.ps1`.
 - Docker/PostgreSQL support for developer or server scenarios only.
 
 ## Quick Start For Non-Technical Windows Users

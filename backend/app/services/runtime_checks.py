@@ -85,6 +85,22 @@ def _check_rules_config() -> RuntimeCheck:
     return RuntimeCheck('rules_config', 'ok', 'Rules configuration loaded and validated.', f'{settings.rules_config_file} workflow={workflow_id} rules={rules_count}')
 
 
+def _check_treatment_plan_checklist() -> RuntimeCheck:
+    """Validate the canonical Version 1 treatment-plan checklist."""
+    try:
+        from app.services.treatment_plan_checklist import load_treatment_plan_checklist
+
+        checklist = load_treatment_plan_checklist()
+    except Exception as exc:
+        return RuntimeCheck('treatment_plan_checklist', 'fail', 'Treatment Plan Checklist Version 1 could not be loaded.', str(exc))
+    return RuntimeCheck(
+        'treatment_plan_checklist',
+        'ok',
+        'Treatment Plan Checklist Version 1 loaded and validated.',
+        f"{checklist['source_of_truth']} version={checklist['version']} steps={len(checklist['steps'])}",
+    )
+
+
 def _check_upload_directory() -> RuntimeCheck:
     """Confirm clinical document storage exists, is writable, and is private."""
     upload_dir = settings.upload_dir_path
@@ -158,6 +174,7 @@ def collect_runtime_checks() -> list[RuntimeCheck]:
         _check_database_config(),
         _check_database_connection(),
         _check_rules_config(),
+        _check_treatment_plan_checklist(),
         _check_upload_directory(),
         _check_disk_space(),
         _check_existing_upload_encryption(),

@@ -195,7 +195,9 @@ def test_default_workflow_is_seeded_and_unused_drafts_can_be_deleted(app_with_sq
         assert listed.status_code == 200
         default = next(item for item in listed.json() if item['workflow_key'] == 'treatment_plan_timeliness')
         assert default['current_version']['status'] == 'published'
-        assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Active client scope'
+        assert default['current_version']['definition_snapshot']['checklist_id'] == 'treatment-plan-v1'
+        assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Select review source'
+        assert len(default['current_version']['definition_snapshot']['steps']) == 20
 
         delete_default = client.delete(f"/api/workflow-definitions/{default['id']}", headers=headers)
         assert delete_default.status_code == 400
