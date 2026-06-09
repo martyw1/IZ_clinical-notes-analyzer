@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.0.1",
-  "build": "2026.06.09.2",
+  "version": "1.0.2",
+  "build": "2026.06.09.3",
   "release_channel": "local-desktop",
   "release_date": "2026-06-09",
   "git_branch": "main",
-  "version_name": "Version 1 patch",
-  "description": "Windows startup reliability and documentation update."
+  "version_name": "Version 1.0.2 Windows admin recovery patch",
+  "description": "Aligns version metadata with VERSION, documents the local admin recovery utility, and keeps Windows startup/admin reset guidance current."
 }
