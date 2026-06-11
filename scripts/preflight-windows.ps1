@@ -326,14 +326,17 @@ function Test-BackendConfig {
     $env:PYTHONPATH = Join-Path $RootDir 'backend'
     $code = @"
 from app.services.rules_engine import load_rules_config, validate_rules_config
-from app.services.treatment_plan_checklist import load_treatment_plan_checklist
+from app.services.treatment_plan_checklist import load_treatment_plan_checklist, validate_treatment_plan_checklist
 rules = load_rules_config()
 errors = validate_rules_config(rules)
 if errors:
     raise SystemExit('; '.join(errors))
 checklist = load_treatment_plan_checklist()
-if len(checklist['steps']) != 20:
-    raise SystemExit('Treatment Plan Checklist must contain 20 steps.')
+checklist_errors = validate_treatment_plan_checklist(checklist)
+if checklist_errors:
+    raise SystemExit('; '.join(checklist_errors))
+if len(checklist['steps']) != 42:
+    raise SystemExit('Treatment Plan Checklist must contain 42 steps.')
 print('backend configuration ok')
 "@
     $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code

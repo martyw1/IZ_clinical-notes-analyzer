@@ -152,7 +152,17 @@ type AuditLogRecord = {
   severity: string
 }
 
-type TimelinessStatus = 'Overdue' | 'Urgent' | 'Due Soon' | 'Needs Review' | 'Missing Data' | 'Compliant'
+type TimelinessStatus =
+  | 'Overdue'
+  | 'Urgent'
+  | 'Due Soon'
+  | 'Returned for Correction'
+  | 'Needs Review'
+  | 'Missing Data'
+  | 'Conflicting Evidence'
+  | 'Unable to Evaluate'
+  | 'Compliant'
+  | 'Approved'
 type TimelinessFilter = 'All' | TimelinessStatus
 
 type TimelinessClientSummary = {
@@ -180,8 +190,12 @@ type TimelinessDashboard = {
   due_soon: number
   urgent: number
   overdue: number
+  returned: number
   needs_review: number
   missing_data: number
+  conflicting_evidence: number
+  unable_to_evaluate: number
+  approved: number
   compliance_percentage: number
   loc_change_window_days: number | null
   loc_change_window_validated: boolean
@@ -540,6 +554,12 @@ type TreatmentPlanChecklistStep = {
   evidence_fields: string[]
   automation_level: string
   severity_default: string
+  status_options: string[]
+  reviewer_actions: string[]
+  manual_override: boolean
+  override_reason_required: boolean
+  audit_event: string
+  export_fields: string[]
 }
 
 type TreatmentPlanChecklist = {
@@ -556,6 +576,47 @@ type TreatmentPlanChecklist = {
   review_statuses: TreatmentPlanChecklistStatus[]
   loc_change_blocker: { status: string; owner: string; message: string }
   steps: TreatmentPlanChecklistStep[]
+}
+
+type ReviewSourceItem = {
+  source_type: string
+  source_item_id: string
+  patient_id: string
+  display_name: string
+  document_type: string
+  source_system_or_file: string
+  review_status: string
+  status_reason: string
+  service_date: string
+  plan_date: string
+  provider_staff: string
+  program_location: string
+  last_changed_at: string
+  review_chart_id: number | null
+  timeliness_client_id: number | null
+}
+
+type ReviewSourceDiscovery = {
+  checklist_id: string
+  checklist_version: string
+  last_refreshed_at: string
+  last_refresh_at: string
+  next_refresh_at: string
+  live_import_enabled: boolean
+  live_import_status: string
+  api_configured: boolean
+  api_mode: string
+  api_mode_label: string
+  daily_monitoring_enabled: boolean
+  refresh_mode: string
+  changed_item_count: number
+  error_count: number
+  notification_badge_count: number
+  manual_review_cadence: string
+  manual_mode_message: string
+  plain_english_status: string
+  status_counts: Record<string, number>
+  items: ReviewSourceItem[]
 }
 
 // Keep the browser-side upload gate aligned with backend ALLOWED_EXTENSIONS.
@@ -575,8 +636,29 @@ const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
   superseded: 'Superseded',
 }
 
-const TIMELINESS_FILTERS: TimelinessFilter[] = ['All', 'Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data', 'Compliant']
-const TIMELINESS_TASK_STATUSES = new Set<TimelinessStatus>(['Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data'])
+const TIMELINESS_FILTERS: TimelinessFilter[] = [
+  'All',
+  'Overdue',
+  'Urgent',
+  'Due Soon',
+  'Returned for Correction',
+  'Needs Review',
+  'Missing Data',
+  'Conflicting Evidence',
+  'Unable to Evaluate',
+  'Compliant',
+  'Approved',
+]
+const TIMELINESS_TASK_STATUSES = new Set<TimelinessStatus>([
+  'Overdue',
+  'Urgent',
+  'Due Soon',
+  'Returned for Correction',
+  'Needs Review',
+  'Missing Data',
+  'Conflicting Evidence',
+  'Unable to Evaluate',
+])
 
 const VIEW_LABELS: Record<AppView, string> = {
   dashboard: 'Chart audit',
@@ -693,6 +775,58 @@ function createWorkflowVersionForm(definition?: WorkflowDefinition | null): Work
     definition_snapshot_text: JSON.stringify(definition?.current_version?.definition_snapshot || { steps: [], owner_roles: ['admin', 'manager'] }, null, 2),
     transition_rules_text: JSON.stringify(definition?.current_version?.transition_rules || [], null, 2),
   }
+}
+
+function workflowSnapshotFromChecklist(checklist: TreatmentPlanChecklist) {
+  return {
+    checklist_id: checklist.checklist_id,
+    checklist_version: checklist.version,
+    display_name: checklist.display_name,
+    source_of_truth: checklist.source_of_truth,
+    loc_change_blocker: checklist.loc_change_blocker,
+    owner_roles: checklist.review_owner_roles,
+    viewer_roles: checklist.viewer_roles,
+    steps: checklist.steps.map((step) => ({
+      key: step.key,
+      label: step.title,
+      step: step.step,
+      source_modes: step.source_modes,
+      automation_level: step.automation_level,
+      severity_default: step.severity_default,
+      status_options: step.status_options,
+      reviewer_actions: step.reviewer_actions,
+      manual_override: step.manual_override,
+      override_reason_required: step.override_reason_required,
+      audit_event: step.audit_event,
+      export_fields: step.export_fields,
+    })),
+  }
+}
+
+function defaultWorkflowTransitionsFromChecklist() {
+  return [
+    { from: 'not_reviewed', to: 'ready_for_review', roles: ['admin', 'manager'] },
+    { from: 'ready_for_review', to: 'in_review', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'current_compliant', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'due_soon', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'urgent', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'overdue', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'needs_review', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'missing_data', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'conflicting_evidence', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'unable_to_evaluate', roles: ['admin', 'manager'] },
+    { from: 'in_review', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'current_compliant', to: 'approved_finalized', roles: ['admin', 'manager'] },
+    { from: 'due_soon', to: 'approved_finalized', roles: ['admin', 'manager'] },
+    { from: 'urgent', to: 'approved_finalized', roles: ['admin', 'manager'] },
+    { from: 'overdue', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'needs_review', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'missing_data', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'conflicting_evidence', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'unable_to_evaluate', to: 'returned_for_correction', roles: ['admin', 'manager'], reason_required: true },
+    { from: 'returned_for_correction', to: 'ready_for_review', roles: ['admin', 'manager'] },
+    { from: 'approved_finalized', to: 'ready_for_review', roles: ['admin'], reason_required: true },
+  ]
 }
 
 function parseWorkflowVersionInput(form: WorkflowDefinitionForm | WorkflowVersionForm) {
@@ -815,10 +949,12 @@ function workflowTone(state: string) {
 
 function timelinessTone(status: string) {
   if (status === 'Compliant') return 'success'
+  if (status === 'Approved') return 'success'
   if (status === 'Overdue') return 'danger'
-  if (status === 'Needs Review') return 'attention'
+  if (status === 'Returned for Correction') return 'danger'
+  if (status === 'Needs Review' || status === 'Conflicting Evidence') return 'attention'
   if (status === 'Urgent' || status === 'Due Soon') return 'warning'
-  if (status === 'Missing Data') return 'muted'
+  if (status === 'Missing Data' || status === 'Unable to Evaluate') return 'muted'
   return 'neutral'
 }
 
@@ -1024,6 +1160,7 @@ export function App() {
   const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
   const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
   const [treatmentPlanChecklist, setTreatmentPlanChecklist] = useState<TreatmentPlanChecklist | null>(null)
+  const [reviewSourceDiscovery, setReviewSourceDiscovery] = useState<ReviewSourceDiscovery | null>(null)
   const [workflowDefinitions, setWorkflowDefinitions] = useState<WorkflowDefinition[]>([])
   const [selectedWorkflowDefinitionId, setSelectedWorkflowDefinitionId] = useState<number | null>(null)
   const [workflowDefinitionForm, setWorkflowDefinitionForm] = useState<WorkflowDefinitionForm>(createWorkflowDefinitionForm())
@@ -1151,6 +1288,14 @@ export function App() {
     [charts],
   )
   const activeBinders = useMemo(() => noteSets.filter((noteSet) => noteSet.status === 'active').length, [noteSets])
+  const reviewSourceApiItems = useMemo(
+    () => reviewSourceDiscovery?.items.filter((item) => item.source_type === 'api').length ?? 0,
+    [reviewSourceDiscovery],
+  )
+  const reviewSourceUploadItems = useMemo(
+    () => reviewSourceDiscovery?.items.filter((item) => item.source_type === 'upload').length ?? 0,
+    [reviewSourceDiscovery],
+  )
   const activeUserCount = useMemo(() => users.filter((entry) => entry.is_active).length, [users])
   const lockedUserCount = useMemo(() => users.filter((entry) => entry.is_locked).length, [users])
   const resetRequiredCount = useMemo(() => users.filter((entry) => entry.must_reset_password).length, [users])
@@ -1226,6 +1371,11 @@ export function App() {
   async function loadTreatmentPlanChecklist() {
     const payload = await apiRequest<TreatmentPlanChecklist>('/treatment-plan-checklist')
     setTreatmentPlanChecklist(payload)
+  }
+
+  async function loadReviewSourceDiscovery() {
+    const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery')
+    setReviewSourceDiscovery(payload)
   }
 
   async function loadChartDetail(chartId: number) {
@@ -1326,16 +1476,18 @@ export function App() {
     setIsBusy(true)
     setError('')
     try {
-      const [profile, chartList, noteSetList] = await Promise.all([
+      const [profile, chartList, noteSetList, sourceDiscovery] = await Promise.all([
         apiRequest<User>('/users/me'),
         apiRequest<ChartSummary[]>('/charts'),
         apiRequest<PatientNoteSetSummary[]>('/patient-note-sets'),
+        apiRequest<ReviewSourceDiscovery>('/review-source-discovery'),
       ])
 
       setUser(profile)
       setProfileForm({ full_name: profile.full_name })
       setCharts(chartList)
       setNoteSets(noteSetList)
+      setReviewSourceDiscovery(sourceDiscovery)
 
       if (profile.role === 'admin') {
         const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile, definitions] = await Promise.all([
@@ -1695,7 +1847,7 @@ export function App() {
       return
     }
     const safePatientId = selectedChart.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.0.0'
+    const checklistVersion = treatmentPlanChecklist?.version || '1.1.0'
     if (format === 'json') {
       downloadTextFile(
         `review-report-${safePatientId}.json`,
@@ -1730,7 +1882,7 @@ export function App() {
       return
     }
     const safePatientId = selectedTimelinessClient.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.0.0'
+    const checklistVersion = treatmentPlanChecklist?.version || '1.1.0'
     if (format === 'json') {
       downloadTextFile(
         `treatment-plan-report-${safePatientId}.json`,
@@ -2108,6 +2260,26 @@ export function App() {
     }
   }
 
+  async function seedWorkflowDraftFromCanonicalChecklist() {
+    if (!selectedWorkflowDefinition) return
+    setIsBusy(true)
+    setError('')
+    try {
+      const checklist = treatmentPlanChecklist || (await apiRequest<TreatmentPlanChecklist>('/treatment-plan-checklist'))
+      setTreatmentPlanChecklist(checklist)
+      setWorkflowVersionForm({
+        version_notes: `Admin-editable draft seeded from ${checklist.display_name} v${checklist.version}.`,
+        definition_snapshot_text: JSON.stringify(workflowSnapshotFromChecklist(checklist), null, 2),
+        transition_rules_text: JSON.stringify(defaultWorkflowTransitionsFromChecklist(), null, 2),
+      })
+      setStatus('Canonical 42-step checklist loaded into the workflow draft editor. Review, edit, create draft, then publish when ready.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to load canonical checklist into workflow editor')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function publishWorkflowVersion(versionId: number) {
     if (!selectedWorkflowDefinition) return
     setIsBusy(true)
@@ -2467,7 +2639,7 @@ export function App() {
                   </article>
                   <article className='mini-card'>
                     <span>Checklist</span>
-                    <strong>v{treatmentPlanChecklist?.version || '1.0.0'}</strong>
+                    <strong>v{treatmentPlanChecklist?.version || '1.1.0'}</strong>
                   </article>
                 </div>
 
@@ -2481,15 +2653,33 @@ export function App() {
                 <section className='panel-subsection'>
                   <h3>Review source</h3>
                   <div className='source-choice-grid'>
-                    <article className='finding-card'>
+                    <article className='finding-card source-mode-card'>
                       <div className='finding-card__header'>
                         <strong>EMR/API access</strong>
-                        <span className='pill pill--warning'>Mock ready</span>
+                        <span className='pill pill--warning'>{reviewSourceDiscovery?.api_mode_label || 'Mock/stub mode'}</span>
                       </div>
-                      <p>API discovery stays in mock/readiness mode until vendor credentials, endpoint mapping, and compliance approval are complete.</p>
+                      <p>{reviewSourceDiscovery?.plain_english_status || 'API discovery stays in mock/readiness mode until vendor credentials, endpoint mapping, and compliance approval are complete.'}</p>
+                      <dl className='source-mode-facts'>
+                        <div>
+                          <dt>Daily monitoring</dt>
+                          <dd>{reviewSourceDiscovery?.daily_monitoring_enabled ? 'Readiness schedule available' : 'Simulated until live approval'}</dd>
+                        </div>
+                        <div>
+                          <dt>Last refresh</dt>
+                          <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.last_refresh_at) : 'Not run'}</dd>
+                        </div>
+                        <div>
+                          <dt>Next refresh</dt>
+                          <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.next_refresh_at) : 'After configuration'}</dd>
+                        </div>
+                        <div>
+                          <dt>Needs follow-up</dt>
+                          <dd>{reviewSourceDiscovery?.notification_badge_count ?? reviewSourceApiItems}</dd>
+                        </div>
+                      </dl>
                       <div className='decision-actions'>
                         <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
-                          Open treatment plans
+                          View Details
                         </button>
                         {user?.role === 'admin' ? (
                           <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
@@ -2498,15 +2688,36 @@ export function App() {
                         ) : null}
                       </div>
                     </article>
-                    <article className='finding-card'>
+                    <article className='finding-card source-mode-card'>
                       <div className='finding-card__header'>
                         <strong>Manual upload</strong>
                         <span className='pill pill--success'>Available</span>
                       </div>
-                      <p>Upload exported treatment plans and clinical note binders, then review findings using the same checklist workflow.</p>
+                      <p>{reviewSourceDiscovery?.manual_mode_message || 'Upload exported treatment plans and clinical note binders, then review findings using the same checklist workflow.'}</p>
+                      <dl className='source-mode-facts'>
+                        <div>
+                          <dt>Cadence</dt>
+                          <dd>Monthly compliance-check fallback</dd>
+                        </div>
+                        <div>
+                          <dt>Active uploads</dt>
+                          <dd>{activeBinders}</dd>
+                        </div>
+                        <div>
+                          <dt>Shared workflow</dt>
+                          <dd>{reviewSourceUploadItems} routed item{reviewSourceUploadItems === 1 ? '' : 's'}</dd>
+                        </div>
+                        <div>
+                          <dt>Snapshot warning</dt>
+                          <dd>As of upload time only</dd>
+                        </div>
+                      </dl>
                       <div className='decision-actions'>
                         <button type='button' className='ghost-button' onClick={() => setActiveView('uploads')}>
                           Upload binder
+                        </button>
+                        <button type='button' className='ghost-button' onClick={() => setActiveView('reviews')}>
+                          View Details
                         </button>
                       </div>
                     </article>
@@ -3053,9 +3264,16 @@ export function App() {
                       : 'Loading canonical checklist...'}
                   </p>
                 </div>
-                <button type='button' className='ghost-button' onClick={() => void loadTreatmentPlanChecklist()} disabled={isBusy}>
-                  Refresh
-                </button>
+                <div className='button-row'>
+                  {user?.role === 'admin' ? (
+                    <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                      Manage Workflow
+                    </button>
+                  ) : null}
+                  <button type='button' className='ghost-button' onClick={() => void loadTreatmentPlanChecklist()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {treatmentPlanChecklist ? (
@@ -3123,6 +3341,24 @@ export function App() {
                             <div>
                               <dt>Documents</dt>
                               <dd>{step.required_documents.length ? step.required_documents.join(', ') : 'None'}</dd>
+                            </div>
+                            <div>
+                              <dt>Status options</dt>
+                              <dd>{step.status_options.join(', ')}</dd>
+                            </div>
+                            <div>
+                              <dt>Reviewer actions</dt>
+                              <dd>{step.reviewer_actions.join(', ')}</dd>
+                            </div>
+                            <div>
+                              <dt>Override rule</dt>
+                              <dd>{step.manual_override ? 'Manual override allowed; reason required' : 'Manual override not allowed'}</dd>
+                            </div>
+                            <div>
+                              <dt>Audit / export</dt>
+                              <dd>
+                                {step.audit_event}; exports {step.export_fields.join(', ')}
+                              </dd>
                             </div>
                           </dl>
                           <ul className='compact-list'>
@@ -3461,6 +3697,12 @@ export function App() {
                 <p>
                   Manual upload is the primary local workflow. Use the patient ID as the source-of-truth key and add the client name when it is present in the export.
                 </p>
+                <div className='rule-alert'>
+                  <strong>Manual upload is a point-in-time snapshot</strong>
+                  <p>
+                    Uploaded charts reflect only the files selected here as of upload time. If API automation is unavailable for 60+ active charts, use this as a monthly compliance-check batch workflow rather than a weekly manual refresh expectation.
+                  </p>
+                </div>
                 <form className='form-grid' onSubmit={handleUpload}>
                   <label>
                     Patient ID
@@ -4661,6 +4903,17 @@ export function App() {
                       {selectedWorkflowDefinition ? (
                         <section className='panel-subsection'>
                           <h4>Create draft version</h4>
+                          <div className='rule-alert'>
+                            <strong>Admin-editable checklist workflow</strong>
+                            <p>
+                              Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.
+                            </p>
+                            <div className='form-actions'>
+                              <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
+                                Seed draft from 42-step checklist
+                              </button>
+                            </div>
+                          </div>
                           <form className='form-grid' onSubmit={handleWorkflowVersionCreate}>
                             <label className='full-width'>
                               Version notes

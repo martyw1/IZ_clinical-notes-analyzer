@@ -4,7 +4,15 @@ Source of truth: `config/checklists/treatment-plan-v1.json`
 
 Checklist ID: `treatment-plan-v1`
 
-Version: `1.0.0`
+Version: `1.1.0`
+
+Last updated: `2026-06-11`
+
+## Purpose
+
+This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, and the default workflow profile seed.
+
+It is deliberately deterministic. Missing or conflicting admission dates, LOC evidence, treatment-plan dates, signatures, or source documents must produce `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` instead of guessed compliance.
 
 ## Acronym Definitions
 
@@ -19,10 +27,16 @@ Version: `1.0.0`
 | TP | Treatment Plan | Facility review requested |
 | SUD | Substance Use Disorder | Facility review requested |
 | LOC | Level of Care | Facility review requested |
+| PHP | Partial Hospitalization Program | Facility review requested |
+| IOP | Intensive Outpatient Program | Facility review requested |
+| OP | Outpatient | Facility review requested |
+| MRN | Medical Record Number | Facility review requested |
 | ASAM | American Society of Addiction Medicine criteria, if used by the facility/workflow | Facility review requested |
 | SMART | Specific, Measurable, Achievable, Relevant, Time-bound | Facility review requested |
 
 ## Review Statuses
+
+Legacy chart-review statuses remain available for existing records:
 
 - Not Reviewed
 - Ready for Review
@@ -34,68 +48,96 @@ Version: `1.0.0`
 - Error
 - Finalized
 
+Treatment-plan PRD statuses are available for Version 1.1.0 workflow steps:
+
+- Current / Compliant
+- Due Soon
+- Urgent
+- Overdue
+- Needs Review
+- Missing Data
+- Conflicting Evidence
+- Unable to Evaluate
+- Returned for Correction
+- Approved / Finalized
+
+## Source Modes
+
+API mode is a readiness and connectivity harness until official Alleva tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval exist. Live patient import remains disabled.
+
+Manual upload mode is a point-in-time snapshot of the files selected by the operator. It does not imply automatic weekly monitoring for large chart batches; use the documented monthly compliance-check fallback when API refresh is not available.
+
+## Admin-Editable Workflow
+
+Admins can open Settings, use `Seed draft from 42-step checklist`, edit the generated workflow snapshot and transition rules, and publish a new workflow profile version. The seeded draft includes checklist steps, source modes, status options, reviewer actions, override rules, audit events, and export fields.
+
+Published workflow history is preserved. Only unused draft-only profiles that were never published can be hard-deleted.
+
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1 keeps this setting configurable, marks it unvalidated in the app, and treats LOC-change timing as Needs Human Review until the blocker is resolved.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.1.0 keeps this setting configurable, marks it unvalidated in the app, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+
+Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
 
 ## Checklist Steps
 
-1. Select review source
-   The reviewer chooses EMR/API access or manual upload before evaluation.
+1. Confirm this is the correct client chart
+2. Identify whether the review is for a new chart or an existing chart update
+3. Confirm the client is active
+4. Confirm the admission date
+5. Confirm the current LOC
+6. Confirm the LOC maps to a Version 1 rule category
+7. Capture LOC history when available
+8. Classify each source document
+9. Confirm each document date
+10. Confirm each document's completion status
+11. Confirm staff/therapist signature status
+12. Confirm client signature status
+13. Check for conflicting evidence
+14. Check that the Initial Treatment Plan exists
+15. Check that the Initial Treatment Plan is dated correctly
+16. Check that the Initial Treatment Plan has required signatures
+17. Check that the Master Treatment Plan exists
+18. Check that the Master Treatment Plan was completed within 30 calendar days of admission
+19. Check that the Master Treatment Plan has required signatures
+20. Identify the latest valid Treatment Plan Review
+21. Calculate the next Treatment Plan Review due date
+22. Apply the PHP timing rule
+23. Apply the IOP/OP timing rule
+24. Mark the treatment plan as current when inside the allowed window
+25. Mark the treatment plan as due soon when approaching the deadline
+26. Mark the treatment plan as overdue when past the deadline
+27. Check PHP individual-session evidence when available
+28. Check IOP/OP individual-session evidence when available
+29. Identify whether an LOC change occurred
+30. Check for an LOC Change Update document when applicable
+31. Hold the LOC-change deadline as unresolved until R3 confirms it
+32. Flag missing data instead of assuming compliance
+33. Allow manual reviewer confirmation
+34. Require a reason for manual overrides
+35. Produce a final checklist result for the chart
+36. Update the status worklist after review
+37. Route the chart for manager review
+38. Return charts with specific correction comments
+39. Approve charts only after checklist issues are resolved or accepted
+40. Preserve the review history
+41. Continue periodic monitoring when API access is available
+42. Use synthetic or approved non-PHI data for validation until production handling is approved
 
-2. API source discovery
-   API mode uses the readiness/mock discovery boundary to surface available treatment plans and notes by review status. Live Alleva import remains disabled until official approval exists.
+## Step Contract
 
-3. Upload source intake
-   Upload mode validates supported files, size, patient identifier, and encrypted storage, then creates the same review workflow used by API-sourced items.
+Every step in `config/checklists/treatment-plan-v1.json` must include:
 
-4. Review item status classification
-   Each item receives a clear status and cannot silently pass when data is missing or conflicting.
+- `step`
+- `key`
+- `title`
+- `description`
+- `source_modes`
+- `status_options`
+- `reviewer_actions`
+- `manual_override`
+- `override_reason_required`
+- `audit_event`
+- `export_fields`
 
-5. Required metadata capture
-   Capture or extract client identifier, document type, provider/staff, service date, plan date, review period, program/location, and source system/file.
-
-6. Required document set check
-   Verify expected treatment plans, progress notes, assessments, signatures, reviews, and supporting documents.
-
-7. Treatment plan structure check
-   Confirm problem areas, diagnoses/clinical needs, goals, objectives, interventions, target dates, review dates, staff responsibilities, client participation, and signatures.
-
-8. Timeliness check
-   Check creation, review, update, and signature timeframes and flag expired, late, missing, future-dated, or unvalidated LOC-change items.
-
-9. Completeness check
-   Flag missing sections, blank fields, placeholders, missing signatures, missing credentials, missing dates, generic language, and incomplete goals/objectives/interventions.
-
-10. Goal/objective quality check
-    Evaluate whether goals and objectives are individualized and SMART enough for clinical review.
-
-11. Medical necessity / clinical rationale check
-    Check whether diagnosis, symptoms, LOC, risks, needs, and planned services are logically connected.
-
-12. Progress note alignment check
-    Check whether notes and services connect back to active plan goals, objectives, interventions, frequency, duration, and modality.
-
-13. Consistency check
-    Flag contradictions across dates, providers, diagnosis, LOC, service frequency, client identifiers, and plan version.
-
-14. High-risk issue detection
-    Specifically flag missing plan, expired plan, unsigned plan, notes before plan creation, service not tied to plan, no measurable objective, no progress update, and unsupported frequency.
-
-15. Evidence capture
-    Store a plain-English finding, severity, checklist step, source document, date, and safe short evidence excerpt when available.
-
-16. Human review and override
-    Authorized reviewers can mark findings confirmed, dismissed, needs follow-up, or corrected with comments and audit logging.
-
-17. Output and export
-    Provide a clear report summary, severity/finding details, remediation suggestions, and CSV/JSON exports where practical.
-
-18. Status persistence
-    Save review status so the same item does not return as unreviewed unless it changes, expires, or is manually reopened.
-
-19. Periodic monitoring
-    API mode can refresh mock/API-derived status and surface new, changed, overdue, failed, or needs-review items.
-
-20. Audit and traceability
-    Record review creation, actor, source type, checklist version, app version, rules/model version where applicable, and final disposition.
+The backend validator requires exactly 42 ordered steps and requires `override_reason_required: true` for each step.

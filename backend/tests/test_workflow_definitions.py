@@ -196,8 +196,12 @@ def test_default_workflow_is_seeded_and_unused_drafts_can_be_deleted(app_with_sq
         default = next(item for item in listed.json() if item['workflow_key'] == 'treatment_plan_timeliness')
         assert default['current_version']['status'] == 'published'
         assert default['current_version']['definition_snapshot']['checklist_id'] == 'treatment-plan-v1'
-        assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Select review source'
-        assert len(default['current_version']['definition_snapshot']['steps']) == 20
+        assert default['current_version']['definition_snapshot']['version'] == '1.1.0'
+        assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Confirm this is the correct client chart'
+        assert len(default['current_version']['definition_snapshot']['steps']) == 42
+        assert default['current_version']['definition_snapshot']['steps'][33]['key'] == 'require_manual_override_reason'
+        transition_targets = {item['to'] for item in default['current_version']['transition_rules']}
+        assert {'current_compliant', 'returned_for_correction', 'approved_finalized'} <= transition_targets
 
         delete_default = client.delete(f"/api/workflow-definitions/{default['id']}", headers=headers)
         assert delete_default.status_code == 400

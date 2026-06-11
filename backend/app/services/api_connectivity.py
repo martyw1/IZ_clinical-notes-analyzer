@@ -5,10 +5,13 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -449,6 +452,17 @@ def build_api_connectivity_report(*, report_type: str, request: dict[str, Any], 
         'request': redact_sensitive_value(request),
         'result': redact_sensitive_value(result),
     }
+
+
+def persist_api_connectivity_report(report: dict[str, Any], *, report_dir: Path | None = None) -> str:
+    """Write a redacted API-connectivity report to local app data."""
+    target_dir = report_dir or (settings.local_app_data_dir / 'api-reports')
+    target_dir.mkdir(parents=True, exist_ok=True)
+    report_type = re.sub(r'[^a-zA-Z0-9_.-]+', '-', str(report.get('report_type') or 'api-connectivity')).strip('-') or 'api-connectivity'
+    generated = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    path = target_dir / f'{generated}-{report_type}.json'
+    path.write_text(json.dumps(redact_sensitive_value(report), indent=2, sort_keys=True), encoding='utf-8')
+    return str(path)
 
 
 def _base_url_for_operation(*, api_base_url: str | None, definition: dict[str, Any], selected_definition_url: str | None) -> str:

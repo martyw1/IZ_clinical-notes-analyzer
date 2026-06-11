@@ -1,8 +1,8 @@
 # Admin Access Reset Guide
 
-Date: 2026-06-09
+Date: 2026-06-11
 
-Applies to: IZ Clinical Notes Analyzer Version 1.0.3 local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version 1.1.0 local Windows desktop runtime.
 
 ## Purpose
 
@@ -71,4 +71,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected patch version: `1.0.3`.
+Expected patch version: `1.1.0`.

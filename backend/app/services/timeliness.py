@@ -25,9 +25,13 @@ STATUS_PRIORITY = [
     TimelinessStatus.overdue.value,
     TimelinessStatus.urgent.value,
     TimelinessStatus.due_soon.value,
+    TimelinessStatus.returned.value,
     TimelinessStatus.needs_review.value,
     TimelinessStatus.missing_data.value,
+    TimelinessStatus.conflicting.value,
+    TimelinessStatus.unable_to_evaluate.value,
     TimelinessStatus.compliant.value,
+    TimelinessStatus.approved.value,
 ]
 PLAN_KIND_ALIASES = {
     'initial': TreatmentPlanKind.initial,

@@ -12,7 +12,7 @@ This PRD defines the first MVP for a Treatment Plan Timeliness Tracker inside th
 
 This is not the full future clinical notes analyzer. The first release should solve the operational problem of trusted treatment-plan timeline tracking.
 
-Implementation note 2026-06-09: the production `Treatment plans` tab now uses a compact work queue with quick status filters, selected-client evidence detail, date-anchor comparison, LOC history, evidence preview, and task-list copy/export for manual Asana tracking. Version `1.0.3` adds a visible updated-evidence-queue banner and stale-build detection for Windows source-checkout launches. Because the LOC-change anchor/window is still unvalidated, source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date are shown side by side; conflicts remain `Needs Review`.
+Implementation note 2026-06-11: the production `Treatment plans` tab uses a compact work queue with quick status filters, selected-client evidence detail, date-anchor comparison, LOC history, evidence preview, and task-list copy/export for manual Asana tracking. Version `1.1.0` adds the 42-step PRD checklist, admin checklist-seeded workflow drafts, source-mode status cards, video-reference color alignment, and retained stale-build detection for Windows source-checkout launches. Because the LOC-change anchor/window is still unvalidated, source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date are shown side by side; conflicts remain `Needs Review`, `Missing Data`, or `Conflicting Evidence`.
 
 ## 2. MVP Positioning
 

@@ -16,11 +16,15 @@ def test_treatment_plan_v1_checklist_is_canonical_and_complete():
 
     assert validate_treatment_plan_checklist(checklist) == []
     assert checklist['checklist_id'] == 'treatment-plan-v1'
-    assert checklist['version'] == '1.0.0'
-    assert [step['step'] for step in checklist['steps']] == list(range(1, 21))
-    assert checklist['steps'][0]['key'] == 'select_review_source'
-    assert checklist['steps'][-1]['key'] == 'audit_and_traceability'
+    assert checklist['version'] == '1.1.0'
+    assert [step['step'] for step in checklist['steps']] == list(range(1, 43))
+    assert checklist['steps'][0]['key'] == 'confirm_correct_client_chart'
+    assert checklist['steps'][-1]['key'] == 'use_synthetic_or_approved_non_phi_data'
     assert checklist['loc_change_blocker']['status'] == 'unvalidated'
+    assert all(step['manual_override'] is True for step in checklist['steps'])
+    assert all(step['override_reason_required'] is True for step in checklist['steps'])
+    assert all(step['audit_event'].startswith('treatment_plan.checklist.') for step in checklist['steps'])
+    assert all({'status', 'source_evidence', 'finding_message', 'severity', 'reviewer_action', 'override_reason'} <= set(step['export_fields']) for step in checklist['steps'])
 
     acronym_terms = {item['term'] for item in checklist['acronyms']}
     assert {'API', 'EMR', 'PHI', 'PII', 'OCR', 'LLM', 'TP', 'SUD', 'LOC', 'ASAM', 'SMART'} <= acronym_terms
@@ -36,6 +40,10 @@ def test_treatment_plan_v1_checklist_is_canonical_and_complete():
         'Missing Required Data',
         'Error',
         'Finalized',
+        'Returned for Correction',
+        'Approved / Finalized',
+        'Conflicting Evidence',
+        'Unable to Evaluate',
     } <= status_labels
 
 
@@ -47,9 +55,11 @@ def test_treatment_plan_checklist_api_is_visible_to_authenticated_users(app_with
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload['display_name'] == 'Treatment Plan Checklist Version 1'
-    assert len(payload['steps']) == 20
-    assert payload['acronyms'][0]['term'] == 'API'
+    assert payload['display_name'] == 'Treatment Plan Checklist Version 1 - 42 Step PRD'
+    assert len(payload['steps']) == 42
+    assert payload['steps'][33]['key'] == 'require_manual_override_reason'
+    assert payload['steps'][33]['override_reason_required'] is True
+    assert {item['term'] for item in payload['acronyms']} >= {'API', 'EMR', 'MRN', 'LOC'}
 
 
 def test_readiness_reports_treatment_plan_checklist(app_with_sqlite):
@@ -61,4 +71,4 @@ def test_readiness_reports_treatment_plan_checklist(app_with_sqlite):
     assert response.status_code == 200
     checklist_check = next(check for check in response.json()['checks'] if check['name'] == 'treatment_plan_checklist')
     assert checklist_check['status'] == 'ok'
-    assert 'steps=20' in checklist_check['detail']
+    assert 'steps=42' in checklist_check['detail']

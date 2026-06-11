@@ -64,8 +64,16 @@ def test_review_source_discovery_provides_mock_api_queue_without_live_import(app
     assert response.status_code == 200
     payload = response.json()
     assert payload['checklist_id'] == 'treatment-plan-v1'
+    assert payload['checklist_version'] == '1.1.0'
     assert payload['live_import_enabled'] is False
     assert payload['live_import_status'] == 'disabled_until_vendor_credentials_mapping_and_compliance_approval'
+    assert payload['api_mode'] == 'mock_stub'
+    assert payload['api_mode_label'] == 'Mock/stub mode'
+    assert payload['refresh_mode'] == 'daily_mock_simulation'
+    assert payload['next_refresh_at'] > payload['last_refresh_at']
+    assert payload['manual_review_cadence'] == 'monthly_compliance_check'
+    assert 'monthly compliance-check' in payload['manual_mode_message']
+    assert payload['notification_badge_count'] >= payload['changed_item_count']
     assert any(item['source_type'] == 'api' and item['patient_id'].startswith('SYNTH-') for item in payload['items'])
     assert 'Ready for Review' in payload['status_counts']
 

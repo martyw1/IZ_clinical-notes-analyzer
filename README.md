@@ -11,11 +11,12 @@ Version 1 is focused on a typical Windows 10/11 laptop or desktop used by non-te
 Version 1 includes:
 
 - Treatment Plan Checklist Version 1 as a canonical source of truth in `config\checklists\treatment-plan-v1.json`.
-- A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 20 checklist steps.
+- A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 42 PRD checklist steps.
 - Dashboard review-source choices for EMR/API access and manual upload.
-- Mock API/source discovery through `GET /api/review-source-discovery`; live Alleva import remains disabled until official vendor and compliance approval exists.
+- Source discovery through `GET /api/review-source-discovery` with live API readiness status, manual point-in-time upload status, daily API-monitoring labels, and monthly compliance-check fallback language.
 - Manual upload, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
 - Treatment-plan timeliness dashboard/detail views, manual overrides, and CSV/JSON exports.
+- Admin-managed workflow profiles with a Settings action that seeds a draft from the canonical 42-step checklist so admins can edit and publish future workflow changes without code edits.
 - Windows preflight, setup/start wrappers, and release-folder packaging scripts.
 
 Version 1 does not yet include a signed MSI/MSIX or live Alleva patient import. The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable.
@@ -667,7 +668,7 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.0.3` adds a visible updated-evidence-queue banner so operators can confirm they are seeing the current UI. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.1.0` keeps the visible updated-evidence-queue banner and aligns the screen colors with the local video walkthrough reference palette: dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
 
@@ -710,6 +711,8 @@ Open blocker:
 ## Workflow Profiles
 
 Admins can manage versioned workflow profiles from Settings. A workflow profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
+
+The Settings workflow panel includes a `Seed draft from 42-step checklist` action. It loads `config\checklists\treatment-plan-v1.json`, copies the 42 steps, review statuses, override requirements, source modes, audit events, and export fields into a draft workflow snapshot, and gives admins a starting point they can edit before publishing a new workflow version.
 
 Fresh databases seed a published `Treatment Plan Timeliness Tracker` profile. Admins can delete only unused draft-only profiles that were never published; published or archived history must be archived instead of hard-deleted.
 
@@ -1024,7 +1027,7 @@ flowchart LR
 The current app version is:
 
 ```text
-1.0.3
+1.1.0
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

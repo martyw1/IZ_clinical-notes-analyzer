@@ -229,6 +229,12 @@ class TreatmentPlanChecklistStepOut(BaseModel):
     evidence_fields: list[str]
     automation_level: str
     severity_default: str
+    status_options: list[str]
+    reviewer_actions: list[str]
+    manual_override: bool
+    override_reason_required: bool
+    audit_event: str
+    export_fields: list[str]
 
 
 class TreatmentPlanChecklistOut(BaseModel):
@@ -269,10 +275,21 @@ class ReviewSourceDiscoveryOut(BaseModel):
     checklist_id: str
     checklist_version: str
     last_refreshed_at: str
+    last_refresh_at: str
+    next_refresh_at: str
     live_import_enabled: bool
     live_import_status: str
     api_configured: bool
+    api_mode: str
+    api_mode_label: str
+    daily_monitoring_enabled: bool
     refresh_mode: str
+    changed_item_count: int
+    error_count: int
+    notification_badge_count: int
+    manual_review_cadence: str
+    manual_mode_message: str
+    plain_english_status: str
     status_counts: dict[str, int]
     items: list[ReviewSourceItemOut]
 
@@ -654,8 +671,12 @@ class TimelinessDashboardOut(BaseModel):
     due_soon: int
     urgent: int
     overdue: int
+    returned: int = 0
     needs_review: int
     missing_data: int
+    conflicting_evidence: int = 0
+    unable_to_evaluate: int = 0
+    approved: int = 0
     compliance_percentage: float
     loc_change_window_days: int | None = None
     loc_change_window_validated: bool

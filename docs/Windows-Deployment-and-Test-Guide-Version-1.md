@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current patch version: `1.0.3` / build `2026.06.09.4`.
+Current patch version: `1.1.0` / build `2026.06.11.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Version 1.0.3 is a Windows UI visibility and stale-build patch. It keeps the Version 1 startup reliability fixes, makes the Treatment Plan Timeliness evidence queue visibly identifiable, and updates source-checkout preflight so it rebuilds or warns when `frontend\dist` is older than the React source.
+Version 1.1.0 is the 42-step treatment-plan PRD readiness patch. It keeps the Version 1 startup reliability and stale-build safeguards, expands checklist/workflow coverage, and preserves the local-first Windows desktop path.
 
 ## Prerequisites for Source Build
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Version 1.0.3 behavior: startup runs preflight once, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Version 1.1.0 behavior: startup runs preflight once, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.1.0`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.1.0.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Version 1.0.3 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Version 1.1.0 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 
@@ -127,6 +127,8 @@ Review every result. Synthetic placeholder words in code and docs are allowed on
 
 - Live Alleva patient import is disabled.
 - The LOC-change treatment-plan update window is unvalidated and must stay configurable.
+- Manual upload is an upload-time snapshot; monthly compliance checks are the documented fallback when API refresh is unavailable.
+- Admins can edit future checklist workflow versions through Settings, but published workflow history is preserved.
 - OCR quality depends on source document readability.
 - LLM assistance is optional and disabled by default.
 - The package is not yet a signed MSI/MSIX; a signed installer remains the recommended long-term endpoint for non-technical deployment.

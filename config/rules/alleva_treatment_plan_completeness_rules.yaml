@@ -1,7 +1,19 @@
-config_version: "0.1.0"
-config_status: "draft_from_transcript"
+config_version: "1.1.0"
+config_status: "version_1_ready_with_42_step_checklist"
 organization: "R3 Recovery Services"
-last_updated: "2026-05-12"
+last_updated: "2026-06-11"
+source_of_truth: "config/checklists/treatment-plan-v1.json"
+checklist_version: "1.1.0"
+review_source_modes:
+  manual_upload:
+    mode: "point_in_time_snapshot"
+    monitoring_cadence: "monthly_compliance_check"
+  emr_api:
+    mode: "readiness_harness_only"
+    live_import_enabled: false
+loc_change_blocker:
+  status: "unvalidated"
+  message: "The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh; keep it configurable and return Needs Review or Missing Data when evidence is incomplete or conflicting."
 
 engine:
   name: "alleva_completeness_rules_engine"
@@ -218,7 +230,7 @@ rules:
     severity: "critical"
     category: "attendance_individual"
     applies_to:
-      mapped_level_of_care: ["IOP", "OUTPATIENT"]
+      mapped_level_of_care: ["IOP", "IOP-5", "IOP-19", "IOP-3", "OUTPATIENT", "OP"]
     logic:
       type: "numeric_compare"
       left_field: "attendance.individual_sessions_completed_count"

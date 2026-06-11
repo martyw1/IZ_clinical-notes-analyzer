@@ -1,7 +1,7 @@
 # Treatment Plan Timeliness UI/UX Update
 
-Date: 2026-06-09
-Current app patch: `1.0.3` / build `2026.06.09.4`
+Date: 2026-06-11
+Current app patch: `1.1.0` / build `2026.06.11.1`
 
 ## Source Artifacts
 
@@ -22,7 +22,8 @@ Primary inputs:
 
 The `Treatment plans` tab is now an evidence-first work queue instead of a passive dashboard. It keeps the existing upload-first chart-review app structure, but presents treatment-plan timeliness as a compact operational workflow:
 
-- visible `Updated evidence queue v1.0.3` banner so operators can confirm the refreshed UI is being served
+- visible `Updated evidence queue v1.1.0` banner so operators can confirm the refreshed UI is being served
+- video-reference color alignment using dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents
 - queue metrics for active clients, task rows, overdue, urgent, needs review, and missing data
 - quick filters for `Overdue`, `Urgent`, `Due Soon`, `Needs Review`, `Missing Data`, and `Compliant`
 - selected-client summary with admission date, current LOC, primary clinician/counselor, next due date, status, and evidence completeness
@@ -43,9 +44,11 @@ The backend timeliness payload now exposes optional evidence fields needed by th
 
 The deterministic rule path remains local and non-LLM. Missing/conflicting source evidence is still surfaced as `Missing Data` or `Needs Review`; the app does not silently convert ambiguous evidence into compliance.
 
+The dashboard source cards now distinguish API readiness from manual upload: API access can show daily-monitoring readiness labels, while manual upload is labeled as an upload-time snapshot with monthly compliance-check fallback language.
+
 ## Windows Build Visibility
 
-The desktop runtime serves `frontend\dist` when present. Version `1.0.3` updates Windows preflight so source-checkout launches rebuild the frontend when npm is available and the React source is newer than `frontend\dist`; otherwise preflight warns that the served browser UI may be stale.
+The desktop runtime serves `frontend\dist` when present. Version `1.1.0` keeps the Windows preflight stale-build guard so source-checkout launches rebuild the frontend when npm is available and the React source is newer than `frontend\dist`; otherwise preflight warns that the served browser UI may be stale.
 
 ## LOC-Change Ambiguity
 

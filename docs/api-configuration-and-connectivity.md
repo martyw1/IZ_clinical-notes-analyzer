@@ -29,6 +29,8 @@ The API configuration page lets an admin:
 7. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
 8. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, operation-test responses, and redacted JSON report payloads.
 
+The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys or bearer tokens in browser payloads.
+
 ## Operation test workbench
 
 After a definition is loaded, the page builds an operation picker from the OpenAPI `paths` object. For each selected method/path, it derives a form from:
@@ -76,7 +78,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend/dist`; Version 1.0.3 preflight warns when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend/dist`; Version 1.1.0 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 
@@ -109,3 +111,13 @@ The app supports configuration and connectivity testing without pretending to im
 - **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import. Do not fake live import without official tenant credentials and endpoint mapping.
 
 Saved API keys are encrypted in the local database. After save, API responses return only `api_key_configured: true/false`; they do not return the key value.
+
+## Local report files
+
+Redacted report files are written below:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-reports
+```
+
+These report files may include endpoint URLs, HTTP status codes, OpenAPI metadata, and redacted response summaries. They must not include saved API keys, one-time pasted keys, bearer tokens, passwords, or external response secrets.

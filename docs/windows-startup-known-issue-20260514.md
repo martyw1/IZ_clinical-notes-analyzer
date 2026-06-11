@@ -1,6 +1,6 @@
 # Windows Startup Note
 
-Status: resolved in Version `1.0.3` / build `2026.06.09.4`.
+Status: resolved and retained in Version `1.1.0` / build `2026.06.11.1`.
 
 ## Original behavior
 
@@ -8,7 +8,7 @@ The Windows source-checkout launch path could incorrectly report a package-check
 
 ## Resolution
 
-Version `1.0.3` keeps the local Windows launch fix and adds stale frontend-build detection so:
+Version `1.1.0` keeps the local Windows launch fix and stale frontend-build detection so:
 
 - `scripts\startup-windows-local.ps1` runs `scripts\preflight-windows.ps1` once before launch.
 - `scripts\preflight-windows.ps1` validates the complete Windows runtime package set.
@@ -25,4 +25,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-The expected app version after this patch is `1.0.3`.
+The expected app version after this patch is `1.1.0`.

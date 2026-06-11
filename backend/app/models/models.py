@@ -62,9 +62,13 @@ class TimelinessStatus(str, enum.Enum):
     overdue = 'Overdue'
     urgent = 'Urgent'
     due_soon = 'Due Soon'
+    returned = 'Returned for Correction'
     needs_review = 'Needs Review'
     missing_data = 'Missing Data'
+    conflicting = 'Conflicting Evidence'
+    unable_to_evaluate = 'Unable to Evaluate'
     compliant = 'Compliant'
+    approved = 'Approved'
 
 
 class TreatmentPlanKind(str, enum.Enum):

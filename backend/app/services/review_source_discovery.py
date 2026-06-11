@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -25,12 +25,34 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _utc_now_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _status_counts(items: list[dict[str, Any]]) -> dict[str, int]:
     counts = {label: 0 for label in REVIEW_STATUS_LABELS.values()}
     for item in items:
         label = str(item.get('review_status') or '')
         counts[label] = counts.get(label, 0) + 1
     return counts
+
+
+def _api_mode(app_settings: AppSetting) -> str:
+    configured = bool(app_settings.emr_fhir_base_url.strip() or app_settings.emr_smart_client_id.strip() or app_settings.emr_smart_client_secret)
+    if app_settings.emr_api_enabled and configured:
+        return 'connectivity_test_only'
+    if configured:
+        return 'disabled_configured'
+    return 'mock_stub'
+
+
+def _api_mode_label(mode: str) -> str:
+    labels = {
+        'connectivity_test_only': 'Connectivity-test-only mode',
+        'disabled_configured': 'API configured but disabled',
+        'mock_stub': 'Mock/stub mode',
+    }
+    return labels.get(mode, 'Disabled')
 
 
 def _chart_status(chart: Chart | None) -> str:
@@ -50,11 +72,15 @@ def _chart_status(chart: Chart | None) -> str:
 def _timeliness_status(status: str) -> str:
     if status == TimelinessStatus.compliant.value:
         return REVIEW_STATUS_LABELS['passed']
+    if status == TimelinessStatus.approved.value:
+        return REVIEW_STATUS_LABELS['finalized']
+    if status == TimelinessStatus.returned.value:
+        return REVIEW_STATUS_LABELS['failed']
     if status in {TimelinessStatus.overdue.value, TimelinessStatus.urgent.value}:
         return REVIEW_STATUS_LABELS['failed']
-    if status == TimelinessStatus.missing_data.value:
+    if status in {TimelinessStatus.missing_data.value, TimelinessStatus.unable_to_evaluate.value}:
         return REVIEW_STATUS_LABELS['missing_required_data']
-    if status in {TimelinessStatus.due_soon.value, TimelinessStatus.needs_review.value}:
+    if status in {TimelinessStatus.due_soon.value, TimelinessStatus.needs_review.value, TimelinessStatus.conflicting.value}:
         return REVIEW_STATUS_LABELS['needs_human_review']
     return REVIEW_STATUS_LABELS['ready_for_review']
 
@@ -137,14 +163,37 @@ def discovery_payload(db: Session, app_settings: AppSetting, note_sets: list[Pat
     api_items = _api_items(db, app_settings)
     upload_items = _upload_items(note_sets)
     all_items = [*api_items, *upload_items]
+    now = _utc_now_dt()
+    status_counts = _status_counts(all_items)
+    changed_item_count = sum(
+        status_counts.get(label, 0)
+        for label in ['Needs Human Review', 'Failed', 'Missing Required Data', 'Error']
+    )
+    api_mode = _api_mode(app_settings)
+    error_count = status_counts.get('Error', 0)
     return {
         'checklist_id': 'treatment-plan-v1',
-        'checklist_version': '1.0.0',
-        'last_refreshed_at': _utc_now(),
+        'checklist_version': '1.1.0',
+        'last_refreshed_at': now.isoformat(),
+        'last_refresh_at': now.isoformat(),
+        'next_refresh_at': (now + timedelta(days=1)).isoformat(),
         'live_import_enabled': False,
         'live_import_status': 'disabled_until_vendor_credentials_mapping_and_compliance_approval',
         'api_configured': bool(app_settings.emr_api_enabled and app_settings.emr_fhir_base_url and app_settings.emr_smart_client_id),
-        'refresh_mode': 'mock_periodic_readiness',
-        'status_counts': _status_counts(all_items),
+        'api_mode': api_mode,
+        'api_mode_label': _api_mode_label(api_mode),
+        'daily_monitoring_enabled': api_mode == 'connectivity_test_only',
+        'refresh_mode': 'daily_mock_simulation' if api_mode == 'mock_stub' else 'daily_connectivity_readiness',
+        'changed_item_count': changed_item_count,
+        'error_count': error_count,
+        'notification_badge_count': changed_item_count + error_count,
+        'manual_review_cadence': 'monthly_compliance_check',
+        'manual_mode_message': 'Manual upload reflects only the uploaded documents as of upload time. For 60+ active charts, use a monthly compliance-check batch when API automation is unavailable.',
+        'plain_english_status': (
+            'Live Alleva import is still blocked. The app can simulate daily monitoring and run safe connectivity tests without pulling live patient charts.'
+            if api_mode != 'connectivity_test_only'
+            else 'API settings are available for safe tests. Daily monitoring remains readiness-only until live import receives vendor and compliance approval.'
+        ),
+        'status_counts': status_counts,
         'items': all_items,
     }

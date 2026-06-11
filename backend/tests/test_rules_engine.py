@@ -40,6 +40,21 @@ def test_late_iop_treatment_plan_fails():
     assert any(finding.rule_id == 'TP-031' and finding.status == 'noncompliant' for finding in result.findings)
 
 
+def test_iop_5_uses_iop_outpatient_attendance_rule():
+    result = evaluate_rules(
+        {
+            'chart_id': 'demo-iop5-attendance',
+            'client_status': 'active',
+            'current_level_of_care': 'IOP 5',
+            'treatment_plan': {'exists': True, 'last_completed_date': '2026-04-01'},
+            'attendance': {'week_start_date': '2026-05-11', 'individual_sessions_completed_count': 0},
+        },
+        evaluation_date='2026-05-12',
+    )
+    assert result.derived_fields['mapped_level_of_care'] == 'IOP-5'
+    assert any(finding.rule_id == 'TP-050' and finding.status == 'noncompliant' for finding in result.findings)
+
+
 def test_unknown_level_of_care_is_unable_to_evaluate():
     result = evaluate_rules(
         {

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 - 2026-06-11
+
+### Added
+- Replaced the canonical treatment-plan checklist with the 42-step PRD checklist, including status options, reviewer actions, source evidence, audit events, export fields, and required manual override reasons for every step.
+- Added a Settings workflow action that seeds an admin-editable draft from the 42-step checklist so future workflow changes can be edited and published through the app.
+- Expanded source discovery status language for API readiness versus manual upload, including daily API-monitoring labels and monthly compliance-check fallback language for point-in-time uploads.
+- Persisted redacted API definition and operation-test reports under local app data without returning API secrets to the browser.
+
+### Changed
+- Promoted version metadata to `1.1.0` / build `2026.06.11.1`.
+- Updated treatment-plan status coverage for returned, conflicting, unable-to-evaluate, and approved/finalized worklist states.
+- Aligned the React color/style layer with the local video walkthrough reference CSS palette while preserving the existing app navigation model.
+- Updated deterministic rules metadata to reference checklist version `1.1.0` and to apply IOP/outpatient attendance checks to `IOP-5`, `IOP-19`, `IOP-3`, and `OP` mappings.
+
+### Verified
+- Focused backend checklist, workflow, source-discovery/readiness, API-connectivity, and rules tests passed locally during implementation.
+- Frontend Vitest passed locally during implementation.
+- Full-suite, Windows script, production build, and browser walkthrough results are recorded in the 2026-06-11 validation report.
+
 ## 1.0.3 - 2026-06-09
 
 ### Changed

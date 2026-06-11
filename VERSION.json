@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.0.3",
-  "build": "2026.06.09.4",
+  "version": "1.1.0",
+  "build": "2026.06.11.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-06-09",
-  "git_branch": "main",
-  "version_name": "Version 1.0.3 Treatment Plan Timeliness UI visibility patch",
-  "description": "Makes the Treatment Plan Timeliness evidence queue visibly identifiable, detects stale source-checkout frontend builds, and updates release/operator documentation."
+  "release_date": "2026-06-11",
+  "git_branch": "feature/treatment-plan-prd-42-ui-api-completion",
+  "version_name": "Version 1.1.0 Treatment Plan 42-step PRD readiness patch",
+  "description": "Adds the comprehensive 42-step treatment-plan checklist, admin-seeded editable workflow drafts, source-mode status language, video-aligned UI colors, and API harness report persistence."
 }

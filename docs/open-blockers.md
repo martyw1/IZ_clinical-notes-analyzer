@@ -1,6 +1,6 @@
 # Open Blockers
 
-Date: 2026-06-09
+Date: 2026-06-11
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -8,7 +8,7 @@ Status: unvalidated.
 
 The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
 
-Current implementation state: the setting exists in the database and admin Settings UI, and the timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side.
+Current implementation state: the setting exists in the database and admin Settings UI, and the timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side. The 42-step checklist also includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
 
 Until R3 confirms the rule, do not hard-code a final number of days and do not silently treat a LOC-change case as compliant. If source evidence is incomplete or conflicting, return `Needs Review` or `Missing Data` according to the deterministic rules.
 
@@ -30,8 +30,8 @@ Current implementation state: Version 1 adds Windows preflight, setup/start wrap
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.0.3` on that machine.
-- The `Treatment plans` tab shows `Updated evidence queue v1.0.3`, proving the source/staff/LOC evidence-comparison UI is the currently served build.
+- `/api/version` and the UI footer show `1.1.0` on that machine.
+- The `Treatment plans` tab shows `Updated evidence queue v1.1.0`, proving the source/staff/LOC evidence-comparison UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 

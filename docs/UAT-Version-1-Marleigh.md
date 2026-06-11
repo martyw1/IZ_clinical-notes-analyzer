@@ -2,9 +2,9 @@
 
 Use synthetic data only for this script.
 
-Current patch version: `1.0.3` / build `2026.06.09.4`.
+Current patch version: `1.1.0` / build `2026.06.11.1`.
 
-Version 1.0.3 keeps the Windows startup reliability fix, aligns app version metadata, adds clear operator guidance for authorized local admin recovery, and makes the updated Treatment Plan Timeliness evidence queue visible in the app.
+Version 1.1.0 keeps the Windows startup reliability fix, aligns app version metadata, expands the checklist to the 42-step PRD workflow, and adds admin-editable workflow seeding in Settings.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -14,12 +14,12 @@ Version 1.0.3 keeps the Windows startup reliability fix, aligns app version meta
 6. Confirm the acronym definitions are understandable.
 7. Confirm the LOC-change blocker says the timing window is unvalidated.
 8. Open Chart audit.
-9. Confirm the dashboard shows checklist version `v1.0.0`.
-10. Confirm `/api/version` reports app version `1.0.3` after this patch is installed.
-11. Confirm the app footer also shows version `1.0.3`.
+9. Confirm the dashboard shows checklist version `v1.1.0`.
+10. Confirm `/api/version` reports app version `1.1.0` after this patch is installed.
+11. Confirm the app footer also shows version `1.1.0`.
 12. Confirm the Review source section shows EMR/API access and Manual upload.
 13. Open Treatment plans.
-14. Confirm the `Updated evidence queue v1.0.3` banner is visible.
+14. Confirm the `Updated evidence queue v1.1.0` banner is visible.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
 17. Review rule results, evidence, and the source/staff/LOC due-date comparison.
@@ -35,11 +35,13 @@ Version 1.0.3 keeps the Windows startup reliability fix, aligns app version meta
 27. Export the review report as CSV or JSON.
 28. Open Settings as admin.
 29. Review API settings and SMART/FHIR discovery controls.
-30. Run readiness checks.
-31. Open Forensic logs.
-32. Confirm sign-in, upload, review, override, and settings actions appear without secrets or uploaded note text.
-33. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
-34. Confirm the Version 1.0.3 local recovery utility exists at `scripts\update-local-admin.ps1`.
-35. Close the browser and app window.
-36. Relaunch and confirm prior review status is still present.
-37. Use the uninstall shortcut only after confirming no local data needs to be preserved.
+30. Confirm the workflow profile panel includes `Seed draft from 42-step checklist`.
+31. Seed a draft, review the generated snapshot and transition rules, and confirm it can be edited before publish.
+32. Run readiness checks.
+33. Open Forensic logs.
+34. Confirm sign-in, upload, review, override, API test, and settings actions appear without secrets or uploaded note text.
+35. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
+36. Confirm the Version 1.1.0 local recovery utility exists at `scripts\update-local-admin.ps1`.
+37. Close the browser and app window.
+38. Relaunch and confirm prior review status is still present.
+39. Use the uninstall shortcut only after confirming no local data needs to be preserved.

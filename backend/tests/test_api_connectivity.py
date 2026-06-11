@@ -1,4 +1,5 @@
 import httpx
+from pathlib import Path
 
 from app.services.api_connectivity import (
     REDACTED,
@@ -331,6 +332,7 @@ def test_api_configuration_routes_redact_inline_and_saved_keys(app_with_sqlite, 
         assert pull.status_code == 200
         assert pull.json()['status'] == 'ok'
         assert pull.json()['report']['request']['api_key'] == REDACTED
+        assert Path(pull.json()['report_path']).exists()
         assert 'saved-secret-api-key' not in pull.text
 
         operation = client.post(
@@ -352,6 +354,7 @@ def test_api_configuration_routes_redact_inline_and_saved_keys(app_with_sqlite, 
         payload = operation.json()
         assert payload['response_json']['access_token'] == REDACTED
         assert payload['report']['request']['api_key'] == REDACTED
+        assert Path(payload['report_path']).exists()
         assert 'inline-secret-key' not in operation.text
         assert 'server-returned-token' not in operation.text
 

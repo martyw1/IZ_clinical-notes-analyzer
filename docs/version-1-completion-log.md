@@ -1,5 +1,44 @@
 # Version 1 Completion Log
 
+## 2026-06-11 1.1.0 Treatment Plan PRD 42-Step Completion
+
+What changed:
+- Updated version metadata to `1.1.0` / build `2026.06.11.1`.
+- Replaced the canonical checklist with the 42-step PRD checklist.
+- Added checklist step fields for source modes, status options, reviewer actions, override requirements, audit events, and export fields.
+- Added a Settings action to seed an editable workflow draft from the 42-step checklist.
+- Expanded review-source discovery status language for API readiness and manual upload point-in-time snapshots.
+- Preserved daily API-monitoring labels and monthly compliance-check fallback language.
+- Aligned the React color/style layer with the local video walkthrough CSS palette.
+- Persisted redacted API connectivity reports under local app data.
+- Kept the LOC-change update window visibly unvalidated and configurable.
+
+Validation target:
+- Confirm `/api/version`, the UI footer, and the Treatment Plan Timeliness banner all show `1.1.0`.
+- Confirm the Checklist tab shows 42 steps and the PRD status/override fields.
+- Confirm Settings can seed a draft from the 42-step checklist for admin workflow editing.
+- Confirm source-mode cards distinguish API readiness from manual upload snapshots.
+
+Commands run:
+- `$env:PYTHONPATH='backend'; backend\.venv\Scripts\python.exe -m pytest backend\tests -q`
+- `npm test -- --run`
+- `npm run build`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight-windows.ps1 -AssumeYes`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-local-app-stack.ps1`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-api-configuration-local.ps1`
+- In-app browser walkthrough against temporary synthetic local runtime `http://127.0.0.1:8031`.
+- Full validation details are recorded in `docs\validation\validation-report-2026-06-11-treatment-plan-prd-42.md`.
+
+Pass/fail status:
+- PASS: Backend full suite passed: 76 passed, 2 skipped.
+- PASS: Frontend Vitest passed: 11 passed.
+- PASS: Frontend production build passed.
+- PASS: Windows preflight passed after updating the stale 20-step script gate to validate the 42-step checklist.
+- PASS: Windows local stack smoke passed.
+- PASS: Windows API configuration smoke passed.
+- PASS: Browser walkthrough verified dashboard source modes, video color tokens, 42 checklist cards, Treatment plans evidence comparison, and Settings workflow seed.
+- PASS: Deprecated archive moved to PRD-required `depriceated/` path with manifest.
+
 ## 2026-06-09 07:40 Local Repo Safety Gate
 
 What changed:

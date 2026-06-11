@@ -52,7 +52,7 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides the Version 1.0.3 updated evidence queue banner, status filters, search, dashboard counts, active-client queue, source/staff/LOC due-date comparison, detail rule results, LOC history, treatment-plan evidence history, task-list copy/export, overrides, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, publishing, archiving, and unused draft-only deletion.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides the Version 1.1.0 updated evidence queue banner, status filters, search, dashboard counts, active-client queue, source/staff/LOC due-date comparison, detail rule results, LOC history, treatment-plan evidence history, task-list copy/export, overrides, source-mode status cards, and audit history. Admin Settings also exposes workflow profile creation, draft version creation, checklist-seeded draft creation, publishing, archiving, and unused draft-only deletion.
 
 ## Scripts and Launchers
 
@@ -170,13 +170,13 @@ CI:
 
 The repo has Dockerfiles, Compose files, `pyinstaller` in backend requirements, and Windows source-checkout launchers. It does not yet contain a signed `.exe`/`.msi` installer, installer project, code-signing plan, repair/modify/uninstall implementation, or evidence from the target purchased Dell Windows 10/11 Home validation machine.
 
-For Version 1.0.3, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
+For Version 1.1.0, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
 
 ## Current Risks
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Browser/full-stack smoke is source-checkout validated only | Version 1.0.3 adds a visible Treatment Plan Timeliness evidence-queue banner and stale `frontend\dist` detection; local browser/Computer Use checks can verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.1.0 keeps the visible Treatment Plan Timeliness evidence-queue banner and stale `frontend\dist` detection, and adds 42-step checklist workflow coverage; local browser/Computer Use checks can verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

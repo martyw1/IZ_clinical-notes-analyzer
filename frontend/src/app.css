@@ -1280,19 +1280,32 @@ ol {
 
 /* Audit-workbench visual pass: denser worksheet/document-manager styling. */
 :root {
+  --video-nav: #0b2f3a;
+  --video-nav-deep: #06242d;
+  --video-coral: #ff8069;
+  --video-coral-dark: #e66654;
+  --video-purple: #7058f4;
+  --video-green: #35c76f;
+  --video-line: #8ed4dd;
+  --video-table-head: #b9b9b9;
+  --video-page: #f1f1f1;
+  --video-paper: #ffffff;
+  --video-text: #263238;
+  --video-muted: #6f7a80;
+  --video-border: #d7dfe2;
   font-family: "Segoe UI", Arial, sans-serif;
-  color: #1f2933;
-  background: #eef2f3;
+  color: var(--video-text);
+  background: var(--video-page);
 }
 
 body {
-  background: #eef2f3;
+  background: var(--video-page);
 }
 
 button {
   border-radius: 3px;
   padding: 0.55rem 0.85rem;
-  background: #0b6f86;
+  background: var(--video-coral);
   color: #ffffff;
   font-weight: 600;
   box-shadow: none;
@@ -1300,7 +1313,19 @@ button {
 
 button:hover {
   transform: none;
-  background: #09596c;
+  background: var(--video-coral-dark);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.queue-item:focus-visible,
+.status-filter:focus-visible,
+.timeliness-queue-table__row:focus-visible,
+.criterion-chip:focus-visible {
+  outline: 3px solid var(--video-line);
+  outline-offset: 2px;
 }
 
 input,
@@ -1308,7 +1333,7 @@ textarea,
 select {
   border-radius: 2px;
   border: 1px solid #b7c5cc;
-  background: #ffffff;
+  background: var(--video-paper);
   padding: 0.55rem 0.65rem;
 }
 
@@ -1328,7 +1353,7 @@ label {
   gap: 0;
   align-items: stretch;
   border-bottom: 1px solid #cbd5da;
-  background: #ffffff;
+  background: var(--video-paper);
 }
 
 .hero > div:first-child {
@@ -1419,8 +1444,8 @@ label {
 .view-tabs {
   gap: 0;
   padding: 0 1rem;
-  background: #073342;
-  border-bottom: 1px solid #052a36;
+  background: var(--video-nav);
+  border-bottom: 1px solid var(--video-nav-deep);
 }
 
 .tab-button,
@@ -1428,19 +1453,24 @@ label {
   border-radius: 0;
   border: 0;
   border-right: 1px solid rgba(255, 255, 255, 0.14);
-  background: #073342;
+  background: var(--video-nav);
   color: #e8f1f3;
 }
 
 .tab-button--active {
-  background: #f27d62;
+  background: var(--video-coral);
   color: #ffffff;
 }
 
 .ghost-button {
   border: 1px solid #b9c7ce;
-  background: #ffffff;
+  background: var(--video-paper);
   color: #1f4550;
+}
+
+.ghost-button:hover {
+  background: #f9fbfb;
+  color: #0b2f3a;
 }
 
 .queue-item,
@@ -1456,13 +1486,44 @@ label {
 
 .queue-item--active,
 .criterion-chip--active {
-  border-color: #0b6f86;
-  box-shadow: inset 3px 0 0 #0b6f86;
+  border-color: var(--video-line);
+  box-shadow: inset 4px 0 0 var(--video-coral);
 }
 
 .pill {
   border-radius: 3px;
   padding: 0.22rem 0.5rem;
+}
+
+.pill--success {
+  background: rgba(53, 199, 111, 0.16);
+  color: #176c39;
+  border: 1px solid rgba(53, 199, 111, 0.38);
+}
+
+.pill--danger {
+  background: rgba(255, 128, 105, 0.16);
+  color: #a63d2e;
+  border: 1px solid rgba(255, 128, 105, 0.42);
+}
+
+.pill--warning {
+  background: rgba(255, 128, 105, 0.14);
+  color: #8d3d30;
+  border: 1px solid rgba(255, 128, 105, 0.32);
+}
+
+.pill--attention {
+  background: rgba(112, 88, 244, 0.12);
+  color: #4c3ec3;
+  border: 1px solid rgba(112, 88, 244, 0.34);
+}
+
+.pill--neutral,
+.pill--muted {
+  background: #eef2f3;
+  color: #56666d;
+  border: 1px solid #d8e0e3;
 }
 
 .form-grid {
@@ -1490,6 +1551,43 @@ label {
 
 .document-card:last-child {
   border-bottom: 0;
+}
+
+.source-mode-card {
+  border-top: 4px solid var(--video-line);
+}
+
+.source-mode-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0.85rem 0;
+  border: 1px solid var(--video-border);
+  background: var(--video-paper);
+}
+
+.source-mode-facts div {
+  min-height: 70px;
+  padding: 0.65rem 0.75rem;
+  border-right: 1px solid var(--video-border);
+  border-bottom: 1px solid var(--video-border);
+}
+
+.source-mode-facts div:nth-child(2n) {
+  border-right: 0;
+}
+
+.source-mode-facts dt {
+  color: var(--video-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.source-mode-facts dd {
+  margin: 0.2rem 0 0;
+  color: var(--video-text);
+  font-weight: 700;
 }
 
 @media (max-width: 720px) {

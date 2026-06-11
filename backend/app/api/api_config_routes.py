@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.models import AppSetting, Role, User
-from app.services.api_connectivity import DEFAULT_ALLEVA_SWAGGER_UI_URL, build_api_connectivity_report, execute_openapi_operation, pull_api_definitions, redact_url
+from app.services.api_connectivity import (
+    DEFAULT_ALLEVA_SWAGGER_UI_URL,
+    build_api_connectivity_report,
+    execute_openapi_operation,
+    persist_api_connectivity_report,
+    pull_api_definitions,
+    redact_url,
+)
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
@@ -306,6 +313,7 @@ def pull_api_configuration_definitions(
         },
         result=result,
     )
+    result['report_path'] = persist_api_connectivity_report(result['report'])
     status = result.get('status')
     log_event(
         db,
@@ -382,6 +390,7 @@ def test_api_configuration_operation(
         },
         result=result,
     )
+    result['report_path'] = persist_api_connectivity_report(result['report'])
     status = result.get('status')
     log_event(
         db,

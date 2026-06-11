@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current patch version: `1.0.3` / build `2026.06.09.4`.
+Current patch version: `1.1.0` / build `2026.06.11.1`.
 
-Version 1.0.3 keeps the Version 1 Windows startup reliability fixes, aligns app version metadata everywhere the app reads release information, documents the local admin recovery utility, and makes the updated Treatment Plan Timeliness evidence queue visibly identifiable in the UI.
+Version 1.1.0 keeps the Version 1 Windows startup reliability fixes, aligns app version metadata everywhere the app reads release information, expands the treatment-plan checklist to the 42-step PRD workflow, and adds an admin-editable workflow seed path in Settings.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.3`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.1.0`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Version 1.0.3 local recovery path is:
+The Version 1.1.0 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -42,15 +42,17 @@ Run the utility from the repo root, save the generated value securely, restart t
 
 - Chart audit: summary, source selection, current queue, and checklist version.
 - Review queue: detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
-- Treatment plans: updated evidence queue banner, timeliness status, source/staff/LOC due-date comparison, LOC-change blocker, rule results, overrides, and CSV/JSON export.
-- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 20 Version 1 steps.
+- Treatment plans: updated evidence queue banner, timeliness status, source/staff/LOC due-date comparison, LOC-change blocker, rule results, overrides, source-mode cards, and CSV/JSON export.
+- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.1.0 PRD steps.
 - Manual upload: upload exported clinical note or treatment plan files.
-- Settings: admin-only API, LLM, readiness, and workflow settings.
+- Settings: admin-only API, LLM, readiness, and workflow settings, including `Seed draft from 42-step checklist` for admin workflow edits.
 - Forensic logs: admin-only audit trail.
 
 ## API Mode
 
 Version 1 includes a direct API readiness harness and mock source discovery. Live Alleva patient import is disabled until official credentials, endpoint mapping, scopes, pagination/rate limits, attachment handling, vendor documentation, and compliance approval exist.
+
+When API monitoring is unavailable, manual upload is treated as an upload-time snapshot. Use the monthly compliance-check fallback for large chart sets instead of assuming weekly automatic monitoring.
 
 ## Upload Mode
 

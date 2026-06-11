@@ -86,6 +86,7 @@ from app.services.review_source_discovery import discovery_payload as review_sou
 from app.services.secure_storage import encrypt_text_secret, read_secure_file
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.timeliness import (
+    STATUS_PRIORITY as TIMELINESS_STATUS_PRIORITY,
     add_override,
     detail_payload as timeliness_detail_payload,
     evaluate_client,
@@ -1281,14 +1282,7 @@ def get_timeliness_dashboard(
     app_settings = get_or_create_app_settings(db)
     as_of = _parse_evaluation_date(evaluation_date)
     evaluations = [evaluate_client(client, app_settings, evaluation_date=as_of) for client in list_timeliness_clients(db)]
-    status_counts = {
-        'Compliant': 0,
-        'Due Soon': 0,
-        'Urgent': 0,
-        'Overdue': 0,
-        'Needs Review': 0,
-        'Missing Data': 0,
-    }
+    status_counts = {status: 0 for status in TIMELINESS_STATUS_PRIORITY}
     for evaluation in evaluations:
         status_counts[evaluation.status] = status_counts.get(evaluation.status, 0) + 1
     total = len(evaluations)
@@ -1296,7 +1290,7 @@ def get_timeliness_dashboard(
     items = sorted(
         [timeliness_summary_payload(evaluation) for evaluation in evaluations],
         key=lambda item: (
-            ['Overdue', 'Urgent', 'Due Soon', 'Needs Review', 'Missing Data', 'Compliant'].index(str(item['status'])),
+            TIMELINESS_STATUS_PRIORITY.index(str(item['status'])) if str(item['status']) in TIMELINESS_STATUS_PRIORITY else len(TIMELINESS_STATUS_PRIORITY),
             item['next_due_date'] or '9999-12-31',
             item['patient_id'],
         ),
@@ -1318,8 +1312,12 @@ def get_timeliness_dashboard(
         'due_soon': status_counts['Due Soon'],
         'urgent': status_counts['Urgent'],
         'overdue': status_counts['Overdue'],
+        'returned': status_counts['Returned for Correction'],
         'needs_review': status_counts['Needs Review'],
         'missing_data': status_counts['Missing Data'],
+        'conflicting_evidence': status_counts['Conflicting Evidence'],
+        'unable_to_evaluate': status_counts['Unable to Evaluate'],
+        'approved': status_counts['Approved'],
         'compliance_percentage': compliance_percentage,
         'loc_change_window_days': app_settings.treatment_plan_loc_change_window_days,
         'loc_change_window_validated': app_settings.treatment_plan_loc_change_window_validated,

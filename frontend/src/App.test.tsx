@@ -19,6 +19,9 @@ function installFetchMock(routes: Record<string, unknown | RouteHandler>) {
     const key = `${(init?.method || 'GET').toUpperCase()} ${url.pathname}`
     const route = routes[key]
     if (!route) {
+      if (key === 'GET /api/review-source-discovery') {
+        return jsonResponse(200, reviewSourceDiscoveryPayload())
+      }
       throw new Error(`Unhandled request ${key}`)
     }
 
@@ -220,6 +223,78 @@ function readinessPayload() {
   }
 }
 
+function reviewSourceDiscoveryPayload() {
+  return {
+    checklist_id: 'treatment-plan-v1',
+    checklist_version: '1.1.0',
+    last_refreshed_at: '2026-06-11T12:00:00Z',
+    last_refresh_at: '2026-06-11T12:00:00Z',
+    next_refresh_at: '2026-06-12T12:00:00Z',
+    live_import_enabled: false,
+    live_import_status: 'disabled_until_vendor_credentials_mapping_and_compliance_approval',
+    api_configured: false,
+    api_mode: 'mock_stub',
+    api_mode_label: 'Mock/stub mode',
+    daily_monitoring_enabled: false,
+    refresh_mode: 'daily_mock_simulation',
+    changed_item_count: 2,
+    error_count: 0,
+    notification_badge_count: 2,
+    manual_review_cadence: 'monthly_compliance_check',
+    manual_mode_message:
+      'Manual upload reflects only the uploaded documents as of upload time. For 60+ active charts, use a monthly compliance-check batch when API automation is unavailable.',
+    plain_english_status:
+      'Live Alleva import is still blocked. The app can simulate daily monitoring and run safe connectivity tests without pulling live patient charts.',
+    status_counts: {
+      'Not Reviewed': 0,
+      'Ready for Review': 1,
+      'In Review': 0,
+      'Needs Human Review': 2,
+      Passed: 0,
+      Failed: 0,
+      'Missing Required Data': 0,
+      Error: 0,
+      Finalized: 0,
+    },
+    items: [
+      {
+        source_type: 'api',
+        source_item_id: 'mock-api-treatment-plan-001',
+        patient_id: 'SYNTH-API-001',
+        display_name: 'Synthetic API Treatment Plan',
+        document_type: 'treatment_plan',
+        source_system_or_file: 'Mock EMR/API source',
+        review_status: 'Ready for Review',
+        status_reason: 'Synthetic mock item available because live EMR import is not approved.',
+        service_date: '2026-06-01',
+        plan_date: '2026-06-01',
+        provider_staff: 'Synthetic Provider',
+        program_location: 'IOP-5',
+        last_changed_at: '2026-06-11T12:00:00Z',
+        review_chart_id: null,
+        timeliness_client_id: null,
+      },
+      {
+        source_type: 'upload',
+        source_item_id: 'note-set-5',
+        patient_id: 'PAT-001',
+        display_name: 'Uploaded binder v1',
+        document_type: 'clinical_note_binder',
+        source_system_or_file: 'Alleva EMR',
+        review_status: 'Needs Human Review',
+        status_reason: 'Status is derived from the latest linked chart review.',
+        service_date: '04/01/2025',
+        plan_date: '',
+        provider_staff: 'Marleigh Johnson',
+        program_location: 'Residential',
+        last_changed_at: '2026-03-08T12:00:00Z',
+        review_chart_id: 8,
+        timeliness_client_id: null,
+      },
+    ],
+  }
+}
+
 function workflowDefinitionsPayload() {
   const currentVersion = {
     id: 61,
@@ -258,11 +333,11 @@ function workflowDefinitionsPayload() {
 function treatmentPlanChecklistPayload() {
   return {
     checklist_id: 'treatment-plan-v1',
-    version: '1.0.0',
-    display_name: 'Treatment Plan Checklist Version 1',
+    version: '1.1.0',
+    display_name: 'Treatment Plan Checklist Version 1 - 42 Step PRD',
     organization: 'R3 Recovery Services',
-    status: 'version_1_ready_with_loc_change_blocker',
-    last_updated: '2026-06-09',
+    status: 'version_1_ready_with_42_steps_and_loc_change_blocker',
+    last_updated: '2026-06-11',
     source_of_truth: 'config/checklists/treatment-plan-v1.json',
     review_owner_roles: ['admin', 'manager'],
     viewer_roles: ['admin', 'manager', 'counselor'],
@@ -281,10 +356,24 @@ function treatmentPlanChecklistPayload() {
       owner: 'R3/Marleigh',
       message: 'The treatment-plan update window after a level-of-care change is not confirmed.',
     },
-    steps: Array.from({ length: 20 }, (_unused, index) => ({
+    steps: Array.from({ length: 42 }, (_unused, index) => ({
       step: index + 1,
-      key: index === 0 ? 'select_review_source' : index === 19 ? 'audit_and_traceability' : `step_${index + 1}`,
-      title: index === 0 ? 'Select review source' : index === 19 ? 'Audit and traceability' : `Checklist step ${index + 1}`,
+      key:
+        index === 0
+          ? 'confirm_correct_client_chart'
+          : index === 33
+            ? 'require_manual_override_reason'
+            : index === 41
+              ? 'use_synthetic_or_approved_non_phi_data'
+              : `step_${index + 1}`,
+      title:
+        index === 0
+          ? 'Confirm this is the correct client chart'
+          : index === 33
+            ? 'Require a reason for manual overrides'
+            : index === 41
+              ? 'Use synthetic or approved non-PHI data for validation until production handling is approved'
+              : `Checklist step ${index + 1}`,
       source_modes: ['api', 'upload'],
       objective: 'Synthetic checklist objective.',
       required_metadata: ['patient_id'],
@@ -295,6 +384,12 @@ function treatmentPlanChecklistPayload() {
       evidence_fields: ['source_document'],
       automation_level: 'deterministic',
       severity_default: 'high',
+      status_options: ['Confirmed', 'Needs Review', 'Missing Data', 'Overridden'],
+      reviewer_actions: ['Confirm', 'Override', 'Return for Correction'],
+      manual_override: true,
+      override_reason_required: true,
+      audit_event: `treatment_plan.checklist.step_${String(index + 1).padStart(2, '0')}.reviewed`,
+      export_fields: ['status', 'source_evidence', 'finding_message', 'severity', 'reviewer_action', 'override_reason'],
     })),
   }
 }
@@ -306,8 +401,12 @@ function timelinessDashboardPayload() {
     due_soon: 1,
     urgent: 0,
     overdue: 0,
+    returned: 0,
     needs_review: 0,
     missing_data: 0,
+    conflicting_evidence: 0,
+    unable_to_evaluate: 0,
+    approved: 0,
     compliance_percentage: 0,
     loc_change_window_days: null,
     loc_change_window_validated: false,
@@ -529,6 +628,9 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
+    expect(screen.getByText('Mock/stub mode')).toBeInTheDocument()
+    expect(screen.getByText('Monthly compliance-check fallback')).toBeInTheDocument()
+    expect(screen.getByText('As of upload time only')).toBeInTheDocument()
   })
 
   it('shows the canonical Treatment Plan Checklist Version 1', async () => {
@@ -553,10 +655,11 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Checklist' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Checklist' }))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment Plan Checklist Version 1' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment Plan Checklist Version 1 - 42 Step PRD' })).toBeInTheDocument())
     expect(screen.getByText('Application Programming Interface')).toBeInTheDocument()
-    expect(screen.getByText(/Select review source/)).toBeInTheDocument()
-    expect(screen.getByText(/Audit and traceability/)).toBeInTheDocument()
+    expect(screen.getByText(/Confirm this is the correct client chart/)).toBeInTheDocument()
+    expect(screen.getByText(/Require a reason for manual overrides/)).toBeInTheDocument()
+    expect(screen.getByText(/Use synthetic or approved non-PHI data/)).toBeInTheDocument()
   })
 
   it('shows treatment plan timeliness detail and records a manual override', async () => {
@@ -980,6 +1083,7 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText('alleva-smart-fhir-document-manager')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument()
     expect(screen.getByText('treatment_plan_followup')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Seed draft from 42-step checklist' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
     fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })

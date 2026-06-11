@@ -9,7 +9,15 @@ from app.core.config import REPO_ROOT
 
 CHECKLIST_PATH = REPO_ROOT / 'config' / 'checklists' / 'treatment-plan-v1.json'
 REQUIRED_ACRONYMS = {'API', 'EMR', 'PHI', 'PII', 'OCR', 'LLM', 'TP', 'SUD', 'LOC', 'ASAM', 'SMART'}
-REQUIRED_STEP_COUNT = 20
+REQUIRED_STEP_COUNT = 42
+REQUIRED_STEP_FIELDS = {
+    'status_options',
+    'reviewer_actions',
+    'manual_override',
+    'override_reason_required',
+    'audit_event',
+    'export_fields',
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -67,6 +75,11 @@ def validate_treatment_plan_checklist(checklist: dict[str, Any]) -> list[str]:
             errors.append(f'steps[{expected_step}].source_modes must be a non-empty list')
         if not str(item.get('objective') or '').strip():
             errors.append(f'steps[{expected_step}].objective is required')
+        for field in REQUIRED_STEP_FIELDS:
+            if field not in item:
+                errors.append(f'steps[{expected_step}].{field} is required')
+        if item.get('override_reason_required') is not True:
+            errors.append(f'steps[{expected_step}].override_reason_required must be true')
     return errors
 
 
@@ -98,6 +111,9 @@ def treatment_plan_workflow_snapshot() -> dict[str, Any]:
                 'source_modes': step['source_modes'],
                 'automation_level': step['automation_level'],
                 'severity_default': step['severity_default'],
+                'reviewer_actions': step.get('reviewer_actions', []),
+                'audit_event': step.get('audit_event', ''),
+                'export_fields': step.get('export_fields', []),
             }
             for step in checklist['steps']
         ],
