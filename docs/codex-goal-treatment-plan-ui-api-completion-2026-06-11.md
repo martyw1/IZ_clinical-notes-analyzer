@@ -1,349 +1,366 @@
-# Codex /goal Prompt — Treatment Plan Checklist, UI/UX, API Harness, Windows 11 Completion
+# /goal Codex Prompt — Complete IZ Clinical Notes Analyzer Treatment Plan Checklist, UI/UX, API/Upload Workflow, Tests, and Cleanup
 
-Use this prompt in the Windows 11 OpenAI Codex app with GPT-5.5 Extra High reasoning.
+/goal
 
----
+You are running in the OpenAI Codex app on a Windows 11 laptop, using GPT-5.5 Extra High reasoning. You have full access to the local clone of:
 
-## /goal
+`https://github.com/martyw1/IZ_clinical-notes-analyzer.git`
 
-You are working in the local Windows 11 clone of:
+Assume you are already in the correct local repo directory. Work locally first. Do not push to `main` until every required implementation, validation, test, UI walkthrough, and documentation update is complete.
 
-```text
-https://github.com/martyw1/IZ_clinical-notes-analyzer.git
-```
+## Mission
 
-You have full local repo access on this Windows 11 laptop. Your job is to update the app so it fully implements the comprehensive updated PRD:
+Complete the app so it satisfies the new comprehensive PRD for IZ Clinical Notes Analyzer: Treatment Plan Checklist, Timeliness, API/Upload Workflow, UI/UX Update, and Windows pilot readiness.
 
-```text
-docs/updated-treatment-plan-comprehensive-prd-2026-06-11.md
-```
+The controlling product requirement is the updated PRD provided with this prompt. Also inspect and reconcile all repo sources, especially:
 
-This includes treatment-plan checklist functionality, Marleigh’s validated 42-step checklist, daily API-monitoring workflow, manual monthly compliance-check workflow, UI/UX updates from `video-extract (2026-06-05)`, API harness updates, Windows 11 readiness, tests, documentation, and safe cleanup of obsolete files.
+- `README.md`
+- `CHANGELOG.md`
+- `VERSION`
+- `VERSION.json`
+- `docs/`
+- all existing PRDs in `docs/`
+- `docs/treatment-plan-checklist-v1.md`
+- `docs/open-blockers.md`
+- `config/checklists/treatment-plan-v1.json`
+- `config/rules/alleva_treatment_plan_completeness_rules.yaml`
+- backend app routes/services/models/tests
+- frontend React source, components, CSS, tests
+- scripts for Windows preflight/start/build/test
+- `video-walkthrough/`
+- `video-extract (2026-06-05)/` and any related stylesheets, snippets, screenshots, transcripts, or extracted UI recommendations
 
-Do not make shallow changes. Inspect the entire repo first, including all subfolders, docs, configs, frontend, backend, scripts, tests, sample data, and especially:
+You must inspect the latest UI/UX recommendations in `video-extract (2026-06-05)` and implement every relevant UI/UX change unless it conflicts with security, PHI rules, or the PRD. If you choose not to implement a recommendation, document the reason in a PRD implementation note and in the final completion report.
 
-```text
-video-extract (2026-06-05)
-```
+## Critical Business Requirements
 
-That folder may include actual style sheets, CSS, component snippets, screenshots, extracted video notes, and UI recommendations. Treat it as a required UI/UX source.
+Marleigh confirmed:
 
----
+1. If API/EMR automation is available, the app should check daily and notify her of anything needing review or follow-up.
+2. If API/EMR automation is not available, each chart must be manually downloaded/uploaded, which is not ideal for 60+ active charts.
+3. If manual upload remains the only option, the app should support a monthly compliance-check workflow rather than implying weekly manual upload is realistic.
+4. The acronym definitions are accepted.
+5. The 42 checklist items are accepted.
+6. Use only de-identified/synthetic data until production PHI handling is approved.
 
-## Mandatory Ground Rules
+## Non-Negotiable Safety and Compliance Rules
 
-1. Work from the current local `main` branch after pulling latest remote changes.
-2. Before editing, run:
+- Do not commit real PHI.
+- Do not use real PHI in test fixtures, logs, screenshots, docs, exports, or prompts.
+- Do not commit `.env`, SQLite runtime DBs, encrypted uploads, logs containing PHI, API keys, bearer tokens, passwords, encryption keys, or real patient notes.
+- Do not expose saved API keys or tokens to the browser.
+- Redact one-time keys, saved keys, bearer strings, token query parameters, sensitive response fields, and secrets in API reports.
+- Do not fake live Alleva import.
+- Keep deterministic rules as the primary compliance path.
+- Optional LLM features must remain disabled by default and may not substitute for deterministic evidence.
+- Missing or conflicting data must be Missing Data, Needs Review, or Unable to Evaluate; never silently compliant.
+- The LOC-change treatment-plan update window remains unvalidated. Keep it configurable and visibly marked unresolved until R3 confirms the exact rule.
 
-```powershell
-git status
-git fetch origin
-git pull --ff-only origin main
-git status
-```
+## Required Implementation Outcomes
 
-3. If the working tree is dirty before you start, stop and report exactly what is dirty unless the dirty files are clearly your own generated temp files.
-4. Use synthetic, fake, or approved de-identified data only.
-5. Do not commit PHI, real patient names, secrets, API keys, bearer tokens, passwords, local `.env`, logs with PHI, runtime DBs, or screenshots with PHI.
-6. Keep live Alleva patient import disabled until official credentials, endpoint mapping, and compliance approval exist.
-7. Keep deterministic rules as the primary compliance mechanism.
-8. Keep optional LLM features disabled by default.
-9. Do not claim a test, build, browser walkthrough, or computer-use validation passed unless you actually ran it.
-10. Commit only when the repo is in a tested, coherent state.
+### 1. Update Checklist Coverage
 
----
+Implement the 42 Marleigh-validated treatment-plan checklist steps across configuration, backend logic, frontend UI, exports, and tests.
 
-## Required Source Documents
+The current repo has a 20-step checklist framework. Reconcile it with the 42-step operational checklist. Do not simply hide or replace the old framework without ensuring current app logic still works. The UI must show the 42-step treatment-plan process in a practical, reviewable form.
 
-Read and reconcile at minimum:
+Each checklist item must support:
 
-```text
-docs/updated-treatment-plan-comprehensive-prd-2026-06-11.md
-docs/prd-treatment-plan-timeliness-mvp-2026-06-01.md
-docs/treatment-plan-checklist-v1.md
-config/checklists/treatment-plan-v1.json
-config/rules/alleva_treatment_plan_completeness_rules.yaml
-docs/open-blockers.md
-README.md
-CHANGELOG.md
-VERSION
-VERSION.json
-```
+- status
+- source evidence
+- finding message
+- severity/priority
+- reviewer action
+- manual confirmation/correction/override where applicable
+- required reason for overrides
+- audit event
+- export representation
 
-Also inspect all relevant files under:
+### 2. Support API and Upload Source Modes
 
-```text
-frontend/
-backend/
-scripts/
-config/
-docs/
-docs/sample-clinical-notes/
-video-extract (2026-06-05)/
-```
+Implement or improve the two source modes:
 
-If paths differ, find the equivalent folders/files and document what you found.
+#### API/EMR Mode
 
----
+- Clearly show whether API mode is disabled, mock/stub mode, connectivity-test-only mode, or live approved mode.
+- Maintain the current rule that live Alleva import is disabled unless official vendor/compliance approval exists.
+- When live API mode is approved and configured, support daily refresh/checks.
+- Daily check should surface new, changed, due soon, urgent, overdue, missing data, returned, and needs-review items.
+- Provide in-app notifications/badges for Marleigh.
+- Record last refresh, next refresh, changed item count, and errors.
+- Include safe test/simulation coverage for daily monitoring without needing real Alleva credentials.
 
-## Functional Implementation Requirements
+#### Manual Upload Mode
 
-### 1. Canonical 42-Step Treatment Plan Checklist
+- Keep and harden file upload validation.
+- Support initial chart review and existing chart update.
+- Route uploads through the same review/checklist workflow as API items.
+- Add UI language making clear that manual upload only reflects the uploaded data as of upload time.
+- Add or improve a monthly compliance-check workflow for the manual-only scenario with 60+ active charts.
 
-Implement Marleigh’s validated 42-step operational checklist as the current Version 1 treatment-plan checklist. Reconcile the current 20-step checklist with the 42-step checklist so the app does not contain conflicting sources of truth.
+### 3. Treatment Plan Timeliness
 
-Update as needed:
+Ensure the app correctly handles:
 
-```text
-config/checklists/treatment-plan-v1.json
-docs/treatment-plan-checklist-v1.md
-frontend checklist UI
-backend checklist APIs/tests
-README/version-facing docs
-```
+- active chart scope
+- admission date
+- current LOC
+- LOC alias mapping
+- LOC history
+- Initial Treatment Plan existence/date/signatures
+- Master Treatment Plan existence/date/signatures/completion within 30 calendar days
+- latest valid Treatment Plan Review
+- PHP 30-day interval
+- IOP/IOP-5/IOP-19/IOP-3/OP/Outpatient 60-day interval
+- due soon, urgent, overdue/current status
+- conflicting source due date vs calculated due date
+- source-document due date, staff-signature cadence due date, and LOC-effective cadence due date side by side
+- LOC-change update as unresolved/configurable/Needs Review until confirmed
+- PHP and IOP/OP individual-session evidence checks when source evidence exists
 
-The UI must show the checklist steps, acronym definitions, statuses, and LOC-change blocker clearly.
+### 4. UI/UX Update
 
-### 2. API and Manual Upload Source Modes
+Read `video-extract (2026-06-05)` deeply and implement the latest UI/UX recommendations, including any provided CSS or component snippets.
 
-Ensure the dashboard and intake flow support both:
+Minimum UI/UX acceptance:
 
-- EMR/API access path
-- Manual upload path
-
-Both paths must route into the same review/checklist/status workflow.
-
-API mode must support daily monitoring when enabled/configured, but live Alleva patient import must remain gated until approved. Manual mode must clearly support monthly compliance-check workflow when 60+ active charts make weekly manual upload unrealistic.
-
-### 3. Treatment Plan Timeliness Rules
-
-Implement or verify:
-
-- Active-client scope.
-- Admission date capture.
-- Current LOC capture and configurable LOC aliases.
-- LOC history.
-- Initial Treatment Plan exists, date, and required signatures.
-- Master Treatment Plan exists, completed within 30 calendar days of admission, and required signatures.
-- Latest valid Treatment Plan Review.
-- PHP 30-day recurrence.
-- IOP/IOP-5/IOP-19/IOP-3/OP/Outpatient 60-day recurrence.
-- Current, due soon, urgent, overdue, missing data, conflicting evidence, unable to evaluate, returned, approved/finalized statuses.
-- PHP and IOP/OP individual-session evidence checks when evidence is available.
-- LOC-change update check stays unresolved/configurable/unvalidated.
-
-Missing/conflicting evidence must never silently pass.
-
-### 4. Manual Review, Overrides, Approval, Return
-
-Implement or verify:
-
-- Authorized reviewer confirmation.
-- Override reason required.
-- Override audit records user, timestamp, original value, new value, reason, affected rule/result, and chart.
-- Manager review routing.
-- Return for correction with specific correction comment.
-- Approval only after issues are resolved or manually accepted.
-- Review history preserved.
+- Dashboard has clear review-source cards for EMR/API and Manual Upload.
+- Treatment Plans tab has a visible current-build/current-queue marker.
+- Treatment Plans worklist prioritizes overdue, urgent, due soon, needs review, missing data, returned, current, approved.
+- Detail view is evidence-first and shows signatures, dates, LOC history, source evidence, conflicts, and audit history.
+- Acronyms/definitions are available inside the app.
+- Errors and readiness results are plain-English and actionable.
+- Buttons are explicit: View Details, Confirm, Override, Return for Correction, Approve, Export CSV, Export JSON, Copy Task List.
+- Returning a chart requires specific correction comments.
+- Overrides require reasons.
+- UI is keyboard navigable and has visible focus states.
+- Status is never communicated by color alone.
+- Layout works on typical Windows laptop screen sizes without awkward horizontal scrolling.
+- No test screenshot or demo contains PHI.
 
 ### 5. API Harness Updates
 
-Verify and improve as needed:
+Review and harden the API configuration/connectivity harness:
 
-- API configuration UI.
-- Encrypted saved credentials.
-- One-time API credential testing.
-- OpenAPI/Swagger pull.
-- Selected operation test workbench.
-- Redaction of API keys, bearer tokens, sensitive query parameters, and sensitive response fields.
-- JSON reports safe for sharing.
-- Mock/source discovery remains available while live import is disabled.
+- Pull OpenAPI/Swagger definitions.
+- Test base connectivity.
+- Test selected operations.
+- Redact secrets from request/response previews and reports.
+- Save API keys encrypted only when the user explicitly saves them.
+- Never return saved keys to browser.
+- Produce JSON reports under the approved local app-data report folder.
+- Add/repair tests for redaction, one-time key use, saved key non-disclosure, and failure messages.
+- Include Alleva readiness but no unapproved live patient import.
 
----
+### 6. Windows Non-Technical Readiness
 
-## UI/UX Implementation Requirements
+Make the app realistic for Windows 11 non-technical use:
 
-Inspect `video-extract (2026-06-05)` in depth and implement the UI/UX recommendations, including any real CSS/style sheets/snippets found there.
+- Source-checkout startup still works.
+- Preflight checks frontend build freshness.
+- Built frontend assets are current.
+- Local runtime data stays under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+- Scripts use clear error messages.
+- Installer/release-folder path is documented and tested as far as current repo supports.
+- If a full signed MSI/MSIX is not implemented, document exactly what remains and why.
+- Repair/uninstall behavior should preserve app data by default wherever implemented.
 
-At minimum:
+### 7. Deprecated File Cleanup
 
-- Dashboard has clear source-mode cards for EMR/API and Manual Upload.
-- Treatment Plans worklist is visibly current and shows version/current-build marker.
-- Status filters and priority sorting are easy to use.
-- Detail view is evidence-first: dates, signatures, LOC history, source/staff/LOC due-date comparison, conflicts, notes, audit history.
-- Buttons have clear labels: View Details, Confirm, Override, Return for Correction, Approve, Export CSV, Export JSON, Copy Task List.
-- Overrides require reason.
-- Returns require correction comment.
-- Status is not color-only; use labels/icons/text.
-- Keyboard navigation and focus states work.
-- Layout works on typical Windows 11 laptop screen sizes.
-- Error messages and readiness results are plain-English.
+Identify files no longer needed.
 
----
+Do not blindly delete anything. Move deprecated files into a repo-level folder named exactly:
 
-## Deprecated / No-Longer-Needed Files Requirement
+`depriceated/`
 
-You must audit the repo for files that are no longer needed because they are obsolete, superseded, duplicate, abandoned, old generated artifacts, stale one-off outputs, or contradicted by the current Version 1 design.
+Use this spelling exactly because that is the requested folder name.
 
-Do **not** delete those files outright.
+Preserve original relative paths where practical. For example:
 
-Create a top-level folder named:
+`old/path/file.ext` -> `depriceated/old/path/file.ext`
 
-```text
-deprecated/
-```
+Create:
 
-If the repo already contains a misspelled `depriceated/` folder from prior instructions, preserve it but migrate toward the correct `deprecated/` folder unless doing so would break an existing test or documented path. Document both names in the manifest if both exist.
+`depriceated/DEPRECATED-MANIFEST.md`
 
-Move no-longer-needed files into `deprecated/`, preserving original path context where practical. Example:
-
-```text
-old/path/file.ext -> deprecated/old/path/file.ext
-```
-
-Create or update:
-
-```text
-deprecated/DEPRECATED-MANIFEST.md
-```
-
-The manifest must list for every moved file:
+The manifest must include:
 
 - original path
-- new path
-- date moved
+- new deprecated path
 - reason moved
-- replacement/current source of truth
-- validation performed after moving it
+- replacement file/functionality, if any
+- date moved
+- validation that tests/build still pass after move
 
-Do not move active runtime files, current source files, active configs, active migrations, active tests, linked current docs, sample data required by tests, frontend build inputs, Windows startup scripts, or anything needed for install/start/test unless you first prove it is truly unused and update all references.
+Do not move active runtime files, active docs linked from README, migrations, configs, sample test data, current scripts, tests, or anything needed by build/start/test unless you have verified replacement behavior.
 
-After moving deprecated files, search the repo for broken references and fix or document them. Then rerun tests/builds.
+### 8. Documentation Updates
 
----
+Update docs after implementation:
 
-## Required Tests and Validation
+- README
+- CHANGELOG
+- PRD implementation note
+- Windows user guide
+- Windows deployment/test guide
+- UAT script for Marleigh
+- open blockers
+- API configuration docs
+- workflow/checklist docs
+- any docs impacted by UI/UX or script changes
 
-Run as many of these as apply to the repo. If a command differs, find the current equivalent and document it.
+Docs must clearly state:
+
+- API mode daily monitoring requirement
+- manual upload monthly compliance-check fallback
+- 42-step checklist
+- LOC-change unresolved blocker
+- PHI restrictions
+- how to run tests on Windows
+- how to launch app on Windows
+- what remains before pilot/production
+
+## Required Testing
+
+Run all relevant tests and fix failures. At minimum:
 
 ```powershell
 git status
 python --version
 node --version
 npm --version
+
 .\scripts\preflight-windows.ps1 -AssumeYes
 .\scripts\test-local-app-stack.ps1
 .\scripts\test-api-configuration-local.ps1
+
 cd frontend
 npm install
 npm test -- --run
 npm run build
 cd ..
+
 .\backend\.venv\Scripts\python.exe -m pytest backend\tests -q
 ```
 
+If paths differ, inspect the repo and use the correct commands. Do not skip tests because the first command fails; diagnose and repair.
+
 Add or update tests for:
 
-- 42 checklist steps.
-- Checklist config/docs/UI consistency.
-- API/upload source routing.
-- Daily API-monitoring simulation.
-- Manual monthly compliance-check workflow.
-- Initial/Master plan timing and signatures.
-- PHP 30-day and IOP/OP 60-day recurrence.
-- LOC alias handling.
-- LOC-change unresolved blocker.
-- Missing/conflicting evidence.
-- Override reason required.
-- Role restrictions.
-- Approval/return workflow.
-- Export redaction.
-- API secret redaction.
-- Audit logs without secrets or note text.
-- Deprecated-file manifest.
-- UI/UX behavior and visible labels.
+- 42 checklist steps
+- API/upload source-mode routing
+- daily API monitoring simulation
+- monthly manual compliance-check workflow
+- LOC mapping and unknown LOC
+- Initial and Master plan due dates/signatures
+- PHP 30-day and IOP/OP 60-day calculations
+- LOC-change unresolved blocker
+- missing/conflicting evidence behavior
+- override reason required
+- role restrictions
+- approval/return workflow
+- export redaction
+- API secret redaction
+- forensic logs without PHI/secrets
+- UI status sorting/filtering
+- UI/UX components from video extract
+- deprecated file manifest
 
----
+## Required Computer Use / Browser Walkthrough
 
-## Required Computer-Use / Browser Walkthrough
+Use Codex computer use or equivalent browser automation to actually walk through the app. Do not only rely on unit tests.
 
-Use computer use or browser automation to actually walk through the app UI on localhost.
+Start the app locally and verify the UI end-to-end in the browser. Walk through all key screens and buttons:
 
-Required path:
-
-1. Launch app.
-2. Confirm version/footer/current-build marker.
+1. Launch app on localhost.
+2. Confirm version/footer/current build marker.
 3. Sign in as admin.
 4. Complete password reset if prompted.
 5. Open Dashboard.
 6. Verify EMR/API and Manual Upload source cards.
 7. Open Treatment Plans.
-8. Verify visible updated evidence/worklist marker.
+8. Verify updated evidence queue marker.
 9. Verify status cards, filters, sorting, and worklist.
-10. Open treatment-plan detail.
-11. Verify source evidence, signatures, LOC history, source/staff/LOC due-date comparison, conflicts, and audit history.
-12. Attempt override without reason and confirm blocked.
-13. Add override with synthetic reason.
+10. Open a treatment-plan detail record.
+11. Verify evidence sections, source/staff/LOC due-date comparison, LOC history, signatures, and audit history.
+12. Add an authorized manual override with synthetic reason.
+13. Confirm override without reason is blocked.
 14. Export CSV and JSON.
 15. Copy task list.
-16. Open Manual Upload and upload synthetic/de-identified sample files.
-17. Confirm created/updated review case.
-18. Open Review Queue / Chart Audit and step through findings.
-19. Return chart for correction with specific comment.
-20. Approve chart after issues are resolved/accepted.
-21. Open API Configuration and run safe sample tests.
-22. Confirm secrets are redacted.
-23. Open Settings and confirm LOC-change setting is visible/configurable/unvalidated.
-24. Open Forensic Logs and confirm actions appear without secrets or uploaded note text.
-25. Confirm keyboard navigation/focus states.
+16. Open Manual Upload.
+17. Upload synthetic/de-identified sample file(s).
+18. Confirm created/updated review case.
+19. Open Review Queue / Chart Audit.
+20. Step through checklist findings.
+21. Return chart for correction with specific comment.
+22. Approve chart after issues are resolved/accepted.
+23. Open API Configuration.
+24. Run safe connectivity/sample OpenAPI tests.
+25. Confirm secrets are redacted.
+26. Open Settings.
+27. Confirm LOC-change setting is visible/configurable/unvalidated.
+28. Open Forensic Logs.
+29. Confirm actions appear and no secrets/note text are logged.
+30. Confirm keyboard navigation and focus states for key actions.
+31. Confirm no PHI appears in screenshots/logs/artifacts.
 
-Save a validation report under:
+Save a validation report in `docs/validation/` with:
 
-```text
-docs/validation/
+- date/time
+- machine/environment
+- commands run
+- test results
+- browser walkthrough results
+- screenshots if safe/synthetic only
+- known limitations
+- exact commit SHA
+
+## Git Workflow
+
+1. Start clean and synced.
+
+```powershell
+git fetch origin
+git status
+git log --oneline --decorate -5
 ```
 
-Do not save screenshots containing PHI.
+2. Create a working branch.
 
----
-
-## Documentation Updates
-
-Update documentation so a non-technical R3 user and a future developer understand the current state.
-
-At minimum update as needed:
-
-```text
-README.md
-docs/treatment-plan-checklist-v1.md
-docs/open-blockers.md
-docs/Windows-User-Guide-Version-1.md
-docs/Windows-Deployment-and-Test-Guide-Version-1.md
-docs/UAT-Version-1-Marleigh.md
-CHANGELOG.md
+```powershell
+git checkout -b feature/treatment-plan-prd-42-ui-api-completion
 ```
 
-Document exactly what remains incomplete, especially:
+3. Make small coherent commits as you complete work.
 
-- live Alleva import gate
-- LOC-change blocker
-- signed installer/MSI/MSIX if not finished
-- any validation that could not run
+4. Before final push:
 
----
+```powershell
+git status
+git diff --stat
+git log --oneline --decorate -10
+```
 
-## Final Deliverables
+5. Final verification must pass.
 
-When finished, provide:
+6. Only after everything passes, push the branch. Do not push broken work to `main`.
 
-1. Summary of functional changes.
-2. Summary of UI/UX changes and exactly which `video-extract (2026-06-05)` assets/recommendations were used.
-3. Summary of API harness changes.
-4. Summary of deprecated files moved and manifest path.
-5. Tests/builds run with pass/fail output.
-6. Computer-use/browser walkthrough results.
-7. Remaining blockers.
-8. Final git status.
-9. Commit hash.
+7. If the user explicitly wants direct main update and all tests pass, merge/push to main using the repo’s accepted workflow. Otherwise leave as branch/PR-ready.
 
-Only push to remote `main` after all required tests and walkthroughs pass, or clearly state why a separate branch/PR is safer.
+## Final Response Required From Codex
+
+When done, provide a concise but complete completion report:
+
+- summary of implemented functionality
+- UI/UX changes completed from video extract
+- checklist coverage confirmation
+- API harness changes
+- Windows install/start/test status
+- deprecated files moved and manifest path
+- tests run and results
+- browser/computer-use walkthrough results
+- remaining blockers/open questions
+- exact branch and commit SHA
+- whether anything was not completed and why
+
+Do not claim success for tests or walkthroughs that were not actually run.
