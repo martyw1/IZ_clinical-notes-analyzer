@@ -17,6 +17,7 @@ Version 1 includes:
 - Manual upload, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
 - Treatment-plan timeliness dashboard/detail views, manual overrides, and CSV/JSON exports.
 - Admin-managed workflow profiles with a Settings action that seeds a draft from the canonical 42-step checklist so admins can edit and publish future workflow changes without code edits.
+- Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, button-event audit logging, safe daily source checks, and API client-credentials testing.
 - Windows preflight, setup/start wrappers, and release-folder packaging scripts.
 
 Version 1 does not yet include a signed MSI/MSIX or live Alleva patient import. The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable.
@@ -379,6 +380,7 @@ This page can:
 - store vendor/base URL settings
 - use a one-time API key for a test
 - save an API key in encrypted form
+- use OAuth2 client credentials to request a bearer token for a test
 - pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL
 - test base connectivity
 - choose an operation from the loaded OpenAPI definition
@@ -390,6 +392,8 @@ Secret handling:
 - saved API keys are encrypted
 - saved API keys are never returned to the browser
 - API keys are not written into audit-log details
+- saved client secrets are encrypted and never returned to the browser
+- bearer tokens obtained by client-credentials tests stay in memory for that test call only
 - one-time keys, saved keys, bearer strings, token query parameters, and sensitive response fields are redacted from reports/results
 - pasted one-time keys can be used without saving them
 
@@ -476,6 +480,20 @@ $env:ALLEVA_API_KEY = "paste-api-key-here"
 .\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
 Remove-Item Env:\ALLEVA_API_KEY
 ```
+
+Client credentials example:
+
+```powershell
+$env:ALLEVA_CLIENT_ID = "paste-client-id-here"
+$env:ALLEVA_CLIENT_SECRET = "paste-client-secret-here"
+$env:ALLEVA_TOKEN_URL = "https://authorization.allevasoft.com/connect/token"
+.\scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+Remove-Item Env:\ALLEVA_CLIENT_ID
+Remove-Item Env:\ALLEVA_CLIENT_SECRET
+Remove-Item Env:\ALLEVA_TOKEN_URL
+```
+
+Current 2026-06-12 validation evidence: Swagger UI and `/swagger/v1/swagger.json` are reachable, but the provided client-credentials token request returned HTTP 400. This blocks live-authenticated Alleva operation tests until R3/Alleva confirms the exact client ID/secret/scope/auth requirements.
 
 ## What The Windows Launcher Does
 
@@ -668,7 +686,7 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.1.0` keeps the visible updated-evidence-queue banner and aligns the screen colors with the local video walkthrough reference palette: dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.1.1` keeps the visible updated-evidence-queue banner and aligns the screen colors with the local video walkthrough reference palette: dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
 
@@ -1027,7 +1045,7 @@ flowchart LR
 The current app version is:
 
 ```text
-1.1.0
+1.1.1
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

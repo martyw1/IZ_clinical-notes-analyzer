@@ -118,6 +118,40 @@ def test_audit_log_endpoint_returns_enriched_records(app_with_sqlite):
         db.close()
 
 
+def test_ui_button_events_are_logged_without_unapproved_context(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        response = client.post(
+            '/api/ui-events',
+            headers=headers,
+            json={
+                'screen': 'reviews',
+                'action_name': 'Dig deeper',
+                'result': 'clicked',
+                'context': {
+                    'button_text': 'Dig deeper',
+                    'view': 'reviews',
+                    'patient_name': 'Do Not Persist',
+                    'api_key': 'do-not-persist',
+                },
+            },
+        )
+        assert response.status_code == 204
+
+    db = session_local()
+    try:
+        ui_log = db.execute(select(AuditLog).where(AuditLog.action == 'ui.button.click')).scalar_one()
+        assert ui_log.event_category == 'ui_interaction'
+        assert ui_log.target_entity == 'Dig deeper'
+        assert 'button_text' in ui_log.details
+        assert 'Do Not Persist' not in ui_log.details
+        assert 'do-not-persist' not in ui_log.details
+    finally:
+        db.close()
+
+
 def test_login_access_attempts_capture_ip_intelligence(app_with_sqlite, monkeypatch):
     app, session_local = app_with_sqlite
 

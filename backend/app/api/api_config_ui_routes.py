@@ -40,7 +40,7 @@ def _api_configuration_page() -> HTMLResponse:
   <body>
     <main>
       <h1>API Configuration and Connectivity Test</h1>
-      <p class="hint">Use this local admin page to enter an API key, pull OpenAPI/Swagger definitions, and test connectivity without putting credentials into source files.</p>
+      <p class="hint">Use this local admin page to test API-key or OAuth client-credentials connectivity without putting credentials into source files.</p>
 
       <section>
         <h2>1. Admin sign-in</h2>
@@ -64,11 +64,24 @@ def _api_configuration_page() -> HTMLResponse:
           <label>API key header name <input id="apiKeyHeaderName" value="x-api-key" /></label>
           <label>Timeout seconds <input id="timeoutSeconds" type="number" min="1" max="60" value="10" /></label>
         </div>
+        <label>Auth mode
+          <select id="authMode">
+            <option value="api_key">API key / saved secret</option>
+            <option value="client_credentials">Client credentials token</option>
+            <option value="none">No auth</option>
+          </select>
+        </label>
         <label>API key for one-time test or saved configuration <input id="apiKey" type="password" autocomplete="off" placeholder="Paste key here; it is never shown in results or logs" /></label>
+        <div class="grid">
+          <label>Client ID <input id="clientId" autocomplete="off" /></label>
+          <label>Client secret <input id="clientSecret" type="password" autocomplete="off" placeholder="Saved encrypted; never shown in results" /></label>
+        </div>
+        <label>Token URL <input id="tokenUrl" value="https://authorization.allevasoft.com/connect/token" /></label>
+        <label>OAuth scopes <input id="scope" placeholder="Optional client-credentials scope string" /></label>
         <button onclick="loadConfig()" class="secondary">Load saved config</button>
-        <button onclick="saveConfig()">Save config and encrypted API key</button>
-        <button onclick="clearSavedKey()" class="danger">Clear saved API key</button>
-        <p class="hint">Saving stores the key encrypted in the local app database. The connectivity test can also use a one-time pasted key without saving it.</p>
+        <button onclick="saveConfig()">Save config and encrypted secret</button>
+        <button onclick="clearSavedKey()" class="danger">Clear saved secret</button>
+        <p class="hint">Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
       </section>
 
       <section>
@@ -144,6 +157,8 @@ def _api_configuration_page() -> HTMLResponse:
         byId('openApiUrl').value = config.openapi_url || '';
         byId('apiKeyHeaderName').value = config.api_key_header_name || 'x-api-key';
         byId('timeoutSeconds').value = String(config.timeout_seconds || 10);
+        byId('clientId').value = config.client_id || '';
+        byId('tokenUrl').value = config.token_url || 'https://authorization.allevasoft.com/connect/token';
         setText('result', JSON.stringify(config, null, 2));
       }
 
@@ -153,11 +168,15 @@ def _api_configuration_page() -> HTMLResponse:
           vendor_name: getValue('vendorName'),
           api_base_url: getValue('apiBaseUrl'),
           api_key: getValue('apiKey') || null,
+          client_id: getValue('clientId') || null,
+          client_secret: getValue('clientSecret') || null,
+          token_url: getValue('tokenUrl') || null,
           timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
           api_enabled: false
         };
         const config = await readJson(await fetch(`${api}/api-configuration`, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }));
         byId('apiKey').value = '';
+        byId('clientSecret').value = '';
         setText('result', JSON.stringify(config, null, 2));
       }
 
@@ -166,7 +185,7 @@ def _api_configuration_page() -> HTMLResponse:
         const config = await readJson(await fetch(`${api}/api-configuration`, {
           method: 'PATCH',
           headers: authHeaders(),
-          body: JSON.stringify({ clear_api_key: true })
+          body: JSON.stringify({ clear_api_key: true, clear_client_secret: true })
         }));
         setText('result', JSON.stringify(config, null, 2));
       }
@@ -187,6 +206,12 @@ def _api_configuration_page() -> HTMLResponse:
           api_key: getValue('apiKey') || null,
           use_saved_api_key: true,
           api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
+          auth_mode: getValue('authMode') || 'api_key',
+          token_url: getValue('tokenUrl') || null,
+          client_id: getValue('clientId') || null,
+          client_secret: getValue('clientSecret') || null,
+          use_saved_client_credentials: true,
+          scope: getValue('scope') || null,
           timeout_seconds: Number(getValue('timeoutSeconds') || '10')
         };
         try {
@@ -305,6 +330,12 @@ def _api_configuration_page() -> HTMLResponse:
           api_key: getValue('apiKey') || null,
           use_saved_api_key: true,
           api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
+          auth_mode: getValue('authMode') || 'api_key',
+          token_url: getValue('tokenUrl') || null,
+          client_id: getValue('clientId') || null,
+          client_secret: getValue('clientSecret') || null,
+          use_saved_client_credentials: true,
+          scope: getValue('scope') || null,
           timeout_seconds: Number(getValue('timeoutSeconds') || '10')
         };
         try {

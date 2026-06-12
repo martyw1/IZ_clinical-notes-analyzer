@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -138,6 +138,8 @@ type PatientNoteSetDetail = PatientNoteSetSummary & {
 type AuditLogRecord = {
   event_id: string
   timestamp_utc: string
+  timestamp_local?: string
+  effective_timezone?: string
   actor_username: string | null
   actor_role: string | null
   actor_type: string
@@ -292,8 +294,12 @@ type AppSettings = {
   emr_fhir_base_url: string
   emr_smart_client_id: string
   emr_smart_client_secret_configured: boolean
+  emr_smart_token_url: string
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  facility_timezone: string
+  effective_timezone: string
+  effective_timezone_label: string
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
   updated_by_id: number | null
@@ -323,8 +329,10 @@ type AppSettingsForm = {
   emr_smart_client_id: string
   emr_smart_client_secret: string
   clear_emr_smart_client_secret: boolean
+  emr_smart_token_url: string
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  facility_timezone: string
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
 }
@@ -609,6 +617,9 @@ type ReviewSourceDiscovery = {
   api_mode_label: string
   daily_monitoring_enabled: boolean
   refresh_mode: string
+  last_successful_check_at: string
+  last_failure_at: string
+  last_check_mode: string
   changed_item_count: number
   error_count: number
   notification_badge_count: number
@@ -750,8 +761,10 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     emr_smart_client_id: settings.emr_smart_client_id,
     emr_smart_client_secret: '',
     clear_emr_smart_client_secret: false,
+    emr_smart_token_url: settings.emr_smart_token_url || 'https://authorization.allevasoft.com/connect/token',
     emr_smart_scopes: settings.emr_smart_scopes,
     emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
+    facility_timezone: settings.facility_timezone || 'local_machine',
     treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
   }
@@ -888,6 +901,18 @@ function formatDateTime(value: string | null | undefined) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function deviceTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local_machine'
+  } catch {
+    return 'local_machine'
+  }
+}
+
+function formatLogDateTime(log: AuditLogRecord) {
+  return log.timestamp_local || formatDateTime(log.timestamp_utc)
 }
 
 function parseLogDetails(details: string) {
@@ -1136,6 +1161,7 @@ export function App() {
   const uploadPatientIdRef = useRef('')
   const patientIdTouchedRef = useRef(false)
   const lastAutoFilledPatientIdRef = useRef('')
+  const criterionWorkbenchRef = useRef<HTMLDivElement | null>(null)
 
   const [users, setUsers] = useState<User[]>([])
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<number | null>(null)
@@ -1336,6 +1362,44 @@ export function App() {
     return payload as T
   }
 
+  function safeButtonLabel(value: string) {
+    return value
+      .replace(/\s+/g, ' ')
+      .replace(/\b(PAT|SYNTH|MRN|CLIENT|ID)[-_:A-Z0-9]{2,}\b/gi, '[id]')
+      .trim()
+      .slice(0, 120)
+  }
+
+  function recordButtonAction(screen: string, actionName: string, result = 'clicked', context: Record<string, string | boolean | number> = {}) {
+    if (!token || !actionName.trim()) return
+    const headers = new Headers({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` })
+    void fetch(`${API}/ui-events`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        screen,
+        action_name: safeButtonLabel(actionName),
+        result,
+        context: {
+          ...context,
+          button_text: safeButtonLabel(String(context.button_text || actionName)),
+          view: screen,
+        },
+      }),
+    }).catch(() => undefined)
+  }
+
+  function handleButtonAuditCapture(event: MouseEvent<HTMLElement>) {
+    const target = event.target as HTMLElement | null
+    const button = target?.closest('button') as HTMLButtonElement | null
+    if (!button || button.dataset.auditSkip === 'true') return
+    const label = button.dataset.auditLabel || button.getAttribute('aria-label') || button.textContent || 'Button'
+    recordButtonAction(activeView, label, button.disabled ? 'blocked' : 'clicked', {
+      button_type: button.type || 'button',
+      disabled: button.disabled,
+    })
+  }
+
   function syncSelectedManagedUser(nextUsers: User[], preferredId?: number | null) {
     const selectedId = preferredId ?? selectedManagedUserId ?? nextUsers[0]?.id ?? null
     setSelectedManagedUserId(selectedId)
@@ -1376,6 +1440,21 @@ export function App() {
   async function loadReviewSourceDiscovery() {
     const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery')
     setReviewSourceDiscovery(payload)
+  }
+
+  async function runDailyReviewSourceCheck() {
+    setIsBusy(true)
+    setError('')
+    setStatus('Running the safe daily review-source check...')
+    try {
+      const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery/run-daily-check', { method: 'POST' })
+      setReviewSourceDiscovery(payload)
+      setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to run daily review-source check')
+    } finally {
+      setIsBusy(false)
+    }
   }
 
   async function loadChartDetail(chartId: number) {
@@ -1679,6 +1758,32 @@ export function App() {
       }
     })
     setReviewDirty(true)
+  }
+
+  function focusCriterionWorkbench() {
+    window.setTimeout(() => {
+      criterionWorkbenchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      criterionWorkbenchRef.current?.focus({ preventScroll: true })
+    }, 0)
+  }
+
+  function handleDigDeeper(item: AuditItem) {
+    setSelectedFindingKey(item.item_key)
+    setStatus(`Opened evidence details for Step ${item.step}.`)
+    focusCriterionWorkbench()
+  }
+
+  function handleCriterionStatusChange(status: ComplianceStatus) {
+    if (!canEditCriteria) {
+      setAppDialog({
+        title: 'Review result is read-only',
+        message: 'Only admins and office managers can change criterion results. You can still review the evidence details on this screen.',
+      })
+      setStatus('Criterion result was not changed because your role has read-only access.')
+      recordButtonAction(activeView, `Criterion ${status}`, 'blocked', { blocked_reason: 'role' })
+      return
+    }
+    updateSelectedCriterion({ status })
   }
 
   async function handleLogin(event: FormEvent) {
@@ -2056,6 +2161,19 @@ export function App() {
     } finally {
       setIsBusy(false)
     }
+  }
+
+  function handleTransitionButton(action: TransitionAction) {
+    if (reviewDirty) {
+      setAppDialog({
+        title: 'Save criterion changes first',
+        message: 'There are unsaved criterion review changes. Save them before recording the office-manager disposition.',
+      })
+      setStatus('Office-manager decision was not recorded because criterion changes are unsaved.')
+      recordButtonAction(activeView, action.label, 'blocked', { blocked_reason: 'unsaved_review_changes' })
+      return
+    }
+    void handleTransition(action)
   }
 
   async function handleCreateUser(event: FormEvent) {
@@ -2479,7 +2597,7 @@ export function App() {
   }
 
   return (
-    <main className='shell'>
+    <main className='shell' onClickCapture={handleButtonAuditCapture}>
       <section className='hero'>
         <div>
           <p className='eyebrow'>R3 Recovery Services Chart Audit</p>
@@ -2669,6 +2787,10 @@ export function App() {
                           <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.last_refresh_at) : 'Not run'}</dd>
                         </div>
                         <div>
+                          <dt>Last safe check</dt>
+                          <dd>{reviewSourceDiscovery?.last_successful_check_at ? formatDateTime(reviewSourceDiscovery.last_successful_check_at) : 'Not run'}</dd>
+                        </div>
+                        <div>
                           <dt>Next refresh</dt>
                           <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.next_refresh_at) : 'After configuration'}</dd>
                         </div>
@@ -2681,6 +2803,11 @@ export function App() {
                         <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
                           View Details
                         </button>
+                        {user?.role === 'admin' || user?.role === 'manager' ? (
+                          <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy}>
+                            Run daily check
+                          </button>
+                        ) : null}
                         {user?.role === 'admin' ? (
                           <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
                             API settings
@@ -2766,7 +2893,7 @@ export function App() {
                     <ul className='queue-list'>
                       {charts.slice(0, 5).map((chart) => (
                         <li key={chart.id}>
-                          <button type='button' className='queue-item' onClick={() => void loadChartDetail(chart.id)}>
+                          <button type='button' className='queue-item' data-audit-label='Open dashboard queue chart' onClick={() => void loadChartDetail(chart.id)}>
                             <div>
                               <strong>{chart.patient_id}</strong>
                               <span>{chart.primary_clinician || 'Clinician pending'}</span>
@@ -2924,6 +3051,7 @@ export function App() {
 	                              ? 'timeliness-queue-table__row timeliness-queue-table__row--active'
 	                              : 'timeliness-queue-table__row'
 	                          }
+                          data-audit-label='Open treatment-plan evidence'
 	                          onClick={() => void loadTimelinessClientDetail(item.id)}
 	                          aria-label={`Open ${item.permitted_name || item.patient_id} treatment plan evidence`}
 	                        >
@@ -3393,6 +3521,7 @@ export function App() {
                         <button
                           type='button'
                           className={selectedChartId === chart.id ? 'queue-item queue-item--active' : 'queue-item'}
+                          data-audit-label='Open review queue chart'
                           onClick={() => void loadChartDetail(chart.id)}
                         >
                           <div>
@@ -3488,7 +3617,7 @@ export function App() {
                         </div>
 
                         {selectedCriterion ? (
-                          <div className='criterion-workbench'>
+                          <div className='criterion-workbench' ref={criterionWorkbenchRef} tabIndex={-1}>
                             <div className='finding-card__header'>
                               <strong>
                                 Step {selectedCriterion.step}. {selectedCriterion.label}
@@ -3503,32 +3632,32 @@ export function App() {
                               <button
                                 type='button'
                                 className='ghost-button'
-                                onClick={() => updateSelectedCriterion({ status: 'yes' })}
-                                disabled={!canEditCriteria}
+                                onClick={() => handleCriterionStatusChange('yes')}
+                                aria-disabled={!canEditCriteria}
                               >
                                 Mark OK
                               </button>
                               <button
                                 type='button'
                                 className='ghost-button'
-                                onClick={() => updateSelectedCriterion({ status: 'no' })}
-                                disabled={!canEditCriteria}
+                                onClick={() => handleCriterionStatusChange('no')}
+                                aria-disabled={!canEditCriteria}
                               >
                                 Mark not OK
                               </button>
                               <button
                                 type='button'
                                 className='ghost-button'
-                                onClick={() => updateSelectedCriterion({ status: 'pending' })}
-                                disabled={!canEditCriteria}
+                                onClick={() => handleCriterionStatusChange('pending')}
+                                aria-disabled={!canEditCriteria}
                               >
                                 Needs follow-up
                               </button>
                               <button
                                 type='button'
                                 className='ghost-button'
-                                onClick={() => updateSelectedCriterion({ status: 'na' })}
-                                disabled={!canEditCriteria}
+                                onClick={() => handleCriterionStatusChange('na')}
+                                aria-disabled={!canEditCriteria}
                               >
                                 N/A
                               </button>
@@ -3618,7 +3747,7 @@ export function App() {
                                   </div>
                                 </dl>
                                 <div className='decision-actions'>
-                                  <button type='button' className='ghost-button' onClick={() => setSelectedFindingKey(item.item_key)}>
+                                  <button type='button' className='ghost-button' onClick={() => handleDigDeeper(item)}>
                                     Dig deeper
                                   </button>
                                 </div>
@@ -3645,7 +3774,7 @@ export function App() {
                           </label>
                           <div className='decision-actions'>
                             {transitionActions.map((action) => (
-                              <button key={action.toState} type='button' onClick={() => void handleTransition(action)} disabled={isBusy || reviewDirty}>
+                              <button key={action.toState} type='button' onClick={() => handleTransitionButton(action)} disabled={isBusy}>
                                 {action.label}
                               </button>
                             ))}
@@ -3901,6 +4030,7 @@ export function App() {
                         <button
                           type='button'
                           className={selectedNoteSetId === noteSet.id ? 'queue-item queue-item--active' : 'queue-item'}
+                          data-audit-label='Open uploaded binder'
                           onClick={() => void loadNoteSetDetail(noteSet.id)}
                         >
                           <div>
@@ -4085,6 +4215,7 @@ export function App() {
                       <button
                         type='button'
                         className={selectedManagedUserId === managedUser.id ? 'queue-item queue-item--active' : 'queue-item'}
+                        data-audit-label='Open managed user'
                         onClick={() => handleSelectManagedUser(managedUser.id)}
                       >
                         <div>
@@ -4336,6 +4467,10 @@ export function App() {
                     <dd>{appSettings?.organization_name || 'Not configured'}</dd>
                   </div>
                   <div>
+                    <dt>Timezone</dt>
+                    <dd>{appSettings?.effective_timezone_label || 'Local machine timezone'}</dd>
+                  </div>
+                  <div>
                     <dt>LLM configured</dt>
                     <dd>{appSettings?.llm_api_key_configured ? 'Yes' : 'No'}</dd>
                   </div>
@@ -4378,6 +4513,24 @@ export function App() {
 	                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, organization_name: event.target.value } : current))}
 	                      />
 	                    </label>
+                    <label>
+                      Facility/app timezone
+                      <input
+                        value={settingsForm.facility_timezone}
+                        placeholder='local_machine or America/New_York'
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, facility_timezone: event.target.value } : current))}
+                      />
+                    </label>
+                    <div className='field-action-row'>
+                      <button
+                        type='button'
+                        className='ghost-button'
+                        onClick={() => setSettingsForm((current) => (current ? { ...current, facility_timezone: deviceTimezone() } : current))}
+                      >
+                        Use this device timezone
+                      </button>
+                      <span className='muted-text'>{appSettings?.effective_timezone_label || 'Local machine timezone'}</span>
+                    </div>
 	                    <label>
 	                      LOC-change update window (days)
 	                      <input
@@ -4597,6 +4750,14 @@ export function App() {
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_fhir_base_url: event.target.value } : current))}
                       />
                     </label>
+                    <label className='full-width'>
+                      SMART token URL
+                      <input
+                        value={settingsForm.emr_smart_token_url}
+                        placeholder='https://authorization.allevasoft.com/connect/token'
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_token_url: event.target.value } : current))}
+                      />
+                    </label>
                     <label>
                       SMART client ID
                       <input
@@ -4748,6 +4909,7 @@ export function App() {
                                   type='button'
                                   key={definition.id}
                                   className={selectedWorkflowDefinition?.id === definition.id ? 'queue-item queue-item--active' : 'queue-item'}
+                                  data-audit-label='Open workflow profile'
                                   onClick={() => {
                                     setSelectedWorkflowDefinitionId(definition.id)
                                     setWorkflowVersionForm(createWorkflowVersionForm(definition))
@@ -5021,7 +5183,7 @@ export function App() {
                       <article key={log.event_id} className='log-row'>
                         <div className='log-row__meta'>
                           <strong>{log.action}</strong>
-                          <span>{formatDateTime(log.timestamp_utc)}</span>
+                          <span>{formatLogDateTime(log)}</span>
                         </div>
                         <p>{log.message}</p>
                         {log.event_category === 'access_attempt' && typeof details.danger_summary === 'string' ? (

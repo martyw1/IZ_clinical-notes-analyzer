@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.config import REPO_ROOT
-from app.models.models import AppSetting
+from app.models.models import AppSetting, AuditLog
 from app.services.emr_fhir import map_document_reference_to_patient_note_metadata
 from app.services.secure_storage import text_secret_is_encrypted
 
@@ -76,6 +76,26 @@ def test_review_source_discovery_provides_mock_api_queue_without_live_import(app
     assert payload['notification_badge_count'] >= payload['changed_item_count']
     assert any(item['source_type'] == 'api' and item['patient_id'].startswith('SYNTH-') for item in payload['items'])
     assert 'Ready for Review' in payload['status_counts']
+
+
+def test_daily_review_source_check_is_safe_and_audited(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app) as client:
+        response = client.post('/api/review-source-discovery/run-daily-check', headers=_auth_headers(client))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['live_import_enabled'] is False
+    assert payload['last_successful_check_at']
+    assert payload['last_check_mode'] == 'manual_safe_mock_check'
+
+    db = session_local()
+    try:
+        audit = db.execute(select(AuditLog).where(AuditLog.action == 'review_source.daily_check.run')).scalar_one()
+        assert audit.outcome_status == 'success'
+        assert 'live_import_enabled' in audit.details
+    finally:
+        db.close()
 
 
 def test_alleva_document_reference_mapping_preserves_source_traceability():

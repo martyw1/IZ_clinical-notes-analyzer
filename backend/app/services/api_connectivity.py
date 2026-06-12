@@ -16,6 +16,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 DEFAULT_ALLEVA_SWAGGER_UI_URL = 'https://api.allevasoft.com/swagger/index.html'
+DEFAULT_ALLEVA_TOKEN_URL = 'https://authorization.allevasoft.com/connect/token'
 DEFAULT_TIMEOUT_SECONDS = 10
 MAX_BODY_SNIPPET_CHARS = 600
 MAX_PATHS_RETURNED = 40
@@ -180,16 +181,98 @@ def extract_swagger_ui_definition_urls(swagger_html: str, swagger_ui_url: str) -
     return _safe_candidates(*(urljoin(base, candidate) for candidate in found))
 
 
-def _headers(api_key: str | None = None, api_key_header_name: str = 'x-api-key') -> dict[str, str]:
+def _headers(api_key: str | None = None, api_key_header_name: str = 'x-api-key', bearer_token: str | None = None) -> dict[str, str]:
     headers = {'Accept': 'application/json, text/html;q=0.9, */*;q=0.8'}
     key = (api_key or '').strip()
-    if not key:
+    token = (bearer_token or '').strip()
+    if not key and not token:
         return headers
     header_name = (api_key_header_name or 'x-api-key').strip()
-    if header_name:
+    if key and header_name:
         headers[header_name] = key
-    headers['Authorization'] = f'Bearer {key}'
+    headers['Authorization'] = f'Bearer {token or key}'
     return headers
+
+
+def request_client_credentials_token(
+    *,
+    token_url: str | None = DEFAULT_ALLEVA_TOKEN_URL,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    scope: str | None = None,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> tuple[dict[str, Any], str]:
+    """Request an OAuth2 client-credentials token and return only redacted public metadata plus the in-memory token."""
+    cleaned_token_url = _clean_url(token_url) or DEFAULT_ALLEVA_TOKEN_URL
+    cleaned_client_id = (client_id or '').strip()
+    cleaned_client_secret = (client_secret or '').strip()
+    cleaned_scope = ' '.join((scope or '').split())
+    started_result: dict[str, Any] = {
+        'status': 'fail',
+        'message': '',
+        'token_url': redact_url(cleaned_token_url),
+        'client_id_configured': bool(cleaned_client_id),
+        'client_secret_configured': bool(cleaned_client_secret),
+        'scope_configured': bool(cleaned_scope),
+        'access_token_configured': False,
+    }
+
+    if not _is_http_url(cleaned_token_url):
+        return {**started_result, 'message': 'Token URL must be an http(s) URL.'}, ''
+    if not cleaned_client_id or not cleaned_client_secret:
+        return {**started_result, 'message': 'Client ID and client secret are required for client-credentials auth.'}, ''
+
+    timeout = max(1, min(int(timeout_seconds or DEFAULT_TIMEOUT_SECONDS), 60))
+    form_data = {
+        'grant_type': 'client_credentials',
+        'client_id': cleaned_client_id,
+        'client_secret': cleaned_client_secret,
+    }
+    if cleaned_scope:
+        form_data['scope'] = cleaned_scope
+
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.post(
+                cleaned_token_url,
+                data=form_data,
+                headers={'Accept': 'application/json'},
+            )
+            response.read()
+    except httpx.RequestError as exc:
+        return {**started_result, 'message': redact_sensitive_text(f'{exc.__class__.__name__}: {exc}')}, ''
+
+    try:
+        elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+    except RuntimeError:
+        elapsed_ms = None
+
+    public_result = {
+        **started_result,
+        'status_code': response.status_code,
+        'elapsed_ms': elapsed_ms,
+        'content_type': response.headers.get('content-type', ''),
+    }
+    try:
+        parsed_json: Any = response.json()
+    except json.JSONDecodeError:
+        parsed_json = {}
+
+    access_token = parsed_json.get('access_token') if isinstance(parsed_json, dict) else ''
+    if not 200 <= response.status_code < 300:
+        preview = redact_sensitive_text(response.text[:MAX_BODY_SNIPPET_CHARS])
+        return {**public_result, 'status': 'fail', 'message': f'Client-credentials token request failed with HTTP {response.status_code}.', 'response_body_preview': preview}, ''
+    if not isinstance(access_token, str) or not access_token.strip():
+        return {**public_result, 'status': 'fail', 'message': 'Client-credentials token response did not include an access token.'}, ''
+
+    return {
+        **public_result,
+        'status': 'ok',
+        'message': 'Client-credentials token obtained.',
+        'token_type': str(parsed_json.get('token_type') or 'Bearer') if isinstance(parsed_json, dict) else 'Bearer',
+        'expires_in': parsed_json.get('expires_in') if isinstance(parsed_json, dict) else None,
+        'access_token_configured': True,
+    }, access_token.strip()
 
 
 def _resolve_schema_ref(definition: dict[str, Any], value: Any) -> Any:
@@ -391,11 +474,12 @@ def pull_api_definitions(
     api_base_url: str | None = None,
     openapi_url: str | None = None,
     api_key: str | None = None,
+    bearer_token: str | None = None,
     api_key_header_name: str = 'x-api-key',
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     timeout = max(1, min(int(timeout_seconds or DEFAULT_TIMEOUT_SECONDS), 60))
-    headers = _headers(api_key=api_key, api_key_header_name=api_key_header_name)
+    headers = _headers(api_key=api_key, api_key_header_name=api_key_header_name, bearer_token=bearer_token)
     swagger_ui_url = _clean_url(swagger_ui_url) or DEFAULT_ALLEVA_SWAGGER_UI_URL
     probes: list[ProbeResult] = []
     discovered_definition_urls: list[str] = []
@@ -442,6 +526,7 @@ def pull_api_definitions(
         'operations': operations,
         'probes': [probe.as_dict() for probe in probes],
         'api_key_used': bool((api_key or '').strip()),
+        'bearer_token_used': bool((bearer_token or '').strip()),
     }
 
 
@@ -489,6 +574,7 @@ def execute_openapi_operation(
     parameters: dict[str, Any] | None = None,
     request_body: Any | None = None,
     api_key: str | None = None,
+    bearer_token: str | None = None,
     api_key_header_name: str = 'x-api-key',
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
@@ -509,7 +595,7 @@ def execute_openapi_operation(
 
     resolved_path = path
     query: dict[str, Any] = {}
-    headers = _headers(api_key=api_key, api_key_header_name=api_key_header_name)
+    headers = _headers(api_key=api_key, api_key_header_name=api_key_header_name, bearer_token=bearer_token)
     for parameter in operation['parameters']:
         name = parameter['name']
         value = values.get(name)

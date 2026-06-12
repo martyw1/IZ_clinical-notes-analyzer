@@ -23,11 +23,12 @@ The API configuration page lets an admin:
 1. Sign in with the existing local app admin account.
 2. Enter or update the API vendor/base URL.
 3. Enter an API key for a one-time test or save it for later use.
-4. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
-5. Test connectivity from inside the running app.
-6. Pick any operation found in the loaded API definition and test that specific API call.
-7. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
-8. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, operation-test responses, and redacted JSON report payloads.
+4. Enter OAuth2 client-credentials values for a one-time test or save the client ID/token URL plus encrypted client secret.
+5. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
+6. Test connectivity from inside the running app.
+7. Pick any operation found in the loaded API definition and test that specific API call.
+8. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
+9. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, and redacted JSON report payloads.
 
 The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys or bearer tokens in browser payloads.
 
@@ -41,11 +42,11 @@ After a definition is loaded, the page builds an operation picker from the OpenA
 - top-level JSON request-body fields
 - required flags, types, enums, defaults, descriptions, and date formats where present
 
-When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, one-time API key, or saved encrypted API key. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys are injected into the outbound request but are not returned in the test result. Sensitive response field names such as tokens, secrets, passwords, authorization values, and API keys are redacted before display.
+When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, selected auth mode, one-time API key, saved encrypted API key, or client-credentials bearer token obtained for that test. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys and bearer tokens are injected into the outbound request but are not returned in the test result. Sensitive response field names such as tokens, secrets, passwords, authorization values, and API keys are redacted before display.
 
 ## Secret handling
 
-API keys are never returned to the browser after save and are not written into audit-log details. Saved API keys are encrypted with the app's existing local secret-encryption envelope and stored in the local application database. The page may also use a pasted one-time API key without saving it. Generated report payloads redact saved keys, one-time keys, bearer strings, token-like query parameters, and sensitive fields from external API responses.
+API keys and client secrets are never returned to the browser after save and are not written into audit-log details. Saved API keys/client secrets are encrypted with the app's existing local secret-encryption envelope and stored in the local application database. The page may also use pasted one-time values without saving them. Client-credentials access tokens are held in memory only for the current pull/test request. Generated report payloads redact saved keys, one-time keys, client secrets, bearer strings, token-like query parameters, and sensitive fields from external API responses.
 
 ## Backend endpoints
 
@@ -69,6 +70,7 @@ The API configuration workflow uses the app's existing forensic audit service. I
 - API configuration reads.
 - API configuration updates.
 - Whether a key was added or cleared, without recording the key itself.
+- Whether a client-credentials token request succeeded, without recording the token or secret.
 - Definition-pull attempts and outcomes.
 - Specific API operation test attempts and non-secret outcomes.
 - Probe count and selected definition URL when found.
@@ -78,11 +80,11 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend/dist`; Version 1.1.0 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the existing local Windows runtime design. It does not add Docker, PostgreSQL, or unusual user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend/dist`; Version 1.1.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 
-The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, OpenAPI summary extraction, operation-form extraction, required-field validation, selected-operation request execution, timeout/error handling, report generation, saved-key encryption, and result/audit redaction without calling the live Alleva API.
+The backend unit test `backend/tests/test_api_connectivity.py` uses `httpx.MockTransport` to validate URL discovery, API-key header injection, client-credentials token handling, OpenAPI summary extraction, operation-form extraction, required-field validation, selected-operation request execution, timeout/error handling, report generation, saved-key encryption, and result/audit redaction without calling the live Alleva API.
 
 Run backend tests from a configured repo checkout with:
 
@@ -108,9 +110,10 @@ The app supports configuration and connectivity testing without pretending to im
 - **configured but not connected** when local vendor/base URL/API key settings have been saved but no successful probe has run.
 - **definition discovered** when an OpenAPI/Swagger definition is found and summarized.
 - **connectivity passed** when a probe succeeds and returns non-secret metadata such as HTTP status, selected definition URL, title/version, path count, schema count, security scheme names, and sample paths.
+- **client-credentials token blocked** when the token endpoint returns an error such as HTTP 400. Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, scopes, tenant, and auth style.
 - **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import. Do not fake live import without official tenant credentials and endpoint mapping.
 
-Saved API keys are encrypted in the local database. After save, API responses return only `api_key_configured: true/false`; they do not return the key value.
+Saved API keys/client secrets are encrypted in the local database. After save, API responses return only configured flags; they do not return saved secret values.
 
 ## Local report files
 

@@ -6,6 +6,7 @@ import io
 import re
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -35,6 +36,10 @@ PATIENT_ID_TOKEN_PATTERNS = (
     re.compile(r'\b(?:patient|client|mrn)[-_ ]?(?:id|number|no)?[-_ ]([A-Za-z0-9][A-Za-z0-9._-]{2,31})\b', re.IGNORECASE),
 )
 CONFIDENCE_RANK = {'none': 0, 'low': 1, 'medium': 2, 'high': 3}
+FIELD_VALUE_MAX_CHARS = 120
+NAME_HIDDEN_STATUS = 'redacted_hidden'
+NAME_BLANK_STATUS = 'blank'
+NAME_NOT_FOUND_STATUS = 'not_found'
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,16 @@ class PatientIdDetection:
     source_kind: str | None
     match_text: str | None
     reason: str
+
+
+@dataclass(frozen=True)
+class UploadMetadataExtraction:
+    primary_clinician: str = ''
+    level_of_care: str = ''
+    admission_date: str = ''
+    patient_name_status: str = NAME_NOT_FOUND_STATUS
+    patient_name_message: str = 'No client-name field was found in the uploaded documents.'
+    source_summary: str = ''
 
 
 def uploads_root() -> Path:
@@ -325,6 +340,109 @@ def _detect_patient_id_in_filename(filename: str) -> PatientIdDetection | None:
             )
 
     return None
+
+
+def _field_value_from_lines(lines: list[str], labels: tuple[str, ...]) -> str:
+    for line in lines:
+        normalized_line = re.sub(r'\s+', ' ', line).strip()
+        for label in labels:
+            match = re.match(rf'(?i)^{re.escape(label)}\s*:\s*(.*)$', normalized_line)
+            if not match:
+                continue
+            value = match.group(1).strip()
+            if not value:
+                continue
+            return value[:FIELD_VALUE_MAX_CHARS]
+    return ''
+
+
+def _patient_name_status_from_lines(lines: list[str]) -> tuple[str, str]:
+    label_seen = False
+    for line in lines:
+        normalized_line = re.sub(r'\s+', ' ', line).strip()
+        match = re.match(r'(?i)^(?:client|patient)\s+name\s*:\s*(.*)$', normalized_line)
+        if not match:
+            continue
+        label_seen = True
+        value = match.group(1).strip()
+        if not value:
+            return NAME_BLANK_STATUS, 'A client-name field was found, but the field was blank.'
+        return (
+            NAME_HIDDEN_STATUS,
+            'A client-name field was found in source text. Because treatment-plan samples may be visually redacted, the app will not expose extracted source names unless an operator enters an approved display name.',
+        )
+    if label_seen:
+        return NAME_BLANK_STATUS, 'A client-name field was found, but the field was blank.'
+    return NAME_NOT_FOUND_STATUS, 'No client-name field was found in the uploaded documents.'
+
+
+def _extract_upload_metadata_from_text(text: str, *, source_filename: str) -> UploadMetadataExtraction:
+    lines = [line for line in text.splitlines() if line.strip()]
+    patient_name_status, patient_name_message = _patient_name_status_from_lines(lines)
+    primary_clinician = _field_value_from_lines(lines, ('Primary Clinician', 'Primary Therapist', 'Assigned Clinician', 'Counselor'))
+    level_of_care = _field_value_from_lines(lines, ('Level Of Care', 'Level of Care', 'LOC'))
+    admission_date = _field_value_from_lines(lines, ('Admission Date', 'Admit Date', 'Date of Admission'))
+    found = []
+    if primary_clinician:
+        found.append('primary clinician')
+    if level_of_care:
+        found.append('level of care')
+    if admission_date:
+        found.append('admission date')
+    found.append(f'patient name status: {patient_name_status}')
+    return UploadMetadataExtraction(
+        primary_clinician=primary_clinician,
+        level_of_care=level_of_care,
+        admission_date=admission_date,
+        patient_name_status=patient_name_status,
+        patient_name_message=patient_name_message,
+        source_summary=f'{source_filename}: {", ".join(found)}',
+    )
+
+
+def _merge_upload_metadata(current: UploadMetadataExtraction, candidate: UploadMetadataExtraction) -> UploadMetadataExtraction:
+    patient_name_status = current.patient_name_status
+    patient_name_message = current.patient_name_message
+    if patient_name_status == NAME_NOT_FOUND_STATUS and candidate.patient_name_status != NAME_NOT_FOUND_STATUS:
+        patient_name_status = candidate.patient_name_status
+        patient_name_message = candidate.patient_name_message
+    source_parts = [part for part in (current.source_summary, candidate.source_summary) if part]
+    return UploadMetadataExtraction(
+        primary_clinician=current.primary_clinician or candidate.primary_clinician,
+        level_of_care=current.level_of_care or candidate.level_of_care,
+        admission_date=current.admission_date or candidate.admission_date,
+        patient_name_status=patient_name_status,
+        patient_name_message=patient_name_message,
+        source_summary='; '.join(source_parts),
+    )
+
+
+async def extract_upload_metadata_from_uploads(files: list[UploadFile]) -> UploadMetadataExtraction:
+    metadata = UploadMetadataExtraction()
+    for upload in files:
+        filename = upload.filename or 'uploaded-file'
+        suffix = Path(filename).suffix.lower()
+        if suffix not in ALLOWED_EXTENSIONS:
+            continue
+        raw = await upload.read(DETECTION_MAX_FILE_BYTES + 1)
+        await upload.seek(0)
+        if len(raw) > DETECTION_MAX_FILE_BYTES:
+            continue
+        extracted = _extract_text_from_bytes(raw, suffix)
+        if not extracted.text:
+            continue
+        metadata = _merge_upload_metadata(metadata, _extract_upload_metadata_from_text(extracted.text, source_filename=filename))
+    return metadata
+
+
+def display_name_for_patient_name_status(status: str, timestamp: datetime | None = None) -> str:
+    stamp_source = timestamp or datetime.now(timezone.utc)
+    stamp = stamp_source.strftime('%Y-%m-%d_%H-%M-%S')
+    if status == NAME_BLANK_STATUS:
+        return f'Name Blank {stamp}'
+    if status == NAME_NOT_FOUND_STATUS:
+        return f'Name Not Found {stamp}'
+    return f'Name Hidden {stamp}'
 
 
 async def _detect_patient_id_for_upload(upload: UploadFile) -> PatientIdDetection | None:

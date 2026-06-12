@@ -123,11 +123,13 @@ class AppSetting(Base):
     emr_fhir_base_url: Mapped[str] = mapped_column(String(255), default='')
     emr_smart_client_id: Mapped[str] = mapped_column(String(255), default='')
     emr_smart_client_secret: Mapped[str] = mapped_column(String(1024), default='')
+    emr_smart_token_url: Mapped[str] = mapped_column(String(500), default='https://authorization.allevasoft.com/connect/token')
     emr_smart_scopes: Mapped[str] = mapped_column(
         String(500),
         default='openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     )
     emr_api_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    facility_timezone: Mapped[str] = mapped_column(String(80), default='local_machine')
     treatment_plan_loc_change_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     treatment_plan_loc_change_window_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)

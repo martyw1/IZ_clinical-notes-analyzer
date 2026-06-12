@@ -63,6 +63,7 @@ from app.schemas.schemas import (
     TimelinessOverrideOut,
     Token,
     TransitionInput,
+    UiEventInput,
     UserCreate,
     UserOut,
     UserPasswordChangeInput,
@@ -80,11 +81,20 @@ from app.services.app_settings import app_settings_public_payload, get_or_create
 from app.services.access_intel import lookup_access_intel
 from app.services.emr_fhir import build_document_reference_import_plan, discover_smart_configuration, emr_connection_profile, normalize_fhir_base_url
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
-from app.services.patient_notes import detect_patient_id_from_uploads, remove_stored_paths, resolve_storage_path, sanitize_filename, store_upload_file
+from app.services.patient_notes import (
+    display_name_for_patient_name_status,
+    detect_patient_id_from_uploads,
+    extract_upload_metadata_from_uploads,
+    remove_stored_paths,
+    resolve_storage_path,
+    sanitize_filename,
+    store_upload_file,
+)
 from app.services.runtime_checks import readiness_payload
 from app.services.review_source_discovery import discovery_payload as review_source_discovery_payload
 from app.services.secure_storage import encrypt_text_secret, read_secure_file
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
+from app.services.timezone import format_local_timestamp, localize_datetime, normalize_timezone_name
 from app.services.timeliness import (
     STATUS_PRIORITY as TIMELINESS_STATUS_PRIORITY,
     add_override,
@@ -417,8 +427,10 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'emr_fhir_base_url': settings_row.emr_fhir_base_url,
         'emr_smart_client_id': settings_row.emr_smart_client_id,
         'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
+        'emr_smart_token_url': settings_row.emr_smart_token_url,
         'emr_smart_scopes': settings_row.emr_smart_scopes,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
+        'facility_timezone': settings_row.facility_timezone,
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
@@ -484,6 +496,48 @@ def _chart_detail(chart: Chart) -> dict[str, object]:
     return {**summary, 'checklist_items': checklist_items}
 
 
+def _audit_log_payload(log: AuditLog, timezone_name: str) -> dict[str, object]:
+    return {
+        'event_id': log.event_id,
+        'timestamp_utc': log.timestamp_utc,
+        'timestamp_local': format_local_timestamp(log.timestamp_utc, timezone_name),
+        'effective_timezone': normalize_timezone_name(timezone_name),
+        'actor_username': log.actor_username,
+        'actor_role': log.actor_role,
+        'actor_type': log.actor_type,
+        'source_ip': log.source_ip,
+        'forwarded_for': log.forwarded_for,
+        'source_host': log.source_host,
+        'source_port': log.source_port,
+        'request_id': log.request_id,
+        'correlation_id': log.correlation_id,
+        'session_id': log.session_id,
+        'http_method': log.http_method,
+        'request_path': log.request_path,
+        'route_template': log.route_template,
+        'query_string': log.query_string,
+        'http_status_code': log.http_status_code,
+        'event_category': log.event_category,
+        'action': log.action,
+        'target_entity': log.target_entity,
+        'target_entity_type': log.target_entity_type,
+        'target_entity_id': log.target_entity_id,
+        'patient_id': log.patient_id,
+        'message': log.message,
+        'details': log.details,
+        'before_state': log.before_state,
+        'after_state': log.after_state,
+        'diff_state': log.diff_state,
+        'cef_extension': log.cef_extension,
+        'cef_payload': log.cef_payload,
+        'fhir_audit_event': log.fhir_audit_event,
+        'outcome_status': log.outcome_status,
+        'severity': log.severity,
+        'prev_hash': log.prev_hash,
+        'hash': log.hash,
+    }
+
+
 def _normalized_chart_name(payload: ChartUpdate | ChartCreate) -> str:
     patient_id = payload.patient_id.strip()
     client_name = payload.client_name.strip()
@@ -525,6 +579,16 @@ def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate) -> No
     missing_keys = [template_item['key'] for template_item in AUDIT_TEMPLATE if template_item['key'] not in seen_keys]
     if missing_keys:
         raise HTTPException(status_code=400, detail=f'Missing checklist items: {", ".join(missing_keys)}')
+
+
+def _sync_chart_display_name_to_timeliness(db: Session, chart: Chart) -> None:
+    if not chart.patient_id.strip() or not chart.client_name.strip():
+        return
+    client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == chart.patient_id)).scalar_one_or_none()
+    if client is None:
+        return
+    client.permitted_name = chart.client_name.strip()
+    client.updated_at = _utc_now()
 
 
 def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[PatientNoteDocumentUploadInput]:
@@ -1059,6 +1123,28 @@ def get_app_settings(request: Request, user: User = Depends(require_roles(Role.a
     return app_settings_public_payload(settings_row)
 
 
+UI_EVENT_CONTEXT_ALLOWLIST = {'button_text', 'button_type', 'disabled', 'blocked_reason', 'view', 'dialog', 'target'}
+
+
+def _clean_ui_text(value: object, *, limit: int = 160) -> str:
+    return ' '.join(str(value or '').split())[:limit]
+
+
+def _sanitized_ui_context(context: dict[str, object]) -> dict[str, object]:
+    sanitized: dict[str, object] = {}
+    for key, value in (context or {}).items():
+        key_text = _clean_ui_text(key, limit=40)
+        if key_text not in UI_EVENT_CONTEXT_ALLOWLIST:
+            continue
+        if isinstance(value, bool):
+            sanitized[key_text] = value
+        elif isinstance(value, int | float):
+            sanitized[key_text] = value
+        else:
+            sanitized[key_text] = _clean_ui_text(value, limit=160)
+    return sanitized
+
+
 @router.patch('/settings', response_model=AppSettingsOut)
 def update_app_settings(
     payload: AppSettingsUpdate,
@@ -1119,10 +1205,17 @@ def update_app_settings(
             settings_row.emr_smart_client_secret = encrypt_text_secret(candidate_secret)
     if payload.clear_emr_smart_client_secret:
         settings_row.emr_smart_client_secret = ''
+    if payload.emr_smart_token_url is not None:
+        settings_row.emr_smart_token_url = payload.emr_smart_token_url.strip()
     if payload.emr_smart_scopes is not None:
         settings_row.emr_smart_scopes = ' '.join(payload.emr_smart_scopes.split())
     if payload.emr_api_timeout_seconds is not None:
         settings_row.emr_api_timeout_seconds = payload.emr_api_timeout_seconds
+    if payload.facility_timezone is not None:
+        try:
+            settings_row.facility_timezone = normalize_timezone_name(payload.facility_timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if payload.treatment_plan_loc_change_window_days is not None:
         settings_row.treatment_plan_loc_change_window_days = payload.treatment_plan_loc_change_window_days
     if payload.treatment_plan_loc_change_window_validated is not None:
@@ -1150,6 +1243,30 @@ def update_app_settings(
         message='Application settings updated.',
     )
     return app_settings_public_payload(settings_row)
+
+
+@router.post('/ui-events', status_code=204)
+def record_ui_event(payload: UiEventInput, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    action_name = _clean_ui_text(payload.action_name)
+    result = _clean_ui_text(payload.result or 'clicked', limit=40) or 'clicked'
+    screen = _clean_ui_text(payload.screen, limit=80)
+    log_event(
+        db,
+        request,
+        'ui.button.click' if result == 'clicked' else 'ui.button.event',
+        actor=user,
+        event_category='ui_interaction',
+        target_entity=action_name,
+        target_entity_type='ui_button',
+        details={
+            'screen': screen,
+            'action_name': action_name,
+            'result': result,
+            'context': _sanitized_ui_context(payload.context),
+        },
+        message=f'UI button event recorded: {screen or "unknown screen"} / {action_name}.',
+    )
+    return Response(status_code=204)
 
 
 @router.get('/system/readiness', response_model=ReadinessOut)
@@ -1268,6 +1385,36 @@ def get_review_source_discovery(
             'live_import_status': payload['live_import_status'],
         },
         message='Review-source discovery queue viewed.',
+    )
+    return payload
+
+
+@router.post('/review-source-discovery/run-daily-check', response_model=ReviewSourceDiscoveryOut)
+def run_review_source_daily_check(
+    request: Request,
+    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    note_set_stmt = _note_set_stmt().where(PatientNoteSet.status == NoteSetStatus.active)
+    note_sets = list(db.execute(note_set_stmt.order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())).scalars().unique().all())
+    payload = review_source_discovery_payload(db, settings_row, note_sets)
+    log_event(
+        db,
+        request,
+        'review_source.daily_check.run',
+        actor=user,
+        event_category='workflow',
+        target_entity='review_source_daily_check',
+        target_entity_type='review_source_discovery',
+        details={
+            'refresh_mode': payload['refresh_mode'],
+            'changed_item_count': payload['changed_item_count'],
+            'error_count': payload['error_count'],
+            'live_import_enabled': payload['live_import_enabled'],
+            'api_mode': payload['api_mode'],
+        },
+        message='Daily review-source check run in safe readiness/mock mode.',
     )
     return payload
 
@@ -1906,6 +2053,7 @@ def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: Us
         chart.reviewed_by_id = None
         chart.reviewed_at = None
         chart.manager_comment = ''
+    _sync_chart_display_name_to_timeliness(db, chart)
     db.commit()
     chart = _find_chart(chart_id, user, db)
     log_event(
@@ -1920,6 +2068,56 @@ def update_chart(chart_id: int, payload: ChartUpdate, request: Request, user: Us
         patient_id=chart.patient_id,
         details={'state': chart.state.value, 'patient_id': chart.patient_id},
         message=f'Chart audit {chart.id} updated by {user.username}.',
+    )
+    return _chart_detail(chart)
+
+
+@router.post('/charts/{chart_id}/reanalyze', response_model=ChartDetailOut)
+def reanalyze_chart(chart_id: int, request: Request, user: User = Depends(require_roles(*REVIEW_ROLES)), db: Session = Depends(get_db)):
+    chart = _find_chart(chart_id, user, db)
+    if chart.source_note_set_id is None:
+        raise HTTPException(status_code=400, detail='This chart is not linked to an uploaded binder, so there is no source document set to re-run.')
+
+    note_set = _find_note_set(chart.source_note_set_id, user, db)
+    app_settings = get_or_create_app_settings(db)
+    timeliness_client = sync_from_note_set(db, note_set)
+    if chart.client_name.strip():
+        timeliness_client.permitted_name = chart.client_name.strip()
+    report = generate_evaluation_report(note_set, app_settings=app_settings)
+    old_state = chart.state
+    apply_report_to_chart(chart, report)
+    chart.client_name = chart.client_name.strip() or note_set.patient_id
+    chart.level_of_care = note_set.level_of_care
+    chart.admission_date = note_set.admission_date
+    chart.discharge_date = note_set.discharge_date
+    chart.primary_clinician = note_set.primary_clinician
+    chart.state = WorkflowState.awaiting_manager_review
+    chart.reviewed_by_id = None
+    chart.reviewed_at = None
+    chart.manager_comment = ''
+    db.add(
+        WorkflowTransition(
+            chart_id=chart.id,
+            actor_id=user.id,
+            from_state=old_state.value,
+            to_state=WorkflowState.awaiting_manager_review.value,
+            comment='Deterministic analysis re-run from the linked uploaded binder.',
+        )
+    )
+    db.commit()
+    chart = _find_chart(chart_id, user, db)
+    log_event(
+        db,
+        request,
+        'chart.reanalyze',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'chart:{chart.id}',
+        target_entity_type='chart',
+        target_entity_id=str(chart.id),
+        patient_id=chart.patient_id,
+        details={'source_note_set_id': note_set.id, 'system_score': chart.system_score, 'state': chart.state.value},
+        message=f'Chart audit {chart.id} re-analyzed from linked uploaded binder.',
     )
     return _chart_detail(chart)
 
@@ -2116,6 +2314,19 @@ async def upload_patient_note_set(
         )
         raise HTTPException(status_code=400, detail=f'Patient ID is required and could not be detected automatically. {reason}')
 
+    extracted_metadata = await extract_upload_metadata_from_uploads(files)
+    app_settings = get_or_create_app_settings(db)
+    effective_local_now = localize_datetime(_utc_now(), app_settings.facility_timezone)
+    resolved_primary_clinician = primary_clinician.strip() or extracted_metadata.primary_clinician
+    resolved_level_of_care = level_of_care.strip() or extracted_metadata.level_of_care
+    resolved_admission_date = admission_date.strip() or extracted_metadata.admission_date
+    resolved_client_name = client_name.strip() or display_name_for_patient_name_status(extracted_metadata.patient_name_status, effective_local_now)
+    client_name_status_detail = (
+        'Operator supplied a permitted display name.'
+        if client_name.strip()
+        else extracted_metadata.patient_name_message
+    )
+
     manifest = _parse_manifest(file_manifest, files)
     existing_active = db.execute(
         _note_set_stmt().where(PatientNoteSet.patient_id == normalized_patient_id, PatientNoteSet.status == NoteSetStatus.active)
@@ -2135,9 +2346,9 @@ async def upload_patient_note_set(
         status=NoteSetStatus.active,
         upload_mode=upload_mode,
         source_system='Alleva EMR',
-        primary_clinician=primary_clinician.strip(),
-        level_of_care=level_of_care.strip(),
-        admission_date=admission_date.strip(),
+        primary_clinician=resolved_primary_clinician.strip(),
+        level_of_care=resolved_level_of_care.strip(),
+        admission_date=resolved_admission_date.strip(),
         discharge_date=discharge_date.strip(),
         upload_notes=upload_notes.strip(),
         replaced_note_set_id=existing_active.id if existing_active else None,
@@ -2197,13 +2408,13 @@ async def upload_patient_note_set(
         chart = Chart(
             source_note_set_id=note_set.id,
             patient_id=normalized_patient_id,
-            client_name=client_name.strip() or normalized_patient_id,
+            client_name=resolved_client_name,
             level_of_care=note_set.level_of_care,
             admission_date=note_set.admission_date,
             discharge_date=note_set.discharge_date,
             primary_clinician=note_set.primary_clinician,
             auditor_name=user.full_name or user.username,
-            other_details='Auto-generated from uploaded clinical note binder.',
+            other_details=f'Auto-generated from uploaded clinical note binder. Patient display name status: {extracted_metadata.patient_name_status}. {client_name_status_detail}',
             counselor_id=user.id,
             notes=note_set.upload_notes,
             state=WorkflowState.draft,
@@ -2212,8 +2423,10 @@ async def upload_patient_note_set(
         db.flush()
 
         note_set.documents[:] = created_documents
-        sync_from_note_set(db, note_set)
-        report = generate_evaluation_report(note_set, app_settings=get_or_create_app_settings(db))
+        timeliness_client = sync_from_note_set(db, note_set)
+        if resolved_client_name:
+            timeliness_client.permitted_name = resolved_client_name
+        report = generate_evaluation_report(note_set, app_settings=app_settings)
         apply_report_to_chart(chart, report)
         chart.notes = note_set.upload_notes
         db.add(
@@ -2263,7 +2476,17 @@ async def upload_patient_note_set(
         target_entity_type='patient_note_set',
         target_entity_id=str(note_set.id),
         patient_id=note_set.patient_id,
-        details={'version': note_set.version, 'file_count': len(note_set.documents), 'upload_mode': note_set.upload_mode.value},
+        details={
+            'version': note_set.version,
+            'file_count': len(note_set.documents),
+            'upload_mode': note_set.upload_mode.value,
+            'metadata_extracted': {
+                'primary_clinician': bool(extracted_metadata.primary_clinician),
+                'level_of_care': bool(extracted_metadata.level_of_care),
+                'admission_date': bool(extracted_metadata.admission_date),
+                'patient_name_status': extracted_metadata.patient_name_status,
+            },
+        },
         message=f'Patient note set {note_set.id} uploaded.',
     )
     for document in note_set.documents:
@@ -2370,6 +2593,7 @@ def audit_logs(
         stmt = stmt.where(AuditLog.request_id == request_id.strip())
 
     logs = list(db.execute(stmt).scalars().all())
+    settings_row = get_or_create_app_settings(db)
     log_event(
         db,
         request,
@@ -2389,4 +2613,4 @@ def audit_logs(
         },
         message='Forensic audit log list viewed.',
     )
-    return logs
+    return [_audit_log_payload(log, settings_row.facility_timezone) for log in logs]

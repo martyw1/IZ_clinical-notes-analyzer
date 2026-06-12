@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.1 - 2026-06-12
+
+### Added
+- Added timezone-aware settings and audit-log display so operators can see local timestamps while the audit chain preserves UTC evidence.
+- Added PHI-safe UI button-event logging, including blocked workflow clicks, through the existing forensic audit trail.
+- Added safe manual daily review-source checks for the dashboard while keeping live Alleva import disabled.
+- Added API client-credentials token testing to the direct API harness and Windows Alleva connectivity script, with access tokens held in memory only.
+
+### Changed
+- Promoted version metadata to `1.1.1` / build `2026.06.12.1`.
+- Improved redacted PDF upload parsing for Primary Clinician, level of care, admission date, and blank/hidden/missing client-name handling.
+- Generated non-PHI placeholder display names for redacted, blank, or missing names instead of exposing note-derived names.
+- Updated review workflow feedback so Dig Deeper focuses evidence details and blocked workflow actions explain the next step.
+- Sanitized the tracked API credential note into a placeholder-only template.
+
+### Verified
+- Backend tests passed with `84 passed, 2 skipped`.
+- Frontend Vitest passed with `11 passed`.
+- Frontend production build passed.
+- Windows preflight, local stack smoke, and API-configuration smoke passed.
+- Browser persona testing passed for login, dashboard daily check, review queue Dig Deeper, settings timezone update, forensic log review, and mobile settings layout.
+- Alleva public Swagger/OpenAPI discovery reached HTTP 200; live client-credentials token request remains blocked by vendor/auth HTTP 400 and is documented in `docs/open-blockers.md`.
+
 ## 1.1.0 - 2026-06-11
 
 ### Added

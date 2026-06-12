@@ -1,30 +1,32 @@
-**PROJECT:** r3 Recovery Services Treatment Plan Verification App
+# App Credentials Info
 
+This tracked file is intentionally sanitized. Do not store live Alleva client IDs,
+client secrets, bearer tokens, API keys, passwords, or tenant-specific patient data
+in this repository.
 
+## Alleva Public Endpoints
 
-**The app login**
+- Swagger UI: `https://api.allevasoft.com/swagger/index.html`
+- Token endpoint: `https://authorization.allevasoft.com/connect/token`
+- Expected auth flow for testing: OAuth2 `client_credentials`, then send the
+  returned access token as an `Authorization: Bearer <token>` header.
 
-Username: admin
+## Safe Local Credential Handling
 
-New value: 3MFt!8okWdScCZSSEmZdajRp
+For one-time connectivity testing, set temporary PowerShell environment variables
+in the current shell only:
 
+```powershell
+$env:ALLEVA_CLIENT_ID = "<provided-by-Alleva>"
+$env:ALLEVA_CLIENT_SECRET = "<provided-by-Alleva>"
+$env:ALLEVA_TOKEN_URL = "https://authorization.allevasoft.com/connect/token"
+scripts\test-alleva-api-connectivity.ps1 -WriteJsonReport
+```
 
+For app-based testing, enter the client ID, token URL, and client secret in the
+admin settings/API configuration screen. The client secret is encrypted at rest
+and never returned to the browser after save.
 
-**API Key Info from Alex Inglish from Alleva**
-
-Alleva API Secret Key
-
-Here is our swagger doc: https://api.allevasoft.com/swagger/index.html
-
-Below is the id and secret for the account:
-
-r3recoveryservices
-
-r3recoveryservicesSECRET4frU1x88!
-
-
-
-We use a simple client\_credential bearer token granted by calls to our authorization server: https://authorization.allevasoft.com/connect/token. The token expires after an hour so you will have to refresh it.
-
-
-
+Live Alleva patient import remains disabled until R3 has approved tenant
+credentials, endpoint mapping, scopes, pagination/rate-limit behavior, attachment
+handling, vendor documentation, and compliance sign-off.

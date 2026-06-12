@@ -1,5 +1,32 @@
 # Version 1 Completion Log
 
+## 2026-06-12 1.1.1 Deployment Readiness Hardening
+
+What changed:
+- Updated version metadata to `1.1.1` / build `2026.06.12.1`.
+- Fixed Dig Deeper evidence focus and blocked workflow feedback.
+- Added PHI-safe UI button-event forensic logging.
+- Added facility timezone settings and local audit timestamp display.
+- Added redacted PDF metadata extraction for Primary Clinician, level of care, admission date, and hidden/blank/missing client-name handling.
+- Added safe daily review-source checks while keeping live Alleva import disabled.
+- Added API client-credentials token testing with in-memory bearer handling and report/audit redaction.
+- Replaced the tracked credentials note with a placeholder-only template.
+- Updated current architecture/runbook/operator docs to keep SQLite/AppData/local-first Windows use as the ordinary path.
+- Wrote final readiness evidence in `docs\deployment-readiness-report-2026-06-12.md`.
+
+Validation completed before final package pass:
+- Backend tests passed with `84 passed, 2 skipped`.
+- Frontend Vitest passed with `11 passed`.
+- Frontend production build passed.
+- Windows preflight, local stack smoke, and API configuration smoke passed.
+- Browser persona testing passed for login, daily safe check, Dig Deeper, timezone settings, forensic logs, and mobile settings layout.
+
+Open external blockers:
+- LOC-change update window remains unvalidated by R3/Marleigh.
+- Alleva client-credentials token request returns HTTP 400 until R3/Alleva confirms the exact auth details.
+- Live Alleva patient import remains disabled pending official vendor/compliance approval.
+- Signed MSI/MSIX remains a long-term packaging improvement.
+
 ## 2026-06-11 1.1.0 Treatment Plan PRD 42-Step Completion
 
 What changed:

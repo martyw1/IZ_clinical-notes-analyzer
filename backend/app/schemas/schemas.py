@@ -96,8 +96,10 @@ class AppSettingsUpdate(BaseModel):
     emr_smart_client_id: str | None = Field(default=None, max_length=255)
     emr_smart_client_secret: str | None = None
     clear_emr_smart_client_secret: bool = False
+    emr_smart_token_url: str | None = Field(default=None, max_length=500)
     emr_smart_scopes: str | None = Field(default=None, max_length=500)
     emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
+    facility_timezone: str | None = Field(default=None, max_length=80)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
     treatment_plan_loc_change_window_validated: bool | None = None
 
@@ -122,8 +124,12 @@ class AppSettingsOut(BaseModel):
     emr_fhir_base_url: str
     emr_smart_client_id: str
     emr_smart_client_secret_configured: bool
+    emr_smart_token_url: str
     emr_smart_scopes: str
     emr_api_timeout_seconds: int
+    facility_timezone: str
+    effective_timezone: str
+    effective_timezone_label: str
     treatment_plan_loc_change_window_days: int | None = None
     treatment_plan_loc_change_window_validated: bool
     updated_by_id: int | None = None
@@ -276,6 +282,8 @@ class ReviewSourceDiscoveryOut(BaseModel):
     checklist_version: str
     last_refreshed_at: str
     last_refresh_at: str
+    last_successful_check_at: str
+    last_failure_at: str
     next_refresh_at: str
     live_import_enabled: bool
     live_import_status: str
@@ -284,6 +292,7 @@ class ReviewSourceDiscoveryOut(BaseModel):
     api_mode_label: str
     daily_monitoring_enabled: bool
     refresh_mode: str
+    last_check_mode: str
     changed_item_count: int
     error_count: int
     notification_badge_count: int
@@ -505,11 +514,20 @@ class PatientIdDetectionOut(BaseModel):
     reason: str
 
 
+class UiEventInput(BaseModel):
+    screen: str = Field(default='', max_length=80)
+    action_name: str = Field(min_length=1, max_length=160)
+    result: str = Field(default='clicked', max_length=40)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
 class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     event_id: str
     timestamp_utc: datetime
+    timestamp_local: str = ''
+    effective_timezone: str = ''
     actor_username: str | None
     actor_role: str | None
     actor_type: str

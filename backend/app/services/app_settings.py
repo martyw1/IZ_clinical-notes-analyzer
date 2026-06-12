@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.models import AppSetting, User
+from app.services.timezone import effective_timezone_label, normalize_timezone_name
 
 
 def _utc_now() -> datetime:
@@ -45,8 +46,12 @@ def app_settings_public_payload(settings_row: AppSetting) -> dict[str, object]:
         'emr_fhir_base_url': settings_row.emr_fhir_base_url,
         'emr_smart_client_id': settings_row.emr_smart_client_id,
         'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
+        'emr_smart_token_url': settings_row.emr_smart_token_url,
         'emr_smart_scopes': settings_row.emr_smart_scopes,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
+        'facility_timezone': settings_row.facility_timezone,
+        'effective_timezone': normalize_timezone_name(settings_row.facility_timezone),
+        'effective_timezone_label': effective_timezone_label(settings_row.facility_timezone),
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,

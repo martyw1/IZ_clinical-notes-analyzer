@@ -9,6 +9,7 @@ from app.services.api_connectivity import (
     extract_swagger_ui_definition_urls,
     extract_openapi_operations,
     pull_api_definitions,
+    request_client_credentials_token,
 )
 
 OriginalHttpxClient = httpx.Client
@@ -27,11 +28,27 @@ class MockedHttpxClient:
     @staticmethod
     def _handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
+        if url == 'https://authorization.example.test/connect/token':
+            body = request.content.decode('utf-8')
+            assert 'grant_type=client_credentials' in body
+            assert 'client_id=mock-client' in body or 'client_id=saved-client' in body
+            assert 'client_secret=mock-secret' in body or 'client_secret=saved-secret' in body
+            return httpx.Response(
+                200,
+                json={
+                    'access_token': 'mock-access-token',
+                    'token_type': 'Bearer',
+                    'expires_in': 3600,
+                },
+            )
         if url.endswith('/swagger/index.html'):
             return httpx.Response(200, text="SwaggerUIBundle({ url: '/swagger/v1/swagger.json' })")
         if url.endswith('/swagger/v1/swagger.json'):
-            assert request.headers.get('x-api-key') in {'test-key', 'saved-secret-api-key'}
-            assert request.headers.get('authorization') in {'Bearer test-key', 'Bearer saved-secret-api-key'}
+            if request.headers.get('authorization') == 'Bearer mock-access-token':
+                assert 'x-api-key' not in request.headers
+            else:
+                assert request.headers.get('x-api-key') in {'test-key', 'saved-secret-api-key'}
+                assert request.headers.get('authorization') in {'Bearer test-key', 'Bearer saved-secret-api-key'}
             return httpx.Response(
                 200,
                 json={
@@ -157,6 +174,48 @@ def test_pull_api_definitions_discovers_and_summarizes_swagger_json(monkeypatch)
     assert result['definition_summary']['sample_paths'] == ['/patients']
     assert result['operations'][0]['method'] == 'GET'
     assert result['operations'][0]['path'] == '/patients'
+
+
+def test_client_credentials_token_request_returns_redacted_public_result(monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+
+    public_result, access_token = request_client_credentials_token(
+        token_url='https://authorization.example.test/connect/token',
+        client_id='mock-client',
+        client_secret='mock-secret',
+        scope='patient/Patient.rs',
+        timeout_seconds=5,
+    )
+
+    assert access_token == 'mock-access-token'
+    assert public_result['status'] == 'ok'
+    assert public_result['access_token_configured'] is True
+    assert public_result['token_type'] == 'Bearer'
+    assert 'mock-secret' not in str(public_result)
+    assert 'mock-access-token' not in str(public_result)
+
+
+def test_pull_api_definitions_can_use_client_credentials_bearer_token(monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+
+    token_result, access_token = request_client_credentials_token(
+        token_url='https://authorization.example.test/connect/token',
+        client_id='mock-client',
+        client_secret='mock-secret',
+        scope='patient/Patient.rs',
+        timeout_seconds=5,
+    )
+    result = pull_api_definitions(
+        swagger_ui_url='https://api.example.test/swagger/index.html',
+        bearer_token=access_token,
+        timeout_seconds=5,
+    )
+
+    assert token_result['status'] == 'ok'
+    assert result['status'] == 'ok'
+    assert result['bearer_token_used'] is True
+    assert result['api_key_used'] is False
+    assert 'mock-access-token' not in str(build_api_connectivity_report(report_type='unit', request={'bearer_token': access_token}, result=result))
 
 
 def test_pull_api_definitions_handles_invalid_and_timeout_urls(monkeypatch):
@@ -365,5 +424,66 @@ def test_api_configuration_routes_redact_inline_and_saved_keys(app_with_sqlite, 
         assert 'saved-secret-api-key' not in serialized
         assert 'inline-secret-key' not in serialized
         assert 'server-returned-token' not in serialized
+    finally:
+        db.close()
+
+
+def test_api_configuration_routes_support_saved_client_credentials_without_exposing_token(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+    app, session_local = app_with_sqlite
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.models.models import AuditLog
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+        saved = client.patch(
+            '/api/api-configuration',
+            headers=headers,
+            json={
+                'vendor_name': 'Mock API',
+                'api_base_url': 'https://api.example.test',
+                'client_id': 'saved-client',
+                'client_secret': 'saved-secret',
+                'token_url': 'https://authorization.example.test/connect/token',
+            },
+        )
+        assert saved.status_code == 200
+        assert saved.json()['client_id_configured'] is True
+        assert saved.json()['client_secret_configured'] is True
+        assert 'saved-secret' not in saved.text
+
+        pull = client.post(
+            '/api/api-configuration/pull-definitions',
+            headers=headers,
+            json={
+                'swagger_ui_url': 'https://api.example.test/swagger/index.html',
+                'api_base_url': 'https://api.example.test',
+                'auth_mode': 'client_credentials',
+                'use_saved_client_credentials': True,
+                'timeout_seconds': 5,
+            },
+        )
+        assert pull.status_code == 200
+        payload = pull.json()
+        assert payload['status'] == 'ok'
+        assert payload['auth_mode'] == 'client_credentials'
+        assert payload['token_result']['status'] == 'ok'
+        assert payload['bearer_token_used'] is True
+        assert payload['report']['request']['client_secret'] == REDACTED
+        assert payload['report']['request']['bearer_token'] == REDACTED
+        assert 'saved-secret' not in pull.text
+        assert 'mock-access-token' not in pull.text
+
+    db = session_local()
+    try:
+        logs = db.execute(select(AuditLog).where(AuditLog.action == 'api_configuration.pull_definitions')).scalars().all()
+        serialized = ' '.join(f'{log.message} {log.details}' for log in logs)
+        assert 'saved-secret' not in serialized
+        assert 'mock-access-token' not in serialized
+        assert 'client_credentials' in serialized
     finally:
         db.close()

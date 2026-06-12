@@ -1,10 +1,12 @@
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.core.config import REPO_ROOT
 from app.core.security import hash_password
-from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet, Role, User
+from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet, Role, TreatmentPlanClient, User
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -45,6 +47,35 @@ def _upload_payload(patient_id: str, *, upload_mode: str, file_name: str, label:
         ),
     }
     files = [('files', (file_name, content or b'Intake packet completed and signed.\nPrimary clinician assigned.\n', 'text/plain'))]
+    return data, files
+
+
+def _redacted_pdf_payload(patient_id: str, pdf_path: Path, *, document_date: str):
+    data = {
+        'patient_id': patient_id,
+        'upload_mode': 'initial',
+        'level_of_care': '',
+        'admission_date': '',
+        'discharge_date': '',
+        'primary_clinician': '',
+        'upload_notes': 'Synthetic test upload from redacted example PDF.',
+        'file_manifest': json.dumps(
+            [
+                {
+                    'client_file_name': pdf_path.name,
+                    'document_label': 'Treatment Plan Export',
+                    'alleva_bucket': 'custom_forms',
+                    'document_type': 'treatment_plan_review',
+                    'completion_status': 'completed',
+                    'client_signed': True,
+                    'staff_signed': True,
+                    'document_date': document_date,
+                    'description': 'Redacted treatment plan export fixture.',
+                }
+            ]
+        ),
+    }
+    files = [('files', (pdf_path.name, pdf_path.read_bytes(), 'application/pdf'))]
     return data, files
 
 
@@ -229,3 +260,113 @@ def test_upload_uses_detected_patient_id_when_field_is_blank(app_with_sqlite):
         payload = uploaded.json()
         assert payload['patient_id'] == 'PAT-AUTO-200'
         assert payload['review_chart_id'] is not None
+
+
+def test_redacted_example_pdf_upload_extracts_clinician_loc_and_placeholder_name(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    pdf_path = REPO_ROOT / 'example-treatment-plans' / 'JTXP.pdf'
+    assert pdf_path.exists()
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _redacted_pdf_payload('PAT-REDACTED-JTXP', pdf_path, document_date='2026-04-02')
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+
+        assert uploaded.status_code == 200
+        payload = uploaded.json()
+        assert payload['primary_clinician']
+        assert payload['level_of_care'] == 'GOP'
+        assert payload['admission_date'] in {'04/02/2026', '2026-04-02'}
+        assert payload['review_chart_id'] is not None
+
+        chart = client.get(f"/api/charts/{payload['review_chart_id']}", headers=headers)
+        assert chart.status_code == 200
+        chart_payload = chart.json()
+        assert chart_payload['primary_clinician'] == payload['primary_clinician']
+        assert chart_payload['level_of_care'] == 'GOP'
+        assert chart_payload['client_name'].startswith('Name Hidden ')
+        assert 'redacted_hidden' in chart_payload['other_details']
+
+    db = session_local()
+    try:
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REDACTED-JTXP')).scalar_one()
+        assert stored_client.current_level_of_care == 'GOP'
+        assert stored_client.permitted_name.startswith('Name Hidden ')
+
+        upload_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.uploaded')).scalar_one()
+        assert 'redacted_hidden' in upload_log.details
+        assert 'metadata_extracted' in upload_log.details
+        assert payload['primary_clinician'] not in upload_log.details
+    finally:
+        db.close()
+
+
+def test_redacted_iop_example_pdf_upload_extracts_level_of_care(app_with_sqlite):
+    app, _session_local = app_with_sqlite
+    pdf_path = REPO_ROOT / 'example-treatment-plans' / 'XTXP.pdf'
+    assert pdf_path.exists()
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _redacted_pdf_payload('PAT-REDACTED-XTXP', pdf_path, document_date='2026-03-24')
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+
+        assert uploaded.status_code == 200
+        payload = uploaded.json()
+        assert payload['primary_clinician']
+        assert payload['level_of_care'] == 'IOP 5'
+        assert payload['admission_date'] in {'02/25/2026', '2026-02-25'}
+        assert payload['review_chart_id'] is not None
+
+
+def test_reanalysis_preserves_operator_display_name_for_redacted_upload(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    pdf_path = REPO_ROOT / 'example-treatment-plans' / 'JTXP.pdf'
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _redacted_pdf_payload('PAT-REANALYZE-JTXP', pdf_path, document_date='2026-04-02')
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+        assert uploaded.status_code == 200
+        chart_id = uploaded.json()['review_chart_id']
+
+        chart = client.get(f'/api/charts/{chart_id}', headers=headers)
+        assert chart.status_code == 200
+        chart_payload = chart.json()
+        update_payload = {
+            'patient_id': chart_payload['patient_id'],
+            'client_name': 'Synthetic Display Name',
+            'level_of_care': chart_payload['level_of_care'],
+            'admission_date': chart_payload['admission_date'],
+            'discharge_date': chart_payload['discharge_date'],
+            'primary_clinician': chart_payload['primary_clinician'],
+            'auditor_name': chart_payload['auditor_name'],
+            'other_details': chart_payload['other_details'],
+            'notes': chart_payload['notes'],
+            'checklist_items': [
+                {
+                    'item_key': item['item_key'],
+                    'status': item['status'],
+                    'notes': item['notes'],
+                    'evidence_location': item['evidence_location'],
+                    'evidence_date': item['evidence_date'],
+                    'expiration_date': item['expiration_date'],
+                }
+                for item in chart_payload['checklist_items']
+            ],
+        }
+        updated = client.put(f'/api/charts/{chart_id}', headers=headers, json=update_payload)
+        assert updated.status_code == 200
+        assert updated.json()['client_name'] == 'Synthetic Display Name'
+
+        reanalyzed = client.post(f'/api/charts/{chart_id}/reanalyze', headers=headers)
+        assert reanalyzed.status_code == 200
+        assert reanalyzed.json()['client_name'] == 'Synthetic Display Name'
+
+    db = session_local()
+    try:
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REANALYZE-JTXP')).scalar_one()
+        assert stored_client.permitted_name == 'Synthetic Display Name'
+        assert db.execute(select(AuditLog).where(AuditLog.action == 'chart.reanalyze')).scalar_one_or_none() is not None
+    finally:
+        db.close()

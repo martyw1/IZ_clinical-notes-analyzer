@@ -2,9 +2,9 @@
 
 Use synthetic data only for this script.
 
-Current patch version: `1.1.0` / build `2026.06.11.1`.
+Current patch version: `1.1.1` / build `2026.06.12.1`.
 
-Version 1.1.0 keeps the Windows startup reliability fix, aligns app version metadata, expands the checklist to the 42-step PRD workflow, and adds admin-editable workflow seeding in Settings.
+Version 1.1.1 keeps the Windows startup reliability fix, aligns app version metadata, keeps the 42-step PRD workflow, and adds deployment-readiness hardening for redacted uploads, timezone-aware logs, button-event logging, safe daily source checks, and API client-credentials testing.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -15,11 +15,11 @@ Version 1.1.0 keeps the Windows startup reliability fix, aligns app version meta
 7. Confirm the LOC-change blocker says the timing window is unvalidated.
 8. Open Chart audit.
 9. Confirm the dashboard shows checklist version `v1.1.0`.
-10. Confirm `/api/version` reports app version `1.1.0` after this patch is installed.
-11. Confirm the app footer also shows version `1.1.0`.
+10. Confirm `/api/version` reports app version `1.1.1` after this patch is installed.
+11. Confirm the app footer also shows version `1.1.1`.
 12. Confirm the Review source section shows EMR/API access and Manual upload.
 13. Open Treatment plans.
-14. Confirm the `Updated evidence queue v1.1.0` banner is visible.
+14. Confirm the `Updated evidence queue v1.1.1` banner is visible.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
 17. Review rule results, evidence, and the source/staff/LOC due-date comparison.
@@ -41,7 +41,7 @@ Version 1.1.0 keeps the Windows startup reliability fix, aligns app version meta
 33. Open Forensic logs.
 34. Confirm sign-in, upload, review, override, API test, and settings actions appear without secrets or uploaded note text.
 35. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
-36. Confirm the Version 1.1.0 local recovery utility exists at `scripts\update-local-admin.ps1`.
+36. Confirm the Version 1.1.1 local recovery utility exists at `scripts\update-local-admin.ps1`.
 37. Close the browser and app window.
 38. Relaunch and confirm prior review status is still present.
 39. Use the uninstall shortcut only after confirming no local data needs to be preserved.

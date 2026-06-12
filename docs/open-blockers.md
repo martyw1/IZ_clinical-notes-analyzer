@@ -1,6 +1,6 @@
 # Open Blockers
 
-Date: 2026-06-11
+Date: 2026-06-12
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -30,10 +30,31 @@ Current implementation state: Version 1 adds Windows preflight, setup/start wrap
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.1.0` on that machine.
-- The `Treatment plans` tab shows `Updated evidence queue v1.1.0`, proving the source/staff/LOC evidence-comparison UI is the currently served build.
+- `/api/version` and the UI footer show `1.1.1` on that machine.
+- The `Treatment plans` tab shows `Updated evidence queue v1.1.1`, proving the source/staff/LOC evidence-comparison UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
+
+## Alleva Client-Credentials Token Request
+
+Status: blocked by vendor/auth response.
+
+The public Alleva Swagger UI and OpenAPI JSON are reachable, but the provided client-credentials token request returned HTTP 400 on 2026-06-12. The app and `scripts\test-alleva-api-connectivity.ps1` now support client-credentials token testing, keep returned access tokens in memory only, and redact token/secret values from reports and audit logs.
+
+Current evidence:
+
+- `https://api.allevasoft.com/swagger/index.html`: HTTP 200.
+- `https://api.allevasoft.com/swagger/v1/swagger.json`: HTTP 200, 942906 bytes.
+- `https://authorization.allevasoft.com/connect/token`: HTTP 400 for the provided client ID/secret using form-encoded `grant_type=client_credentials`.
+- HTTP Basic client-auth with `grant_type=client_credentials` was also attempted and returned HTTP 400.
+- Sanitized report files were written under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports`.
+
+Required resolution evidence:
+
+- R3/Alleva confirms the exact tenant/client ID and client secret.
+- R3/Alleva confirms whether a scope, audience, tenant identifier, or alternate token endpoint is required.
+- R3/Alleva confirms whether credentials must be sent in the form body or HTTP Basic auth.
+- A token request returns HTTP 200 with an access token, followed by one approved non-PHI operation test against a synthetic or vendor-approved test patient.
 
 ## Frontend Vitest and Direct TypeScript Check
 

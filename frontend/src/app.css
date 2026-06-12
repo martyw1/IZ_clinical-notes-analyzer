@@ -1592,7 +1592,39 @@ label {
 
 @media (max-width: 720px) {
   .hero {
+    width: 100%;
+    max-width: 100vw;
     grid-template-columns: 1fr;
+  }
+
+  .hero > *,
+  .status-card,
+  .metric-card,
+  .panel,
+  .workspace-grid,
+  .dashboard-grid,
+  .workflow-admin-grid,
+  .metrics {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .workflow-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeliness-table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .eyebrow,
+  .hero h1,
+  .hero-copy,
+  .status-card p,
+  .status-meta,
+  .metric-card span {
+    overflow-wrap: anywhere;
   }
 
   .status-card {
@@ -1601,6 +1633,48 @@ label {
   }
 
   .view-tabs {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: auto;
     padding: 0;
   }
+}
+
+.field-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.criterion-chip {
+  border-radius: 8px;
+  min-height: 84px;
+}
+
+.criterion-workbench {
+  border-radius: 8px;
+  outline: none;
+}
+
+.criterion-workbench:focus-visible {
+  outline: 3px solid var(--video-line);
+  outline-offset: 3px;
+}
+
+.segmented-actions {
+  align-items: stretch;
+}
+
+.segmented-actions .ghost-button {
+  flex: 1 1 132px;
+  min-height: 40px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.segmented-actions .ghost-button[aria-disabled='true'] {
+  opacity: 0.72;
+  border-style: dashed;
 }
