@@ -75,9 +75,9 @@ The startup script prints the first local admin password the first time it creat
 ## Manual UI Checklist
 
 1. Sign in as `admin`.
-2. Confirm the footer shows version `1.1.1` after the final version bump.
+2. Confirm the footer shows version `1.2.0` after the final version bump.
 3. Open `Treatment plans`.
-4. Confirm the dashboard loads, the `Updated evidence queue v1.1.1` banner is visible, and the LOC-change window is visibly unvalidated if not confirmed.
+4. Confirm the dashboard loads, the `Updated evidence queue v1.2.0` banner is visible, and the LOC-change window is visibly unvalidated if not confirmed.
 5. Open `Settings`.
 6. Confirm runtime readiness is not `fail`.
 7. Confirm workflow profiles show `Treatment Plan Timeliness Tracker` with a published version.
@@ -95,8 +95,8 @@ Save these outputs locally on the Dell, outside the repository if they might con
 - `git rev-parse --short HEAD`
 - `.\scripts\test-local-app-stack.ps1 -Port 8010` final PASS output.
 - `.\scripts\test-api-configuration-local.ps1 -Port 8021` final PASS output.
-- Screenshot of the app footer showing version `1.1.1`.
-- Screenshot of the Treatment Plan Timeliness tab showing `Updated evidence queue v1.1.1`.
+- Screenshot of the app footer showing version `1.2.0`.
+- Screenshot of the Treatment Plan Timeliness tab showing `Updated evidence queue v1.2.0`.
 - Screenshot of Settings workflow profiles showing the seeded Treatment Plan Timeliness Tracker profile and 42-step draft action.
 
 Do not save screenshots containing real PHI or real credentials.

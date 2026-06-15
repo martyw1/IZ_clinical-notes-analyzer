@@ -1,7 +1,16 @@
 import { ChangeEvent, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AppDialogModal,
+  ConfirmDialogModal,
+  UploadProgressPanel,
+  type AppDialogState,
+  type ConfirmDialogState,
+  type UploadProgressState,
+} from './components/feedback'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
+const SESSION_TOKEN_KEY = 'iz-cna-session-token'
 
 type Role = 'admin' | 'counselor' | 'manager'
 type WorkflowState =
@@ -495,11 +504,6 @@ type EvidencePreview = {
   note: string
 }
 
-type AppDialog = {
-  title: string
-  message: string
-}
-
 type TrendPoint = {
   label: string
   count: number
@@ -683,6 +687,8 @@ const VIEW_LABELS: Record<AppView, string> = {
   settings: 'Settings',
 }
 
+const APP_VIEWS: AppView[] = ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'logs', 'settings']
+
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
     'Awaiting Office Manager Review': [
@@ -699,11 +705,32 @@ const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]
   counselor: {},
 }
 
+class ApiRequestError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+  }
+}
+
 function readErrorMessage(status: number, payload: ApiError | null) {
   const detail = payload?.detail
-  if (typeof detail === 'string' && detail.trim()) return `HTTP ${status}: ${detail}`
-  if (detail && typeof detail === 'object' && typeof detail.msg === 'string') return `HTTP ${status}: ${detail.msg}`
-  return `HTTP ${status}: request failed`
+  const detailText =
+    typeof detail === 'string' && detail.trim()
+      ? detail.trim()
+      : detail && typeof detail === 'object' && typeof detail.msg === 'string'
+        ? detail.msg.trim()
+        : ''
+
+  if (status === 401) return 'Your session has expired. Sign in again to continue.'
+  if (status === 403) return detailText || 'Your account does not have access to that action.'
+  if (status === 413) return 'The selected upload is too large. Remove files or split the binder into a smaller upload.'
+  if (status === 422) return detailText || 'Some required information is missing or needs a different format.'
+  if (status >= 500) return 'The local app could not finish that request. Try again, then restart the app if it keeps happening.'
+  if (detailText) return detailText
+  return 'The request could not be completed.'
 }
 
 function groupedChecklist(items: AuditItem[]) {
@@ -731,10 +758,36 @@ function createUploadForm(overrides?: Partial<Omit<UploadFormState, 'entries'>>)
   }
 }
 
-function viewFromUrl(): AppView {
-  if (typeof window === 'undefined') return 'dashboard'
+function requestedViewFromUrl(): AppView | null {
+  if (typeof window === 'undefined') return null
   const requested = new URLSearchParams(window.location.search).get('view') || window.location.hash.replace(/^#\/?/, '')
-  return ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'logs', 'settings'].includes(requested) ? (requested as AppView) : 'dashboard'
+  return APP_VIEWS.includes(requested as AppView) ? (requested as AppView) : null
+}
+
+function viewFromUrl(): AppView {
+  return requestedViewFromUrl() || 'dashboard'
+}
+
+function hasExplicitViewInUrl() {
+  return requestedViewFromUrl() !== null
+}
+
+function getStoredSessionToken() {
+  if (typeof window === 'undefined') return ''
+  return window.sessionStorage.getItem(SESSION_TOKEN_KEY) || ''
+}
+
+function storeSessionToken(token: string) {
+  if (typeof window === 'undefined') return
+  if (token) {
+    window.sessionStorage.setItem(SESSION_TOKEN_KEY, token)
+  } else {
+    window.sessionStorage.removeItem(SESSION_TOKEN_KEY)
+  }
+}
+
+function defaultViewForRole(role: Role): AppView | null {
+  return role === 'admin' || role === 'manager' ? 'timeliness' : null
 }
 
 function createSettingsForm(settings: AppSettings): AppSettingsForm {
@@ -975,11 +1028,14 @@ function workflowTone(state: string) {
 function timelinessTone(status: string) {
   if (status === 'Compliant') return 'success'
   if (status === 'Approved') return 'success'
-  if (status === 'Overdue') return 'danger'
-  if (status === 'Returned for Correction') return 'danger'
-  if (status === 'Needs Review' || status === 'Conflicting Evidence') return 'attention'
-  if (status === 'Urgent' || status === 'Due Soon') return 'warning'
-  if (status === 'Missing Data' || status === 'Unable to Evaluate') return 'muted'
+  if (status === 'Overdue') return 'overdue'
+  if (status === 'Urgent') return 'urgent'
+  if (status === 'Due Soon') return 'due-soon'
+  if (status === 'Returned for Correction') return 'returned'
+  if (status === 'Needs Review') return 'needs-review'
+  if (status === 'Missing Data') return 'missing-data'
+  if (status === 'Conflicting Evidence') return 'conflicting'
+  if (status === 'Unable to Evaluate') return 'unable'
   return 'neutral'
 }
 
@@ -1123,7 +1179,9 @@ async function readJson(response: Response) {
 }
 
 export function App() {
-  const [token, setToken] = useState('')
+  const explicitInitialViewRef = useRef(hasExplicitViewInUrl())
+  const initialRoleViewAppliedRef = useRef(false)
+  const [token, setToken] = useState(getStoredSessionToken)
   const [user, setUser] = useState<User | null>(null)
   const [status, setStatus] = useState('Sign in to upload notes, review findings, and manage approvals.')
   const [error, setError] = useState('')
@@ -1153,8 +1211,10 @@ export function App() {
   const [timelinessSearch, setTimelinessSearch] = useState('')
   const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
   const [evidencePreview, setEvidencePreview] = useState<EvidencePreview | null>(null)
-  const [appDialog, setAppDialog] = useState<AppDialog | null>(null)
+  const [appDialog, setAppDialog] = useState<AppDialogState | null>(null)
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
   const [uploadForm, setUploadForm] = useState<UploadFormState>(createUploadForm())
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null)
   const [patientIdDetection, setPatientIdDetection] = useState<PatientIdDetection | null>(null)
   const [patientIdTouched, setPatientIdTouched] = useState(false)
   const [lastAutoFilledPatientId, setLastAutoFilledPatientId] = useState('')
@@ -1268,11 +1328,31 @@ export function App() {
   const timelinessBuildLabel = versionInfo?.version ? `v${versionInfo.version}` : 'current build'
 
   useEffect(() => {
+    storeSessionToken(token)
+  }, [token])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const current = new URL(window.location.href)
     current.searchParams.set('view', activeView)
     window.history.replaceState(null, '', `${current.pathname}?${current.searchParams.toString()}`)
   }, [activeView])
+
+  useEffect(() => {
+    if (!evidencePreview && !appDialog && !confirmDialog) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (confirmDialog) {
+        setConfirmDialog(null)
+      } else if (appDialog) {
+        setAppDialog(null)
+      } else {
+        setEvidencePreview(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [evidencePreview, appDialog, confirmDialog])
 
   useEffect(() => {
     if (error) {
@@ -1357,9 +1437,78 @@ export function App() {
     const response = await fetch(`${API}${path}`, { ...init, headers })
     const payload = (await readJson(response)) as ApiError | T | null
     if (!response.ok) {
-      throw new Error(readErrorMessage(response.status, payload as ApiError | null))
+      throw new ApiRequestError(response.status, readErrorMessage(response.status, payload as ApiError | null))
     }
     return payload as T
+  }
+
+  function uploadPatientNoteSet(body: FormData, fileNames: string[], totalBytes: number): Promise<PatientNoteSetDetail> {
+    if (import.meta.env.MODE === 'test' || typeof XMLHttpRequest === 'undefined') {
+      setUploadProgress((current) =>
+        current
+          ? {
+              ...current,
+              phase: 'processing',
+              percent: 100,
+              loadedBytes: totalBytes,
+              message: 'Upload received. Processing securely...',
+            }
+          : current,
+      )
+      return apiRequest<PatientNoteSetDetail>('/patient-note-sets', { method: 'POST', body })
+    }
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${API}/patient-note-sets`)
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+      xhr.upload.onprogress = (event) => {
+        const total = event.lengthComputable && event.total > 0 ? event.total : totalBytes
+        const percent = total > 0 ? Math.min(99, Math.round((event.loaded / total) * 100)) : 0
+        setUploadProgress({
+          phase: 'uploading',
+          percent,
+          loadedBytes: event.loaded,
+          totalBytes,
+          fileCount: fileNames.length,
+          fileNames,
+          message: `Uploading ${fileNames.length} ${fileNames.length === 1 ? 'file' : 'files'}...`,
+        })
+      }
+
+      xhr.upload.onload = () => {
+        setUploadProgress({
+          phase: 'processing',
+          percent: 100,
+          loadedBytes: totalBytes,
+          totalBytes,
+          fileCount: fileNames.length,
+          fileNames,
+          message: 'Upload received. Processing securely...',
+        })
+      }
+
+      xhr.onerror = () => reject(new Error('The upload could not reach the local app. Confirm the app is still running and try again.'))
+      xhr.onabort = () => reject(new Error('Upload was cancelled before it finished.'))
+      xhr.onload = () => {
+        let payload: ApiError | PatientNoteSetDetail | null = null
+        try {
+          payload = xhr.responseText ? (JSON.parse(xhr.responseText) as ApiError | PatientNoteSetDetail) : null
+        } catch {
+          reject(new Error('The local app returned a response that could not be read.'))
+          return
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new ApiRequestError(xhr.status, readErrorMessage(xhr.status, payload as ApiError | null)))
+          return
+        }
+        resolve(payload as PatientNoteSetDetail)
+      }
+
+      xhr.send(body)
+    })
   }
 
   function safeButtonLabel(value: string) {
@@ -1368,6 +1517,62 @@ export function App() {
       .replace(/\b(PAT|SYNTH|MRN|CLIENT|ID)[-_:A-Z0-9]{2,}\b/gi, '[id]')
       .trim()
       .slice(0, 120)
+  }
+
+  function changeView(view: AppView) {
+    explicitInitialViewRef.current = true
+    setActiveView(view)
+  }
+
+  function applyInitialRoleView(profile: User) {
+    if (initialRoleViewAppliedRef.current) return
+    initialRoleViewAppliedRef.current = true
+    if (explicitInitialViewRef.current) return
+    const nextView = defaultViewForRole(profile.role)
+    if (nextView) setActiveView(nextView)
+  }
+
+  function clearWorkspaceState() {
+    setUser(null)
+    setCharts([])
+    setNoteSets([])
+    setSelectedChart(null)
+    setSelectedChartId(null)
+    setSelectedNoteSet(null)
+    setSelectedNoteSetId(null)
+    setTimelinessDashboard(null)
+    setSelectedTimelinessClient(null)
+    setSelectedTimelinessClientId(null)
+    setTimelinessStatusFilter('All')
+    setTimelinessSearch('')
+    setTimelinessOverrideForm(createTimelinessOverrideForm())
+    setEvidencePreview(null)
+    setAppDialog(null)
+    setConfirmDialog(null)
+    setReadiness(null)
+    setUsers([])
+    setSelectedManagedUserId(null)
+    setManagedUserForm(null)
+    setLogs([])
+    setAppSettings(null)
+    setSettingsForm(null)
+    setEmrProfile(null)
+    setEmrDiscovery(null)
+    setEmrImportPlan(null)
+    setTreatmentPlanChecklist(null)
+    setReviewSourceDiscovery(null)
+    syncWorkflowDefinitions([])
+    setUploadProgress(null)
+    setReviewDirty(false)
+  }
+
+  function handleExpiredSession() {
+    storeSessionToken('')
+    setToken('')
+    setMustResetPassword(false)
+    clearWorkspaceState()
+    setStatus('Session expired. Sign in again to continue.')
+    setError('')
   }
 
   function recordButtonAction(screen: string, actionName: string, result = 'clicked', context: Record<string, string | boolean | number> = {}) {
@@ -1457,8 +1662,21 @@ export function App() {
     }
   }
 
-  async function loadChartDetail(chartId: number) {
-    if (reviewDirty && selectedChartId !== chartId && !window.confirm('Discard unsaved criterion review changes?')) return
+  async function loadChartDetail(chartId: number, options: { skipDirtyCheck?: boolean } = {}) {
+    if (!options.skipDirtyCheck && reviewDirty && selectedChartId !== chartId) {
+      setConfirmDialog({
+        title: 'Discard unsaved review changes?',
+        message: 'The current criterion edits have not been saved. Keep editing, or discard them and open the selected chart.',
+        confirmLabel: 'Discard changes',
+        cancelLabel: 'Keep editing',
+        onConfirm: () => {
+          setConfirmDialog(null)
+          setReviewDirty(false)
+          void loadChartDetail(chartId, { skipDirtyCheck: true })
+        },
+      })
+      return
+    }
     const detail = copyChartDetail(await apiRequest<ChartDetail>(`/charts/${chartId}`))
     setSelectedChart(detail)
     setSelectedChartId(detail.id)
@@ -1564,6 +1782,7 @@ export function App() {
 
       setUser(profile)
       setProfileForm({ full_name: profile.full_name })
+      applyInitialRoleView(profile)
       setCharts(chartList)
       setNoteSets(noteSetList)
       setReviewSourceDiscovery(sourceDiscovery)
@@ -1634,6 +1853,10 @@ export function App() {
 
       setStatus(`Workspace ready for ${profile.full_name || profile.username}.`)
     } catch (caught) {
+      if (caught instanceof ApiRequestError && caught.status === 401) {
+        handleExpiredSession()
+        return
+      }
       setError(caught instanceof Error ? caught.message : 'Failed to load workspace')
     } finally {
       setIsBusy(false)
@@ -1801,14 +2024,15 @@ export function App() {
         },
         false,
       )
+      const profile = await apiRequest<User>('/users/me', { headers: { Authorization: `Bearer ${login.access_token}` } }, false)
       setToken(login.access_token)
       setMustResetPassword(login.must_reset_password)
-      const profile = await apiRequest<User>('/users/me', { headers: { Authorization: `Bearer ${login.access_token}` } }, false)
       setUser(profile)
       setProfileForm({ full_name: profile.full_name })
       if (login.must_reset_password) {
         setStatus('Password reset required before continuing.')
       } else {
+        applyInitialRoleView(profile)
         setStatus(`Signed in as ${profile.full_name || profile.username}. Loading workspace...`)
       }
     } catch (caught) {
@@ -1849,6 +2073,17 @@ export function App() {
     setIsBusy(true)
     setError('')
     setStatus(`Uploading clinical notes for patient ${uploadForm.patient_id || 'pending'}...`)
+    const uploadFileNames = uploadForm.entries.map((entry) => entry.file.name)
+    const uploadTotalBytes = uploadForm.entries.reduce((total, entry) => total + entry.file.size, 0)
+    setUploadProgress({
+      phase: 'uploading',
+      percent: 0,
+      loadedBytes: 0,
+      totalBytes: uploadTotalBytes,
+      fileCount: uploadForm.entries.length,
+      fileNames: uploadFileNames,
+      message: `Preparing ${uploadForm.entries.length} ${uploadForm.entries.length === 1 ? 'file' : 'files'}...`,
+    })
 
     try {
       const body = new FormData()
@@ -1885,10 +2120,7 @@ export function App() {
       )
       uploadForm.entries.forEach((entry) => body.append('files', entry.file))
 
-      const uploaded = await apiRequest<PatientNoteSetDetail>('/patient-note-sets', {
-        method: 'POST',
-        body,
-      })
+      const uploaded = await uploadPatientNoteSet(body, uploadFileNames, uploadTotalBytes)
 
       setUploadForm(
         createUploadForm({
@@ -1907,15 +2139,20 @@ export function App() {
       setLastAutoFilledPatientId('')
       setSelectedNoteSet(uploaded)
       setSelectedNoteSetId(uploaded.id)
-      setActiveView('reviews')
+      changeView('reviews')
       await loadWorkspace()
       if (uploaded.review_chart_id) {
         await loadChartDetail(uploaded.review_chart_id)
       }
       setStatus(`Clinical notes uploaded for patient ${uploaded.patient_id}. The system review is ready for office-manager disposition.`)
     } catch (caught) {
+      if (caught instanceof ApiRequestError && caught.status === 401) {
+        handleExpiredSession()
+        return
+      }
       setError(caught instanceof Error ? caught.message : 'Upload failed')
     } finally {
+      setUploadProgress(null)
       setIsBusy(false)
     }
   }
@@ -2517,7 +2754,7 @@ export function App() {
   }
 
   function openRejectedPatientUpload(chart: ChartDetail) {
-    setActiveView('uploads')
+    changeView('uploads')
     setUploadForm(
       createUploadForm({
         patient_id: chart.patient_id,
@@ -2533,24 +2770,11 @@ export function App() {
   }
 
   function handleSignOut() {
+    storeSessionToken('')
     setToken('')
-    setUser(null)
     setMustResetPassword(false)
-    setCharts([])
-    setNoteSets([])
-    setSelectedChart(null)
-    setSelectedChartId(null)
-    setSelectedNoteSet(null)
-    setSelectedNoteSetId(null)
-    setTimelinessDashboard(null)
-    setSelectedTimelinessClient(null)
-    setSelectedTimelinessClientId(null)
-    setTimelinessStatusFilter('All')
-    setTimelinessSearch('')
-    setTimelinessOverrideForm(createTimelinessOverrideForm())
-    setEvidencePreview(null)
-    setAppDialog(null)
-    setReadiness(null)
+    initialRoleViewAppliedRef.current = false
+    clearWorkspaceState()
     setStatus('Signed out. Sign in to continue.')
     setError('')
   }
@@ -2702,7 +2926,7 @@ export function App() {
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
-                onClick={() => setActiveView(view)}
+                onClick={() => changeView(view)}
                 type='button'
               >
                 {VIEW_LABELS[view]}
@@ -2713,7 +2937,7 @@ export function App() {
                   <button
                     key={view}
                     className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
-                    onClick={() => setActiveView(view)}
+                    onClick={() => changeView(view)}
                     type='button'
                   >
                     {VIEW_LABELS[view]}
@@ -2800,7 +3024,7 @@ export function App() {
                         </div>
                       </dl>
                       <div className='decision-actions'>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
                           View Details
                         </button>
                         {user?.role === 'admin' || user?.role === 'manager' ? (
@@ -2809,7 +3033,7 @@ export function App() {
                           </button>
                         ) : null}
                         {user?.role === 'admin' ? (
-                          <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                          <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
                             API settings
                           </button>
                         ) : null}
@@ -2840,10 +3064,10 @@ export function App() {
                         </div>
                       </dl>
                       <div className='decision-actions'>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('uploads')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('uploads')}>
                           Upload binder
                         </button>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('reviews')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
                           View Details
                         </button>
                       </div>
@@ -2856,30 +3080,30 @@ export function App() {
                 <section className='panel-subsection'>
                   <h3>Quick actions</h3>
                   <div className='quick-actions'>
-                    <button type='button' onClick={() => setActiveView('uploads')}>
+                    <button type='button' onClick={() => changeView('uploads')}>
                       Upload binder
                     </button>
-                    <button type='button' className='ghost-button' onClick={() => setActiveView('reviews')}>
+                    <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
                       Open review queue
                     </button>
-                    <button type='button' className='ghost-button' onClick={() => setActiveView('timeliness')}>
+                    <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
                       Treatment plans
                     </button>
-                    <button type='button' className='ghost-button' onClick={() => setActiveView('checklist')}>
+                    <button type='button' className='ghost-button' onClick={() => changeView('checklist')}>
                       Checklist v1
                     </button>
-                    <button type='button' className='ghost-button' onClick={() => setActiveView('profile')}>
+                    <button type='button' className='ghost-button' onClick={() => changeView('profile')}>
                       My account
                     </button>
                     {user?.role === 'admin' ? (
                       <>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('users')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('users')}>
                           User management
                         </button>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('logs')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('logs')}>
                           Forensic logs
                         </button>
-                        <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                        <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
                           Settings
                         </button>
                       </>
@@ -3394,7 +3618,7 @@ export function App() {
                 </div>
                 <div className='button-row'>
                   {user?.role === 'admin' ? (
-                    <button type='button' className='ghost-button' onClick={() => setActiveView('settings')}>
+                    <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
                       Manage Workflow
                     </button>
                   ) : null}
@@ -4008,6 +4232,7 @@ export function App() {
                       ))}
                     </div>
                   ) : null}
+                  {uploadProgress ? <UploadProgressPanel progress={uploadProgress} /> : null}
                   <div className='full-width form-actions'>
                     <button type='submit' disabled={isBusy}>
                       {isBusy ? 'Uploading...' : 'Upload and run automated evaluation'}
@@ -5242,19 +5467,9 @@ export function App() {
         </div>
       ) : null}
 
-      {appDialog ? (
-        <div className='modal-backdrop' role='presentation'>
-          <section className='app-dialog' role='dialog' aria-modal='true' aria-labelledby='app-dialog-title'>
-            <h2 id='app-dialog-title'>{appDialog.title}</h2>
-            <p>{appDialog.message}</p>
-            <div className='form-actions'>
-              <button type='button' onClick={() => setAppDialog(null)}>
-                OK
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      {appDialog ? <AppDialogModal dialog={appDialog} onClose={() => setAppDialog(null)} /> : null}
+
+      {confirmDialog ? <ConfirmDialogModal dialog={confirmDialog} onCancel={() => setConfirmDialog(null)} /> : null}
 
       <footer className='app-footer' aria-label='Application version'>
         <span>IZ Clinical Notes Analyzer</span>

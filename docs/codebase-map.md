@@ -20,7 +20,10 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 |---|---|
 | `backend/app/main.py` | FastAPI app factory, startup readiness/schema/admin bootstrap, CORS/trusted-host/security headers, health/readiness/version, primary API routers. |
 | `backend/app/desktop_main.py` | Desktop runtime wrapper. Includes rules API, API configuration UI, clinical-notes intake UI, and serves `frontend/dist` when built. |
-| `backend/app/api/routes.py` | Main authenticated API: auth, users, settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, timeliness dashboard/detail/override APIs, audit logs. |
+| `backend/app/api/routes.py` | Main authenticated API: settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, audit template/checklist, UI events, and audit logs. |
+| `backend/app/api/auth_user_routes.py` | Authentication, self-service password/profile updates, and admin user-management APIs. |
+| `backend/app/api/timeliness_routes.py` | Treatment Plan Timeliness dashboard/detail/client/override APIs. |
+| `backend/app/api/workflow_routes.py` | Workflow profile CRUD, draft versioning, publish/archive, and unused draft deletion APIs. |
 | `backend/app/api/api_config_routes.py` | Direct API harness for API configuration, local sample OpenAPI, OpenAPI/Swagger discovery, and selected operation testing. |
 | `backend/app/api/rules_routes.py` | Rules profile and ad hoc rules evaluation API. |
 | `backend/app/api/api_config_ui_routes.py` | Standalone HTML page for API configuration/testing. |
@@ -47,7 +50,8 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | Entrypoint | Purpose |
 |---|---|
 | `frontend/src/main.tsx` | Mounts React app. |
-| `frontend/src/App.tsx` | Single large UI component with auth, dashboard, review queue, Treatment Plans tracker, upload form, profile, user management, settings, workflow profiles, logs, and API/EMR operations. |
+| `frontend/src/App.tsx` | Main React app with auth, dashboard, review queue, Treatment Plans tracker, upload form, profile, user management, settings, workflow profiles, logs, and API/EMR operations. |
+| `frontend/src/components/feedback.tsx` | Shared feedback UI for app dialogs, confirmation dialogs, and upload progress. |
 | `frontend/src/app.css` | Application styling. |
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
@@ -58,7 +62,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 
 | File | Purpose | Keep status |
 |---|---|---|
-| `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher; calls `startup-windows-local.ps1`. | Required for Windows target. |
+| `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher; calls `startup-windows-local.ps1` without forcing unattended setup. | Required for Windows target. |
 | `scripts/startup-windows-local.ps1` | Main ordinary Windows source-checkout startup; delegates preflight, creates/uses local AppData config, verifies runtime dependencies, detects stale frontend builds, and starts desktop backend. | Required for Windows target. |
 | `scripts/test-local-app-stack.ps1` | Windows local full-stack smoke test. | Required validation path. |
 | `scripts/test-api-configuration-local.ps1` | Windows API harness smoke test. | Required validation path. |
@@ -170,13 +174,13 @@ CI:
 
 The repo has Dockerfiles, Compose files, `pyinstaller` in backend requirements, and Windows source-checkout launchers. It does not yet contain a signed `.exe`/`.msi` installer, installer project, code-signing plan, repair/modify/uninstall implementation, or evidence from the target purchased Dell Windows 10/11 Home validation machine.
 
-For Version 1.1.1, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
+For Version 1.2.0, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
 
 ## Current Risks
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Browser/full-stack smoke is source-checkout validated only | Version 1.1.1 keeps the visible Treatment Plan Timeliness evidence-queue banner and stale `frontend\dist` detection, keeps 42-step checklist workflow coverage, and adds deployment-readiness UI/audit/API hardening; local browser checks verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.2.0 keeps the visible Treatment Plan Timeliness evidence-queue banner, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, deployment-readiness UI/audit/API hardening, and example-plan upload validation; local browser checks verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

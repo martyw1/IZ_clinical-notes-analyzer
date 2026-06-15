@@ -156,7 +156,7 @@ def test_login_access_attempts_capture_ip_intelligence(app_with_sqlite, monkeypa
     app, session_local = app_with_sqlite
 
     monkeypatch.setattr(
-        'app.api.routes.lookup_access_intel',
+        'app.api.auth_user_routes.lookup_access_intel',
         lambda *_args, **_kwargs: AccessIntelResult(
             source_ip='8.8.8.8',
             ip_scope='public',

@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current patch version: `1.1.1` / build `2026.06.12.1`.
+Current patch version: `1.2.0` / build `2026.06.15.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Version 1.1.1 is the deployment-readiness hardening patch. It keeps the Version 1 startup reliability, stale-build safeguards, and 42-step workflow coverage while adding redacted PDF metadata extraction, placeholder-name handling, timezone-aware audit display, UI button audit events, safe daily source checks, client-credentials API harness testing, and sanitized credential handling.
+Version 1.2.0 is the Windows local resilience and maintainability patch. It keeps the Version 1 startup reliability, stale-build safeguards, 42-step workflow coverage, redacted PDF handling, and API harness hardening while adding SQLite local-desktop hardening, same-browser session restore, Treatment Plans default landing for admins/managers, upload progress, accessible in-app dialogs, prompted source-checkout dependency setup, and focused route/component extraction.
 
 ## Prerequisites for Source Build
 
@@ -15,7 +15,7 @@ Version 1.1.1 is the deployment-readiness hardening patch. It keeps the Version 
 - PowerShell 5.1 or newer
 - Git only for development
 
-The release package includes built frontend assets. A source checkout can install Python and Node through `winget` when `scripts\preflight-windows.ps1 -AssumeYes` is used.
+The release package includes built frontend assets. Ordinary source-checkout launch prompts before installing Python, backend packages, or rebuilding frontend assets. Support automation can still pass `-AssumeYes` to run unattended setup.
 
 ## Setup
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Version 1.1.1 behavior: startup runs preflight once, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Version 1.2.0 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.1.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.1.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.2.0`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.2.0.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Version 1.1.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Version 1.2.0 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 

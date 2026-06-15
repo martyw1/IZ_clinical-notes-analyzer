@@ -37,6 +37,20 @@ function Add-Check {
     Write-Host "[$Status] $Name - $Message $Detail" -ForegroundColor $color
 }
 
+function Confirm-SetupAction {
+    param(
+        [string]$Action,
+        [string]$Detail = ''
+    )
+
+    if ($AssumeYes) { return $true }
+    Write-Host ''
+    Write-Host $Action -ForegroundColor Yellow
+    if ($Detail) { Write-Host $Detail }
+    $answer = Read-Host 'Continue? Type Y to proceed'
+    return ($answer.Trim().ToLowerInvariant() -match '^(y|yes)$')
+}
+
 function Invoke-PythonSnippetFile {
     param(
         [string]$PythonExe,
@@ -101,8 +115,8 @@ function Ensure-Python {
         Add-Check 'python' 'fail' 'Python 3.11+ is missing and winget is unavailable.' 'Install Python 3.12 from python.org, then rerun preflight.'
         return $null
     }
-    if (-not $AssumeYes) {
-        Add-Check 'python' 'fail' 'Python 3.11+ is missing.' 'Rerun with -AssumeYes to install Python 3.12 through winget.'
+    if (-not (Confirm-SetupAction -Action 'Python 3.11 or newer is missing. The launcher can install Python 3.12 for this Windows user account through winget.' -Detail 'This installs the standard Python runtime required by the local app.')) {
+        Add-Check 'python' 'fail' 'Python 3.11+ is missing.' 'Install Python 3.12 from python.org, or rerun with -AssumeYes to install through winget.'
         return $null
     }
 
@@ -205,6 +219,10 @@ function Ensure-Venv {
         Add-Check 'backend_dependencies' 'ok' 'Backend runtime dependencies import successfully.' ''
         return
     }
+    if (-not (Confirm-SetupAction -Action 'Backend Python packages are missing. The launcher can install them into backend\.venv for this checkout.' -Detail $requirements)) {
+        Add-Check 'backend_dependencies' 'fail' 'Backend runtime dependencies are missing.' 'Install them manually with backend\.venv\Scripts\python.exe -m pip install -r backend\requirements-windows-local.txt, or rerun with -AssumeYes.'
+        return
+    }
     Add-Check 'backend_dependencies' 'warn' 'Installing backend runtime dependencies.' $requirements
     & $VenvPython -m pip install -r $requirements
     if ($LASTEXITCODE -ne 0) {
@@ -303,6 +321,14 @@ function Ensure-Frontend {
         Add-Check 'frontend_build' 'warn' 'Rebuilding frontend because source files are newer than frontend\dist.' ''
     } else {
         Add-Check 'frontend_build' 'warn' 'Building frontend because frontend\dist is missing.' ''
+    }
+    if (-not (Confirm-SetupAction -Action 'The browser UI needs a frontend build. The launcher can run npm install and npm run build in the frontend folder.' -Detail (Join-Path $RootDir 'frontend'))) {
+        if ($buildExists) {
+            Add-Check 'frontend_build' 'warn' 'Frontend rebuild was declined; using the existing built browser UI.' $indexFile
+            return
+        }
+        Add-Check 'frontend_build' 'fail' 'Frontend build is missing and rebuild was declined.' 'Use a packaged release with frontend\dist, or rerun with -AssumeYes to build from source.'
+        return
     }
     Invoke-FrontendBuild -Npm $npm
 }

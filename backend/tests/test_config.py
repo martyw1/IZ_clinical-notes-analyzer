@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.config import Settings
-from app.db.session import resolve_database_url
+from app.db.session import engine, resolve_database_url
 
 
 def test_frontend_origins_list_parses_csv():
@@ -56,3 +56,13 @@ def test_resolve_database_url_keeps_localhost_outside_docker():
 def test_resolve_database_url_keeps_dedicated_external_host_inside_docker():
     original = 'postgresql+psycopg2://iz_clinical_notes:pass@db.example.org:5432/iz_clinical_notes_analyzer'
     assert resolve_database_url(original, in_docker=True) == 'postgresql+psycopg://iz_clinical_notes:pass@db.example.org:5432/iz_clinical_notes_analyzer'
+
+
+def test_sqlite_engine_enforces_local_desktop_pragmas():
+    if engine.dialect.name != 'sqlite':
+        pytest.skip('SQLite pragmas only apply to local desktop SQLite deployments.')
+
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql('PRAGMA foreign_keys').scalar() == 1
+        assert connection.exec_driver_sql('PRAGMA busy_timeout').scalar() >= 30000
+        assert connection.exec_driver_sql('PRAGMA journal_mode').scalar().lower() in {'wal', 'memory'}

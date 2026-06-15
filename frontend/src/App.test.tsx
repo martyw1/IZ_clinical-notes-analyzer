@@ -596,6 +596,7 @@ describe('App turnkey workflow', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     window.history.replaceState(null, '', '/')
+    window.sessionStorage.clear()
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn(() => 'blob:synthetic-export'),
@@ -607,6 +608,7 @@ describe('App turnkey workflow', () => {
   })
 
   it('renders the summary dashboard and admin tools for administrators', async () => {
+    window.history.replaceState(null, '', '/?view=dashboard')
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-a', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
@@ -633,7 +635,25 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText('As of upload time only')).toBeInTheDocument()
   })
 
+  it('restores a same-browser session and lands managers on treatment plans', async () => {
+    window.sessionStorage.setItem('iz-cna-session-token', 'stored-manager-token')
+    const fetchMock = installFetchMock({
+      'GET /api/users/me': userPayload('manager'),
+      'GET /api/charts': [],
+      'GET /api/patient-note-sets': [],
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/login'))).toBe(false)
+  })
+
   it('shows the canonical Treatment Plan Checklist Version 1', async () => {
+    window.history.replaceState(null, '', '/?view=dashboard')
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-checklist', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
@@ -910,6 +930,7 @@ describe('App turnkey workflow', () => {
   })
 
   it('lets an office manager drill into a criterion and save a decision', async () => {
+    window.history.replaceState(null, '', '/?view=reviews')
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-c', must_reset_password: false },
       'GET /api/users/me': userPayload('manager'),
@@ -955,6 +976,7 @@ describe('App turnkey workflow', () => {
   })
 
   it('shows profile management, admin user management, and forensic logs', async () => {
+    window.history.replaceState(null, '', '/?view=dashboard')
     let directory = [userPayload('admin'), userPayload('manager')]
 
     installFetchMock({
@@ -1101,6 +1123,7 @@ describe('App turnkey workflow', () => {
   })
 
   it('lets an admin edit and delete a selected managed user', async () => {
+    window.history.replaceState(null, '', '/?view=users')
     let directory = [userPayload('admin'), userPayload('manager')]
 
     installFetchMock({

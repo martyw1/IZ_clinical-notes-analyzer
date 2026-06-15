@@ -164,7 +164,7 @@ The Windows source-checkout runtime installs from:
 backend\requirements-windows-local.txt
 ```
 
-If `frontend\dist` is missing or older than the React source and Node.js/npm is available, preflight rebuilds the browser UI. If npm is not available, preflight warns that the served UI may be stale; use a packaged release or install Node.js/npm and rerun preflight before judging the UI.
+If backend dependencies, Python, or a frontend rebuild are needed, ordinary double-click startup asks before installing or rebuilding. Automated support runs can still use `-AssumeYes`. If `frontend\dist` is missing or older than the React source and Node.js/npm is available, preflight rebuilds the browser UI after confirmation. If npm is not available, preflight warns that the served UI may be stale; use a packaged release or install Node.js/npm and rerun preflight before judging the UI.
 
 ### Step 4: Save the first admin password
 
@@ -515,7 +515,7 @@ The startup script:
 8. Installs from `backend\requirements-windows-local.txt` for ordinary local runs.
 9. Validates the YAML Treatment Plan rules configuration without requiring pytest.
 10. Checks whether `frontend\dist` exists and whether it is older than the React source.
-11. Uses Node/npm to install and build frontend files when needed and available; otherwise it warns when the browser UI may be stale.
+11. Asks before using Node/npm to install and build frontend files when needed and available; otherwise it warns when the browser UI may be stale.
 12. Starts the local FastAPI desktop app on `http://localhost:8000`.
 13. Opens the browser unless started with `-NoBrowser`.
 
@@ -686,7 +686,7 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.1.1` keeps the visible updated-evidence-queue banner and aligns the screen colors with the local video walkthrough reference palette: dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.2.0` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
 
@@ -1045,7 +1045,7 @@ flowchart LR
 The current app version is:
 
 ```text
-1.1.1
+1.2.0
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

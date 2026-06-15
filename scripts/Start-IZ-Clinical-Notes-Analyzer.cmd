@@ -14,7 +14,7 @@ title IZ Clinical Notes Analyzer
 echo Starting IZ Clinical Notes Analyzer...
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\start-windows-local.ps1" -AssumeYes
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%\scripts\start-windows-local.ps1"
 set EXIT_CODE=%ERRORLEVEL%
 
 if not "%EXIT_CODE%"=="0" (

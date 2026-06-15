@@ -1,5 +1,14 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-15 v1.2.0 Windows local resilience and maintainability
+- Updated app/version metadata to `1.2.0` / build `2026.06.15.1`.
+- Added SQLite local-desktop hardening with busy timeout, foreign-key enforcement, and WAL mode where supported.
+- Added same-browser session restore, admin/manager default landing on Treatment Plans, accessible confirmation dialogs, Escape dismissal, upload progress, and distinct Treatment Plan Timeliness status colors.
+- Updated ordinary Windows double-click startup so it no longer forces `-AssumeYes`; preflight prompts before installing Python, backend packages, or rebuilding frontend assets unless support automation explicitly opts into unattended setup.
+- Extracted auth/user, Treatment Plan Timeliness, and workflow-profile API routes into focused backend modules, and moved feedback dialogs/progress UI into `frontend/src/components/feedback.tsx`.
+- Validation passed focused backend route/upload/config tests, frontend Vitest, frontend build, and a real local browser upload of `example-treatment-plans\JTXP.pdf` against a disposable desktop server.
+- Computer Use opened the disposable local app in Chrome, signed in with the synthetic admin, and verified the Treatment Plans queue; local browser automation handled the example-PDF file selection/upload for reliable file input handling.
+
 ## 2026-06-09 v1.0.3 Treatment Plan Timeliness UI visibility patch
 - Updated app/version metadata to `1.0.3` / build `2026.06.09.4`.
 - Added a visible Treatment Plan Timeliness `Updated evidence queue` banner so operators can confirm the current UI is being served.

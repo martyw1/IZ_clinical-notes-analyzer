@@ -31,3 +31,6 @@ backend/.venv-*
 # Local reference artifacts that may contain PHI or recording exports
 /Product Requirements Document.docx
 /walkthroughs/
+
+.alleva.local.ps1
+alleva-api-test-logs/

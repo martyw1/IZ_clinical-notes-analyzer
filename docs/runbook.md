@@ -23,7 +23,7 @@
 - The ordinary Windows path runs one local FastAPI desktop service at `http://localhost:8000`.
 - The default database is SQLite under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
 - Uploads, logs, API reports, and `.env` also live under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-- Use `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` for double-click launch and `scripts\preflight-windows.ps1 -AssumeYes` for support validation.
+- Use `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` for double-click launch. Ordinary launch prompts before installing missing dependencies or rebuilding frontend assets. Use `scripts\preflight-windows.ps1 -AssumeYes` only for unattended support validation.
 - Do not move runtime data into the OneDrive-backed source repository.
 
 ## Developer/server runtime

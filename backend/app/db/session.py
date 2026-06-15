@@ -1,6 +1,6 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
 from fastapi import Request
@@ -51,8 +51,24 @@ def resolve_database_url(
 
 
 resolved_database_url = resolve_database_url(settings.database_url_value, postgres_service_host=settings.postgres_service_host)
-connect_args = {'check_same_thread': False} if resolved_database_url.startswith('sqlite') else {}
+is_sqlite_database = resolved_database_url.startswith('sqlite')
+connect_args = {'check_same_thread': False, 'timeout': 30} if is_sqlite_database else {}
 engine = create_engine(resolved_database_url, connect_args=connect_args, pool_pre_ping=True)
+
+
+if is_sqlite_database:
+    @event.listens_for(engine, 'connect')
+    def configure_sqlite_connection(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute('PRAGMA foreign_keys=ON')
+            cursor.execute('PRAGMA busy_timeout=30000')
+            if resolved_database_url != 'sqlite:///:memory:':
+                cursor.execute('PRAGMA journal_mode=WAL')
+        finally:
+            cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 register_session_audit_events(SessionLocal)
 

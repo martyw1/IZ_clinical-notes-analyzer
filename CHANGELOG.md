@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 - 2026-06-15
+
+### Added
+- Added SQLite local-desktop connection hardening with `busy_timeout`, foreign-key enforcement, and WAL mode where SQLite supports it.
+- Added same-browser session restore through `sessionStorage`, with `/api/users/me` validation and clean stale-session clearing.
+- Added upload progress feedback for manual binder uploads, including file count, total size, and upload/processing phase.
+- Added accessible in-app confirmation handling and Escape-key dialog dismissal.
+
+### Changed
+- Promoted version metadata to `1.2.0` / build `2026.06.15.1`.
+- Defaulted admins and office managers to the Treatment Plans work queue when no explicit view is requested.
+- Expanded Treatment Plan Timeliness status badge colors so high-risk, review, missing-data, conflict, unable, approved, and compliant states are visually distinct.
+- Updated the ordinary double-click Windows launcher so it no longer forces `-AssumeYes`; preflight now prompts before installing Python, backend packages, or rebuilding frontend assets unless automation explicitly opts into unattended setup.
+- Extracted auth/user, Treatment Plan Timeliness, and workflow-profile API routes into focused backend modules, and moved app feedback dialogs/progress UI into `frontend/src/components/feedback.tsx`.
+
+### Verified
+- Backend focused auth/user/audit, workflow, route/upload/config, and example treatment-plan tests passed, including existing `example-treatment-plans\JTXP.pdf` and `example-treatment-plans\XTXP.pdf` regression coverage.
+- Frontend Vitest passed with `12 passed`, including session-restore coverage.
+- Frontend production build passed.
+- Real local browser UI upload test passed against a disposable desktop server using `example-treatment-plans\JTXP.pdf`: login, manual upload, generated review queue, synthetic patient ID, and treatment-plan evidence text were visible.
+- Computer Use opened the disposable local app in Chrome, signed in with the synthetic admin, and verified the Treatment Plans queue; the actual example-PDF file selection/upload was completed through local browser automation for reliable file input handling.
+
 ## 1.1.1 - 2026-06-12
 
 ### Added

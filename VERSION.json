@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.1.1",
-  "build": "2026.06.12.1",
+  "version": "1.2.0",
+  "build": "2026.06.15.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-06-12",
+  "release_date": "2026-06-15",
   "git_branch": "main",
-  "version_name": "Version 1.1.1 Deployment-readiness hardening patch",
-  "description": "Adds deployment-readiness fixes for redacted PDF metadata extraction, placeholder names, timezone-aware audit display, UI button audit events, daily safe source checks, client-credentials API harness testing, and sanitized credential handling."
+  "version_name": "Version 1.2.0 Windows local resilience and maintainability patch",
+  "description": "Adds SQLite local-desktop hardening, same-browser session restore, role-aware Treatment Plans landing, upload progress, accessible in-app dialogs, clearer timeliness status colors, prompted source-checkout dependency setup, and focused backend/frontend maintainability extraction."
 }
