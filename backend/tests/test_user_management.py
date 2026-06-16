@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.models.models import AppSetting
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -173,7 +175,81 @@ def test_managed_roles_can_sign_in_and_access_allowed_endpoints(app_with_sqlite)
             assert note_sets.json() == []
 
             directory = client.get('/api/users', headers=headers)
-            assert directory.status_code == 403
+            if user['role'] == 'manager':
+                assert directory.status_code == 200
+            else:
+                assert directory.status_code == 403
+
+
+def test_manager_can_manage_counselors_but_not_privileged_accounts(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        admin_headers = _auth_headers(client)
+        manager = client.post(
+            '/api/users',
+            headers=admin_headers,
+            json={
+                'username': 'manager-user-crud',
+                'full_name': 'Manager User CRUD',
+                'password': 'temporary-pass-1234',
+                'role': 'manager',
+            },
+        )
+        assert manager.status_code == 200
+        manager_headers = _login_headers(client, 'manager-user-crud', 'temporary-pass-1234')
+
+        created = client.post(
+            '/api/users',
+            headers=manager_headers,
+            json={
+                'username': 'managed-counselor-01',
+                'full_name': 'Managed Counselor',
+                'password': 'temporary-pass-1234',
+                'role': 'counselor',
+            },
+        )
+        assert created.status_code == 200
+        counselor = created.json()
+
+        blocked_admin_create = client.post(
+            '/api/users',
+            headers=manager_headers,
+            json={
+                'username': 'blocked-admin',
+                'full_name': 'Blocked Admin',
+                'password': 'temporary-pass-1234',
+                'role': 'admin',
+            },
+        )
+        assert blocked_admin_create.status_code == 403
+
+        updated = client.patch(
+            f"/api/users/{counselor['id']}",
+            headers=manager_headers,
+            json={'full_name': 'Managed Counselor Updated', 'is_locked': True},
+        )
+        assert updated.status_code == 200
+        assert updated.json()['full_name'] == 'Managed Counselor Updated'
+        assert updated.json()['is_locked'] is True
+
+        blocked_promotion = client.patch(f"/api/users/{counselor['id']}", headers=manager_headers, json={'role': 'admin'})
+        assert blocked_promotion.status_code == 403
+
+        reset = client.post(
+            f"/api/users/{counselor['id']}/reset-password",
+            headers=manager_headers,
+            json={'new_password': 'replacement-pass-1234', 'require_reset_on_login': False},
+        )
+        assert reset.status_code == 200
+        assert reset.json()['is_locked'] is False
+
+        blocked_manager_update = client.patch(f"/api/users/{manager.json()['id']}", headers=manager_headers, json={'full_name': 'Self Edit'})
+        assert blocked_manager_update.status_code == 403
+
+        deleted = client.delete(f"/api/users/{counselor['id']}", headers=manager_headers)
+        assert deleted.status_code == 200
+        assert deleted.json()['status'] == 'deleted'
 
 
 def test_admin_can_delete_unused_managed_user(app_with_sqlite):
@@ -265,3 +341,64 @@ def test_admin_can_view_and_update_app_settings(app_with_sqlite):
         assert payload['organization_name'] == 'R3 Recovery Services QA'
         assert payload['llm_enabled'] is True
         assert payload['llm_api_key_configured'] is True
+
+
+def test_saved_llm_configuration_can_call_openai_compatible_json_endpoint(app_with_sqlite, monkeypatch):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        updated = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'llm_enabled': True,
+                'llm_base_url': 'https://llm.example.test/v1',
+                'llm_model': 'synthetic-model',
+                'llm_api_key': 'sk-synthetic-llm',
+                'access_lookup_timeout_seconds': 5,
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()['llm_api_key_configured'] is True
+
+    import app.services.llm_assist as llm_module
+
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {'choices': [{'message': {'content': '{"status":"ok","missing":[]}'}}]}
+
+    class FakeClient:
+        def __init__(self, timeout):
+            captured['timeout'] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, endpoint, *, json, headers):
+            captured['endpoint'] = endpoint
+            captured['payload'] = json
+            captured['authorization'] = headers.get('Authorization')
+            return FakeResponse()
+
+    monkeypatch.setattr(llm_module.httpx, 'Client', FakeClient)
+
+    db = session_local()
+    try:
+        app_settings = db.execute(select(AppSetting)).scalar_one()
+        assert llm_module.llm_is_configured(app_settings) is True
+        payload = llm_module.call_llm_json(app_settings, system_prompt='Return JSON.', user_prompt='Check synthetic note.')
+        assert payload == {'status': 'ok', 'missing': []}
+        assert captured['endpoint'] == 'https://llm.example.test/v1/chat/completions'
+        assert captured['payload']['model'] == 'synthetic-model'
+        assert captured['authorization'] == 'Bearer sk-synthetic-llm'
+    finally:
+        db.close()

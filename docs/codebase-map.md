@@ -12,7 +12,7 @@ This map started as the S0 baseline inventory and now also notes the v0.5.0 impl
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, and local audit logs under per-user app data. Docker and PostgreSQL exist for developer/server scenarios, but are not acceptable as ordinary Windows 10/11 Home requirements.
 
-Current implementation includes clinical-note binder upload, chart-audit review, the S2 first-class Treatment Plan Timeliness Tracker, S3 upload hardening, S4 direct API harness hardening, S5 admin-managed workflow profile CRUD/versioning with a seeded Treatment Plan Timeliness profile, and S6 expanded smoke coverage. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Windows installer packaging and target Dell validation remain release blockers.
+Current implementation includes clinical-note binder upload, chart-audit review, the first-class Treatment Plan Timeliness Tracker, upload hardening, direct API harness hardening, admin/manager workflow profile CRUD/versioning with a seeded Treatment Plan Timeliness profile, role-scoped user management, stored EMR endpoint profiles, and expanded smoke coverage. The timeliness tracker now has active-client records, LOC history, treatment-plan records, manual overrides, dashboard status APIs, and a React detail page. Windows installer packaging and target Dell validation remain release blockers.
 
 ## Backend Entrypoints
 
@@ -33,8 +33,8 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 
 | Area | Files | Current behavior |
 |---|---|---|
-| Models | `backend/app/models/models.py` | Users, app settings, charts, patient note sets/documents, workflow transitions, workflow definitions/versions, audit item responses, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. |
-| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit-log APIs plus timeliness dashboard/detail/override and workflow definition/version schemas. |
+| Models | `backend/app/models/models.py` | Users, app settings, EMR endpoint profiles, charts, patient note sets/documents, workflow transitions, workflow definitions/versions, audit item responses, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. |
+| Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR endpoint profiles/chart/note-set/audit-log APIs plus timeliness dashboard/detail/override and workflow definition/version schemas. |
 | Config | `backend/app/core/config.py` | SQLite-first defaults; relative DB/upload/log paths resolve into OS-local app data; local PostgreSQL only allowed for supported developer/server modes. |
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, password hashing/policy, role checks, password-reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File type/count/size validation, safe filenames, patient ID detection, encrypted file writes, path traversal prevention, encrypted text helper. |
@@ -56,7 +56,7 @@ Current implementation includes clinical-note binder upload, chart-audit review,
 | `frontend/src/App.test.tsx` | Vitest/Testing Library workflow tests with mocked API routes. |
 | `frontend/vite.config.ts` | Vite React build/test config. |
 
-Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `uploads`, `profile`, `users`, `logs`, and `settings`. The Treatment Plans view provides the current app-version updated evidence queue banner, status filters, search, dashboard counts, active-client queue, source/staff/LOC due-date comparison, detail rule results, LOC history, treatment-plan evidence history, task-list copy/export, overrides, source-mode status cards, and audit history. Admin Settings also exposes facility timezone, API client-credentials fields, workflow profile creation, draft version creation, checklist-seeded draft creation, publishing, archiving, and unused draft-only deletion.
+Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `uploads`, `profile`, `help`, `users`, `workflows`, `logs`, and `settings`. The Treatment Plans view provides the current app-version updated evidence queue banner, status filters, search, dashboard counts, active-client queue, source/staff/LOC due-date comparison, detail rule results, LOC history, treatment-plan evidence history, task-list copy/export, overrides, source-mode status cards, and audit history. The Workflow profiles view exposes profile creation, draft version creation, checklist-seeded draft creation, publishing, archiving, and unused draft-only deletion for admins and office managers. App settings is admin-only and holds facility timezone, API/FHIR client-credentials fields, EMR endpoint profiles, LLM configuration, readiness, and LOC-change settings.
 
 ## Scripts and Launchers
 
@@ -104,13 +104,13 @@ Platform defaults:
 
 ## Direct API Harness Flow
 
-1. Admin opens the settings UI or standalone `/api-configuration` page.
+1. Admin opens App settings or standalone `/api-configuration` page.
 2. API configuration reads/writes `AppSetting` fields through `/api/api-configuration`.
 3. Saved API key material uses the encrypted text envelope on the API configuration route.
 4. `/api/api-configuration/sample-openapi.json` and local operation targets support synthetic smoke tests.
 5. `/api/api-configuration/pull-definitions` probes Swagger/OpenAPI URLs and summarizes operations.
 6. `/api/api-configuration/test-operation` executes a selected OpenAPI operation with supplied or saved API key.
-7. EMR/FHIR routes expose profile, SMART discovery, and import-plan generation. They do not import live patient data.
+7. EMR/FHIR routes expose profile, endpoint profiles, FHIR/OAuth discovery, and import-plan generation. They do not import live patient data.
 
 Boundary: this harness is for configuration, testing, OpenAPI discovery, and future-readiness planning. It is not live Alleva patient import approval.
 
@@ -174,13 +174,13 @@ CI:
 
 The repo has Dockerfiles, Compose files, `pyinstaller` in backend requirements, and Windows source-checkout launchers. It does not yet contain a signed `.exe`/`.msi` installer, installer project, code-signing plan, repair/modify/uninstall implementation, or evidence from the target purchased Dell Windows 10/11 Home validation machine.
 
-For Version 1.2.0, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
+For Version 1.3.0, Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop.
 
 ## Current Risks
 
 | Risk | Evidence | Impact |
 |---|---|---|
-| Browser/full-stack smoke is source-checkout validated only | Version 1.2.0 keeps the visible Treatment Plan Timeliness evidence-queue banner, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, deployment-readiness UI/audit/API hardening, and example-plan upload validation; local browser checks verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.3.0 keeps the visible Treatment Plan Timeliness evidence-queue banner, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, deployment-readiness UI/audit/API hardening, role/help/workflow-profile coverage, and example-plan upload validation; local browser checks verify the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | LOC-change update window is unvalidated | PRD open question asks what "immediate" means after LOC change. | Must stay configurable and visibly unvalidated. |
 | Direct API harness remains test-only for live vendors | S4 added offline OpenAPI, saved-key encryption, redacted result/report, timeout/error, and audit redaction coverage. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; S3 removed original filenames and note-derived strings from patient-note upload/download audit details. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

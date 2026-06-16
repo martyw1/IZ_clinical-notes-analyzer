@@ -38,6 +38,7 @@ from app.services.audit import log_event
 
 
 router = APIRouter()
+USER_MANAGER_ROLES = (Role.admin, Role.manager)
 
 
 def _utc_now() -> datetime:
@@ -69,6 +70,20 @@ def _assert_admin_safety(target: User, db: Session, *, new_role: Role | None = N
     admin_would_be_removed = new_role == Role.counselor or new_role == Role.manager or new_is_active is False or new_is_locked is True
     if admin_would_be_removed and _active_admin_count(db) <= 1:
         raise HTTPException(status_code=400, detail='At least one active, unlocked admin account must remain')
+
+
+def _assert_user_management_scope(actor: User, target: User | None = None, *, requested_role: Role | None = None) -> None:
+    if actor.role == Role.admin:
+        return
+    if actor.role != Role.manager:
+        raise HTTPException(status_code=403, detail='Insufficient permissions')
+    if target is not None:
+        if target.id == actor.id:
+            raise HTTPException(status_code=403, detail='Use My account to manage your own profile')
+        if target.role != Role.counselor:
+            raise HTTPException(status_code=403, detail='Office managers can manage counselor accounts only')
+    if requested_role is not None and requested_role != Role.counselor:
+        raise HTTPException(status_code=403, detail='Office managers can create or assign counselor accounts only')
 
 
 def _user_snapshot(user: User) -> dict[str, object]:
@@ -326,7 +341,7 @@ def change_my_password(
 
 
 @router.get('/users', response_model=list[UserOut])
-def list_users(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+def list_users(request: Request, user: User = Depends(require_roles(*USER_MANAGER_ROLES)), db: Session = Depends(get_db)):
     users = list(db.execute(select(User).order_by(User.role.asc(), User.username.asc())).scalars().all())
     log_event(
         db,
@@ -343,10 +358,11 @@ def list_users(request: Request, user: User = Depends(require_roles(Role.admin))
 
 
 @router.post('/users', response_model=UserOut)
-def create_user(payload: UserCreate, request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, request: Request, user: User = Depends(require_roles(*USER_MANAGER_ROLES)), db: Session = Depends(get_db)):
     username = payload.username.strip()
     if not username:
         raise HTTPException(status_code=400, detail='Username is required')
+    _assert_user_management_scope(user, requested_role=payload.role)
     exists = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=409, detail='Username exists')
@@ -379,10 +395,11 @@ def create_user(payload: UserCreate, request: Request, user: User = Depends(requ
 
 
 @router.patch('/users/{user_id}', response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, request: Request, actor: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+def update_user(user_id: int, payload: UserUpdate, request: Request, actor: User = Depends(require_roles(*USER_MANAGER_ROLES)), db: Session = Depends(get_db)):
     target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail='User not found')
+    _assert_user_management_scope(actor, target, requested_role=payload.role)
 
     if _is_bootstrap_admin(target):
         disallowed = any(
@@ -435,12 +452,13 @@ def admin_reset_password(
     user_id: int,
     payload: UserPasswordResetAdmin,
     request: Request,
-    actor: User = Depends(require_roles(Role.admin)),
+    actor: User = Depends(require_roles(*USER_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail='User not found')
+    _assert_user_management_scope(actor, target)
     if _is_bootstrap_admin(target):
         raise HTTPException(status_code=400, detail='The bootstrap admin password is fixed and cannot be changed in-app')
 
@@ -467,10 +485,11 @@ def admin_reset_password(
 
 
 @router.delete('/users/{user_id}')
-def delete_user(user_id: int, request: Request, actor: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+def delete_user(user_id: int, request: Request, actor: User = Depends(require_roles(*USER_MANAGER_ROLES)), db: Session = Depends(get_db)):
     target = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail='User not found')
+    _assert_user_management_scope(actor, target)
     if actor.id == target.id:
         raise HTTPException(status_code=400, detail='You cannot delete your own account')
     if _is_bootstrap_admin(target):

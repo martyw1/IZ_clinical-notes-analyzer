@@ -23,7 +23,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'checklist' | 'uploads' | 'profile' | 'users' | 'logs' | 'settings'
+type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'checklist' | 'uploads' | 'profile' | 'users' | 'workflows' | 'logs' | 'settings' | 'help'
 
 type VersionInfo = {
   app_name: string
@@ -304,8 +304,16 @@ type AppSettings = {
   emr_smart_client_id: string
   emr_smart_client_secret_configured: boolean
   emr_smart_token_url: string
+  emr_smart_token_auth_style: string
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  emr_periodic_check_enabled: boolean
+  emr_periodic_check_interval_minutes: number
+  emr_last_check_at: string | null
+  emr_last_check_status: string
+  emr_last_check_message: string
+  emr_last_successful_check_at: string | null
+  emr_last_failure_at: string | null
   facility_timezone: string
   effective_timezone: string
   effective_timezone_label: string
@@ -339,8 +347,11 @@ type AppSettingsForm = {
   emr_smart_client_secret: string
   clear_emr_smart_client_secret: boolean
   emr_smart_token_url: string
+  emr_smart_token_auth_style: string
   emr_smart_scopes: string
   emr_api_timeout_seconds: number
+  emr_periodic_check_enabled: boolean
+  emr_periodic_check_interval_minutes: number
   facility_timezone: string
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
@@ -524,6 +535,46 @@ type EmrProfile = {
   required_vendor_inputs: string[]
 }
 
+type EmrEndpointProfile = {
+  id: number
+  profile_key: string
+  display_name: string
+  vendor_name: string
+  adapter_key: string
+  fhir_base_url: string
+  openapi_url: string
+  token_url: string
+  token_auth_style: string
+  client_id: string
+  client_id_configured: boolean
+  client_secret_configured: boolean
+  scopes: string
+  timeout_seconds: number
+  is_active: boolean
+  is_default: boolean
+  notes: string
+  created_by_id: number | null
+  updated_by_id: number | null
+  created_at: string
+  updated_at: string
+}
+
+type EmrEndpointProfileForm = {
+  profile_key: string
+  display_name: string
+  vendor_name: string
+  adapter_key: string
+  fhir_base_url: string
+  openapi_url: string
+  token_url: string
+  token_auth_style: string
+  client_id: string
+  client_secret: string
+  scopes: string
+  timeout_seconds: number
+  notes: string
+}
+
 type EmrDiscovery = {
   status: string
   smart_configuration_url: string
@@ -683,11 +734,13 @@ const VIEW_LABELS: Record<AppView, string> = {
   checklist: 'Checklist',
   profile: 'My account',
   users: 'User management',
+  workflows: 'Workflow profiles',
   logs: 'Forensic logs',
-  settings: 'Settings',
+  settings: 'App settings',
+  help: 'Help',
 }
 
-const APP_VIEWS: AppView[] = ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'logs', 'settings']
+const APP_VIEWS: AppView[] = ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
 
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
@@ -704,6 +757,102 @@ const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]
   },
   counselor: {},
 }
+
+const ROLE_CAPABILITIES = [
+  {
+    role: 'Admin',
+    can: [
+      'Use every screen and action, including user management, workflow profiles, app settings, API/EMR setup, LLM setup, logs, uploads, reviews, overrides, exports, and readiness checks.',
+    ],
+    cannot: ['Change the fixed bootstrap admin password in-app.'],
+  },
+  {
+    role: 'Office manager',
+    can: [
+      'Use the treatment-plan queue, review queue, manual upload/update, counselor user management, workflow profile editing/versioning, manager approvals/returns, manual timeliness overrides, exports, and own account.',
+    ],
+    cannot: ['Open App settings, API/EMR configuration, LLM setup, forensic logs, or manage admin/manager accounts.'],
+  },
+  {
+    role: 'Counselor',
+    can: ['Manual upload/update for their own binders, view accessible queues/details, respond to returned review work, export permitted details, and manage their own account.'],
+    cannot: ['Manage users, settings, API/EMR setup, workflow profiles, forensic logs, manager approvals, or treatment-plan overrides.'],
+  },
+]
+
+const HELP_SECTIONS = [
+  {
+    title: 'Dashboard',
+    items: [
+      'Refresh reloads the current workspace and clears stale queue data.',
+      'EMR/API access shows readiness-only status until vendor mapping and compliance approval are complete.',
+      'Run daily check performs a safe readiness check only; it does not import live Alleva patient charts.',
+      'Upload binder starts a manual upload or update workflow; Open review queue opens generated chart-review work.',
+    ],
+  },
+  {
+    title: 'Treatment Plans',
+    items: [
+      'Status filters narrow the queue by Overdue, Urgent, Due Soon, Returned, Needs Review, Missing Data, Conflicting Evidence, Unable to Evaluate, Compliant, or Approved.',
+      'View evidence opens the exact date fields used for the selected due-date comparison.',
+      'Copy task list and Export task list create non-secret work lists for follow-up tracking.',
+      'Manual override is available only to admins and office managers and requires a reason.',
+    ],
+  },
+  {
+    title: 'Manual Upload',
+    items: [
+      'Initial creates the first binder for a patient ID; Update supersedes the active binder and re-runs evaluation.',
+      'Detect patient ID reads supported synthetic/export files conservatively; conflicting IDs are blocked.',
+      'Upload and run automated evaluation stores files encrypted, creates a review chart, syncs treatment-plan tracker records, and evaluates deterministic rules.',
+      'Delete uploaded binder removes the binder, linked generated review, upload-derived treatment-plan data, and encrypted stored files when authorized.',
+    ],
+  },
+  {
+    title: 'Review Queue',
+    items: [
+      'Open automated review loads the selected chart and criterion workbench.',
+      'Mark OK, Mark not OK, Not applicable, and Save criterion review changes are available to admins and office managers.',
+      'Approve and Return to counselor are manager/admin decisions; returns require a correction note.',
+      'Re-analyze reruns deterministic checks from the stored encrypted binder while preserving an operator-approved display name.',
+    ],
+  },
+  {
+    title: 'User Management',
+    items: [
+      'Admins can create and maintain admin, manager, and counselor accounts.',
+      'Office managers can create, update, unlock, deactivate, reset, or delete counselor accounts only.',
+      'Delete user works only when the account has no linked clinical, workflow, or audit history; otherwise deactivate it.',
+    ],
+  },
+  {
+    title: 'Workflow Profiles',
+    items: [
+      'Create profile defines a versioned checklist/workflow logic container.',
+      'Seed draft from 42-step checklist loads the canonical checklist into editable workflow JSON.',
+      'Create draft version records proposed logic changes; Publish makes that version current and archives the previous published version.',
+      'Archive profile retires a workflow profile without deleting its audit history.',
+    ],
+  },
+  {
+    title: 'App Settings, API/EMR, And LLM',
+    items: [
+      'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
+      'FHIR base URL means the root FHIR R4 endpoint supplied by the EMR vendor, for example an Alleva tenant FHIR endpoint ending in /fhir/R4.',
+      'OAuth/FHIR client ID, secret, token URL, and scopes are stored for readiness testing; secrets are encrypted and never returned to the browser.',
+      'Stored EMR endpoint profiles let admins save future EMR/FHIR endpoint options and activate the one used by current readiness/API tests.',
+      'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
+    ],
+  },
+  {
+    title: 'Forensic Logs And Account',
+    items: [
+      'Forensic logs are admin-only and show request, access, workflow, upload, settings, API, and user-management events.',
+      'My account lets every role update their display name and change managed-account passwords.',
+      'The fixed bootstrap admin account is recovered outside the app and cannot change its password in-app.',
+    ],
+  },
+]
 
 class ApiRequestError extends Error {
   status: number
@@ -815,11 +964,32 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     emr_smart_client_secret: '',
     clear_emr_smart_client_secret: false,
     emr_smart_token_url: settings.emr_smart_token_url || 'https://authorization.allevasoft.com/connect/token',
+    emr_smart_token_auth_style: settings.emr_smart_token_auth_style || 'body',
     emr_smart_scopes: settings.emr_smart_scopes,
     emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
+    emr_periodic_check_enabled: settings.emr_periodic_check_enabled,
+    emr_periodic_check_interval_minutes: settings.emr_periodic_check_interval_minutes || 1440,
     facility_timezone: settings.facility_timezone || 'local_machine',
     treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
+  }
+}
+
+function createEmrEndpointProfileForm(): EmrEndpointProfileForm {
+  return {
+    profile_key: '',
+    display_name: '',
+    vendor_name: 'Alleva',
+    adapter_key: 'alleva-fhir-document-manager',
+    fhir_base_url: '',
+    openapi_url: '',
+    token_url: 'https://authorization.allevasoft.com/connect/token',
+    token_auth_style: 'body',
+    client_id: '',
+    client_secret: '',
+    scopes: 'patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs',
+    timeout_seconds: 10,
+    notes: '',
   }
 }
 
@@ -1218,6 +1388,7 @@ export function App() {
   const [patientIdDetection, setPatientIdDetection] = useState<PatientIdDetection | null>(null)
   const [patientIdTouched, setPatientIdTouched] = useState(false)
   const [lastAutoFilledPatientId, setLastAutoFilledPatientId] = useState('')
+  const [deleteNoteSetConfirmation, setDeleteNoteSetConfirmation] = useState('')
   const uploadPatientIdRef = useRef('')
   const patientIdTouchedRef = useRef(false)
   const lastAutoFilledPatientIdRef = useRef('')
@@ -1242,6 +1413,9 @@ export function App() {
   const [settingsForm, setSettingsForm] = useState<AppSettingsForm | null>(null)
   const [readiness, setReadiness] = useState<RuntimeReadiness | null>(null)
   const [emrProfile, setEmrProfile] = useState<EmrProfile | null>(null)
+  const [emrEndpointProfiles, setEmrEndpointProfiles] = useState<EmrEndpointProfile[]>([])
+  const [selectedEmrEndpointProfileId, setSelectedEmrEndpointProfileId] = useState<number | null>(null)
+  const [emrEndpointProfileForm, setEmrEndpointProfileForm] = useState<EmrEndpointProfileForm>(createEmrEndpointProfileForm())
   const [emrDiscovery, setEmrDiscovery] = useState<EmrDiscovery | null>(null)
   const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
   const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
@@ -1279,14 +1453,23 @@ export function App() {
     () => workflowDefinitions.find((definition) => definition.id === selectedWorkflowDefinitionId) || workflowDefinitions[0] || null,
     [selectedWorkflowDefinitionId, workflowDefinitions],
   )
+  const selectedEmrEndpointProfile = useMemo(
+    () => emrEndpointProfiles.find((profile) => profile.id === selectedEmrEndpointProfileId) || emrEndpointProfiles[0] || null,
+    [emrEndpointProfiles, selectedEmrEndpointProfileId],
+  )
   const selectedWorkflowDefinitionCanDelete = Boolean(
     selectedWorkflowDefinition &&
       selectedWorkflowDefinition.current_version_id == null &&
       selectedWorkflowDefinition.versions.every((version) => version.status === 'draft'),
   )
+  const canManageUsers = user?.role === 'admin' || user?.role === 'manager'
+  const canManageWorkflowProfiles = user?.role === 'admin' || user?.role === 'manager'
+  const canManageSelectedUser = Boolean(user?.role === 'admin' || (user?.role === 'manager' && selectedManagedUser?.role === 'counselor'))
   const selectedManagedUserIsBootstrap = isBootstrapAdmin(selectedManagedUser)
   const selectedManagedUserIsCurrentUser = selectedManagedUser?.id === user?.id
-  const selectedManagedUserCanDelete = Boolean(selectedManagedUser && !selectedManagedUserIsBootstrap && !selectedManagedUserIsCurrentUser)
+  const selectedManagedUserCanDelete = Boolean(
+    selectedManagedUser && canManageSelectedUser && !selectedManagedUserIsBootstrap && !selectedManagedUserIsCurrentUser,
+  )
 
   const filteredUsers = useMemo(() => {
     const query = userFilters.query.trim().toLowerCase()
@@ -1437,6 +1620,7 @@ export function App() {
     const response = await fetch(`${API}${path}`, { ...init, headers })
     const payload = (await readJson(response)) as ApiError | T | null
     if (!response.ok) {
+      if (response.status === 401) handleExpiredSession()
       throw new ApiRequestError(response.status, readErrorMessage(response.status, payload as ApiError | null))
     }
     return payload as T
@@ -1557,12 +1741,16 @@ export function App() {
     setAppSettings(null)
     setSettingsForm(null)
     setEmrProfile(null)
+    setEmrEndpointProfiles([])
+    setSelectedEmrEndpointProfileId(null)
+    setEmrEndpointProfileForm(createEmrEndpointProfileForm())
     setEmrDiscovery(null)
     setEmrImportPlan(null)
     setTreatmentPlanChecklist(null)
     setReviewSourceDiscovery(null)
     syncWorkflowDefinitions([])
     setUploadProgress(null)
+    setDeleteNoteSetConfirmation('')
     setReviewDirty(false)
   }
 
@@ -1591,7 +1779,11 @@ export function App() {
           view: screen,
         },
       }),
-    }).catch(() => undefined)
+    })
+      .then((response) => {
+        if (response.status === 401) handleExpiredSession()
+      })
+      .catch(() => undefined)
   }
 
   function handleButtonAuditCapture(event: MouseEvent<HTMLElement>) {
@@ -1632,9 +1824,17 @@ export function App() {
   }
 
   async function loadWorkflowDefinitions(preferredId?: number | null) {
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin' && user?.role !== 'manager') return
     const payload = await apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true')
     syncWorkflowDefinitions(payload, preferredId)
+  }
+
+  async function loadEmrEndpointProfiles(preferredId?: number | null) {
+    if (user?.role !== 'admin') return
+    const payload = await apiRequest<EmrEndpointProfile[]>('/emr/profiles')
+    setEmrEndpointProfiles(payload)
+    const selectedId = preferredId ?? selectedEmrEndpointProfileId ?? payload.find((profile) => profile.is_default)?.id ?? payload[0]?.id ?? null
+    setSelectedEmrEndpointProfileId(selectedId)
   }
 
   async function loadTreatmentPlanChecklist() {
@@ -1654,6 +1854,11 @@ export function App() {
     try {
       const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery/run-daily-check', { method: 'POST' })
       setReviewSourceDiscovery(payload)
+      if (activeView === 'settings' && user?.role === 'admin') {
+        const latestSettings = await apiRequest<AppSettings>('/settings')
+        setAppSettings(latestSettings)
+        setSettingsForm(createSettingsForm(latestSettings))
+      }
       setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to run daily review-source check')
@@ -1701,6 +1906,7 @@ export function App() {
     const detail = await apiRequest<PatientNoteSetDetail>(`/patient-note-sets/${noteSetId}`)
     setSelectedNoteSet(detail)
     setSelectedNoteSetId(detail.id)
+    setDeleteNoteSetConfirmation('')
   }
 
   function timelinessQueryString() {
@@ -1732,7 +1938,7 @@ export function App() {
   }
 
   async function loadUsers(preferredId?: number | null) {
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin' && user?.role !== 'manager') return
     const nextUsers = await apiRequest<User[]>('/users')
     setUsers(nextUsers)
     syncSelectedManagedUser(nextUsers, preferredId)
@@ -1740,15 +1946,16 @@ export function App() {
 
   async function loadSettings() {
     if (user?.role !== 'admin') return
-    const [payload, profile, definitions] = await Promise.all([
+    const [payload, profile, endpointProfiles] = await Promise.all([
       apiRequest<AppSettings>('/settings'),
       apiRequest<EmrProfile>('/emr/profile'),
-      apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true'),
+      apiRequest<EmrEndpointProfile[]>('/emr/profiles'),
     ])
     setAppSettings(payload)
     setSettingsForm(createSettingsForm(payload))
     setEmrProfile(profile)
-    syncWorkflowDefinitions(definitions)
+    setEmrEndpointProfiles(endpointProfiles)
+    setSelectedEmrEndpointProfileId((current) => current ?? endpointProfiles.find((endpointProfile) => endpointProfile.is_default)?.id ?? endpointProfiles[0]?.id ?? null)
   }
 
   async function loadReadiness() {
@@ -1788,11 +1995,12 @@ export function App() {
       setReviewSourceDiscovery(sourceDiscovery)
 
       if (profile.role === 'admin') {
-        const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile, definitions] = await Promise.all([
+        const [directory, configuredSettings, runtimeReadiness, configuredEmrProfile, endpointProfiles, definitions] = await Promise.all([
           apiRequest<User[]>('/users'),
           apiRequest<AppSettings>('/settings'),
           apiRequest<RuntimeReadiness>('/system/readiness'),
           apiRequest<EmrProfile>('/emr/profile'),
+          apiRequest<EmrEndpointProfile[]>('/emr/profiles'),
           apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true'),
         ])
         setUsers(directory)
@@ -1801,6 +2009,25 @@ export function App() {
         setSettingsForm(createSettingsForm(configuredSettings))
         setReadiness(runtimeReadiness)
         setEmrProfile(configuredEmrProfile)
+        setEmrEndpointProfiles(endpointProfiles)
+        setSelectedEmrEndpointProfileId((current) => current ?? endpointProfiles.find((endpointProfile) => endpointProfile.is_default)?.id ?? endpointProfiles[0]?.id ?? null)
+        syncWorkflowDefinitions(definitions, selectedWorkflowDefinitionId)
+      } else if (profile.role === 'manager') {
+        setNewUserForm((current) => ({ ...current, role: 'counselor' }))
+        const [directory, definitions] = await Promise.all([
+          apiRequest<User[]>('/users'),
+          apiRequest<WorkflowDefinition[]>('/workflow-definitions?include_archived=true'),
+        ])
+        setUsers(directory)
+        syncSelectedManagedUser(directory, selectedManagedUserId)
+        setAppSettings(null)
+        setSettingsForm(null)
+        setReadiness(null)
+        setEmrProfile(null)
+        setEmrEndpointProfiles([])
+        setSelectedEmrEndpointProfileId(null)
+        setEmrDiscovery(null)
+        setEmrImportPlan(null)
         syncWorkflowDefinitions(definitions, selectedWorkflowDefinitionId)
       } else {
         setUsers([])
@@ -1810,6 +2037,8 @@ export function App() {
         setSettingsForm(null)
         setReadiness(null)
         setEmrProfile(null)
+        setEmrEndpointProfiles([])
+        setSelectedEmrEndpointProfileId(null)
         setEmrDiscovery(null)
         setEmrImportPlan(null)
         syncWorkflowDefinitions([])
@@ -1877,6 +2106,18 @@ export function App() {
   useEffect(() => {
     if (activeView === 'settings' && token && user?.role === 'admin' && !mustResetPassword) {
       void loadSettings()
+    }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'users' && token && (user?.role === 'admin' || user?.role === 'manager') && !mustResetPassword) {
+      void loadUsers()
+    }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView === 'workflows' && token && (user?.role === 'admin' || user?.role === 'manager') && !mustResetPassword) {
+      void loadWorkflowDefinitions(selectedWorkflowDefinitionId)
     }
   }, [activeView, token, user, mustResetPassword])
 
@@ -2183,6 +2424,33 @@ export function App() {
     }
   }
 
+  async function deleteSelectedNoteSet() {
+    if (!selectedNoteSet) return
+    if (deleteNoteSetConfirmation.trim() !== selectedNoteSet.patient_id) {
+      setError('Type the patient ID exactly before deleting this uploaded binder.')
+      return
+    }
+
+    const deletedPatientId = selectedNoteSet.patient_id
+    const deletedVersion = selectedNoteSet.version
+    setIsBusy(true)
+    setError('')
+    try {
+      await apiRequest(`/patient-note-sets/${selectedNoteSet.id}`, { method: 'DELETE' })
+      setSelectedNoteSet(null)
+      setSelectedNoteSetId(null)
+      setSelectedChart(null)
+      setSelectedChartId(null)
+      setDeleteNoteSetConfirmation('')
+      await loadWorkspace()
+      setStatus(`Deleted uploaded binder version ${deletedVersion} for patient ${deletedPatientId}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete uploaded binder')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   function exportSelectedChart(format: 'json' | 'csv') {
     if (!selectedChart) {
       setError('Select a review before exporting a report.')
@@ -2426,7 +2694,7 @@ export function App() {
       const created = await apiRequest<User>('/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUserForm),
+        body: JSON.stringify({ ...newUserForm, role: user?.role === 'manager' ? 'counselor' : newUserForm.role }),
       })
       setNewUserForm({ username: '', full_name: '', password: '', role: 'counselor' })
       setUserFilters({ query: '', role: 'all' })
@@ -2443,13 +2711,17 @@ export function App() {
   async function handleSaveManagedUser(event: FormEvent) {
     event.preventDefault()
     if (!selectedManagedUser || !managedUserForm) return
+    if (!canManageSelectedUser) {
+      setError('This account is outside your user-management scope.')
+      return
+    }
     setIsBusy(true)
     setError('')
     try {
       const updated = await apiRequest<User>(`/users/${selectedManagedUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(managedUserForm),
+        body: JSON.stringify({ ...managedUserForm, role: user?.role === 'manager' ? 'counselor' : managedUserForm.role }),
       })
       await loadUsers(updated.id)
       setStatus(`Updated user ${updated.username}.`)
@@ -2463,6 +2735,10 @@ export function App() {
   async function handleAdminPasswordReset(event: FormEvent) {
     event.preventDefault()
     if (!selectedManagedUser || !adminPasswordReset.trim()) return
+    if (!canManageSelectedUser) {
+      setError('This account is outside your user-management scope.')
+      return
+    }
     setIsBusy(true)
     setError('')
     try {
@@ -2484,6 +2760,10 @@ export function App() {
   async function handleDeleteManagedUser(event: FormEvent) {
     event.preventDefault()
     if (!selectedManagedUser) return
+    if (!selectedManagedUserCanDelete) {
+      setError('This account cannot be deleted from your current role or while linked history exists.')
+      return
+    }
     if (deleteUserConfirmation.trim() !== selectedManagedUser.username) {
       setError(`Type ${selectedManagedUser.username} exactly to confirm deletion.`)
       return
@@ -2548,6 +2828,31 @@ export function App() {
   async function handleSettingsSave(event: FormEvent) {
     event.preventDefault()
     if (!settingsForm) return
+    const hasStoredEmrSecret = Boolean(appSettings?.emr_smart_client_secret_configured && !settingsForm.clear_emr_smart_client_secret)
+    const hasEmrSecret = Boolean(settingsForm.emr_smart_client_secret.trim() || hasStoredEmrSecret)
+    const hasStoredLlmKey = Boolean(appSettings?.llm_api_key_configured && !settingsForm.clear_llm_api_key)
+    const hasLlmKey = Boolean(settingsForm.llm_api_key.trim() || hasStoredLlmKey)
+    if (settingsForm.llm_enabled && (!settingsForm.llm_base_url.trim() || !settingsForm.llm_model.trim() || !hasLlmKey)) {
+      setError('To enable LLM analysis, enter the LLM base URL, model, and API key, or keep the existing stored key.')
+      return
+    }
+    if (settingsForm.emr_api_enabled) {
+      const scopes = new Set(settingsForm.emr_smart_scopes.split(/\s+/).filter(Boolean))
+      const missingScopes = ['patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'].filter((scope) => !scopes.has(scope))
+      if (!settingsForm.emr_fhir_base_url.trim() || !settingsForm.emr_smart_client_id.trim() || missingScopes.length) {
+        setError(
+          `To enable the EMR API connector, enter the FHIR base URL, client ID, and required read scopes. Missing scopes: ${missingScopes.join(', ') || 'none'}.`,
+        )
+        return
+      }
+    }
+    if (
+      settingsForm.emr_periodic_check_enabled &&
+      (!settingsForm.emr_fhir_base_url.trim() || !settingsForm.emr_smart_token_url.trim() || !settingsForm.emr_smart_client_id.trim() || !hasEmrSecret)
+    ) {
+      setError('To turn on periodic API checks, enter the FHIR base URL, OAuth token URL, client ID, and client secret, or keep the existing stored secret.')
+      return
+    }
     setIsBusy(true)
     setError('')
     try {
@@ -2562,6 +2867,57 @@ export function App() {
       setStatus('Application settings have been updated.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function handleCreateEmrEndpointProfile(event?: FormEvent) {
+    event?.preventDefault()
+    setIsBusy(true)
+    setError('')
+    try {
+      const created = await apiRequest<EmrEndpointProfile>('/emr/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emrEndpointProfileForm),
+      })
+      setEmrEndpointProfileForm(createEmrEndpointProfileForm())
+      await loadEmrEndpointProfiles(created.id)
+      setStatus(`Stored EMR endpoint profile ${created.display_name}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to create EMR endpoint profile')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function activateEmrEndpointProfile(profileId: number) {
+    setIsBusy(true)
+    setError('')
+    try {
+      const updatedSettings = await apiRequest<AppSettings>(`/emr/profiles/${profileId}/activate`, { method: 'POST' })
+      setAppSettings(updatedSettings)
+      setSettingsForm(createSettingsForm(updatedSettings))
+      await loadEmrEndpointProfiles(profileId)
+      setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
+      setStatus('EMR endpoint profile activated for API readiness testing.')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to activate EMR endpoint profile')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function deleteEmrEndpointProfile(profileId: number) {
+    setIsBusy(true)
+    setError('')
+    try {
+      const deleted = await apiRequest<{ status: string; profile_key: string }>(`/emr/profiles/${profileId}`, { method: 'DELETE' })
+      await loadEmrEndpointProfiles(null)
+      setStatus(`Deleted EMR endpoint profile ${deleted.profile_key}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete EMR endpoint profile')
     } finally {
       setIsBusy(false)
     }
@@ -2753,6 +3109,27 @@ export function App() {
     }
   }
 
+  function openApiConnectivityHarness() {
+    const harnessWindow = window.open('/api-configuration', '_blank')
+    const currentToken = readStoredSessionToken()
+    if (!harnessWindow || !currentToken) return
+    const sendSession = () => {
+      try {
+        harnessWindow.postMessage({ type: 'iz-cna-session-token', token: currentToken }, window.location.origin)
+      } catch {
+        // The harness still falls back to direct same-origin session reads when available.
+      }
+    }
+    const handleSessionRequest = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if ((event.data as { type?: string } | null)?.type === 'iz-cna-session-token-request') sendSession()
+    }
+    window.addEventListener('message', handleSessionRequest)
+    window.setTimeout(sendSession, 150)
+    window.setTimeout(sendSession, 800)
+    window.setTimeout(() => window.removeEventListener('message', handleSessionRequest), 5000)
+  }
+
   function openRejectedPatientUpload(chart: ChartDetail) {
     changeView('uploads')
     setUploadForm(
@@ -2922,7 +3299,7 @@ export function App() {
           </section>
 
           <nav className='view-tabs'>
-            {(['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile'] as AppView[]).map((view) => (
+            {(['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -2932,8 +3309,20 @@ export function App() {
                 {VIEW_LABELS[view]}
               </button>
             ))}
+            {user?.role === 'admin' || user?.role === 'manager'
+              ? (['users', 'workflows'] as AppView[]).map((view) => (
+                  <button
+                    key={view}
+                    className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
+                    onClick={() => changeView(view)}
+                    type='button'
+                  >
+                    {VIEW_LABELS[view]}
+                  </button>
+                ))
+              : null}
             {user?.role === 'admin'
-              ? (['users', 'logs', 'settings'] as AppView[]).map((view) => (
+              ? (['logs', 'settings'] as AppView[]).map((view) => (
                   <button
                     key={view}
                     className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -3095,16 +3484,26 @@ export function App() {
                     <button type='button' className='ghost-button' onClick={() => changeView('profile')}>
                       My account
                     </button>
-                    {user?.role === 'admin' ? (
+                    <button type='button' className='ghost-button' onClick={() => changeView('help')}>
+                      Help
+                    </button>
+                    {user?.role === 'admin' || user?.role === 'manager' ? (
                       <>
                         <button type='button' className='ghost-button' onClick={() => changeView('users')}>
                           User management
                         </button>
+                        <button type='button' className='ghost-button' onClick={() => changeView('workflows')}>
+                          Workflow profiles
+                        </button>
+                      </>
+                    ) : null}
+                    {user?.role === 'admin' ? (
+                      <>
                         <button type='button' className='ghost-button' onClick={() => changeView('logs')}>
                           Forensic logs
                         </button>
                         <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
-                          Settings
+                          App settings
                         </button>
                       </>
                     ) : null}
@@ -3152,6 +3551,62 @@ export function App() {
               </aside>
 	            </section>
 	          ) : null}
+
+          {activeView === 'help' ? (
+            <section className='panel detail-panel help-workspace'>
+              <div className='panel-heading'>
+                <div>
+                  <h2>Help</h2>
+                  <p>Role permissions, screen guides, and setup notes for local production use.</p>
+                </div>
+                <button type='button' className='ghost-button' onClick={() => changeView('dashboard')}>
+                  Back to dashboard
+                </button>
+              </div>
+
+              <section className='panel-subsection'>
+                <h3>Role permissions</h3>
+                <div className='role-matrix'>
+                  {ROLE_CAPABILITIES.map((roleInfo) => (
+                    <article key={roleInfo.role} className='finding-card'>
+                      <div className='finding-card__header'>
+                        <strong>{roleInfo.role}</strong>
+                        <span className='pill pill--neutral'>{roleInfo.can.length} allowed</span>
+                      </div>
+                      <h4>Can do</h4>
+                      <ul className='compact-list'>
+                        {roleInfo.can.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                      <h4>Cannot do</h4>
+                      <ul className='compact-list'>
+                        {roleInfo.cannot.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className='panel-subsection'>
+                <h3>Screen and button guide</h3>
+                <div className='help-grid'>
+                  {HELP_SECTIONS.map((section) => (
+                    <article key={section.title} className='finding-card help-card'>
+                      <h4>{section.title}</h4>
+                      <ul className='compact-list'>
+                        {section.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </section>
+          ) : null}
 
 	          {activeView === 'timeliness' ? (
 	            <section className='timeliness-workspace'>
@@ -3617,9 +4072,9 @@ export function App() {
                   </p>
                 </div>
                 <div className='button-row'>
-                  {user?.role === 'admin' ? (
-                    <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
-                      Manage Workflow
+                  {canManageWorkflowProfiles ? (
+                    <button type='button' className='ghost-button' onClick={() => changeView('workflows')}>
+                      Workflow profiles
                     </button>
                   ) : null}
                   <button type='button' className='ghost-button' onClick={() => void loadTreatmentPlanChecklist()} disabled={isBusy}>
@@ -4024,7 +4479,14 @@ export function App() {
                           <p>
                             Version {linkedNoteSet.version} from {formatDateTime(linkedNoteSet.created_at)} with {linkedNoteSet.file_count} file(s).
                           </p>
-                          <button type='button' className='ghost-button' onClick={() => void loadNoteSetDetail(linkedNoteSet.id)}>
+                          <button
+                            type='button'
+                            className='ghost-button'
+                            onClick={() => {
+                              setActiveView('uploads')
+                              void loadNoteSetDetail(linkedNoteSet.id)
+                            }}
+                          >
                             Open binder details
                           </button>
                         </div>
@@ -4282,7 +4744,13 @@ export function App() {
                     </p>
                     <p>{selectedNoteSet.upload_notes || 'No binder notes were entered.'}</p>
                     {selectedNoteSet.review_chart_id ? (
-                      <button type='button' onClick={() => void loadChartDetail(selectedNoteSet.review_chart_id!)}>
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setActiveView('reviews')
+                          void loadChartDetail(selectedNoteSet.review_chart_id!)
+                        }}
+                      >
                         Open automated review
                       </button>
                     ) : null}
@@ -4298,6 +4766,28 @@ export function App() {
                           </button>
                         </article>
                       ))}
+                    </div>
+                    <div className='danger-zone'>
+                      <strong>Delete this uploaded binder</strong>
+                      <p>
+                        Deletes this upload, its linked automated review, and the encrypted stored files from this computer. Audit logs remain.
+                      </p>
+                      <label>
+                        Type patient ID to confirm
+                        <input
+                          value={deleteNoteSetConfirmation}
+                          onChange={(event) => setDeleteNoteSetConfirmation(event.target.value)}
+                          placeholder={selectedNoteSet.patient_id}
+                        />
+                      </label>
+                      <button
+                        type='button'
+                        className='danger-button'
+                        onClick={() => void deleteSelectedNoteSet()}
+                        disabled={isBusy || deleteNoteSetConfirmation.trim() !== selectedNoteSet.patient_id}
+                      >
+                        Delete uploaded binder
+                      </button>
                     </div>
                   </section>
                 ) : null}
@@ -4383,13 +4873,17 @@ export function App() {
             </section>
           ) : null}
 
-          {activeView === 'users' && user?.role === 'admin' ? (
+          {activeView === 'users' && canManageUsers ? (
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
                 <div className='panel-heading'>
                   <div>
                     <h2>User management</h2>
-                    <p>Select a user to edit access, reset their password, or delete the account.</p>
+                    <p>
+                      {user?.role === 'admin'
+                        ? 'Select a user to edit access, reset their password, or delete the account.'
+                        : 'Office managers can maintain counselor accounts. Admin and manager accounts are visible but not editable here.'}
+                    </p>
                   </div>
                   <button type='button' className='ghost-button' onClick={() => void loadUsers()} disabled={isBusy}>
                     Refresh
@@ -4488,7 +4982,15 @@ export function App() {
                           </div>
                           <div>
                             <dt>Editable role</dt>
-                            <dd>{selectedManagedUserIsBootstrap ? 'Bootstrap admin is fixed' : 'Yes'}</dd>
+                            <dd>
+                              {selectedManagedUserIsBootstrap
+                                ? 'Bootstrap admin is fixed'
+                                : canManageSelectedUser
+                                  ? user?.role === 'manager'
+                                    ? 'Counselor only'
+                                    : 'Yes'
+                                  : 'No'}
+                            </dd>
                           </div>
                           <div>
                             <dt>Deletion</dt>
@@ -4508,6 +5010,7 @@ export function App() {
                           Full name
                           <input
                             value={managedUserForm.full_name}
+                            disabled={isBusy || !canManageSelectedUser}
                             onChange={(event) => setManagedUserForm((current) => (current ? { ...current, full_name: event.target.value } : current))}
                           />
                         </label>
@@ -4515,21 +5018,21 @@ export function App() {
                           Role
                           <select
                             value={managedUserForm.role}
-                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            disabled={isBusy || selectedManagedUserIsBootstrap || user?.role === 'manager' || !canManageSelectedUser}
                             onChange={(event) =>
                               setManagedUserForm((current) => (current ? { ...current, role: event.target.value as Role } : current))
                             }
                           >
                             <option value='counselor'>Counselor</option>
-                            <option value='manager'>Office manager</option>
-                            <option value='admin'>Admin</option>
+                            {user?.role === 'admin' ? <option value='manager'>Office manager</option> : null}
+                            {user?.role === 'admin' ? <option value='admin'>Admin</option> : null}
                           </select>
                         </label>
                         <label className='checkbox-row'>
                           <input
                             type='checkbox'
                             checked={managedUserForm.is_active}
-                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            disabled={isBusy || selectedManagedUserIsBootstrap || !canManageSelectedUser}
                             onChange={(event) =>
                               setManagedUserForm((current) => (current ? { ...current, is_active: event.target.checked } : current))
                             }
@@ -4540,7 +5043,7 @@ export function App() {
                           <input
                             type='checkbox'
                             checked={managedUserForm.is_locked}
-                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            disabled={isBusy || selectedManagedUserIsBootstrap || !canManageSelectedUser}
                             onChange={(event) =>
                               setManagedUserForm((current) => (current ? { ...current, is_locked: event.target.checked } : current))
                             }
@@ -4551,7 +5054,7 @@ export function App() {
                           <input
                             type='checkbox'
                             checked={managedUserForm.must_reset_password}
-                            disabled={isBusy || selectedManagedUserIsBootstrap}
+                            disabled={isBusy || selectedManagedUserIsBootstrap || !canManageSelectedUser}
                             onChange={(event) =>
                               setManagedUserForm((current) => (current ? { ...current, must_reset_password: event.target.checked } : current))
                             }
@@ -4559,16 +5062,20 @@ export function App() {
                           Force password reset at next login
                         </label>
                         <div className='full-width form-actions'>
-                          <button type='submit' disabled={isBusy}>
+                          <button type='submit' disabled={isBusy || !canManageSelectedUser}>
                             Save selected user
                           </button>
                         </div>
                       </form>
 
                       <section className='panel-subsection'>
-                        <h3>Admin password reset</h3>
-                        {selectedManagedUserIsBootstrap ? (
-                          <p className='muted-text'>The bootstrap admin password is fixed outside the app.</p>
+                        <h3>Password reset</h3>
+                        {selectedManagedUserIsBootstrap || !canManageSelectedUser ? (
+                          <p className='muted-text'>
+                            {selectedManagedUserIsBootstrap
+                              ? 'The bootstrap admin password is fixed outside the app.'
+                              : 'This account is outside your user-management scope.'}
+                          </p>
                         ) : (
                           <form className='form-grid' onSubmit={handleAdminPasswordReset}>
                             <label className='full-width'>
@@ -4614,7 +5121,9 @@ export function App() {
                           <p className='muted-text'>
                             {selectedManagedUserIsBootstrap
                               ? 'The bootstrap admin account cannot be deleted.'
-                              : 'The signed-in admin account cannot delete itself.'}
+                              : selectedManagedUserIsCurrentUser
+                                ? 'The signed-in account cannot delete itself.'
+                                : 'This account is outside your user-management scope.'}
                           </p>
                         )}
                       </section>
@@ -4626,7 +5135,11 @@ export function App() {
 
                 <section className='panel-subsection'>
                   <h2>Create user</h2>
-                  <p className='muted-text'>Create a managed user account with a temporary password of at least 12 characters. The user will be prompted to reset it after the first sign-in.</p>
+                  <p className='muted-text'>
+                    {user?.role === 'admin'
+                      ? 'Create a managed user account with a temporary password of at least 12 characters. The user will be prompted to reset it after the first sign-in.'
+                      : 'Create a counselor account with a temporary password of at least 12 characters. The counselor will be prompted to reset it after the first sign-in.'}
+                  </p>
                   <form className='form-grid' onSubmit={handleCreateUser}>
                     <label>
                       Username
@@ -4645,10 +5158,14 @@ export function App() {
                     </label>
                     <label>
                       Role
-                      <select value={newUserForm.role} onChange={(event) => setNewUserForm((current) => ({ ...current, role: event.target.value as Role }))}>
+                      <select
+                        value={newUserForm.role}
+                        disabled={user?.role === 'manager'}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, role: event.target.value as Role }))}
+                      >
                         <option value='counselor'>Counselor</option>
-                        <option value='manager'>Office manager</option>
-                        <option value='admin'>Admin</option>
+                        {user?.role === 'admin' ? <option value='manager'>Office manager</option> : null}
+                        {user?.role === 'admin' ? <option value='admin'>Admin</option> : null}
                       </select>
                     </label>
                     <label>
@@ -4670,6 +5187,247 @@ export function App() {
                   </form>
                 </section>
               </section>
+            </section>
+          ) : null}
+
+          {activeView === 'workflows' && canManageWorkflowProfiles ? (
+            <section className='panel detail-panel workflow-admin-panel'>
+              <div className='panel-heading'>
+                <div>
+                  <h2>Workflow profiles</h2>
+                  <p>Version the checklist logic and routing rules used by treatment-plan and chart-review work.</p>
+                </div>
+                <button type='button' className='ghost-button' onClick={() => void loadWorkflowDefinitions(selectedWorkflowDefinitionId)} disabled={isBusy}>
+                  Refresh profiles
+                </button>
+              </div>
+
+              <div className='dashboard-metrics'>
+                <article className='mini-card'>
+                  <span>Workflow profiles</span>
+                  <strong>{workflowDefinitions.length}</strong>
+                </article>
+                <article className='mini-card'>
+                  <span>Active profiles</span>
+                  <strong>{activeWorkflowDefinitionCount}</strong>
+                </article>
+                <article className='mini-card'>
+                  <span>Draft versions</span>
+                  <strong>{draftWorkflowVersionCount}</strong>
+                </article>
+                <article className='mini-card'>
+                  <span>Access</span>
+                  <strong>{user?.role === 'admin' ? 'Admin' : 'Manager'}</strong>
+                </article>
+              </div>
+
+              <div className='workflow-admin-grid'>
+                <section className='panel-subsection'>
+                  <h3>Profiles</h3>
+                  {workflowDefinitions.length ? (
+                    <div className='queue-list'>
+                      {workflowDefinitions.map((definition) => (
+                        <button
+                          type='button'
+                          key={definition.id}
+                          className={selectedWorkflowDefinition?.id === definition.id ? 'queue-item queue-item--active' : 'queue-item'}
+                          data-audit-label='Open workflow profile'
+                          onClick={() => {
+                            setSelectedWorkflowDefinitionId(definition.id)
+                            setWorkflowVersionForm(createWorkflowVersionForm(definition))
+                          }}
+                        >
+                          <div>
+                            <strong>{definition.display_name}</strong>
+                            <span>{definition.workflow_key}</span>
+                          </div>
+                          <div className='queue-item-meta'>
+                            <span className={`pill pill--${definition.is_active ? 'success' : 'neutral'}`}>
+                              {definition.is_active ? 'active' : 'archived'}
+                            </span>
+                            <span>{definition.current_version ? `v${definition.current_version.version}` : 'no published version'}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className='empty-state'>No workflow profiles are configured.</p>
+                  )}
+                </section>
+
+                <section className='panel-subsection'>
+                  <h3>{selectedWorkflowDefinition?.display_name || 'Selected profile'}</h3>
+                  {selectedWorkflowDefinition ? (
+                    <>
+                      <div className='fact-list'>
+                        <div>
+                          <dt>Category</dt>
+                          <dd>{selectedWorkflowDefinition.category}</dd>
+                        </div>
+                        <div>
+                          <dt>Current version</dt>
+                          <dd>{selectedWorkflowDefinition.current_version ? `Version ${selectedWorkflowDefinition.current_version.version}` : 'Draft only'}</dd>
+                        </div>
+                        <div>
+                          <dt>Updated</dt>
+                          <dd>{formatDateTime(selectedWorkflowDefinition.updated_at)}</dd>
+                        </div>
+                      </div>
+                      <div className='timeliness-table timeliness-table--workflow'>
+                        <div className='timeliness-table__head'>
+                          <span>Version</span>
+                          <span>Status</span>
+                          <span>Notes</span>
+                          <span>Action</span>
+                        </div>
+                        {selectedWorkflowDefinition.versions.map((version) => (
+                          <div key={version.id} className='timeliness-table__row'>
+                            <span>v{version.version}</span>
+                            <span>
+                              <span className={`pill pill--${workflowVersionTone(version.status)}`}>{version.status}</span>
+                            </span>
+                            <span>{version.version_notes || 'No notes'}</span>
+                            <span>
+                              {version.status === 'draft' ? (
+                                <button type='button' className='ghost-button' onClick={() => void publishWorkflowVersion(version.id)} disabled={isBusy}>
+                                  Publish
+                                </button>
+                              ) : (
+                                formatDateTime(version.published_at || version.archived_at)
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className='form-actions'>
+                        <button type='button' className='danger-button' onClick={() => void archiveWorkflowDefinition()} disabled={isBusy || !selectedWorkflowDefinition.is_active}>
+                          Archive profile
+                        </button>
+                        <button
+                          type='button'
+                          className='ghost-button'
+                          onClick={() => void deleteWorkflowDefinition()}
+                          disabled={isBusy || !selectedWorkflowDefinitionCanDelete}
+                        >
+                          Delete unused draft
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className='empty-state'>Select or create a workflow profile.</p>
+                  )}
+                </section>
+              </div>
+
+              <section className='panel-subsection'>
+                <h3>Create workflow profile</h3>
+                <form className='form-grid' onSubmit={handleWorkflowDefinitionCreate}>
+                  <label>
+                    Workflow key
+                    <input
+                      required
+                      pattern='[a-z0-9][a-z0-9_-]*'
+                      value={workflowDefinitionForm.workflow_key}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, workflow_key: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Display name
+                    <input
+                      required
+                      value={workflowDefinitionForm.display_name}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, display_name: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Category
+                    <input
+                      value={workflowDefinitionForm.category}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, category: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Version notes
+                    <input
+                      value={workflowDefinitionForm.version_notes}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, version_notes: event.target.value }))}
+                    />
+                  </label>
+                  <label className='full-width'>
+                    Description
+                    <textarea
+                      value={workflowDefinitionForm.description}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, description: event.target.value }))}
+                    />
+                  </label>
+                  <label className='full-width'>
+                    Definition JSON
+                    <textarea
+                      className='code-textarea'
+                      value={workflowDefinitionForm.definition_snapshot_text}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                    />
+                  </label>
+                  <label className='full-width'>
+                    Transition rules JSON
+                    <textarea
+                      className='code-textarea'
+                      value={workflowDefinitionForm.transition_rules_text}
+                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                    />
+                  </label>
+                  <div className='full-width form-actions'>
+                    <button type='submit' disabled={isBusy}>
+                      Create profile
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              {selectedWorkflowDefinition ? (
+                <section className='panel-subsection'>
+                  <h3>Create draft version</h3>
+                  <div className='rule-alert'>
+                    <strong>Manager/admin-editable checklist workflow</strong>
+                    <p>Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.</p>
+                    <div className='form-actions'>
+                      <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
+                        Seed draft from 42-step checklist
+                      </button>
+                    </div>
+                  </div>
+                  <form className='form-grid' onSubmit={handleWorkflowVersionCreate}>
+                    <label className='full-width'>
+                      Version notes
+                      <input
+                        value={workflowVersionForm.version_notes}
+                        onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, version_notes: event.target.value }))}
+                      />
+                    </label>
+                    <label className='full-width'>
+                      Definition JSON
+                      <textarea
+                        className='code-textarea'
+                        value={workflowVersionForm.definition_snapshot_text}
+                        onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                      />
+                    </label>
+                    <label className='full-width'>
+                      Transition rules JSON
+                      <textarea
+                        className='code-textarea'
+                        value={workflowVersionForm.transition_rules_text}
+                        onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                      />
+                    </label>
+                    <div className='full-width form-actions'>
+                      <button type='submit' disabled={isBusy}>
+                        Create draft version
+                      </button>
+                    </div>
+                  </form>
+                </section>
+              ) : null}
             </section>
           ) : null}
 
@@ -4710,6 +5468,18 @@ export function App() {
                   <div>
                     <dt>EMR API</dt>
                     <dd>{appSettings?.emr_api_enabled ? 'Enabled' : 'Stub configured only'}</dd>
+                  </div>
+                  <div>
+                    <dt>Periodic API check</dt>
+                    <dd>{appSettings?.emr_periodic_check_enabled ? `Every ${appSettings.emr_periodic_check_interval_minutes} minutes` : 'Off'}</dd>
+                  </div>
+                  <div>
+                    <dt>Last API check</dt>
+                    <dd>
+                      {appSettings?.emr_last_check_at
+                        ? `${appSettings.emr_last_check_status || 'checked'} at ${formatDateTime(appSettings.emr_last_check_at)}`
+                        : 'Not run'}
+                    </dd>
                   </div>
 	                  <div>
 	                    <dt>Runtime readiness</dt>
@@ -4969,14 +5739,18 @@ export function App() {
                       />
                     </label>
                     <label>
-                      FHIR base URL
+                      FHIR base URL (root FHIR R4 endpoint)
                       <input
                         value={settingsForm.emr_fhir_base_url}
+                        placeholder='https://your-alleva-tenant.example.com/fhir/R4'
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_fhir_base_url: event.target.value } : current))}
                       />
                     </label>
+                    <p className='muted-text field-note'>
+                      This is the vendor-supplied root FHIR endpoint used for Patient, DocumentReference, Binary, and Provenance requests.
+                    </p>
                     <label className='full-width'>
-                      SMART token URL
+                      OAuth token URL (SMART/FHIR when used by the vendor)
                       <input
                         value={settingsForm.emr_smart_token_url}
                         placeholder='https://authorization.allevasoft.com/connect/token'
@@ -4984,14 +5758,29 @@ export function App() {
                       />
                     </label>
                     <label>
-                      SMART client ID
+                      Token auth style
+                      <select
+                        value={settingsForm.emr_smart_token_auth_style}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, emr_smart_token_auth_style: event.target.value } : current))
+                        }
+                      >
+                        <option value='body'>Body credentials</option>
+                        <option value='basic'>Basic auth header</option>
+                        <option value='basic_urlencoded'>Basic auth header, URL-encoded pair</option>
+                        <option value='both'>Try body, then Basic</option>
+                        <option value='all'>Try all supported styles</option>
+                      </select>
+                    </label>
+                    <label>
+                      OAuth/FHIR client ID
                       <input
                         value={settingsForm.emr_smart_client_id}
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_client_id: event.target.value } : current))}
                       />
                     </label>
                     <label>
-                      SMART client secret
+                      OAuth/FHIR client secret
                       <input
                         type='password'
                         autoComplete='off'
@@ -5018,10 +5807,10 @@ export function App() {
                           setSettingsForm((current) => (current ? { ...current, clear_emr_smart_client_secret: event.target.checked } : current))
                         }
                       />
-                      Clear stored SMART client secret
+                      Clear stored OAuth/FHIR client secret
                     </label>
                     <label className='full-width'>
-                      SMART scopes
+                      OAuth/FHIR scopes
                       <input
                         value={settingsForm.emr_smart_scopes}
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_scopes: event.target.value } : current))}
@@ -5036,6 +5825,30 @@ export function App() {
                         value={settingsForm.emr_api_timeout_seconds}
                         onChange={(event) =>
                           setSettingsForm((current) => (current ? { ...current, emr_api_timeout_seconds: Number(event.target.value || 1) } : current))
+                        }
+                      />
+                    </label>
+                    <label className='checkbox-row'>
+                      <input
+                        type='checkbox'
+                        checked={settingsForm.emr_periodic_check_enabled}
+                        onChange={(event) =>
+                          setSettingsForm((current) => (current ? { ...current, emr_periodic_check_enabled: event.target.checked } : current))
+                        }
+                      />
+                      Periodically run safe Alleva API checks
+                    </label>
+                    <label>
+                      Check interval (minutes)
+                      <input
+                        type='number'
+                        min={5}
+                        max={10080}
+                        value={settingsForm.emr_periodic_check_interval_minutes}
+                        onChange={(event) =>
+                          setSettingsForm((current) =>
+                            current ? { ...current, emr_periodic_check_interval_minutes: Number(event.target.value || 1440) } : current
+                          )
                         }
                       />
                     </label>
@@ -5061,9 +5874,16 @@ export function App() {
                       </div>
                       <div className='form-actions'>
                         <button type='button' className='ghost-button' onClick={handleEmrDiscovery} disabled={isBusy}>
-                          Check SMART discovery
+                          Check FHIR/OAuth discovery
+                        </button>
+                        <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy || !appSettings?.emr_periodic_check_enabled}>
+                          Run API check now
+                        </button>
+                        <button type='button' className='ghost-button' onClick={openApiConnectivityHarness}>
+                          API connectivity test harness
                         </button>
                       </div>
+                      {appSettings?.emr_last_check_message ? <p className='muted-text'>Last API check: {appSettings.emr_last_check_message}</p> : null}
                       {emrDiscovery ? (
                         <p className='muted-text'>
                           Discovery: {emrDiscovery.status}; auth endpoint {emrDiscovery.authorization_endpoint_configured ? 'found' : 'missing'}, token endpoint{' '}
@@ -5088,6 +5908,209 @@ export function App() {
                           ))}
                         </ol>
                       ) : null}
+                    </section>
+                    <section className='panel-subsection full-width'>
+                      <div className='panel-heading'>
+                        <div>
+                          <h3>Stored EMR endpoint profiles</h3>
+                          <p>Save Alleva now and future EMR/FHIR endpoints without exposing stored secrets back to the browser.</p>
+                        </div>
+                        <button type='button' className='ghost-button' onClick={() => void loadEmrEndpointProfiles(selectedEmrEndpointProfileId)} disabled={isBusy}>
+                          Refresh profiles
+                        </button>
+                      </div>
+                      <div className='workflow-admin-grid'>
+                        <section className='panel-subsection'>
+                          <h4>Saved profiles</h4>
+                          {emrEndpointProfiles.length ? (
+                            <div className='queue-list'>
+                              {emrEndpointProfiles.map((profile) => (
+                                <button
+                                  type='button'
+                                  key={profile.id}
+                                  className={selectedEmrEndpointProfile?.id === profile.id ? 'queue-item queue-item--active' : 'queue-item'}
+                                  data-audit-label='Open EMR endpoint profile'
+                                  onClick={() => setSelectedEmrEndpointProfileId(profile.id)}
+                                >
+                                  <div>
+                                    <strong>{profile.display_name}</strong>
+                                    <span>{profile.vendor_name}</span>
+                                  </div>
+                                  <div className='queue-item-meta'>
+                                    <span className={`pill pill--${profile.is_default ? 'success' : profile.is_active ? 'neutral' : 'muted'}`}>
+                                      {profile.is_default ? 'current' : profile.is_active ? 'saved' : 'inactive'}
+                                    </span>
+                                    <span>{profile.client_secret_configured ? 'secret stored' : 'no secret'}</span>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className='empty-state'>No endpoint profiles are stored yet.</p>
+                          )}
+                        </section>
+
+                        <section className='panel-subsection'>
+                          <h4>{selectedEmrEndpointProfile?.display_name || 'Selected endpoint'}</h4>
+                          {selectedEmrEndpointProfile ? (
+                            <>
+                              <div className='fact-list'>
+                                <div>
+                                  <dt>FHIR base URL</dt>
+                                  <dd>{selectedEmrEndpointProfile.fhir_base_url || 'Not set'}</dd>
+                                </div>
+                                <div>
+                                  <dt>Token URL</dt>
+                                  <dd>{selectedEmrEndpointProfile.token_url || 'Not set'}</dd>
+                                </div>
+                                <div>
+                                  <dt>Client ID</dt>
+                                  <dd>{selectedEmrEndpointProfile.client_id_configured ? selectedEmrEndpointProfile.client_id : 'Not set'}</dd>
+                                </div>
+                                <div>
+                                  <dt>Scopes</dt>
+                                  <dd>{selectedEmrEndpointProfile.scopes || 'Not set'}</dd>
+                                </div>
+                              </div>
+                              <div className='form-actions'>
+                                <button
+                                  type='button'
+                                  className='ghost-button'
+                                  onClick={() => void activateEmrEndpointProfile(selectedEmrEndpointProfile.id)}
+                                  disabled={isBusy || selectedEmrEndpointProfile.is_default}
+                                >
+                                  Use for API tests
+                                </button>
+                                <button
+                                  type='button'
+                                  className='danger-button'
+                                  onClick={() => void deleteEmrEndpointProfile(selectedEmrEndpointProfile.id)}
+                                  disabled={isBusy || selectedEmrEndpointProfile.is_default}
+                                >
+                                  Delete saved profile
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <p className='empty-state'>Select a saved endpoint profile.</p>
+                          )}
+                        </section>
+                      </div>
+
+                      <section className='panel-subsection'>
+                        <h4>Add endpoint profile</h4>
+                        <div className='form-grid'>
+                          <label>
+                            Profile key
+                            <input
+                              pattern='[a-z0-9][a-z0-9_-]*'
+                              value={emrEndpointProfileForm.profile_key}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, profile_key: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Display name
+                            <input
+                              value={emrEndpointProfileForm.display_name}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, display_name: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Vendor
+                            <input
+                              value={emrEndpointProfileForm.vendor_name}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, vendor_name: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Adapter key
+                            <input
+                              value={emrEndpointProfileForm.adapter_key}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, adapter_key: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            FHIR base URL
+                            <input
+                              placeholder='https://your-alleva-tenant.example.com/fhir/R4'
+                              value={emrEndpointProfileForm.fhir_base_url}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, fhir_base_url: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            OpenAPI URL
+                            <input
+                              value={emrEndpointProfileForm.openapi_url}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, openapi_url: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            OAuth token URL
+                            <input
+                              value={emrEndpointProfileForm.token_url}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, token_url: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Token auth style
+                            <select
+                              value={emrEndpointProfileForm.token_auth_style}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, token_auth_style: event.target.value }))}
+                            >
+                              <option value='body'>Body credentials</option>
+                              <option value='basic'>Basic auth header</option>
+                              <option value='basic_urlencoded'>Basic auth header, URL-encoded pair</option>
+                              <option value='both'>Try body, then Basic</option>
+                              <option value='all'>Try all supported styles</option>
+                            </select>
+                          </label>
+                          <label>
+                            Client ID
+                            <input
+                              value={emrEndpointProfileForm.client_id}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, client_id: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Client secret
+                            <input
+                              type='password'
+                              autoComplete='off'
+                              value={emrEndpointProfileForm.client_secret}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, client_secret: event.target.value }))}
+                            />
+                          </label>
+                          <label>
+                            Timeout seconds
+                            <input
+                              type='number'
+                              min={1}
+                              max={60}
+                              value={emrEndpointProfileForm.timeout_seconds}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, timeout_seconds: Number(event.target.value || 10) }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            OAuth/FHIR scopes
+                            <input
+                              value={emrEndpointProfileForm.scopes}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, scopes: event.target.value }))}
+                            />
+                          </label>
+                          <label className='full-width'>
+                            Notes
+                            <textarea
+                              value={emrEndpointProfileForm.notes}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, notes: event.target.value }))}
+                            />
+                          </label>
+                          <div className='full-width form-actions'>
+                            <button type='button' onClick={() => void handleCreateEmrEndpointProfile()} disabled={isBusy}>
+                              Save endpoint profile
+                            </button>
+                          </div>
+                        </div>
+                      </section>
                     </section>
                     <div className='full-width form-actions'>
                       <button type='submit' disabled={isBusy}>
@@ -5291,7 +6314,7 @@ export function App() {
                         <section className='panel-subsection'>
                           <h4>Create draft version</h4>
                           <div className='rule-alert'>
-                            <strong>Admin-editable checklist workflow</strong>
+                            <strong>Manager/admin-editable checklist workflow</strong>
                             <p>
                               Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.
                             </p>

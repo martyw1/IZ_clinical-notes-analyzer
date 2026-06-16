@@ -109,6 +109,7 @@ class ApiConfigurationOut(BaseModel):
     client_id_configured: bool
     client_secret_configured: bool
     token_url: str
+    token_auth_style: str
     api_key_header_name: str
     timeout_seconds: int
     api_enabled: bool
@@ -123,6 +124,7 @@ class ApiConfigurationUpdate(BaseModel):
     client_secret: str | None = None
     clear_client_secret: bool = False
     token_url: str | None = Field(default=None, max_length=500)
+    token_auth_style: Literal['body', 'basic', 'basic_urlencoded', 'both', 'all'] | None = None
     clear_api_key: bool = False
     timeout_seconds: int | None = Field(default=None, ge=1, le=60)
     api_enabled: bool | None = None
@@ -137,6 +139,7 @@ class ApiDefinitionPullInput(BaseModel):
     api_key_header_name: str = Field(default=DEFAULT_API_KEY_HEADER_NAME, max_length=80)
     auth_mode: Literal['api_key', 'client_credentials', 'none'] = 'api_key'
     token_url: str | None = Field(default=None, max_length=500)
+    token_auth_style: Literal['body', 'basic', 'basic_urlencoded', 'both', 'all'] = 'body'
     client_id: str | None = Field(default=None, max_length=255)
     client_secret: str | None = None
     use_saved_client_credentials: bool = True
@@ -181,6 +184,7 @@ def _configuration_out(settings_row: AppSetting) -> ApiConfigurationOut:
         client_id_configured=bool(settings_row.emr_smart_client_id),
         client_secret_configured=bool(settings_row.emr_smart_client_secret),
         token_url=settings_row.emr_smart_token_url or DEFAULT_ALLEVA_TOKEN_URL,
+        token_auth_style=getattr(settings_row, 'emr_smart_token_auth_style', 'body') or 'body',
         api_key_header_name=DEFAULT_API_KEY_HEADER_NAME,
         timeout_seconds=settings_row.emr_api_timeout_seconds,
         api_enabled=settings_row.emr_api_enabled,
@@ -212,6 +216,7 @@ def _auth_context(
         'api_key_source': 'none',
         'credential_source': 'none',
         'token_url': _strip(payload.token_url) or settings_row.emr_smart_token_url or DEFAULT_ALLEVA_TOKEN_URL,
+        'token_auth_style': payload.token_auth_style or getattr(settings_row, 'emr_smart_token_auth_style', 'body') or 'body',
         'scope': _strip(payload.scope) or settings_row.emr_smart_scopes,
         'token_result': {},
     }
@@ -236,6 +241,7 @@ def _auth_context(
         client_secret=client_secret,
         scope=context['scope'],
         timeout_seconds=timeout_seconds,
+        token_auth_style=context['token_auth_style'],
     )
     context['token_result'] = token_result
     context['bearer_token'] = bearer_token
@@ -343,6 +349,8 @@ def update_api_configuration(
         api_key_changed = True
     if payload.token_url is not None:
         settings_row.emr_smart_token_url = _strip(payload.token_url) or DEFAULT_ALLEVA_TOKEN_URL
+    if payload.token_auth_style is not None:
+        settings_row.emr_smart_token_auth_style = payload.token_auth_style
 
     settings_row.updated_by_id = user.id
     settings_row.updated_at = _utc_now()
@@ -366,6 +374,7 @@ def update_api_configuration(
             'api_base_url_configured': bool(settings_row.emr_fhir_base_url),
             'client_id_configured': bool(settings_row.emr_smart_client_id),
             'token_url_configured': bool(settings_row.emr_smart_token_url),
+            'token_auth_style': getattr(settings_row, 'emr_smart_token_auth_style', 'body'),
         },
         before_state=before,
         after_state=after,
@@ -395,6 +404,7 @@ def pull_api_configuration_definitions(
         'api_key_source': auth_context['api_key_source'],
         'auth_mode': auth_context['auth_mode'],
         'token_url': auth_context['token_url'],
+        'token_auth_style': auth_context['token_auth_style'],
         'client_id_configured': bool(_strip(payload.client_id) or settings_row.emr_smart_client_id),
         'client_secret': _strip(payload.client_secret) or (_saved_api_key(settings_row) if payload.use_saved_client_credentials else ''),
         'credential_source': auth_context['credential_source'],
@@ -419,6 +429,7 @@ def pull_api_configuration_definitions(
                 'vendor_name': settings_row.emr_vendor_name,
                 'auth_mode': payload.auth_mode,
                 'token_status': auth_context['token_result'].get('status') if isinstance(auth_context.get('token_result'), dict) else 'fail',
+                'token_auth_style': auth_context['token_auth_style'],
                 'credential_source': auth_context['credential_source'],
             },
             outcome_status='failure',
@@ -467,6 +478,7 @@ def pull_api_configuration_definitions(
             'bearer_token_used': bool(auth_context['bearer_token']),
             'credential_source': auth_context['credential_source'],
             'token_status': auth_context['token_result'].get('status') if isinstance(auth_context.get('token_result'), dict) else '',
+            'token_auth_style': auth_context['token_auth_style'],
             'probe_count': len(result.get('probes', [])),
         },
         outcome_status='success' if status == 'ok' else 'failure',
@@ -506,6 +518,7 @@ def test_api_configuration_operation(
         'api_key_source': auth_context['api_key_source'],
         'auth_mode': auth_context['auth_mode'],
         'token_url': auth_context['token_url'],
+        'token_auth_style': auth_context['token_auth_style'],
         'client_id_configured': bool(_strip(payload.client_id) or settings_row.emr_smart_client_id),
         'client_secret': _strip(payload.client_secret) or (_saved_api_key(settings_row) if payload.use_saved_client_credentials else ''),
         'credential_source': auth_context['credential_source'],
@@ -532,6 +545,7 @@ def test_api_configuration_operation(
                 'auth_mode': payload.auth_mode,
                 'credential_source': auth_context['credential_source'],
                 'token_status': auth_context['token_result'].get('status') if isinstance(auth_context.get('token_result'), dict) else 'fail',
+                'token_auth_style': auth_context['token_auth_style'],
             },
             outcome_status='failure',
             severity='warning',
@@ -580,6 +594,7 @@ def test_api_configuration_operation(
             'bearer_token_used': bool(auth_context['bearer_token']),
             'credential_source': auth_context['credential_source'],
             'token_status': auth_context['token_result'].get('status') if isinstance(auth_context.get('token_result'), dict) else '',
+            'token_auth_style': auth_context['token_auth_style'],
             'http_status': result.get('status_code'),
         },
         outcome_status='success' if status == 'ok' else 'failure',

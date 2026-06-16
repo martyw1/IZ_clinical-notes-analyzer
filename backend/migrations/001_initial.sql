@@ -32,13 +32,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
   llm_use_for_evaluation_gap_analysis BOOLEAN NOT NULL DEFAULT TRUE,
   llm_analysis_instructions TEXT NOT NULL DEFAULT '',
   emr_api_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-  emr_vendor_name VARCHAR(120) NOT NULL DEFAULT 'Alleva / SMART on FHIR',
+  emr_vendor_name VARCHAR(120) NOT NULL DEFAULT 'Alleva / FHIR',
     emr_fhir_base_url VARCHAR(255) NOT NULL DEFAULT '',
     emr_smart_client_id VARCHAR(255) NOT NULL DEFAULT '',
     emr_smart_client_secret VARCHAR(1024) NOT NULL DEFAULT '',
     emr_smart_token_url VARCHAR(500) NOT NULL DEFAULT 'https://authorization.allevasoft.com/connect/token',
+    emr_smart_token_auth_style VARCHAR(40) NOT NULL DEFAULT 'body',
     emr_smart_scopes VARCHAR(500) NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
   emr_api_timeout_seconds INTEGER NOT NULL DEFAULT 10,
+  emr_periodic_check_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  emr_periodic_check_interval_minutes INTEGER NOT NULL DEFAULT 1440,
+  emr_last_check_at TIMESTAMPTZ,
+  emr_last_check_status VARCHAR(40) NOT NULL DEFAULT '',
+  emr_last_check_message TEXT NOT NULL DEFAULT '',
+  emr_last_successful_check_at TIMESTAMPTZ,
+  emr_last_failure_at TIMESTAMPTZ,
   facility_timezone VARCHAR(80) NOT NULL DEFAULT 'local_machine',
   treatment_plan_loc_change_window_days INTEGER,
   treatment_plan_loc_change_window_validated BOOLEAN NOT NULL DEFAULT FALSE,
@@ -201,6 +209,29 @@ CREATE TABLE IF NOT EXISTS treatment_plan_clients (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS emr_endpoint_profiles (
+  id SERIAL PRIMARY KEY,
+  profile_key VARCHAR(80) UNIQUE NOT NULL,
+  display_name VARCHAR(120) NOT NULL DEFAULT '',
+  vendor_name VARCHAR(120) NOT NULL DEFAULT 'Alleva',
+  adapter_key VARCHAR(120) NOT NULL DEFAULT 'alleva-fhir-document-manager',
+  fhir_base_url VARCHAR(500) NOT NULL DEFAULT '',
+  openapi_url VARCHAR(500) NOT NULL DEFAULT '',
+  token_url VARCHAR(500) NOT NULL DEFAULT '',
+  token_auth_style VARCHAR(40) NOT NULL DEFAULT 'body',
+  client_id VARCHAR(255) NOT NULL DEFAULT '',
+  client_secret VARCHAR(1024) NOT NULL DEFAULT '',
+  scopes VARCHAR(500) NOT NULL DEFAULT '',
+  timeout_seconds INTEGER NOT NULL DEFAULT 10,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT NOT NULL DEFAULT '',
+  created_by_id INTEGER REFERENCES users(id),
+  updated_by_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS level_of_care_history (
   id SERIAL PRIMARY KEY,
   client_id INTEGER NOT NULL REFERENCES treatment_plan_clients(id),
@@ -261,6 +292,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category
 CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id);
 CREATE INDEX IF NOT EXISTS idx_treatment_plan_clients_patient_id ON treatment_plan_clients(patient_id);
 CREATE INDEX IF NOT EXISTS idx_treatment_plan_clients_is_active ON treatment_plan_clients(is_active);
+CREATE INDEX IF NOT EXISTS idx_emr_endpoint_profiles_profile_key ON emr_endpoint_profiles(profile_key);
+CREATE INDEX IF NOT EXISTS idx_emr_endpoint_profiles_is_active ON emr_endpoint_profiles(is_active);
+CREATE INDEX IF NOT EXISTS idx_emr_endpoint_profiles_is_default ON emr_endpoint_profiles(is_default);
 CREATE INDEX IF NOT EXISTS idx_level_of_care_history_client_id ON level_of_care_history(client_id);
 CREATE INDEX IF NOT EXISTS idx_treatment_plan_records_client_id ON treatment_plan_records(client_id);
 CREATE INDEX IF NOT EXISTS idx_treatment_plan_records_plan_kind ON treatment_plan_records(plan_kind);

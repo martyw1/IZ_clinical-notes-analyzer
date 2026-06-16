@@ -1,5 +1,32 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-16 v1.3.0 production usability and role-control hardening
+- Updated app/version metadata to `1.3.0` / build `2026.06.16.1`.
+- Reviewed the 2026-06-16 morning console/startup logs and local app logs; startup preflight was clean, while one settings `400` and repeated stale-session `401` loops were identified from the app session.
+- Added stale-session handling so browser-side 401 responses clear the stored session token and return the operator to sign-in instead of repeating background requests.
+- Added first-class Workflow profiles navigation for admins and office managers; the Checklist workflow action now opens Workflow profiles instead of App settings.
+- Added role-scoped user management: admins manage all user roles, office managers manage counselor accounts only, and counselors manage only their own account.
+- Kept App settings, API/EMR setup, optional LLM setup, and forensic logs admin-only.
+- Added in-app Help covering role permissions, screen/button behavior, setup notes, workflow profile changes, API/EMR definitions, and LLM configuration notes.
+- Added stored EMR endpoint profiles for Alleva and future EMR/FHIR endpoints, with encrypted client-secret storage and activation into current readiness/API settings.
+- Renamed confusing SMART-only UI labels to OAuth/FHIR wording and clarified FHIR base URL as the vendor-supplied root FHIR R4 endpoint.
+- Removed the standalone API harness second admin-login requirement when opened from the app; it now reuses the current signed-in admin session.
+- Fixed uploaded/API-style treatment-plan re-evaluation behavior, safe fallback generated display names, and compliant-rule due-date selection.
+- Verified optional LLM configuration against an OpenAI-compatible JSON response path while keeping LLM use disabled by default.
+- Updated README, Windows user/deployment/UAT guides, API connectivity docs, runbook, workflow docs, blocker register, changelog, and validation reporting.
+- Browser validation found opener `sessionStorage` was not reliable for the standalone API harness in every tab surface, so the harness now uses same-origin message handoff and was retested successfully.
+- Verification passed full backend pytest (`93 passed, 2 skipped`), frontend Vitest (`15 passed`), frontend production build, Windows local stack smoke on port `8768`, Windows API configuration smoke on port `8769`, and a browser walkthrough against a disposable local server with synthetic admin/manager/counselor users.
+
+## 2026-06-16 manual upload deletion and API readiness hardening
+- Added authorized Manual upload binder deletion, including linked automated review cleanup, upload-derived timeliness cleanup, encrypted stored-file removal, and typed patient-ID confirmation in the UI.
+- Added periodic API readiness settings for saved Alleva/API client ID and encrypted secret, configurable interval, token auth style, last-check status, and a background checker that remains dormant unless enabled.
+- Ported `Test-AllevaApi.ps1` learnings into the app harness: body credentials, Basic auth, URL-encoded Basic auth, try-both, and try-all token styles; GET/HEAD operation tests avoid bodies unless required.
+- Capped selected API operation response capture at 200 KB and compacted saved API reports so large provider responses cannot swamp the browser or report directory.
+- Tightened forensic audit redaction for uploaded document labels, filenames, storage paths, descriptions, and source attachment/author metadata.
+- Fixed Manual upload/review navigation found during browser smoke testing: uploaded binder details now open the automated review workbench, and linked reviews return to the binder detail panel.
+- Updated API connectivity, Windows user guide, runbook, changelog, backend tests, and frontend tests for the new workflows.
+- Verification passed full backend pytest (`89 passed, 2 skipped`), frontend Vitest (`14 passed`), frontend production build, and a local browser smoke against a disposable desktop server using synthetic data for periodic API checks, API harness large-response truncation, manual upload review handoff, criterion save, binder deletion, linked-review deletion, and sign out.
+
 ## 2026-06-15 v1.2.0 Windows local resilience and maintainability
 - Updated app/version metadata to `1.2.0` / build `2026.06.15.1`.
 - Added SQLite local-desktop hardening with busy timeout, foreign-key enforcement, and WAL mode where supported.

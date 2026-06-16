@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
@@ -22,12 +22,15 @@ from app.models.models import (
     AuditLog,
     Chart,
     ComplianceStatus,
+    EmrEndpointProfile,
+    LevelOfCareHistory,
     NoteSetStatus,
     NoteSetUploadMode,
     PatientNoteDocument,
     PatientNoteSet,
     Role,
     TreatmentPlanClient,
+    TreatmentPlanRecord,
     User,
     WorkflowState,
     WorkflowTransition,
@@ -44,6 +47,9 @@ from app.schemas.schemas import (
     EmrConnectionProfileOut,
     EmrDiscoveryInput,
     EmrDiscoveryOut,
+    EmrEndpointProfileCreate,
+    EmrEndpointProfileOut,
+    EmrEndpointProfileUpdate,
     EmrImportPlanOut,
     PatientIdDetectionOut,
     PatientNoteDocumentUploadInput,
@@ -56,6 +62,7 @@ from app.schemas.schemas import (
     UiEventInput,
 )
 from app.services.audit import log_event
+from app.services.api_monitor import run_periodic_api_check
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
 from app.services.emr_fhir import build_document_reference_import_plan, discover_smart_configuration, emr_connection_profile, normalize_fhir_base_url
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
@@ -99,11 +106,24 @@ def _validate_emr_enablement(settings_row: AppSetting) -> None:
         raise HTTPException(status_code=400, detail='FHIR base URL is required before enabling the EMR API connector')
     settings_row.emr_fhir_base_url = normalize_fhir_base_url(settings_row.emr_fhir_base_url)
     if not settings_row.emr_smart_client_id.strip():
-        raise HTTPException(status_code=400, detail='SMART client ID is required before enabling the EMR API connector')
+        raise HTTPException(status_code=400, detail='OAuth/FHIR client ID is required before enabling the EMR API connector')
     scopes = {scope for scope in settings_row.emr_smart_scopes.split() if scope}
     missing_scopes = sorted(REQUIRED_EMR_READ_SCOPES - scopes)
     if missing_scopes:
         raise HTTPException(status_code=400, detail=f'Missing required read scopes for Alleva document import: {", ".join(missing_scopes)}')
+
+
+def _validate_periodic_api_check(settings_row: AppSetting) -> None:
+    if not settings_row.emr_periodic_check_enabled:
+        return
+    if not settings_row.emr_fhir_base_url.strip():
+        raise HTTPException(status_code=400, detail='API base URL is required before enabling periodic Alleva checks')
+    if not settings_row.emr_smart_token_url.strip():
+        raise HTTPException(status_code=400, detail='Token URL is required before enabling periodic Alleva checks')
+    if not settings_row.emr_smart_client_id.strip():
+        raise HTTPException(status_code=400, detail='Client ID is required before enabling periodic Alleva checks')
+    if not settings_row.emr_smart_client_secret:
+        raise HTTPException(status_code=400, detail='Client secret is required before enabling periodic Alleva checks')
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:
@@ -161,6 +181,23 @@ def _ensure_note_set_access(note_set: PatientNoteSet | None, user: User) -> Pati
 def _find_note_set(note_set_id: int, user: User, db: Session) -> PatientNoteSet:
     note_set = db.execute(_note_set_stmt().where(PatientNoteSet.id == note_set_id)).scalar_one_or_none()
     return _ensure_note_set_access(note_set, user)
+
+
+def _timeliness_client_for_patient(patient_id: str, db: Session) -> TreatmentPlanClient | None:
+    return (
+        db.execute(
+            select(TreatmentPlanClient)
+            .options(
+                selectinload(TreatmentPlanClient.level_of_care_history),
+                selectinload(TreatmentPlanClient.treatment_plans),
+                selectinload(TreatmentPlanClient.overrides),
+            )
+            .where(TreatmentPlanClient.patient_id == patient_id)
+        )
+        .scalars()
+        .unique()
+        .one_or_none()
+    )
 
 
 def _ensure_all_responses(chart: Chart) -> None:
@@ -280,13 +317,99 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'emr_smart_client_id': settings_row.emr_smart_client_id,
         'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
         'emr_smart_token_url': settings_row.emr_smart_token_url,
+        'emr_smart_token_auth_style': settings_row.emr_smart_token_auth_style,
         'emr_smart_scopes': settings_row.emr_smart_scopes,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
+        'emr_periodic_check_enabled': settings_row.emr_periodic_check_enabled,
+        'emr_periodic_check_interval_minutes': settings_row.emr_periodic_check_interval_minutes,
+        'emr_last_check_at': settings_row.emr_last_check_at,
+        'emr_last_check_status': settings_row.emr_last_check_status,
+        'emr_last_check_message': settings_row.emr_last_check_message,
+        'emr_last_successful_check_at': settings_row.emr_last_successful_check_at,
+        'emr_last_failure_at': settings_row.emr_last_failure_at,
         'facility_timezone': settings_row.facility_timezone,
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
     }
+
+
+def _emr_profile_payload(profile: EmrEndpointProfile) -> dict[str, object]:
+    return {
+        'id': profile.id,
+        'profile_key': profile.profile_key,
+        'display_name': profile.display_name,
+        'vendor_name': profile.vendor_name,
+        'adapter_key': profile.adapter_key,
+        'fhir_base_url': profile.fhir_base_url,
+        'openapi_url': profile.openapi_url,
+        'token_url': profile.token_url,
+        'token_auth_style': profile.token_auth_style,
+        'client_id': profile.client_id,
+        'client_id_configured': bool(profile.client_id.strip()),
+        'client_secret_configured': bool(profile.client_secret),
+        'scopes': profile.scopes,
+        'timeout_seconds': profile.timeout_seconds,
+        'is_active': profile.is_active,
+        'is_default': profile.is_default,
+        'notes': profile.notes,
+        'created_by_id': profile.created_by_id,
+        'updated_by_id': profile.updated_by_id,
+        'created_at': profile.created_at,
+        'updated_at': profile.updated_at,
+    }
+
+
+def _emr_profile_snapshot(profile: EmrEndpointProfile) -> dict[str, object]:
+    payload = _emr_profile_payload(profile)
+    return {
+        **payload,
+        'client_secret_configured': bool(profile.client_secret),
+    }
+
+
+def _find_emr_endpoint_profile(profile_id: int, db: Session) -> EmrEndpointProfile:
+    profile = db.execute(select(EmrEndpointProfile).where(EmrEndpointProfile.id == profile_id)).scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail='EMR endpoint profile not found')
+    return profile
+
+
+def _ensure_default_emr_endpoint_profile(db: Session, settings_row: AppSetting, user: User | None = None) -> None:
+    existing = db.execute(select(EmrEndpointProfile.id).limit(1)).scalar_one_or_none()
+    if existing is not None:
+        return
+    now = _utc_now()
+    profile = EmrEndpointProfile(
+        profile_key='alleva-default',
+        display_name='Alleva default FHIR/OAuth profile',
+        vendor_name=settings_row.emr_vendor_name or 'Alleva',
+        adapter_key='alleva-fhir-document-manager',
+        fhir_base_url=settings_row.emr_fhir_base_url,
+        openapi_url='',
+        token_url=settings_row.emr_smart_token_url,
+        token_auth_style=settings_row.emr_smart_token_auth_style,
+        client_id=settings_row.emr_smart_client_id,
+        client_secret=settings_row.emr_smart_client_secret,
+        scopes=settings_row.emr_smart_scopes,
+        timeout_seconds=settings_row.emr_api_timeout_seconds,
+        is_active=True,
+        is_default=True,
+        notes='Seeded from current app settings. Live patient import remains disabled until vendor and compliance approval.',
+        created_by_id=user.id if user else None,
+        updated_by_id=user.id if user else None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(profile)
+    db.flush()
+
+
+def _make_only_default_profile(db: Session, profile: EmrEndpointProfile) -> None:
+    if not profile.is_default:
+        return
+    for other in db.execute(select(EmrEndpointProfile).where(EmrEndpointProfile.id != profile.id)).scalars().all():
+        other.is_default = False
 
 
 def _chart_summary(chart: Chart) -> dict[str, object]:
@@ -606,10 +729,16 @@ def update_app_settings(
         settings_row.emr_smart_client_secret = ''
     if payload.emr_smart_token_url is not None:
         settings_row.emr_smart_token_url = payload.emr_smart_token_url.strip()
+    if payload.emr_smart_token_auth_style is not None:
+        settings_row.emr_smart_token_auth_style = payload.emr_smart_token_auth_style
     if payload.emr_smart_scopes is not None:
         settings_row.emr_smart_scopes = ' '.join(payload.emr_smart_scopes.split())
     if payload.emr_api_timeout_seconds is not None:
         settings_row.emr_api_timeout_seconds = payload.emr_api_timeout_seconds
+    if payload.emr_periodic_check_enabled is not None:
+        settings_row.emr_periodic_check_enabled = payload.emr_periodic_check_enabled
+    if payload.emr_periodic_check_interval_minutes is not None:
+        settings_row.emr_periodic_check_interval_minutes = payload.emr_periodic_check_interval_minutes
     if payload.facility_timezone is not None:
         try:
             settings_row.facility_timezone = normalize_timezone_name(payload.facility_timezone)
@@ -620,6 +749,7 @@ def update_app_settings(
     if payload.treatment_plan_loc_change_window_validated is not None:
         settings_row.treatment_plan_loc_change_window_validated = payload.treatment_plan_loc_change_window_validated
     _validate_emr_enablement(settings_row)
+    _validate_periodic_api_check(settings_row)
 
     touch_app_settings(settings_row, actor=user)
     db.commit()
@@ -703,6 +833,218 @@ def get_emr_profile(request: Request, user: User = Depends(require_roles(Role.ad
     return profile
 
 
+@router.get('/emr/profiles', response_model=list[EmrEndpointProfileOut])
+def list_emr_endpoint_profiles(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    settings_row = get_or_create_app_settings(db)
+    seeded = db.execute(select(EmrEndpointProfile.id).limit(1)).scalar_one_or_none() is None
+    _ensure_default_emr_endpoint_profile(db, settings_row, user)
+    if seeded:
+        db.commit()
+    profiles = list(db.execute(select(EmrEndpointProfile).order_by(EmrEndpointProfile.is_default.desc(), EmrEndpointProfile.display_name.asc())).scalars().all())
+    log_event(
+        db,
+        request,
+        'emr.endpoint_profile.list.read',
+        actor=user,
+        event_category='configuration',
+        target_entity='emr_endpoint_profiles',
+        target_entity_type='emr_endpoint_profile',
+        details={'count': len(profiles), 'seeded_default': seeded},
+        message='EMR endpoint profile list viewed.',
+    )
+    return [_emr_profile_payload(profile) for profile in profiles]
+
+
+@router.post('/emr/profiles', response_model=EmrEndpointProfileOut)
+def create_emr_endpoint_profile(
+    payload: EmrEndpointProfileCreate,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    profile_key = payload.profile_key.strip().lower()
+    existing = db.execute(select(EmrEndpointProfile).where(EmrEndpointProfile.profile_key == profile_key)).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail='An EMR endpoint profile with this key already exists')
+    now = _utc_now()
+    profile = EmrEndpointProfile(
+        profile_key=profile_key,
+        display_name=payload.display_name.strip(),
+        vendor_name=payload.vendor_name.strip() or 'Alleva',
+        adapter_key=payload.adapter_key.strip() or 'alleva-fhir-document-manager',
+        fhir_base_url=normalize_fhir_base_url(payload.fhir_base_url) if payload.fhir_base_url.strip() else '',
+        openapi_url=payload.openapi_url.strip(),
+        token_url=payload.token_url.strip(),
+        token_auth_style=payload.token_auth_style,
+        client_id=payload.client_id.strip(),
+        client_secret=encrypt_text_secret(payload.client_secret.strip()) if payload.client_secret and payload.client_secret.strip() else '',
+        scopes=' '.join(payload.scopes.split()),
+        timeout_seconds=payload.timeout_seconds,
+        is_active=payload.is_active,
+        is_default=payload.is_default,
+        notes=payload.notes.strip(),
+        created_by_id=user.id,
+        updated_by_id=user.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(profile)
+    db.flush()
+    _make_only_default_profile(db, profile)
+    db.commit()
+    db.refresh(profile)
+    log_event(
+        db,
+        request,
+        'emr.endpoint_profile.create',
+        actor=user,
+        event_category='configuration',
+        target_entity=f'emr_endpoint_profile:{profile.id}',
+        target_entity_type='emr_endpoint_profile',
+        target_entity_id=str(profile.id),
+        details={'profile_key': profile.profile_key, 'client_secret_configured': bool(profile.client_secret)},
+        after_state=_emr_profile_snapshot(profile),
+        message=f'EMR endpoint profile {profile.profile_key} created.',
+    )
+    return _emr_profile_payload(profile)
+
+
+@router.patch('/emr/profiles/{profile_id}', response_model=EmrEndpointProfileOut)
+def update_emr_endpoint_profile(
+    profile_id: int,
+    payload: EmrEndpointProfileUpdate,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    profile = _find_emr_endpoint_profile(profile_id, db)
+    before = _emr_profile_snapshot(profile)
+    if payload.display_name is not None:
+        profile.display_name = payload.display_name.strip()
+    if payload.vendor_name is not None:
+        profile.vendor_name = payload.vendor_name.strip() or profile.vendor_name
+    if payload.adapter_key is not None:
+        profile.adapter_key = payload.adapter_key.strip() or profile.adapter_key
+    if payload.fhir_base_url is not None:
+        profile.fhir_base_url = normalize_fhir_base_url(payload.fhir_base_url) if payload.fhir_base_url.strip() else ''
+    if payload.openapi_url is not None:
+        profile.openapi_url = payload.openapi_url.strip()
+    if payload.token_url is not None:
+        profile.token_url = payload.token_url.strip()
+    if payload.token_auth_style is not None:
+        profile.token_auth_style = payload.token_auth_style
+    if payload.client_id is not None:
+        profile.client_id = payload.client_id.strip()
+    if payload.clear_client_secret:
+        profile.client_secret = ''
+    elif payload.client_secret and payload.client_secret.strip():
+        profile.client_secret = encrypt_text_secret(payload.client_secret.strip())
+    if payload.scopes is not None:
+        profile.scopes = ' '.join(payload.scopes.split())
+    if payload.timeout_seconds is not None:
+        profile.timeout_seconds = payload.timeout_seconds
+    if payload.is_active is not None:
+        profile.is_active = payload.is_active
+    if payload.is_default is not None:
+        profile.is_default = payload.is_default
+    if payload.notes is not None:
+        profile.notes = payload.notes.strip()
+    profile.updated_by_id = user.id
+    profile.updated_at = _utc_now()
+    _make_only_default_profile(db, profile)
+    db.commit()
+    db.refresh(profile)
+    after = _emr_profile_snapshot(profile)
+    log_event(
+        db,
+        request,
+        'emr.endpoint_profile.update',
+        actor=user,
+        event_category='configuration',
+        target_entity=f'emr_endpoint_profile:{profile.id}',
+        target_entity_type='emr_endpoint_profile',
+        target_entity_id=str(profile.id),
+        details={'profile_key': profile.profile_key, 'client_secret_configured': bool(profile.client_secret)},
+        before_state=before,
+        after_state=after,
+        diff_state={key: {'before': before.get(key), 'after': after.get(key)} for key in sorted(set(before) | set(after)) if before.get(key) != after.get(key)},
+        message=f'EMR endpoint profile {profile.profile_key} updated.',
+    )
+    return _emr_profile_payload(profile)
+
+
+@router.post('/emr/profiles/{profile_id}/activate', response_model=AppSettingsOut)
+def activate_emr_endpoint_profile(
+    profile_id: int,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    profile = _find_emr_endpoint_profile(profile_id, db)
+    if not profile.is_active:
+        raise HTTPException(status_code=400, detail='Archived EMR endpoint profiles cannot be activated')
+    settings_row = get_or_create_app_settings(db)
+    before = _settings_snapshot(settings_row)
+    settings_row.emr_vendor_name = profile.vendor_name
+    settings_row.emr_fhir_base_url = profile.fhir_base_url
+    settings_row.emr_smart_client_id = profile.client_id
+    if profile.client_secret:
+        settings_row.emr_smart_client_secret = profile.client_secret
+    settings_row.emr_smart_token_url = profile.token_url
+    settings_row.emr_smart_token_auth_style = profile.token_auth_style
+    settings_row.emr_smart_scopes = profile.scopes
+    settings_row.emr_api_timeout_seconds = profile.timeout_seconds
+    profile.is_default = True
+    profile.updated_by_id = user.id
+    profile.updated_at = _utc_now()
+    _make_only_default_profile(db, profile)
+    touch_app_settings(settings_row, actor=user)
+    db.commit()
+    db.refresh(settings_row)
+    after = _settings_snapshot(settings_row)
+    log_event(
+        db,
+        request,
+        'emr.endpoint_profile.activate',
+        actor=user,
+        event_category='configuration',
+        target_entity=f'emr_endpoint_profile:{profile.id}',
+        target_entity_type='emr_endpoint_profile',
+        target_entity_id=str(profile.id),
+        details={'profile_key': profile.profile_key, 'client_secret_configured': bool(profile.client_secret)},
+        before_state=before,
+        after_state=after,
+        diff_state={key: {'before': before.get(key), 'after': after.get(key)} for key in sorted(set(before) | set(after)) if before.get(key) != after.get(key)},
+        message=f'EMR endpoint profile {profile.profile_key} activated for API testing.',
+    )
+    return app_settings_public_payload(settings_row)
+
+
+@router.delete('/emr/profiles/{profile_id}')
+def delete_emr_endpoint_profile(profile_id: int, request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    profile = _find_emr_endpoint_profile(profile_id, db)
+    if profile.is_default:
+        raise HTTPException(status_code=400, detail='The default EMR endpoint profile cannot be deleted; activate another profile first')
+    before = _emr_profile_snapshot(profile)
+    profile_key = profile.profile_key
+    db.delete(profile)
+    db.commit()
+    log_event(
+        db,
+        request,
+        'emr.endpoint_profile.delete',
+        actor=user,
+        event_category='configuration',
+        target_entity=f'emr_endpoint_profile:{profile_id}',
+        target_entity_type='emr_endpoint_profile',
+        target_entity_id=str(profile_id),
+        details={'profile_key': profile_key},
+        before_state=before,
+        message=f'EMR endpoint profile {profile_key} deleted.',
+    )
+    return {'status': 'deleted', 'profile_key': profile_key}
+
+
 @router.post('/emr/discover', response_model=EmrDiscoveryOut)
 def discover_emr_smart_configuration(
     payload: EmrDiscoveryInput,
@@ -727,7 +1069,7 @@ def discover_emr_smart_configuration(
             'token_endpoint_configured': discovery['token_endpoint_configured'],
             'capabilities_count': len(discovery['capabilities']),
         },
-        message='SMART-on-FHIR discovery completed.',
+        message='FHIR/OAuth discovery completed.',
     )
     return discovery
 
@@ -797,7 +1139,11 @@ def run_review_source_daily_check(
     settings_row = get_or_create_app_settings(db)
     note_set_stmt = _note_set_stmt().where(PatientNoteSet.status == NoteSetStatus.active)
     note_sets = list(db.execute(note_set_stmt.order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())).scalars().unique().all())
+    api_check_result = run_periodic_api_check(db, settings_row) if settings_row.emr_periodic_check_enabled else None
+    db.refresh(settings_row)
     payload = review_source_discovery_payload(db, settings_row, note_sets)
+    if api_check_result is not None:
+        payload['last_check_mode'] = 'periodic_api_readiness_check'
     log_event(
         db,
         request,
@@ -812,6 +1158,7 @@ def run_review_source_daily_check(
             'error_count': payload['error_count'],
             'live_import_enabled': payload['live_import_enabled'],
             'api_mode': payload['api_mode'],
+            'api_check_status': api_check_result.get('status') if isinstance(api_check_result, dict) else '',
         },
         message='Daily review-source check run in safe readiness/mock mode.',
     )
@@ -1216,7 +1563,11 @@ async def upload_patient_note_set(
     resolved_primary_clinician = primary_clinician.strip() or extracted_metadata.primary_clinician
     resolved_level_of_care = level_of_care.strip() or extracted_metadata.level_of_care
     resolved_admission_date = admission_date.strip() or extracted_metadata.admission_date
-    resolved_client_name = client_name.strip() or display_name_for_patient_name_status(extracted_metadata.patient_name_status, effective_local_now)
+    resolved_client_name = client_name.strip() or display_name_for_patient_name_status(
+        extracted_metadata.patient_name_status,
+        effective_local_now,
+        patient_id=normalized_patient_id,
+    )
     client_name_status_detail = (
         'Operator supplied a permitted display name.'
         if client_name.strip()
@@ -1425,6 +1776,110 @@ async def upload_patient_note_set(
             message=f'Automated evaluation completed for chart {review_chart.id}.',
         )
     return _note_set_detail(note_set)
+
+
+@router.delete('/patient-note-sets/{note_set_id}')
+def delete_patient_note_set(
+    note_set_id: int,
+    request: Request,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    note_set = _find_note_set(note_set_id, user, db)
+    patient_id = note_set.patient_id
+    storage_paths = [document.storage_path for document in note_set.documents if document.storage_path]
+    deleted_chart_ids = [chart.id for chart in note_set.review_charts]
+    deleted_document_count = len(note_set.documents)
+    was_active = note_set.status == NoteSetStatus.active
+    replacement_note_set = (
+        db.execute(
+            _note_set_stmt()
+            .where(PatientNoteSet.patient_id == patient_id, PatientNoteSet.id != note_set.id)
+            .order_by(PatientNoteSet.version.desc(), PatientNoteSet.id.desc())
+        )
+        .scalars()
+        .unique()
+        .first()
+    )
+    timeliness_client = _timeliness_client_for_patient(patient_id, db)
+    timeliness_only_from_deleted_note_set = bool(
+        timeliness_client
+        and timeliness_client.source_note_set_id == note_set.id
+        and all(item.source_note_set_id == note_set.id for item in timeliness_client.level_of_care_history)
+        and all(item.source_note_set_id == note_set.id for item in timeliness_client.treatment_plans)
+    )
+
+    try:
+        if timeliness_client is not None:
+            if timeliness_only_from_deleted_note_set and not replacement_note_set:
+                db.delete(timeliness_client)
+            else:
+                db.execute(delete(LevelOfCareHistory).where(LevelOfCareHistory.source_note_set_id == note_set.id))
+                db.execute(delete(TreatmentPlanRecord).where(TreatmentPlanRecord.source_note_set_id == note_set.id))
+                if timeliness_client.source_note_set_id == note_set.id:
+                    timeliness_client.source_note_set_id = None
+                    timeliness_client.source_evidence = ''
+                    timeliness_client.last_imported_at = None
+                    timeliness_client.updated_at = _utc_now()
+
+        for chart in list(note_set.review_charts):
+            db.execute(delete(WorkflowTransition).where(WorkflowTransition.chart_id == chart.id))
+            db.delete(chart)
+
+        if was_active and replacement_note_set is not None:
+            replacement_note_set.status = NoteSetStatus.active
+            sync_from_note_set(db, replacement_note_set)
+
+        db.delete(note_set)
+        db.flush()
+        remove_stored_paths(storage_paths)
+        reactivated_note_set_id = replacement_note_set.id if was_active and replacement_note_set else None
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        log_event(
+            db,
+            request,
+            'patient_note_set.delete.failed',
+            actor=user,
+            event_category='file_activity',
+            target_entity=f'patient_note_set:{note_set_id}',
+            target_entity_type='patient_note_set',
+            target_entity_id=str(note_set_id),
+            patient_id=patient_id,
+            details={'reason': exc.__class__.__name__},
+            outcome_status='failure',
+            severity='error',
+            message=f'Patient note set {note_set_id} deletion failed.',
+            http_status_code=500,
+        )
+        raise
+
+    log_event(
+        db,
+        request,
+        'patient_note_set.deleted',
+        actor=user,
+        event_category='file_activity',
+        target_entity=f'patient_note_set:{note_set_id}',
+        target_entity_type='patient_note_set',
+        target_entity_id=str(note_set_id),
+        patient_id=patient_id,
+        details={
+            'deleted_document_count': deleted_document_count,
+            'deleted_chart_ids': deleted_chart_ids,
+            'deleted_storage_file_count': len(storage_paths),
+            'reactivated_note_set_id': reactivated_note_set_id,
+        },
+        message=f'Patient note set {note_set_id} and linked review data were deleted.',
+    )
+    return {
+        'status': 'deleted',
+        'deleted_note_set_id': note_set_id,
+        'deleted_review_chart_ids': deleted_chart_ids,
+        'deleted_document_count': deleted_document_count,
+        'reactivated_note_set_id': reactivated_note_set_id,
+    }
 
 
 @router.get('/patient-note-sets/{note_set_id}/documents/{document_id}/download')

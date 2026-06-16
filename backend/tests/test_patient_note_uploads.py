@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -6,7 +7,7 @@ from sqlalchemy import select
 
 from app.core.config import REPO_ROOT
 from app.core.security import hash_password
-from app.models.models import AuditLog, PatientNoteDocument, PatientNoteSet, Role, TreatmentPlanClient, User
+from app.models.models import AuditLog, Chart, PatientNoteDocument, PatientNoteSet, Role, TreatmentPlanClient, User
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -174,6 +175,54 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         db.close()
 
 
+def test_delete_patient_note_set_removes_files_review_and_timeliness(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _upload_payload('PAT-DELETE-100', upload_mode='initial', file_name='delete-me.txt', label='Delete Me')
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+        assert uploaded.status_code == 200
+        payload = uploaded.json()
+        note_set_id = payload['id']
+        chart_id = payload['review_chart_id']
+
+        db = session_local()
+        try:
+            document = db.execute(select(PatientNoteDocument).where(PatientNoteDocument.note_set_id == note_set_id)).scalar_one()
+            import app.services.patient_notes as patient_notes_module
+
+            stored_path = patient_notes_module.settings.upload_dir_path / document.storage_path
+            assert stored_path.exists()
+        finally:
+            db.close()
+
+        deleted = client.delete(f'/api/patient-note-sets/{note_set_id}', headers=headers)
+        assert deleted.status_code == 200
+        assert deleted.json()['deleted_note_set_id'] == note_set_id
+        assert deleted.json()['deleted_review_chart_ids'] == [chart_id]
+
+        assert client.get(f'/api/patient-note-sets/{note_set_id}', headers=headers).status_code == 404
+        assert client.get(f'/api/charts/{chart_id}', headers=headers).status_code == 404
+
+    db = session_local()
+    try:
+        assert db.execute(select(PatientNoteSet).where(PatientNoteSet.id == note_set_id)).scalar_one_or_none() is None
+        assert db.execute(select(PatientNoteDocument).where(PatientNoteDocument.note_set_id == note_set_id)).scalar_one_or_none() is None
+        assert db.execute(select(Chart).where(Chart.id == chart_id)).scalar_one_or_none() is None
+        assert db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-DELETE-100')).scalar_one_or_none() is None
+        assert not stored_path.exists()
+
+        delete_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.deleted')).scalar_one_or_none()
+        assert delete_log is not None
+        assert delete_log.patient_id == 'PAT-DELETE-100'
+        serialized_logs = ' '.join(f'{audit_log.message} {audit_log.details} {audit_log.before_state or ""}' for audit_log in db.execute(select(AuditLog)).scalars().all())
+        assert 'Intake packet completed' not in serialized_logs
+        assert 'delete-me.txt' not in serialized_logs
+    finally:
+        db.close()
+
+
 def test_download_requires_access_to_note_set(app_with_sqlite):
     app, session_local = app_with_sqlite
 
@@ -284,14 +333,14 @@ def test_redacted_example_pdf_upload_extracts_clinician_loc_and_placeholder_name
         chart_payload = chart.json()
         assert chart_payload['primary_clinician'] == payload['primary_clinician']
         assert chart_payload['level_of_care'] == 'GOP'
-        assert chart_payload['client_name'].startswith('Name Hidden ')
+        assert re.fullmatch(r'PAT-REDACTED-JTXP_\d{8}_\d{6}', chart_payload['client_name'])
         assert 'redacted_hidden' in chart_payload['other_details']
 
     db = session_local()
     try:
         stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REDACTED-JTXP')).scalar_one()
         assert stored_client.current_level_of_care == 'GOP'
-        assert stored_client.permitted_name.startswith('Name Hidden ')
+        assert re.fullmatch(r'PAT-REDACTED-JTXP_\d{8}_\d{6}', stored_client.permitted_name)
 
         upload_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.uploaded')).scalar_one()
         assert 'redacted_hidden' in upload_log.details

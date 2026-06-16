@@ -331,43 +331,51 @@ label {
 }
 
 .pill--overdue {
-  background: #f9e0df;
-  color: #8c2431;
+  background: #fbe1e1;
+  color: #8c1d2c;
+  border: 1px solid #df8c92;
 }
 
 .pill--urgent {
-  background: #ffe4cf;
-  color: #9a421d;
+  background: #ffe6d4;
+  color: #914112;
+  border: 1px solid #f0a06a;
 }
 
 .pill--due-soon {
-  background: #f6e8be;
-  color: #7a5b0b;
+  background: #fbefbf;
+  color: #705108;
+  border: 1px solid #d9b63e;
 }
 
 .pill--returned {
-  background: #efe4ff;
-  color: #5b2aa1;
+  background: #ede5ff;
+  color: #54269a;
+  border: 1px solid #a58be7;
 }
 
 .pill--needs-review {
-  background: #e2e9ff;
-  color: #264c9d;
+  background: #e1ecff;
+  color: #174e9a;
+  border: 1px solid #8caee8;
 }
 
 .pill--missing-data {
-  background: #e7ece8;
+  background: #f0f3f2;
   color: #33473d;
+  border: 1px dashed #91a29a;
 }
 
 .pill--conflicting {
-  background: #dce3e5;
-  color: #24343b;
+  background: #ece6dc;
+  color: #3d2d1f;
+  border: 1px solid #b59972;
 }
 
 .pill--unable {
-  background: #e5e9ee;
-  color: #475569;
+  background: #e7ebef;
+  color: #354354;
+  border: 1px solid #a8b3bf;
 }
 
 .detail-grid {
@@ -473,6 +481,25 @@ label {
   margin: 0.75rem 0 0;
   padding-left: 1.2rem;
   color: #425249;
+}
+
+.field-note {
+  align-self: end;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-left: 3px solid #8ed4dd;
+  background: rgba(237, 248, 250, 0.75);
+}
+
+.help-grid,
+.role-matrix {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.help-card {
+  align-content: start;
 }
 
 .finding-card,
@@ -1195,6 +1222,25 @@ label {
   background: #761b29;
 }
 
+.danger-zone {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(140, 36, 49, 0.28);
+  border-left: 4px solid #8c2431;
+  background: rgba(140, 36, 49, 0.06);
+}
+
+.danger-zone p {
+  margin: 0;
+  color: #5c4c4d;
+}
+
+.danger-zone button {
+  justify-self: start;
+}
+
 .workflow-admin-panel {
   margin-top: 1.25rem;
   display: grid;
@@ -1239,6 +1285,8 @@ ol {
   .acronym-grid,
   .status-vocabulary,
   .source-choice-grid,
+  .help-grid,
+  .role-matrix,
   .checklist-step-card dl,
   .file-editor-row__fields,
   .form-grid,
@@ -1267,6 +1315,8 @@ ol {
   .acronym-grid,
   .status-vocabulary,
   .source-choice-grid,
+  .help-grid,
+  .role-matrix,
   .checklist-step-card dl,
   .file-editor-row__fields,
   .form-grid,
@@ -1548,9 +1598,9 @@ label {
 }
 
 .pill--warning {
-  background: rgba(255, 128, 105, 0.14);
-  color: #8d3d30;
-  border: 1px solid rgba(255, 128, 105, 0.32);
+  background: rgba(246, 201, 83, 0.22);
+  color: #725100;
+  border: 1px solid rgba(246, 201, 83, 0.52);
 }
 
 .pill--attention {
@@ -1567,51 +1617,51 @@ label {
 }
 
 .pill--overdue {
-  background: rgba(255, 128, 105, 0.16);
-  color: #a63d2e;
-  border: 1px solid rgba(255, 128, 105, 0.42);
+  background: #fbe1e1;
+  color: #8c1d2c;
+  border: 1px solid #df8c92;
 }
 
 .pill--urgent {
-  background: rgba(255, 150, 76, 0.16);
-  color: #9a421d;
-  border: 1px solid rgba(255, 150, 76, 0.42);
+  background: #ffe6d4;
+  color: #914112;
+  border: 1px solid #f0a06a;
 }
 
 .pill--due-soon {
-  background: rgba(246, 201, 83, 0.2);
-  color: #7a5b0b;
-  border: 1px solid rgba(246, 201, 83, 0.46);
+  background: #fbefbf;
+  color: #705108;
+  border: 1px solid #d9b63e;
 }
 
 .pill--returned {
-  background: rgba(126, 76, 219, 0.14);
-  color: #5b2aa1;
-  border: 1px solid rgba(126, 76, 219, 0.36);
+  background: #ede5ff;
+  color: #54269a;
+  border: 1px solid #a58be7;
 }
 
 .pill--needs-review {
-  background: rgba(72, 111, 219, 0.14);
-  color: #264c9d;
-  border: 1px solid rgba(72, 111, 219, 0.36);
+  background: #e1ecff;
+  color: #174e9a;
+  border: 1px solid #8caee8;
 }
 
 .pill--missing-data {
-  background: #eef2f3;
-  color: #56666d;
-  border: 1px solid #d8e0e3;
+  background: #f0f3f2;
+  color: #33473d;
+  border: 1px dashed #91a29a;
 }
 
 .pill--conflicting {
-  background: #dce3e5;
-  color: #24343b;
-  border: 1px solid #c1ccd1;
+  background: #ece6dc;
+  color: #3d2d1f;
+  border: 1px solid #b59972;
 }
 
 .pill--unable {
-  background: #e5e9ee;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  background: #e7ebef;
+  color: #354354;
+  border: 1px solid #a8b3bf;
 }
 
 .form-grid {
@@ -1733,12 +1783,16 @@ label {
   .workspace-grid,
   .dashboard-grid,
   .workflow-admin-grid,
+  .help-grid,
+  .role-matrix,
   .metrics {
     min-width: 0;
     max-width: 100%;
   }
 
-  .workflow-admin-grid {
+  .workflow-admin-grid,
+  .help-grid,
+  .role-matrix {
     grid-template-columns: 1fr;
   }
 

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 import time
@@ -20,11 +21,14 @@ from app.db.bootstrap import ensure_schema_compatibility
 from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 from app.services.audit import bind_request_context, log_event, log_request_completed, log_unhandled_exception, reset_audit_context, system_audit_context
+from app.services.api_monitor import periodic_check_due, run_periodic_api_check
+from app.services.app_settings import get_or_create_app_settings
 from app.services.runtime_checks import assert_startup_ready, readiness_payload
 from app.services.version import build_version_payload
 from app.services.workflow_definitions import ensure_default_workflow_definitions
 
 logger = logging.getLogger(__name__)
+API_MONITOR_POLL_SECONDS = 60
 
 
 def wait_for_database(max_attempts: int = 8, initial_delay: float = 0.5) -> None:
@@ -118,6 +122,26 @@ def initialize_database() -> None:
         )
 
 
+def run_due_periodic_api_check_once() -> None:
+    db = SessionLocal()
+    try:
+        settings_row = get_or_create_app_settings(db)
+        if periodic_check_due(settings_row):
+            run_periodic_api_check(db, settings_row)
+    except Exception as exc:  # pragma: no cover - defensive background guard
+        logger.warning('Periodic API check failed: %s', exc)
+    finally:
+        db.close()
+
+
+async def periodic_api_monitor_loop(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=API_MONITOR_POLL_SECONDS)
+        except asyncio.TimeoutError:
+            await asyncio.to_thread(run_due_periodic_api_check_once)
+
+
 def create_app() -> FastAPI:
     os.makedirs(settings.upload_dir_path, exist_ok=True)
     os.makedirs(settings.log_dir_path, exist_ok=True)
@@ -125,7 +149,17 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         initialize_database()
-        yield
+        stop_event = asyncio.Event()
+        monitor_task = asyncio.create_task(periodic_api_monitor_loop(stop_event))
+        try:
+            yield
+        finally:
+            stop_event.set()
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
 
     api = FastAPI(title=settings.app_name, lifespan=lifespan)
 

@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -135,6 +136,47 @@ def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
         assert payload['evidence_comparison']['loc_anchor_due_date'] == '2026-05-29'
         assert 'LOC-change anchor/window is unvalidated' in payload['evidence_comparison']['conflict_explanation']
         assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
+
+
+def test_api_style_treatment_plan_repull_updates_record_and_reevaluates(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        initial = _client_payload(patient_id='PAT-TP-REPULL', review_date='2026-04-02')
+        initial['permitted_name'] = ''
+        created = client.post('/api/timeliness/clients', headers=headers, json=initial)
+        assert created.status_code == 200
+        assert re.fullmatch(r'PAT-TP-REPULL_\d{8}_\d{6}', created.json()['permitted_name'])
+
+        first_dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-27', headers=headers)
+        assert first_dashboard.status_code == 200
+        first_item = first_dashboard.json()['items'][0]
+        assert first_item['patient_id'] == 'PAT-TP-REPULL'
+        assert first_item['next_due_date'] == '2026-05-29'
+        assert first_item['status'] == 'Needs Review'
+
+        updated_payload = _client_payload(patient_id='PAT-TP-REPULL', loc='PHP', review_date='2026-05-20')
+        updated_payload['permitted_name'] = ''
+        updated_payload['level_of_care_history'] = [
+            {
+                'level_of_care': 'PHP',
+                'facility': 'Synthetic Facility',
+                'effective_date': '2026-02-26',
+                'source_evidence': 'Synthetic API re-pull LOC',
+            }
+        ]
+        updated = client.post('/api/timeliness/clients', headers=headers, json=updated_payload)
+        assert updated.status_code == 200
+        assert updated.json()['last_valid_review_date'] == '2026-05-20'
+
+        second_dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-27', headers=headers)
+        assert second_dashboard.status_code == 200
+        second_item = second_dashboard.json()['items'][0]
+        assert second_item['patient_id'] == 'PAT-TP-REPULL'
+        assert second_item['next_due_date'] == '2026-06-19'
+        assert second_item['status'] == 'Compliant'
+        assert second_item['rule_used'] == 'TP-REVIEW-30'
 
 
 def test_timeliness_missing_data_and_manual_override_are_audited(app_with_sqlite):

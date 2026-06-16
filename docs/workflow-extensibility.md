@@ -1,10 +1,10 @@
 # Workflow Extensibility
 
-Date: 2026-06-04
+Date: 2026-06-16
 
 ## Purpose
 
-Workflow profiles let admins define future clinical workflows without changing deterministic Treatment Plan Timeliness code. Profiles are versioned, audited, and managed from admin Settings.
+Workflow profiles let admins and office managers define future clinical workflows without changing deterministic Treatment Plan Timeliness code. Profiles are versioned, audited, and managed from the dedicated Workflow profiles screen.
 
 The current workflow profile system is for metadata, steps, transition rules, and future workflow planning. It does not replace the deterministic timeliness evaluator in `backend/app/services/timeliness.py`.
 
@@ -53,14 +53,14 @@ Each version stores:
 
 ## API
 
-Admin and manager can read workflow profiles:
+Admins and office managers can read workflow profiles:
 
 ```text
 GET /api/workflow-definitions
 GET /api/workflow-definitions/{id}
 ```
 
-Admin-only mutation routes:
+Admin/manager mutation routes:
 
 ```text
 POST /api/workflow-definitions
@@ -107,9 +107,9 @@ Workflow profile changes write forensic audit events for:
 
 Audit records include before/after state where applicable. Do not include PHI, credentials, bearer tokens, API keys, encryption keys, or uploaded note text in workflow definitions or version notes.
 
-## Admin UI
+## App UI
 
-Admin Settings includes a Workflow Profiles section for:
+The `Workflow profiles` screen is available to admins and office managers for:
 
 - viewing active/archived profiles
 - viewing published/draft/archived versions
@@ -119,7 +119,7 @@ Admin Settings includes a Workflow Profiles section for:
 - archiving profiles
 - deleting unused draft-only profiles
 
-Managers can read profiles through the API but cannot mutate them.
+App settings remains admin-only. Workflow profile changes are intentionally separate so office managers can adjust approved checklist workflow steps and transition logic without opening API/EMR, LLM, readiness, or forensic-log settings.
 
 ## Current Limits
 

@@ -37,26 +37,23 @@ def _api_configuration_page() -> HTMLResponse:
       .required { color: #b91c1c; font-weight: 800; }
     </style>
   </head>
-  <body>
+  <body onload="initializeSession()">
     <main>
       <h1>API Configuration and Connectivity Test</h1>
       <p class="hint">Use this local admin page to test API-key or OAuth client-credentials connectivity without putting credentials into source files.</p>
 
       <section>
-        <h2>1. Admin sign-in</h2>
-        <div class="grid">
-          <label>Username <input id="username" autocomplete="username" value="admin" /></label>
-          <label>Password <input id="password" type="password" autocomplete="current-password" /></label>
-        </div>
-        <button onclick="login()">Sign in</button>
-        <span id="loginStatus" class="hint">Not signed in.</span>
+        <h2>1. Admin session</h2>
+        <p class="hint">This test harness uses the admin session from the main app window. Open it from App settings after signing in as an administrator.</p>
+        <button onclick="initializeSession()">Use current app session</button>
+        <span id="loginStatus" class="hint">Checking admin session...</span>
       </section>
 
       <section>
         <h2>2. API settings</h2>
         <div class="grid">
           <label>Vendor name <input id="vendorName" value="Alleva API" /></label>
-          <label>API base URL <input id="apiBaseUrl" placeholder="https://api.allevasoft.com" /></label>
+          <label>API or FHIR base URL <input id="apiBaseUrl" placeholder="https://api.allevasoft.com or https://your-alleva-tenant.example.com/fhir/R4" /></label>
         </div>
         <label>Swagger UI URL <input id="swaggerUiUrl" value="https://api.allevasoft.com/swagger/index.html" /></label>
         <label>OpenAPI/Swagger JSON URL <input id="openApiUrl" placeholder="https://api.allevasoft.com/swagger/v1/swagger.json" /></label>
@@ -77,11 +74,20 @@ def _api_configuration_page() -> HTMLResponse:
           <label>Client secret <input id="clientSecret" type="password" autocomplete="off" placeholder="Saved encrypted; never shown in results" /></label>
         </div>
         <label>Token URL <input id="tokenUrl" value="https://authorization.allevasoft.com/connect/token" /></label>
+        <label>Token auth style
+          <select id="tokenAuthStyle">
+            <option value="body">Body credentials</option>
+            <option value="basic">Basic auth header</option>
+            <option value="basic_urlencoded">Basic auth header, URL-encoded pair</option>
+            <option value="both">Try body, then Basic</option>
+            <option value="all">Try all supported styles</option>
+          </select>
+        </label>
         <label>OAuth scopes <input id="scope" placeholder="Optional client-credentials scope string" /></label>
         <button onclick="loadConfig()" class="secondary">Load saved config</button>
         <button onclick="saveConfig()">Save config and encrypted secret</button>
         <button onclick="clearSavedKey()" class="danger">Clear saved secret</button>
-        <p class="hint">Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
+        <p class="hint">For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
       </section>
 
       <section>
@@ -108,6 +114,7 @@ def _api_configuration_page() -> HTMLResponse:
     </main>
 
     <script>
+      const SESSION_TOKEN_KEY = 'iz-cna-session-token';
       let token = '';
       let currentDefinition = {};
       let currentSelectedDefinitionUrl = '';
@@ -118,6 +125,22 @@ def _api_configuration_page() -> HTMLResponse:
       const getValue = (id) => byId(id).value.trim();
       const authHeaders = () => ({ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' });
       const operationByKey = () => currentOperations.find((item) => item.operation_key === byId('operationSelect').value);
+      window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
+        const data = event.data || {};
+        if (data.type !== 'iz-cna-session-token' || !data.token) return;
+        window.sessionStorage.setItem(SESSION_TOKEN_KEY, data.token);
+        token = data.token;
+        initializeSession();
+      });
+      const displayResult = (id, payload) => {
+        const clone = JSON.parse(JSON.stringify(payload || {}));
+        if (clone.definition) clone.definition = { omitted_from_screen: true, definition_summary: clone.definition_summary || {} };
+        if (Array.isArray(clone.operations) && clone.operations.length > 50) {
+          clone.operations = clone.operations.slice(0, 50).concat([{ _truncated_items: clone.operations.length - 50 }]);
+        }
+        setText(id, JSON.stringify(clone, null, 2));
+      };
 
       async function readJson(response) {
         const text = await response.text();
@@ -130,19 +153,46 @@ def _api_configuration_page() -> HTMLResponse:
         return payload;
       }
 
-      async function login() {
-        setText('loginStatus', 'Signing in...');
+      function readSessionToken() {
+        const localToken = window.sessionStorage.getItem(SESSION_TOKEN_KEY) || '';
+        if (localToken) return localToken;
         try {
-          const payload = await readJson(await fetch(`${api}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: getValue('username'), password: getValue('password') })
-          }));
-          token = payload.access_token;
-          setText('loginStatus', 'Signed in.');
+          const openerToken = window.opener?.sessionStorage?.getItem(SESSION_TOKEN_KEY) || '';
+          if (openerToken) {
+            window.sessionStorage.setItem(SESSION_TOKEN_KEY, openerToken);
+            return openerToken;
+          }
+        } catch {
+          return '';
+        }
+        return '';
+      }
+
+      async function initializeSession() {
+        setText('loginStatus', 'Checking admin session...');
+        token = readSessionToken();
+        if (!token) {
+          try {
+            window.opener?.postMessage({ type: 'iz-cna-session-token-request' }, window.location.origin);
+          } catch {}
+          setText('loginStatus', 'Waiting for the admin session from the main app. Return to the main app, sign in as admin, then open this page from App settings if this does not update.');
+          byId('loginStatus').className = 'warn';
+          return;
+        }
+        try {
+          const profile = await readJson(await fetch(`${api}/users/me`, { headers: authHeaders() }));
+          if (!profile || profile.role !== 'admin') {
+            token = '';
+            setText('loginStatus', 'Admin access is required for API configuration and connectivity tests.');
+            byId('loginStatus').className = 'warn';
+            return;
+          }
+          setText('loginStatus', `Using signed-in admin session for ${profile.username}.`);
           byId('loginStatus').className = 'ok';
           await loadConfig();
         } catch (error) {
+          token = '';
+          window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
           setText('loginStatus', error.message);
           byId('loginStatus').className = 'warn';
         }
@@ -159,7 +209,8 @@ def _api_configuration_page() -> HTMLResponse:
         byId('timeoutSeconds').value = String(config.timeout_seconds || 10);
         byId('clientId').value = config.client_id || '';
         byId('tokenUrl').value = config.token_url || 'https://authorization.allevasoft.com/connect/token';
-        setText('result', JSON.stringify(config, null, 2));
+        byId('tokenAuthStyle').value = config.token_auth_style || 'body';
+        displayResult('result', config);
       }
 
       async function saveConfig() {
@@ -171,13 +222,14 @@ def _api_configuration_page() -> HTMLResponse:
           client_id: getValue('clientId') || null,
           client_secret: getValue('clientSecret') || null,
           token_url: getValue('tokenUrl') || null,
+          token_auth_style: getValue('tokenAuthStyle') || 'body',
           timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
           api_enabled: false
         };
         const config = await readJson(await fetch(`${api}/api-configuration`, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }));
         byId('apiKey').value = '';
         byId('clientSecret').value = '';
-        setText('result', JSON.stringify(config, null, 2));
+        displayResult('result', config);
       }
 
       async function clearSavedKey() {
@@ -187,7 +239,7 @@ def _api_configuration_page() -> HTMLResponse:
           headers: authHeaders(),
           body: JSON.stringify({ clear_api_key: true, clear_client_secret: true })
         }));
-        setText('result', JSON.stringify(config, null, 2));
+        displayResult('result', config);
       }
 
       async function testConnectivity() {
@@ -208,6 +260,7 @@ def _api_configuration_page() -> HTMLResponse:
           api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
           auth_mode: getValue('authMode') || 'api_key',
           token_url: getValue('tokenUrl') || null,
+          token_auth_style: getValue('tokenAuthStyle') || 'body',
           client_id: getValue('clientId') || null,
           client_secret: getValue('clientSecret') || null,
           use_saved_client_credentials: true,
@@ -226,7 +279,7 @@ def _api_configuration_page() -> HTMLResponse:
           populateOperations();
           setText('testStatus', `Result: ${result.status} - ${result.message}`);
           byId('testStatus').className = result.status === 'ok' ? 'ok' : 'warn';
-          setText('result', JSON.stringify(result, null, 2));
+          displayResult('result', result);
         } catch (error) {
           setText('testStatus', error.message);
           byId('testStatus').className = 'warn';
@@ -332,6 +385,7 @@ def _api_configuration_page() -> HTMLResponse:
           api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
           auth_mode: getValue('authMode') || 'api_key',
           token_url: getValue('tokenUrl') || null,
+          token_auth_style: getValue('tokenAuthStyle') || 'body',
           client_id: getValue('clientId') || null,
           client_secret: getValue('clientSecret') || null,
           use_saved_client_credentials: true,
@@ -346,7 +400,7 @@ def _api_configuration_page() -> HTMLResponse:
           }));
           setText('operationStatus', `${result.status}: ${result.message}`);
           byId('operationStatus').className = result.status === 'ok' ? 'ok' : 'warn';
-          setText('operationResult', JSON.stringify(result, null, 2));
+          displayResult('operationResult', result);
         } catch (error) {
           setText('operationStatus', error.message);
           byId('operationStatus').className = 'warn';

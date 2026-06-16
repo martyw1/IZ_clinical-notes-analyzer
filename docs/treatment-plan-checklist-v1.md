@@ -67,9 +67,9 @@ API mode is a readiness and connectivity harness until official Alleva tenant cr
 
 Manual upload mode is a point-in-time snapshot of the files selected by the operator. It does not imply automatic weekly monitoring for large chart batches; use the documented monthly compliance-check fallback when API refresh is not available.
 
-## Admin-Editable Workflow
+## Admin/Manager-Editable Workflow
 
-Admins can open Settings, use `Seed draft from 42-step checklist`, edit the generated workflow snapshot and transition rules, and publish a new workflow profile version. The seeded draft includes checklist steps, source modes, status options, reviewer actions, override rules, audit events, and export fields.
+Admins and office managers can open Workflow profiles, use `Seed draft from 42-step checklist`, edit the generated workflow snapshot and transition rules, and publish a new workflow profile version. The seeded draft includes checklist steps, source modes, status options, reviewer actions, override rules, audit events, and export fields.
 
 Published workflow history is preserved. Only unused draft-only profiles that were never published can be hard-deleted.
 

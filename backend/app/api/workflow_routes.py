@@ -21,6 +21,7 @@ from app.services.audit import log_event
 from app.services.workflow_definitions import stable_json, validate_workflow_version_payload
 
 router = APIRouter()
+WORKFLOW_MANAGER_ROLES = (Role.admin, Role.manager)
 
 
 def _utc_now() -> datetime:
@@ -133,7 +134,7 @@ def _create_workflow_version(definition: WorkflowDefinition, payload: WorkflowDe
 def list_workflow_definitions(
     request: Request,
     include_archived: bool = Query(default=False),
-    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     stmt = _workflow_definition_stmt().order_by(WorkflowDefinition.display_name, WorkflowDefinition.id)
@@ -158,7 +159,7 @@ def list_workflow_definitions(
 def create_workflow_definition(
     payload: WorkflowDefinitionCreate,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     workflow_key = payload.workflow_key.strip().lower()
@@ -212,7 +213,7 @@ def create_workflow_definition(
 def get_workflow_definition(
     definition_id: int,
     request: Request,
-    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -236,7 +237,7 @@ def update_workflow_definition(
     definition_id: int,
     payload: WorkflowDefinitionUpdate,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -276,7 +277,7 @@ def create_workflow_definition_version(
     definition_id: int,
     payload: WorkflowDefinitionVersionInput,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -306,7 +307,7 @@ def update_workflow_definition_version(
     version_id: int,
     payload: WorkflowDefinitionVersionInput,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -347,7 +348,7 @@ def publish_workflow_definition_version(
     definition_id: int,
     version_id: int,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -394,7 +395,7 @@ def publish_workflow_definition_version(
 def archive_workflow_definition(
     definition_id: int,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)
@@ -432,7 +433,7 @@ def archive_workflow_definition(
 def delete_unused_workflow_definition(
     definition_id: int,
     request: Request,
-    user: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(*WORKFLOW_MANAGER_ROLES)),
     db: Session = Depends(get_db),
 ):
     definition = _find_workflow_definition(definition_id, db)

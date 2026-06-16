@@ -31,8 +31,12 @@ class MockedHttpxClient:
         if url == 'https://authorization.example.test/connect/token':
             body = request.content.decode('utf-8')
             assert 'grant_type=client_credentials' in body
-            assert 'client_id=mock-client' in body or 'client_id=saved-client' in body
-            assert 'client_secret=mock-secret' in body or 'client_secret=saved-secret' in body
+            if request.headers.get('authorization', '').startswith('Basic '):
+                assert 'client_id=' not in body
+                assert 'client_secret=' not in body
+            else:
+                assert 'client_id=mock-client' in body or 'client_id=saved-client' in body
+                assert 'client_secret=mock-secret' in body or 'client_secret=saved-secret' in body
             return httpx.Response(
                 200,
                 json={
@@ -78,6 +82,8 @@ class MockedHttpxClient:
             assert request.method == 'POST'
             assert request.headers.get('x-api-key') == 'test-key'
             return httpx.Response(201, json={'created': True, 'payload': {'accepted': True}})
+        if url == 'https://api.example.test/huge':
+            return httpx.Response(200, json={'items': [{'row': index, 'text': 'x' * 2000} for index in range(200)]})
         return httpx.Response(404, text='not found')
 
 
@@ -130,6 +136,12 @@ OPERATION_DEFINITION = {
                     },
                 },
                 'responses': {'201': {'description': 'created'}},
+            }
+        },
+        '/huge': {
+            'get': {
+                'summary': 'Huge response',
+                'responses': {'200': {'description': 'ok'}},
             }
         },
     },
@@ -195,6 +207,24 @@ def test_client_credentials_token_request_returns_redacted_public_result(monkeyp
     assert 'mock-access-token' not in str(public_result)
 
 
+def test_client_credentials_token_request_supports_basic_auth_style(monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+
+    public_result, access_token = request_client_credentials_token(
+        token_url='https://authorization.example.test/connect/token',
+        client_id='mock-client',
+        client_secret='mock-secret',
+        scope='patient/Patient.rs',
+        timeout_seconds=5,
+        token_auth_style='basic',
+    )
+
+    assert access_token == 'mock-access-token'
+    assert public_result['status'] == 'ok'
+    assert public_result['token_auth_style'] == 'basic'
+    assert public_result['attempted_token_auth_styles'] == ['basic']
+
+
 def test_pull_api_definitions_can_use_client_credentials_bearer_token(monkeypatch):
     monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
 
@@ -246,7 +276,7 @@ def test_build_api_connectivity_report_redacts_secret_inputs_and_results():
 
 def test_extract_openapi_operations_returns_required_form_fields():
     operations = extract_openapi_operations(OPERATION_DEFINITION, selected_definition_url='https://api.example.test/swagger.json')
-    get_operation = next(item for item in operations if item['method'] == 'GET')
+    get_operation = next(item for item in operations if item['method'] == 'GET' and item['path'] == '/patients/{patient_id}')
     post_operation = next(item for item in operations if item['method'] == 'POST')
 
     assert get_operation['operation_key'] == 'GET /patients/{patient_id}'
@@ -311,6 +341,26 @@ def test_execute_openapi_operation_redacts_secret_response_fields(monkeypatch):
     assert result['response_json']['items'][0]['client_secret'] == REDACTED
     assert 'server-returned-token' not in str(result)
     assert 'inline-secret-key' not in str(result)
+
+
+def test_execute_openapi_operation_caps_large_response_payloads(monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+
+    result = execute_openapi_operation(
+        definition=OPERATION_DEFINITION,
+        selected_definition_url='https://api.example.test/swagger.json',
+        method='GET',
+        path='/huge',
+        parameters={},
+        api_key='test-key',
+        api_key_header_name='x-api-key',
+    )
+
+    assert result['status'] == 'ok'
+    assert result['response_truncated'] is True
+    assert result['response_json'] is None
+    assert len(result['response_body_preview']) <= 4000
+    assert result['response_capture_limit_bytes'] == 200_000
 
 
 def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
@@ -485,5 +535,52 @@ def test_api_configuration_routes_support_saved_client_credentials_without_expos
         assert 'saved-secret' not in serialized
         assert 'mock-access-token' not in serialized
         assert 'client_credentials' in serialized
+    finally:
+        db.close()
+
+
+def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+    app, session_local = app_with_sqlite
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.models.models import AppSetting
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+        saved = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'emr_fhir_base_url': 'https://api.example.test',
+                'emr_smart_client_id': 'saved-client',
+                'emr_smart_client_secret': 'saved-secret',
+                'emr_smart_token_url': 'https://authorization.example.test/connect/token',
+                'emr_smart_token_auth_style': 'all',
+                'emr_periodic_check_enabled': True,
+                'emr_periodic_check_interval_minutes': 60,
+            },
+        )
+        assert saved.status_code == 200
+        assert saved.json()['emr_periodic_check_enabled'] is True
+        assert 'saved-secret' not in saved.text
+
+        checked = client.post('/api/review-source-discovery/run-daily-check', headers=headers)
+        assert checked.status_code == 200
+        payload = checked.json()
+        assert payload['last_check_mode'] == 'periodic_api_readiness_check'
+        assert payload['daily_monitoring_enabled'] is True
+        assert payload['last_successful_check_at']
+        assert 'saved-secret' not in checked.text
+        assert 'mock-access-token' not in checked.text
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting)).scalar_one()
+        assert settings_row.emr_last_check_status == 'ok'
+        assert settings_row.emr_last_successful_check_at is not None
     finally:
         db.close()

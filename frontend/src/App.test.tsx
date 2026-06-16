@@ -22,6 +22,15 @@ function installFetchMock(routes: Record<string, unknown | RouteHandler>) {
       if (key === 'GET /api/review-source-discovery') {
         return jsonResponse(200, reviewSourceDiscoveryPayload())
       }
+      if (key === 'GET /api/users') {
+        return jsonResponse(200, [userPayload('admin'), userPayload('manager'), userPayload('counselor')])
+      }
+      if (key === 'GET /api/workflow-definitions') {
+        return jsonResponse(200, workflowDefinitionsPayload())
+      }
+      if (key === 'GET /api/emr/profiles') {
+        return jsonResponse(200, emrEndpointProfilesPayload())
+      }
       throw new Error(`Unhandled request ${key}`)
     }
 
@@ -178,12 +187,21 @@ function appSettingsPayload() {
     llm_use_for_evaluation_gap_analysis: true,
     llm_analysis_instructions: '',
     emr_api_enabled: false,
-    emr_vendor_name: 'Alleva / SMART on FHIR',
+    emr_vendor_name: 'Alleva / FHIR',
     emr_fhir_base_url: '',
     emr_smart_client_id: '',
     emr_smart_client_secret_configured: false,
+    emr_smart_token_url: 'https://authorization.allevasoft.com/connect/token',
+    emr_smart_token_auth_style: 'body',
     emr_smart_scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     emr_api_timeout_seconds: 10,
+    emr_periodic_check_enabled: false,
+    emr_periodic_check_interval_minutes: 1440,
+    emr_last_check_at: null,
+    emr_last_check_status: '',
+    emr_last_check_message: '',
+    emr_last_successful_check_at: null,
+    emr_last_failure_at: null,
     treatment_plan_loc_change_window_days: null,
     treatment_plan_loc_change_window_validated: false,
     updated_by_id: 1,
@@ -193,7 +211,7 @@ function appSettingsPayload() {
 
 function emrProfilePayload() {
   return {
-    vendor_name: 'Alleva / SMART on FHIR',
+    vendor_name: 'Alleva / FHIR',
     adapter_key: 'alleva-smart-fhir-document-manager',
     live_import_status: 'disabled',
     enabled: false,
@@ -210,8 +228,36 @@ function emrProfilePayload() {
       { key: 'uploaded_documents', label: 'Uploaded Documents', expected_content: ['External PDFs', 'Word documents'] },
       { key: 'portal_documents', label: 'Portal Documents', expected_content: ['Client-uploaded portal documents'] },
     ],
-    required_vendor_inputs: ['Alleva tenant FHIR base URL', 'SMART client ID', 'SMART client secret'],
+    required_vendor_inputs: ['Alleva tenant FHIR base URL', 'OAuth/FHIR client ID', 'OAuth/FHIR client secret'],
   }
+}
+
+function emrEndpointProfilesPayload() {
+  return [
+    {
+      id: 91,
+      profile_key: 'alleva-default',
+      display_name: 'Alleva Default',
+      vendor_name: 'Alleva / FHIR',
+      adapter_key: 'alleva-smart-fhir-document-manager',
+      fhir_base_url: 'https://alleva.example.com/fhir/R4',
+      openapi_url: '',
+      token_url: 'https://authorization.allevasoft.com/connect/token',
+      token_auth_style: 'body',
+      client_id: 'synthetic-client',
+      client_id_configured: true,
+      client_secret_configured: true,
+      scopes: 'openid fhirUser patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
+      timeout_seconds: 10,
+      is_active: true,
+      is_default: true,
+      notes: 'Synthetic Alleva endpoint profile.',
+      created_by_id: 1,
+      updated_by_id: 1,
+      created_at: '2026-03-08T13:00:00Z',
+      updated_at: '2026-03-08T13:00:00Z',
+    },
+  ]
 }
 
 function readinessPayload() {
@@ -680,6 +726,46 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText(/Confirm this is the correct client chart/)).toBeInTheDocument()
     expect(screen.getByText(/Require a reason for manual overrides/)).toBeInTheDocument()
     expect(screen.getByText(/Use synthetic or approved non-PHI data/)).toBeInTheDocument()
+    const checklistHeader = screen.getByRole('heading', { name: 'Treatment Plan Checklist Version 1 - 42 Step PRD' }).closest('.panel-heading')
+    expect(checklistHeader).not.toBeNull()
+    fireEvent.click(within(checklistHeader as HTMLElement).getByRole('button', { name: 'Workflow profiles' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument())
+  })
+
+  it('shows manager-scoped user management, workflow profiles, and help without admin-only settings', async () => {
+    window.history.replaceState(null, '', '/?view=dashboard')
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-manager-scope', must_reset_password: false },
+      'GET /api/users/me': userPayload('manager'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('counselor')],
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'App settings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Forensic logs' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'User management' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'User management' })).toBeInTheDocument())
+    expect(screen.getByText(/Office managers can maintain counselor accounts/)).toBeInTheDocument()
+    expect(screen.getAllByText('Counselor One').length).toBeGreaterThan(0)
+    expect(screen.queryByText('System Administrator')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Workflow profiles' })[0])
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Seed draft from 42-step checklist' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Role permissions' })).toBeInTheDocument())
+    expect(screen.getByText('Office manager')).toBeInTheDocument()
+    expect(screen.getByText(/Open App settings, API\/EMR configuration/)).toBeInTheDocument()
   })
 
   it('shows treatment plan timeliness detail and records a manual override', async () => {
@@ -929,6 +1015,73 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByText('Attendance Policy Consent').length).toBeGreaterThan(0)
   })
 
+  it('deletes an uploaded binder and linked review from the manual upload screen', async () => {
+    window.history.replaceState(null, '', '/?view=uploads')
+    let noteSetList = [noteSetSummary()]
+    let chartList = [chartSummary()]
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-delete-binder', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': () => ({ body: chartList }),
+      'GET /api/patient-note-sets': () => ({ body: noteSetList }),
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'DELETE /api/patient-note-sets/5': () => {
+        noteSetList = []
+        chartList = []
+        return { body: { status: 'deleted', deleted_note_set_id: 5, deleted_review_chart_ids: [8], deleted_document_count: 1 } }
+      },
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Uploaded binders' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Type patient ID to confirm'), { target: { value: 'PAT-001' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete uploaded binder' }))
+
+    await waitFor(() => expect(screen.getByText('Deleted uploaded binder version 1 for patient PAT-001.')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /PAT-001/i })).not.toBeInTheDocument()
+  })
+
+  it('opens an existing uploaded binder review from the manual upload screen', async () => {
+    window.history.replaceState(null, '', '/?view=uploads')
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-open-uploaded-review', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Binder details' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Open automated review' }))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient PAT-001' })).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Criterion review workbench' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open binder details' }))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Binder details' })).toBeInTheDocument())
+    expect(screen.getByText(/Patient PAT-001, version 1, uploaded/)).toBeInTheDocument()
+  })
+
   it('lets an office manager drill into a criterion and save a decision', async () => {
     window.history.replaceState(null, '', '/?view=reviews')
     installFetchMock({
@@ -1007,8 +1160,12 @@ describe('App turnkey workflow', () => {
             emr_fhir_base_url: body.emr_fhir_base_url,
             emr_smart_client_id: body.emr_smart_client_id,
             emr_smart_client_secret_configured: Boolean(body.emr_smart_client_secret),
+            emr_smart_token_url: body.emr_smart_token_url,
+            emr_smart_token_auth_style: body.emr_smart_token_auth_style,
             emr_smart_scopes: body.emr_smart_scopes,
             emr_api_timeout_seconds: body.emr_api_timeout_seconds,
+            emr_periodic_check_enabled: body.emr_periodic_check_enabled,
+            emr_periodic_check_interval_minutes: body.emr_periodic_check_interval_minutes,
             treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
             treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
           },
@@ -1024,7 +1181,7 @@ describe('App turnkey workflow', () => {
       },
       'GET /api/emr/import-plan': {
         patient_id: 'PAT-001',
-        vendor_name: 'Alleva / SMART on FHIR',
+        vendor_name: 'Alleva / FHIR',
         live_import_enabled: false,
         planned_requests: [
           {
@@ -1099,7 +1256,7 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByText('Counselor Two').length).toBeGreaterThan(0)
     expect(screen.getAllByText('counselor-02').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'App settings' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
     expect(screen.getByRole('heading', { name: 'Alleva import profile' })).toBeInTheDocument()
     expect(screen.getByText('alleva-smart-fhir-document-manager')).toBeInTheDocument()
@@ -1109,8 +1266,8 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
     fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
-    fireEvent.change(screen.getByLabelText('FHIR base URL'), { target: { value: 'https://alleva.example.com/fhir' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Check SMART discovery' }))
+    fireEvent.change(screen.getAllByLabelText(/FHIR base URL/)[0], { target: { value: 'https://alleva.example.com/fhir' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Check FHIR/OAuth discovery' }))
     await waitFor(() => expect(screen.getByText(/Discovery: ok/i)).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Import plan patient ID'), { target: { value: 'PAT-001' } })
     fireEvent.click(screen.getByRole('button', { name: 'Build import plan' }))

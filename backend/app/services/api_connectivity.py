@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from base64 import b64encode
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -19,10 +21,16 @@ DEFAULT_ALLEVA_SWAGGER_UI_URL = 'https://api.allevasoft.com/swagger/index.html'
 DEFAULT_ALLEVA_TOKEN_URL = 'https://authorization.allevasoft.com/connect/token'
 DEFAULT_TIMEOUT_SECONDS = 10
 MAX_BODY_SNIPPET_CHARS = 600
+MAX_RESPONSE_CAPTURE_BYTES = 200_000
+MAX_RESPONSE_PREVIEW_CHARS = 4_000
+MAX_JSON_COLLECTION_ITEMS = 25
+MAX_JSON_DEPTH = 4
+MAX_JSON_STRING_CHARS = 1_000
 MAX_PATHS_RETURNED = 40
 HTTP_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
 REDACTED = '[redacted]'
 SENSITIVE_NAME_PARTS = ('authorization', 'api_key', 'apikey', 'access_token', 'refresh_token', 'bearer', 'client_secret', 'secret', 'password', 'token')
+TOKEN_AUTH_STYLES = {'body', 'basic', 'basic_urlencoded', 'both', 'all'}
 
 
 @dataclass
@@ -103,6 +111,42 @@ def redact_sensitive_value(value: Any) -> Any:
     if isinstance(value, str):
         return redact_sensitive_text(value)
     return value
+
+
+def _compact_json_value(value: Any, *, depth: int = 0) -> Any:
+    if depth >= MAX_JSON_DEPTH:
+        return '[truncated: depth limit reached]'
+    if isinstance(value, dict):
+        items = list(value.items())
+        compacted = {str(key): _compact_json_value(item, depth=depth + 1) for key, item in items[:MAX_JSON_COLLECTION_ITEMS]}
+        if len(items) > MAX_JSON_COLLECTION_ITEMS:
+            compacted['_truncated_fields'] = len(items) - MAX_JSON_COLLECTION_ITEMS
+        return compacted
+    if isinstance(value, list):
+        compacted_list = [_compact_json_value(item, depth=depth + 1) for item in value[:MAX_JSON_COLLECTION_ITEMS]]
+        if len(value) > MAX_JSON_COLLECTION_ITEMS:
+            compacted_list.append({'_truncated_items': len(value) - MAX_JSON_COLLECTION_ITEMS})
+        return compacted_list
+    if isinstance(value, str) and len(value) > MAX_JSON_STRING_CHARS:
+        return f'{value[:MAX_JSON_STRING_CHARS]}... [truncated {len(value) - MAX_JSON_STRING_CHARS} chars]'
+    return value
+
+
+def compact_public_payload(value: Any) -> Any:
+    """Return a bounded JSON-safe preview for UI and report payloads."""
+    return _compact_json_value(redact_sensitive_value(value))
+
+
+def _report_safe_result(result: dict[str, Any]) -> dict[str, Any]:
+    safe = dict(result)
+    if isinstance(safe.get('definition'), dict) and safe.get('definition'):
+        safe['definition'] = {
+            'omitted_from_report': True,
+            'definition_summary': safe.get('definition_summary') or _json_summary(safe['definition']) or {},
+        }
+    if isinstance(safe.get('operations'), list) and len(safe['operations']) > 100:
+        safe['operations'] = [*safe['operations'][:100], {'_truncated_items': len(safe['operations']) - 100}]
+    return compact_public_payload(safe)
 
 
 def redact_url(value: str) -> str:
@@ -194,53 +238,68 @@ def _headers(api_key: str | None = None, api_key_header_name: str = 'x-api-key',
     return headers
 
 
-def request_client_credentials_token(
+def _token_styles_to_try(token_auth_style: str | None) -> list[str]:
+    normalized = (token_auth_style or 'body').strip().lower().replace('-', '_')
+    if normalized not in TOKEN_AUTH_STYLES:
+        normalized = 'body'
+    if normalized == 'both':
+        return ['body', 'basic']
+    if normalized == 'all':
+        return ['body', 'basic', 'basic_urlencoded']
+    return [normalized]
+
+
+def _client_credentials_request_parts(
     *,
-    token_url: str | None = DEFAULT_ALLEVA_TOKEN_URL,
-    client_id: str | None = None,
-    client_secret: str | None = None,
-    scope: str | None = None,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    client_id: str,
+    client_secret: str,
+    scope: str,
+    token_auth_style: str,
+) -> tuple[dict[str, str], dict[str, str]]:
+    headers = {'Accept': 'application/json'}
+    form_data = {'grant_type': 'client_credentials'}
+    if scope:
+        form_data['scope'] = scope
+    if token_auth_style == 'body':
+        form_data['client_id'] = client_id
+        form_data['client_secret'] = client_secret
+        return headers, form_data
+
+    if token_auth_style == 'basic_urlencoded':
+        pair = f'{quote(client_id, safe="")}:{quote(client_secret, safe="")}'
+    else:
+        pair = f'{client_id}:{client_secret}'
+    headers['Authorization'] = f'Basic {b64encode(pair.encode("ascii", errors="ignore")).decode("ascii")}'
+    return headers, form_data
+
+
+def _request_client_credentials_token_once(
+    *,
+    token_url: str,
+    client_id: str,
+    client_secret: str,
+    scope: str,
+    timeout_seconds: int,
+    token_auth_style: str,
 ) -> tuple[dict[str, Any], str]:
-    """Request an OAuth2 client-credentials token and return only redacted public metadata plus the in-memory token."""
-    cleaned_token_url = _clean_url(token_url) or DEFAULT_ALLEVA_TOKEN_URL
-    cleaned_client_id = (client_id or '').strip()
-    cleaned_client_secret = (client_secret or '').strip()
-    cleaned_scope = ' '.join((scope or '').split())
-    started_result: dict[str, Any] = {
-        'status': 'fail',
-        'message': '',
-        'token_url': redact_url(cleaned_token_url),
-        'client_id_configured': bool(cleaned_client_id),
-        'client_secret_configured': bool(cleaned_client_secret),
-        'scope_configured': bool(cleaned_scope),
-        'access_token_configured': False,
-    }
-
-    if not _is_http_url(cleaned_token_url):
-        return {**started_result, 'message': 'Token URL must be an http(s) URL.'}, ''
-    if not cleaned_client_id or not cleaned_client_secret:
-        return {**started_result, 'message': 'Client ID and client secret are required for client-credentials auth.'}, ''
-
     timeout = max(1, min(int(timeout_seconds or DEFAULT_TIMEOUT_SECONDS), 60))
-    form_data = {
-        'grant_type': 'client_credentials',
-        'client_id': cleaned_client_id,
-        'client_secret': cleaned_client_secret,
-    }
-    if cleaned_scope:
-        form_data['scope'] = cleaned_scope
+    headers, form_data = _client_credentials_request_parts(
+        client_id=client_id,
+        client_secret=client_secret,
+        scope=scope,
+        token_auth_style=token_auth_style,
+    )
 
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             response = client.post(
-                cleaned_token_url,
+                token_url,
                 data=form_data,
-                headers={'Accept': 'application/json'},
+                headers=headers,
             )
             response.read()
     except httpx.RequestError as exc:
-        return {**started_result, 'message': redact_sensitive_text(f'{exc.__class__.__name__}: {exc}')}, ''
+        return {'status': 'fail', 'message': redact_sensitive_text(f'{exc.__class__.__name__}: {exc}'), 'token_auth_style': token_auth_style}, ''
 
     try:
         elapsed_ms = int(response.elapsed.total_seconds() * 1000)
@@ -248,10 +307,11 @@ def request_client_credentials_token(
         elapsed_ms = None
 
     public_result = {
-        **started_result,
+        'status': 'fail',
         'status_code': response.status_code,
         'elapsed_ms': elapsed_ms,
         'content_type': response.headers.get('content-type', ''),
+        'token_auth_style': token_auth_style,
     }
     try:
         parsed_json: Any = response.json()
@@ -261,9 +321,9 @@ def request_client_credentials_token(
     access_token = parsed_json.get('access_token') if isinstance(parsed_json, dict) else ''
     if not 200 <= response.status_code < 300:
         preview = redact_sensitive_text(response.text[:MAX_BODY_SNIPPET_CHARS])
-        return {**public_result, 'status': 'fail', 'message': f'Client-credentials token request failed with HTTP {response.status_code}.', 'response_body_preview': preview}, ''
+        return {**public_result, 'message': f'Client-credentials token request failed with HTTP {response.status_code}.', 'response_body_preview': preview}, ''
     if not isinstance(access_token, str) or not access_token.strip():
-        return {**public_result, 'status': 'fail', 'message': 'Client-credentials token response did not include an access token.'}, ''
+        return {**public_result, 'message': 'Client-credentials token response did not include an access token.'}, ''
 
     return {
         **public_result,
@@ -273,6 +333,56 @@ def request_client_credentials_token(
         'expires_in': parsed_json.get('expires_in') if isinstance(parsed_json, dict) else None,
         'access_token_configured': True,
     }, access_token.strip()
+
+
+def request_client_credentials_token(
+    *,
+    token_url: str | None = DEFAULT_ALLEVA_TOKEN_URL,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    scope: str | None = None,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    token_auth_style: str | None = 'body',
+) -> tuple[dict[str, Any], str]:
+    """Request an OAuth2 client-credentials token and return only redacted public metadata plus the in-memory token."""
+    cleaned_token_url = _clean_url(token_url) or DEFAULT_ALLEVA_TOKEN_URL
+    cleaned_client_id = (client_id or '').strip()
+    cleaned_client_secret = (client_secret or '').strip()
+    cleaned_scope = ' '.join((scope or '').split())
+    styles_to_try = _token_styles_to_try(token_auth_style)
+    started_result: dict[str, Any] = {
+        'status': 'fail',
+        'message': '',
+        'token_url': redact_url(cleaned_token_url),
+        'client_id_configured': bool(cleaned_client_id),
+        'client_secret_configured': bool(cleaned_client_secret),
+        'scope_configured': bool(cleaned_scope),
+        'access_token_configured': False,
+        'token_auth_style': (token_auth_style or 'body').strip().lower().replace('-', '_') or 'body',
+        'attempted_token_auth_styles': styles_to_try,
+    }
+
+    if not _is_http_url(cleaned_token_url):
+        return {**started_result, 'message': 'Token URL must be an http(s) URL.'}, ''
+    if not cleaned_client_id or not cleaned_client_secret:
+        return {**started_result, 'message': 'Client ID and client secret are required for client-credentials auth.'}, ''
+
+    attempts = []
+    for style in styles_to_try:
+        result, access_token = _request_client_credentials_token_once(
+            token_url=cleaned_token_url,
+            client_id=cleaned_client_id,
+            client_secret=cleaned_client_secret,
+            scope=cleaned_scope,
+            timeout_seconds=timeout_seconds,
+            token_auth_style=style,
+        )
+        attempts.append(result)
+        if access_token:
+            return {**started_result, **result, 'attempts': compact_public_payload(attempts)}, access_token
+
+    last_result = attempts[-1] if attempts else {}
+    return {**started_result, **last_result, 'attempts': compact_public_payload(attempts)}, ''
 
 
 def _resolve_schema_ref(definition: dict[str, Any], value: Any) -> Any:
@@ -534,8 +644,8 @@ def build_api_connectivity_report(*, report_type: str, request: dict[str, Any], 
     return {
         'report_type': report_type,
         'generated_at': datetime.now(timezone.utc).isoformat(),
-        'request': redact_sensitive_value(request),
-        'result': redact_sensitive_value(result),
+        'request': compact_public_payload(request),
+        'result': _report_safe_result(result),
     }
 
 
@@ -562,6 +672,49 @@ def _base_url_for_operation(*, api_base_url: str | None, definition: dict[str, A
     if origin:
         return origin.rstrip('/')
     return ''
+
+
+def _decode_preview(raw: bytes) -> str:
+    for encoding in ('utf-8', 'utf-16', 'latin-1'):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8', errors='ignore')
+
+
+def _read_limited_response(
+    client: httpx.Client,
+    *,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    request_body: Any | None,
+    timeout_seconds: int,
+) -> tuple[httpx.Response, bytes, bool, int, int]:
+    started = time.perf_counter()
+    captured = bytearray()
+    observed_bytes = 0
+    truncated = False
+    with client.stream(
+        method,
+        url,
+        headers=headers,
+        json=request_body if method not in {'GET', 'HEAD'} and request_body not in (None, '') else None,
+        timeout=max(1, min(int(timeout_seconds or DEFAULT_TIMEOUT_SECONDS), 60)),
+    ) as response:
+        for chunk in response.iter_bytes():
+            if not chunk:
+                continue
+            observed_bytes += len(chunk)
+            remaining = MAX_RESPONSE_CAPTURE_BYTES - len(captured)
+            if remaining > 0:
+                captured.extend(chunk[:remaining])
+            if observed_bytes > MAX_RESPONSE_CAPTURE_BYTES:
+                truncated = True
+                break
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    return response, bytes(captured), truncated, observed_bytes, elapsed_ms
 
 
 def execute_openapi_operation(
@@ -622,26 +775,23 @@ def execute_openapi_operation(
     }
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            response = client.request(
-                method.upper(),
-                url,
+            response, captured_body, response_truncated, observed_bytes, elapsed_ms = _read_limited_response(
+                client,
+                method=method.upper(),
+                url=url,
                 headers=headers,
-                json=request_body if method.upper() not in {'GET', 'HEAD'} and request_body not in (None, '') else None,
+                request_body=request_body,
+                timeout_seconds=timeout,
             )
-            response.read()
     except httpx.RequestError as exc:
         return {**started_result, 'message': redact_sensitive_text(f'{exc.__class__.__name__}: {exc}')}
 
-    try:
-        elapsed_ms = int(response.elapsed.total_seconds() * 1000)
-    except RuntimeError:
-        elapsed_ms = None
     content_type = response.headers.get('content-type', '')
-    body_text = redact_sensitive_text(response.text[:MAX_BODY_SNIPPET_CHARS])
+    body_text = redact_sensitive_text(_decode_preview(captured_body)[:MAX_RESPONSE_PREVIEW_CHARS])
     parsed_json: Any | None = None
-    if 'json' in content_type.lower():
+    if 'json' in content_type.lower() and not response_truncated:
         try:
-            parsed_json = redact_sensitive_value(response.json())
+            parsed_json = compact_public_payload(json.loads(captured_body.decode('utf-8')))
         except json.JSONDecodeError:
             parsed_json = None
     return {
@@ -651,6 +801,9 @@ def execute_openapi_operation(
         'status_code': response.status_code,
         'elapsed_ms': elapsed_ms,
         'content_type': content_type,
+        'response_truncated': response_truncated,
+        'response_capture_limit_bytes': MAX_RESPONSE_CAPTURE_BYTES,
+        'response_size_bytes_observed': observed_bytes,
         'response_json': parsed_json,
         'response_body_preview': '' if parsed_json is not None else body_text,
     }

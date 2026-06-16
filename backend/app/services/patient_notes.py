@@ -435,14 +435,13 @@ async def extract_upload_metadata_from_uploads(files: list[UploadFile]) -> Uploa
     return metadata
 
 
-def display_name_for_patient_name_status(status: str, timestamp: datetime | None = None) -> str:
+def display_name_for_patient_name_status(status: str, timestamp: datetime | None = None, *, patient_id: str = '') -> str:
     stamp_source = timestamp or datetime.now(timezone.utc)
-    stamp = stamp_source.strftime('%Y-%m-%d_%H-%M-%S')
-    if status == NAME_BLANK_STATUS:
-        return f'Name Blank {stamp}'
-    if status == NAME_NOT_FOUND_STATUS:
-        return f'Name Not Found {stamp}'
-    return f'Name Hidden {stamp}'
+    stamp = stamp_source.strftime('%Y%m%d_%H%M%S')
+    safe_patient_id = sanitize_patient_id(patient_id) if patient_id.strip() else ''
+    if status in {NAME_BLANK_STATUS, NAME_NOT_FOUND_STATUS, NAME_HIDDEN_STATUS}:
+        return f'{safe_patient_id or "generated-name"}_{stamp}'
+    return f'{safe_patient_id or "generated-name"}_{stamp}'
 
 
 async def _detect_patient_id_for_upload(upload: UploadFile) -> PatientIdDetection | None:

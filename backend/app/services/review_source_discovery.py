@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.models import AppSetting, Chart, PatientNoteSet, TimelinessStatus, WorkflowState
+from app.services.api_monitor import next_periodic_check_at
 from app.services.timeliness import evaluate_client, list_clients
 
 REVIEW_STATUS_LABELS = {
@@ -39,6 +40,8 @@ def _status_counts(items: list[dict[str, Any]]) -> dict[str, int]:
 
 def _api_mode(app_settings: AppSetting) -> str:
     configured = bool(app_settings.emr_fhir_base_url.strip() or app_settings.emr_smart_client_id.strip() or app_settings.emr_smart_client_secret)
+    if app_settings.emr_periodic_check_enabled and configured:
+        return 'periodic_readiness_check'
     if app_settings.emr_api_enabled and configured:
         return 'connectivity_test_only'
     if configured:
@@ -49,6 +52,7 @@ def _api_mode(app_settings: AppSetting) -> str:
 def _api_mode_label(mode: str) -> str:
     labels = {
         'connectivity_test_only': 'Connectivity-test-only mode',
+        'periodic_readiness_check': 'Periodic readiness checks enabled',
         'disabled_configured': 'API configured but disabled',
         'mock_stub': 'Mock/stub mode',
     }
@@ -164,6 +168,7 @@ def discovery_payload(db: Session, app_settings: AppSetting, note_sets: list[Pat
     upload_items = _upload_items(note_sets)
     all_items = [*api_items, *upload_items]
     now = _utc_now_dt()
+    next_check = next_periodic_check_at(app_settings, now=now) or (now + timedelta(days=1))
     status_counts = _status_counts(all_items)
     changed_item_count = sum(
         status_counts.get(label, 0)
@@ -175,27 +180,31 @@ def discovery_payload(db: Session, app_settings: AppSetting, note_sets: list[Pat
         'checklist_id': 'treatment-plan-v1',
         'checklist_version': '1.1.0',
         'last_refreshed_at': now.isoformat(),
-        'last_refresh_at': now.isoformat(),
-        'last_successful_check_at': now.isoformat(),
-        'last_failure_at': '',
-        'next_refresh_at': (now + timedelta(days=1)).isoformat(),
+        'last_refresh_at': app_settings.emr_last_check_at.isoformat() if app_settings.emr_last_check_at else now.isoformat(),
+        'last_successful_check_at': app_settings.emr_last_successful_check_at.isoformat() if app_settings.emr_last_successful_check_at else now.isoformat(),
+        'last_failure_at': app_settings.emr_last_failure_at.isoformat() if app_settings.emr_last_failure_at else '',
+        'next_refresh_at': next_check.isoformat(),
         'live_import_enabled': False,
         'live_import_status': 'disabled_until_vendor_credentials_mapping_and_compliance_approval',
-        'api_configured': bool(app_settings.emr_api_enabled and app_settings.emr_fhir_base_url and app_settings.emr_smart_client_id),
+        'api_configured': bool(app_settings.emr_fhir_base_url and app_settings.emr_smart_client_id and app_settings.emr_smart_client_secret),
         'api_mode': api_mode,
         'api_mode_label': _api_mode_label(api_mode),
-        'daily_monitoring_enabled': api_mode == 'connectivity_test_only',
-        'refresh_mode': 'daily_mock_simulation' if api_mode == 'mock_stub' else 'daily_connectivity_readiness',
-        'last_check_mode': 'manual_safe_mock_check',
+        'daily_monitoring_enabled': app_settings.emr_periodic_check_enabled,
+        'refresh_mode': 'daily_mock_simulation' if api_mode == 'mock_stub' else 'api_readiness_check',
+        'last_check_mode': app_settings.emr_last_check_status or 'manual_safe_mock_check',
         'changed_item_count': changed_item_count,
         'error_count': error_count,
         'notification_badge_count': changed_item_count + error_count,
         'manual_review_cadence': 'monthly_compliance_check',
         'manual_mode_message': 'Manual upload reflects only the uploaded documents as of upload time. For 60+ active charts, use a monthly compliance-check batch when API automation is unavailable.',
         'plain_english_status': (
-            'Live Alleva import is still blocked. The app can simulate daily monitoring and run safe connectivity tests without pulling live patient charts.'
-            if api_mode != 'connectivity_test_only'
-            else 'API settings are available for safe tests. Daily monitoring remains readiness-only until live import receives vendor and compliance approval.'
+            'Periodic API readiness checks are enabled. They authenticate with the saved client ID/secret and do not import live patient charts until vendor mapping and compliance approval are complete.'
+            if api_mode == 'periodic_readiness_check'
+            else (
+                'API settings are available for safe tests. Daily monitoring remains readiness-only until live import receives vendor and compliance approval.'
+                if api_mode == 'connectivity_test_only'
+                else 'Live Alleva import is still blocked. The app can simulate daily monitoring and run safe connectivity tests without pulling live patient charts.'
+            )
         ),
         'status_counts': status_counts,
         'items': all_items,

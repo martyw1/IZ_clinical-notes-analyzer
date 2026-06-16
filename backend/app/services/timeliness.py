@@ -19,6 +19,7 @@ from app.models.models import (
     TimelinessStatus,
     User,
 )
+from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
 from app.services.rules_engine import load_rules_config
 
 STATUS_PRIORITY = [
@@ -210,15 +211,25 @@ def _select_overall(rule_results: list[RuleResult], evaluation_date: date) -> tu
         if due is not None and days_until is not None:
             due_candidates.append((due, days_until, result))
 
-    if due_candidates:
-        due, days_until, selected = sorted(due_candidates, key=lambda item: (STATUS_PRIORITY.index(item[2].status), item[0]))[0]
-        if selected.status in {TimelinessStatus.overdue.value, TimelinessStatus.urgent.value, TimelinessStatus.due_soon.value}:
-            return selected.status, due.isoformat(), days_until, selected.rule_id
+    actionable_due_candidates = [
+        item
+        for item in due_candidates
+        if item[2].status in {TimelinessStatus.overdue.value, TimelinessStatus.urgent.value, TimelinessStatus.due_soon.value}
+    ]
+    if actionable_due_candidates:
+        due, days_until, selected = sorted(actionable_due_candidates, key=lambda item: (STATUS_PRIORITY.index(item[2].status), item[0]))[0]
+        return selected.status, due.isoformat(), days_until, selected.rule_id
 
     ranked = sorted(rule_results, key=lambda item: STATUS_PRIORITY.index(item.status))
     selected = ranked[0]
     due = _date(selected.due_date)
     days_until = _days_until(due, evaluation_date)
+    if selected.status == TimelinessStatus.compliant.value and due_candidates:
+        future_due_candidates = [item for item in due_candidates if item[0] >= evaluation_date]
+        if future_due_candidates:
+            due, days_until, selected = sorted(future_due_candidates, key=lambda item: item[0])[0]
+        else:
+            due, days_until, selected = sorted(due_candidates, key=lambda item: item[0], reverse=True)[0]
     return selected.status, _date_str(due), days_until, selected.rule_id
 
 
@@ -486,7 +497,7 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
         db.add(client)
         db.flush()
 
-    client.permitted_name = payload.permitted_name.strip()
+    client.permitted_name = payload.permitted_name.strip() or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=patient_id)
     client.is_active = payload.is_active
     client.current_level_of_care = payload.current_level_of_care.strip()
     client.counselor_name = payload.counselor_name.strip()

@@ -20,15 +20,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-window
 
 The API configuration page lets an admin:
 
-1. Sign in with the existing local app admin account.
+1. Use the existing signed-in admin app session when opened from App settings; a second in-page admin login is not required.
 2. Enter or update the API vendor/base URL.
 3. Enter an API key for a one-time test or save it for later use.
 4. Enter OAuth2 client-credentials values for a one-time test or save the client ID/token URL plus encrypted client secret.
-5. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
-6. Test connectivity from inside the running app.
-7. Pick any operation found in the loaded API definition and test that specific API call.
-8. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
-9. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, and redacted JSON report payloads.
+5. Select the OAuth token auth style that matches the provider: body credentials, Basic auth, URL-encoded Basic auth, or try both/all supported styles.
+6. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
+7. Test connectivity from inside the running app.
+8. Pick any operation found in the loaded API definition and test that specific API call.
+9. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
+10. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, and redacted JSON report payloads.
 
 The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys or bearer tokens in browser payloads.
 
@@ -42,7 +43,30 @@ After a definition is loaded, the page builds an operation picker from the OpenA
 - top-level JSON request-body fields
 - required flags, types, enums, defaults, descriptions, and date formats where present
 
-When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, selected auth mode, one-time API key, saved encrypted API key, or client-credentials bearer token obtained for that test. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys and bearer tokens are injected into the outbound request but are not returned in the test result. Sensitive response field names such as tokens, secrets, passwords, authorization values, and API keys are redacted before display.
+When an admin runs a selected API call test, the app sends the request from the local FastAPI backend using the configured base URL, selected auth mode, one-time API key, saved encrypted API key, or client-credentials bearer token obtained for that test. GET/HEAD requests do not send a request body unless the selected OpenAPI operation genuinely requires one. The response shown in the browser includes status code, content type, timing when available, parsed JSON when the response is JSON, or a short body preview for non-JSON responses. API keys and bearer tokens are injected into the outbound request but are not returned in the test result. Sensitive response field names such as tokens, secrets, passwords, authorization values, and API keys are redacted before display.
+
+Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
+
+For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`.
+
+## Periodic API readiness checks
+
+Admins can turn on periodic safe Alleva API checks from `App settings` after saving:
+
+- API or FHIR base URL.
+- Token URL.
+- Client ID.
+- Encrypted client secret.
+- Token auth style.
+- Check interval in minutes.
+
+The background checker authenticates with the saved client ID/secret, applies the selected token auth style, and runs the same bounded OpenAPI/readiness probe used by the harness. App settings shows the last check time, status, message, last success/failure, and next scheduled check through the Review Source Discovery payload.
+
+## EMR endpoint profiles
+
+Admins can save multiple endpoint profiles for Alleva and future EMR/FHIR integrations from App settings. Each profile stores vendor label, adapter key, FHIR base URL, optional OpenAPI URL, token URL, token auth style, client ID, encrypted client secret, scopes, timeout, active/default flags, and notes. Browser responses return only configured flags for secrets. Activating a profile copies it into the current App settings EMR/API configuration used by discovery, import-plan, and readiness tests.
+
+Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, scopes, pagination/rate limits, attachment handling, documentation, and compliance approval.
 
 ## Secret handling
 

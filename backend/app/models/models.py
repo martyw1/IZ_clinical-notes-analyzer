@@ -119,22 +119,59 @@ class AppSetting(Base):
     llm_use_for_evaluation_gap_analysis: Mapped[bool] = mapped_column(Boolean, default=True)
     llm_analysis_instructions: Mapped[str] = mapped_column(Text, default='')
     emr_api_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    emr_vendor_name: Mapped[str] = mapped_column(String(120), default='Alleva / SMART on FHIR')
+    emr_vendor_name: Mapped[str] = mapped_column(String(120), default='Alleva / FHIR')
     emr_fhir_base_url: Mapped[str] = mapped_column(String(255), default='')
     emr_smart_client_id: Mapped[str] = mapped_column(String(255), default='')
     emr_smart_client_secret: Mapped[str] = mapped_column(String(1024), default='')
     emr_smart_token_url: Mapped[str] = mapped_column(String(500), default='https://authorization.allevasoft.com/connect/token')
+    emr_smart_token_auth_style: Mapped[str] = mapped_column(String(40), default='body')
     emr_smart_scopes: Mapped[str] = mapped_column(
         String(500),
         default='openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     )
     emr_api_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    emr_periodic_check_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    emr_periodic_check_interval_minutes: Mapped[int] = mapped_column(Integer, default=1440)
+    emr_last_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    emr_last_check_status: Mapped[str] = mapped_column(String(40), default='')
+    emr_last_check_message: Mapped[str] = mapped_column(Text, default='')
+    emr_last_successful_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    emr_last_failure_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     facility_timezone: Mapped[str] = mapped_column(String(80), default='local_machine')
     treatment_plan_loc_change_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     treatment_plan_loc_change_window_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    updated_by: Mapped[User] = relationship(foreign_keys=[updated_by_id])
+
+
+class EmrEndpointProfile(Base):
+    __tablename__ = 'emr_endpoint_profiles'
+    __table_args__ = (UniqueConstraint('profile_key', name='uq_emr_endpoint_profiles_profile_key'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120), default='')
+    vendor_name: Mapped[str] = mapped_column(String(120), default='Alleva')
+    adapter_key: Mapped[str] = mapped_column(String(120), default='alleva-fhir-document-manager')
+    fhir_base_url: Mapped[str] = mapped_column(String(500), default='')
+    openapi_url: Mapped[str] = mapped_column(String(500), default='')
+    token_url: Mapped[str] = mapped_column(String(500), default='')
+    token_auth_style: Mapped[str] = mapped_column(String(40), default='body')
+    client_id: Mapped[str] = mapped_column(String(255), default='')
+    client_secret: Mapped[str] = mapped_column(String(1024), default='')
+    scopes: Mapped[str] = mapped_column(String(500), default='')
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    notes: Mapped[str] = mapped_column(Text, default='')
+    created_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
     updated_by: Mapped[User] = relationship(foreign_keys=[updated_by_id])
 
 

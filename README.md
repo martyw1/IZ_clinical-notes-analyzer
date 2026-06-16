@@ -14,10 +14,12 @@ Version 1 includes:
 - A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 42 PRD checklist steps.
 - Dashboard review-source choices for EMR/API access and manual upload.
 - Source discovery through `GET /api/review-source-discovery` with live API readiness status, manual point-in-time upload status, daily API-monitoring labels, and monthly compliance-check fallback language.
-- Manual upload, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
+- Manual upload, uploaded-binder deletion, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
 - Treatment-plan timeliness dashboard/detail views, manual overrides, and CSV/JSON exports.
-- Admin-managed workflow profiles with a Settings action that seeds a draft from the canonical 42-step checklist so admins can edit and publish future workflow changes without code edits.
-- Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, button-event audit logging, safe daily source checks, and API client-credentials testing.
+- Admin/manager Workflow profiles with a dedicated screen that seeds a draft from the canonical 42-step checklist so approved staff can edit, version, and publish future workflow changes without code edits.
+- In-app Help with role permissions, screen guides, button behavior, setup notes, workflow guidance, API/EMR definitions, and LLM configuration notes.
+- Stored EMR endpoint profiles for Alleva now and future EMR/FHIR endpoints, with encrypted secret storage and one-click activation for API readiness testing.
+- Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, button-event audit logging, safe periodic source checks, bounded API operation responses, and API client-credentials testing.
 - Windows preflight, setup/start wrappers, and release-folder packaging scripts.
 
 Version 1 does not yet include a signed MSI/MSIX or live Alleva patient import. The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable.
@@ -41,6 +43,7 @@ Use this app to:
 - approve the chart or return it to the counselor with comments
 - keep a local audit trail of sign-ins, uploads, reviews, settings changes, and API tests
 - test future Alleva/API connectivity without pretending live patient import is ready
+- delete an uploaded/analyzed local binder when it should no longer remain in the app
 
 Important boundaries:
 
@@ -54,9 +57,9 @@ Important boundaries:
 
 | Person | What they do |
 | --- | --- |
-| Counselor | Uploads clinical-note binders and reviews returned items. |
-| Manager | Reviews charts, confirms checklist items, approves charts, or returns them with comments. |
-| Admin | Manages users, settings, readiness checks, forensic logs, API connectivity, and local configuration. |
+| Counselor | Uploads/updates binders, reviews assigned/returned work, views permitted treatment-plan details, exports permitted work lists, and manages their own account. |
+| Manager | Reviews charts, confirms checklist items, approves or returns charts, records treatment-plan overrides, manages counselor users, and manages workflow profiles. |
+| Admin | Manages every screen and action, including all users, App settings, readiness checks, forensic logs, API/EMR setup, LLM setup, and local configuration. |
 
 ## What Is Included Today
 
@@ -64,7 +67,7 @@ Current functionality:
 
 - Local Windows desktop launch through `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`.
 - FastAPI desktop runtime served from one local URL.
-- React UI for sign-in, dashboard, review queue, manual uploads, user management, settings, forensic logs, profile, and version footer.
+- React UI for sign-in, dashboard, review queue, manual uploads, user management, workflow profiles, help, App settings, forensic logs, profile, and version footer.
 - Treatment Plan Checklist Version 1 tab and dashboard checklist version visibility.
 - Review-source dashboard choices for EMR/API access and manual upload.
 - Bootstrap local admin account on first startup.
@@ -76,14 +79,16 @@ Current functionality:
 - Patient ID auto-detection from filenames and readable file contents.
 - Immutable binder versioning for later updates.
 - Secure download of stored source documents after authentication and authorization.
+- Authorized deletion of uploaded binders, linked generated reviews, upload-derived timeliness records, and encrypted stored files.
 - Deterministic YAML rules for Treatment Plan Tracking completeness checks.
 - Treatment Plan Timeliness dashboard/detail views for active clients, LOC history, treatment-plan dates, due status, source conflicts, and audited manual overrides.
-- Seeded versioned workflow profile for the Treatment Plan Timeliness Tracker, with admin Settings controls for future draft/publish/archive workflows.
+- Seeded versioned workflow profile for the Treatment Plan Timeliness Tracker, with admin/manager Workflow profiles controls for future draft/publish/archive workflows.
 - Generated chart audit findings and checklist responses.
 - Manager approval and return-to-counselor workflow.
 - Admin-visible readiness checks.
 - API health and version endpoints.
 - Local API configuration page for vendor/base URL/API key testing.
+- Stored EMR endpoint profiles for multiple current/future EMR endpoints.
 - OpenAPI/Swagger definition discovery and sample offline OpenAPI test endpoint.
 - Operation test workbench for selected OpenAPI operations.
 - EMR/FHIR readiness endpoints for future SMART/FHIR integration planning.
@@ -229,6 +234,8 @@ The app stores the binder, encrypts uploaded files, extracts readable text where
 
 Upload guardrails block unsupported extensions, empty files, per-file uploads over `50MB`, binders over `250MB`, more than `40` files, missing patient IDs, and conflicting detected patient IDs. Upload/download audit logs keep hashes, sizes, bucket/status metadata, and request context, but not uploaded note text or original filenames.
 
+To delete an uploaded/analyzed binder, open the binder details on `Manual upload`, type the patient ID exactly in the confirmation field, and click `Delete uploaded binder`. This removes the local uploaded binder, linked automated review, upload-derived timeliness records, and encrypted stored files. Forensic audit logs remain.
+
 ### Review a chart
 
 1. Open `Review queue` or `Chart audit`.
@@ -268,9 +275,19 @@ Admins can open `Forensic logs` to review audited events. Logs can be filtered b
 
 The audit system records request metadata and event details, but it should not log uploaded note text, PHI-like clinical content, API keys, bearer tokens, passwords, or encryption keys.
 
-### Configure settings
+### Use in-app help
 
-Admins can open `Settings` to review:
+Every signed-in user can open `Help` for:
+
+- what each role can and cannot do
+- what each screen and major button does
+- treatment-plan status meanings and update/re-evaluation flow
+- workflow-profile change guidance
+- App settings, API/EMR, FHIR base URL, and LLM setup notes
+
+### Configure App settings
+
+Admins can open `App settings` to review:
 
 - organization label
 - access-intelligence settings
@@ -279,10 +296,13 @@ Admins can open `Settings` to review:
 - future EMR/FHIR connector settings
 - runtime readiness
 - EMR profile
-- SMART/FHIR discovery checks
+- stored EMR endpoint profiles
+- FHIR/OAuth discovery checks
 - planned import workflow for a patient ID
 
 Optional LLM features are disabled by default. Keep deterministic rules as the primary completeness-check path.
+
+Office managers cannot open App settings, API/EMR setup, LLM setup, or forensic logs. Counselors cannot manage users, workflow profiles, settings, logs, manager approvals, or treatment-plan overrides.
 
 ## Supported Files
 
@@ -330,7 +350,7 @@ Important local files and folders:
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\clinical-notes-analyzer.sqlite3` | Local SQLite application database |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads` | Encrypted uploaded clinical files |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
-| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Optional Alleva/OpenAPI connectivity reports |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-reports` | Optional Alleva/OpenAPI connectivity reports |
 
 On macOS host runs, the default app-data folder is:
 
@@ -376,16 +396,17 @@ http://localhost:8000/api-configuration
 
 This page can:
 
-- sign in with the local admin account
+- use the existing signed-in admin app session; a second in-page admin login is not required
 - store vendor/base URL settings
 - use a one-time API key for a test
 - save an API key in encrypted form
 - use OAuth2 client credentials to request a bearer token for a test
+- choose body, Basic, URL-encoded Basic, try-both, or try-all OAuth token auth styles
 - pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL
 - test base connectivity
 - choose an operation from the loaded OpenAPI definition
 - build a test form from path, query, header, and JSON body fields
-- show non-secret results such as HTTP status, selected definition URL, title/version, path counts, schema counts, security scheme names, sample paths, content type, response preview, and redacted JSON reports
+- show non-secret results such as HTTP status, selected definition URL, title/version, path counts, schema counts, security scheme names, sample paths, content type, bounded response preview, truncation status, and redacted JSON reports
 
 Secret handling:
 
@@ -396,6 +417,9 @@ Secret handling:
 - bearer tokens obtained by client-credentials tests stay in memory for that test call only
 - one-time keys, saved keys, bearer strings, token query parameters, and sensitive response fields are redacted from reports/results
 - pasted one-time keys can be used without saving them
+- selected operation responses are capped before display so large provider payloads do not overwhelm the UI
+
+For FHIR testing, the FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, for example an endpoint ending in `/fhir/R4`.
 
 Backend routes:
 
@@ -420,10 +444,13 @@ The app is upload-first today. The supported production-style workflow is to exp
 
 The app includes readiness boundaries for future direct integration:
 
-- `GET /api/emr/profile` reports configured vendor/FHIR/SMART profile information.
-- `POST /api/emr/discover` validates SMART `.well-known/smart-configuration` discovery when a real FHIR base URL is available.
+- `GET /api/emr/profile` reports configured vendor/FHIR/OAuth profile information.
+- `GET/POST/PATCH/DELETE /api/emr/profiles` stores multiple Alleva/future EMR endpoint profiles with encrypted client secrets.
+- `POST /api/emr/profiles/{id}/activate` copies a stored endpoint profile into the active App settings profile used for readiness/API tests.
+- `POST /api/emr/discover` validates FHIR/OAuth `.well-known/smart-configuration` discovery when a real FHIR base URL is available.
 - `GET /api/emr/import-plan?patient_id=...` returns the planned FHIR R4 `Patient`, `DocumentReference`, `Binary`, and optional `Provenance` request flow.
 - `/clinical-notes-intake` explains manual upload vs future API lookup.
+- App settings can enable periodic API readiness checks using saved encrypted client credentials and a configurable interval.
 
 Live patient import remains unavailable until the client/vendor supplies official tenant credentials, supported endpoints, scopes, registration details, pagination/rate-limit rules, and attachment download behavior.
 
@@ -686,9 +713,16 @@ Important settings:
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.2.0` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.3.0` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history. The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
 
 Admins and office managers can record manual overrides from the client detail view. Counselors can view tracker details but cannot create overrides.
+
+Manual re-upload and API-style re-pull flows update the stored treatment-plan evidence, re-run deterministic evaluation, and preserve audit history so metrics can be interpreted against the logic/version active at the time.
+
+If an uploaded or API-pulled plan has no patient name, the app creates a safe fallback display name:
+
+- no name and no patient ID: `generated-name_YYYYMMDD_HHMMSS`
+- no name and a patient ID: `patient-id_YYYYMMDD_HHMMSS`
 
 The deterministic rules profile is configured here:
 
@@ -719,7 +753,7 @@ Rules-file guardrails:
 - keep PHI out of YAML rules files
 - keep vendor credentials out of YAML rules files
 - treat YAML rules as deterministic business logic, not LLM prompts
-- manage future workflow profiles through admin Settings and the versioned workflow-definition API; keep deterministic YAML rules under `config\rules`
+- manage future workflow profiles through the admin/manager Workflow profiles screen and the versioned workflow-definition API; keep deterministic YAML rules under `config\rules`
 - keep LOC aliases such as `IOP5`, `IOP-5`, `IOP 5`, `IOP-19`, `IOP-3`, and `OP` configurable in rules/config files
 
 Open blocker:
@@ -728,9 +762,9 @@ Open blocker:
 
 ## Workflow Profiles
 
-Admins can manage versioned workflow profiles from Settings. A workflow profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
+Admins and office managers can manage versioned workflow profiles from the dedicated `Workflow profiles` screen. A workflow profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
 
-The Settings workflow panel includes a `Seed draft from 42-step checklist` action. It loads `config\checklists\treatment-plan-v1.json`, copies the 42 steps, review statuses, override requirements, source modes, audit events, and export fields into a draft workflow snapshot, and gives admins a starting point they can edit before publishing a new workflow version.
+The Workflow profiles screen includes a `Seed draft from 42-step checklist` action. It loads `config\checklists\treatment-plan-v1.json`, copies the 42 steps, review statuses, override requirements, source modes, audit events, and export fields into a draft workflow snapshot, and gives admins/managers a starting point they can edit before publishing a new workflow version.
 
 Fresh databases seed a published `Treatment Plan Timeliness Tracker` profile. Admins can delete only unused draft-only profiles that were never published; published or archived history must be archived instead of hard-deleted.
 
@@ -1045,7 +1079,7 @@ flowchart LR
 The current app version is:
 
 ```text
-1.2.0
+1.3.0
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

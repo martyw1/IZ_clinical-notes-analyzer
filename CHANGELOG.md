@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+- No unreleased changes.
+
+## 1.3.0 - 2026-06-16
+
+### Added
+- Added first-class Workflow profiles navigation for admins and office managers so workflow logic is no longer edited only from App settings.
+- Added role-scoped user management: admins can manage all roles; office managers can manage counselor accounts only; counselors can manage only their own account.
+- Added in-app Help with role permissions, screen-by-screen button guidance, setup notes, workflow guidance, API/EMR definitions, and LLM configuration notes.
+- Added stored EMR endpoint profiles so admins can save and activate Alleva now and future EMR/FHIR endpoints without returning stored secrets to the browser.
+- Added treatment-plan update/re-evaluation coverage for uploaded and API-style pulled plans, including fallback generated client names when no patient name is available.
+- Added LLM configuration coverage for OpenAI-compatible endpoint URL, API key, model, and JSON content-analysis responses while keeping LLM use disabled by default.
+- Added authorized deletion for uploaded patient note binders, including linked generated review cleanup, upload-derived timeliness cleanup, encrypted file removal, and UI confirmation from Manual upload.
+- Added periodic Alleva/API readiness checks from App settings using saved encrypted client credentials, configurable interval, and selectable OAuth token auth style.
+- Added API harness support for body, Basic, URL-encoded Basic, try-both, and try-all client-credentials token styles.
+
+### Changed
+- Promoted version metadata to `1.3.0` / build `2026.06.16.1`.
+- Renamed confusing SMART-only API configuration labels to OAuth/FHIR wording and clarified that the FHIR base URL is the vendor-supplied root FHIR R4 endpoint.
+- Changed the checklist `Manage Workflow` action to `Workflow profiles` and routed it to the workflow screen instead of App settings.
+- Kept App settings, API/EMR setup, LLM setup, and forensic logs admin-only while allowing office managers to work in User management and Workflow profiles.
+- Expanded dashboard and Treatment Plan status colors with clearer high-risk/review/missing/conflict distinctions and responsive grids for smaller displays.
+- Capped selected API operation response capture and compacted saved API connectivity reports so large provider responses cannot overwhelm the browser UI or local report directory.
+- Redacted uploaded document labels, filenames, storage paths, descriptions, and source attachment/author metadata from forensic data-change snapshots.
+
+### Fixed
+- Fixed stale-session loops so 401 responses clear the same-browser session and return the operator to sign-in instead of continuing repeated background requests.
+- Fixed Manual upload navigation so "Open automated review" switches to the review workbench and the linked-review "Open binder details" button returns to the uploaded binder.
+- Fixed settings-save behavior so optional endpoint-profile draft fields cannot block saving App settings.
+- Fixed treatment-plan due-date selection when all deterministic rules are compliant, choosing the correct next future due date instead of an older non-actionable date.
+
+### Verified
+- Morning startup/app logs were reviewed; the 2026-06-16 startup preflight was clean, one settings `400` and repeated stale-session `401` events were identified, and the stale-session UI behavior was fixed.
+- Full backend pytest passed with `93 passed, 2 skipped`.
+- Frontend Vitest passed with `15 passed`.
+- Frontend production build passed.
+- Windows local stack smoke passed on port `8768`.
+- Windows API configuration smoke passed on port `8769`.
+- Browser walkthrough passed against a disposable local server with synthetic admin, office manager, and counselor personas, including no-second-login API harness session reuse and local sample OpenAPI pull.
+- Focused backend coverage passed for role-scoped user CRUD, manager workflow editing, EMR endpoint profiles, uploaded/API-style treatment-plan re-evaluation, fallback names, and LLM JSON analysis.
+- Final production-readiness test report added at `docs/validation/validation-report-2026-06-16-production-readiness.md`.
+
 ## 1.2.0 - 2026-06-15
 
 ### Added

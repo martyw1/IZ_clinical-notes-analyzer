@@ -37,8 +37,9 @@ Docker and PostgreSQL remain developer/server options only. They are not ordinar
 
 ## EMR integration boundary
 - The current production-ready path remains local file upload from the EMR export.
-- Admin settings capture a vendor label, FHIR base URL, SMART client metadata, token URL, scopes, timeout, and encrypted direct-API credential state.
-- The backend exposes a SMART discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
+- Admin App settings capture a vendor label, FHIR base URL, OAuth/FHIR client metadata, token URL, scopes, timeout, and encrypted direct-API credential state.
+- Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with encrypted client secrets and an active/default profile used by readiness checks.
+- The backend exposes a FHIR/OAuth discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
 - The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details.
 - Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval.
 

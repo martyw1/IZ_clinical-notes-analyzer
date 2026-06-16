@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.config import REPO_ROOT
-from app.models.models import AppSetting, AuditLog
+from app.models.models import AppSetting, AuditLog, EmrEndpointProfile
 from app.services.emr_fhir import map_document_reference_to_patient_note_metadata
 from app.services.secure_storage import text_secret_is_encrypted
 
@@ -153,6 +153,62 @@ def test_emr_enablement_requires_minimum_alleva_smart_contract(app_with_sqlite):
             assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
         finally:
             db.close()
+
+
+def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        listed = client.get('/api/emr/profiles', headers=headers)
+        assert listed.status_code == 200
+        assert listed.json()[0]['profile_key'] == 'alleva-default'
+        assert listed.json()[0]['client_secret_configured'] is False
+
+        created = client.post(
+            '/api/emr/profiles',
+            headers=headers,
+            json={
+                'profile_key': 'future_emr_sandbox',
+                'display_name': 'Future EMR sandbox',
+                'vendor_name': 'Future EMR',
+                'adapter_key': 'future-fhir-document-manager',
+                'fhir_base_url': 'https://future.example.test/fhir/R4',
+                'openapi_url': 'https://future.example.test/openapi.json',
+                'token_url': 'https://future.example.test/oauth/token',
+                'token_auth_style': 'basic',
+                'client_id': 'future-client',
+                'client_secret': 'future-secret',
+                'scopes': 'patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs',
+                'timeout_seconds': 12,
+                'is_default': False,
+                'notes': 'Synthetic future endpoint profile.',
+            },
+        )
+        assert created.status_code == 200
+        profile = created.json()
+        assert profile['client_secret_configured'] is True
+        assert 'future-secret' not in created.text
+
+        activated = client.post(f"/api/emr/profiles/{profile['id']}/activate", headers=headers)
+        assert activated.status_code == 200
+        payload = activated.json()
+        assert payload['emr_vendor_name'] == 'Future EMR'
+        assert payload['emr_fhir_base_url'] == 'https://future.example.test/fhir/R4'
+        assert payload['emr_smart_client_id'] == 'future-client'
+        assert payload['emr_smart_client_secret_configured'] is True
+        assert 'future-secret' not in activated.text
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting)).scalar_one()
+        assert settings_row.emr_vendor_name == 'Future EMR'
+        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+        stored_profile = db.execute(select(EmrEndpointProfile).where(EmrEndpointProfile.profile_key == 'future_emr_sandbox')).scalar_one()
+        assert stored_profile.is_default is True
+        assert text_secret_is_encrypted(stored_profile.client_secret)
+    finally:
+        db.close()
 
 
 def test_version_endpoint_reports_repo_version(app_with_sqlite):

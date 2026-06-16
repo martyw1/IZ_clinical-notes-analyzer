@@ -154,7 +154,7 @@ def test_admin_can_create_version_publish_and_archive_workflow_definition(app_wi
         db.close()
 
 
-def test_workflow_definition_role_gate_and_duplicate_key(app_with_sqlite):
+def test_manager_can_manage_workflow_definitions_and_duplicate_keys_are_blocked(app_with_sqlite):
     app, _ = app_with_sqlite
 
     with TestClient(app) as client:
@@ -183,7 +183,24 @@ def test_workflow_definition_role_gate_and_duplicate_key(app_with_sqlite):
         assert {item['workflow_key'] for item in manager_list.json()} == {'treatment_plan_timeliness', 'workflow_role_gate'}
 
         manager_create = client.post('/api/workflow-definitions', headers=manager_headers, json=_workflow_payload('manager_created'))
-        assert manager_create.status_code == 403
+        assert manager_create.status_code == 200
+        manager_definition = manager_create.json()
+        manager_version_id = manager_definition['versions'][0]['id']
+
+        manager_update = client.patch(
+            f"/api/workflow-definitions/{manager_definition['id']}",
+            headers=manager_headers,
+            json={'description': 'Manager-adjusted workflow profile.'},
+        )
+        assert manager_update.status_code == 200
+        assert manager_update.json()['description'] == 'Manager-adjusted workflow profile.'
+
+        manager_publish = client.post(
+            f"/api/workflow-definitions/{manager_definition['id']}/versions/{manager_version_id}/publish",
+            headers=manager_headers,
+        )
+        assert manager_publish.status_code == 200
+        assert manager_publish.json()['current_version_id'] == manager_version_id
 
 
 def test_default_workflow_is_seeded_and_unused_drafts_can_be_deleted(app_with_sqlite):

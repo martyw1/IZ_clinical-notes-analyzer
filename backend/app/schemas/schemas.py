@@ -97,8 +97,11 @@ class AppSettingsUpdate(BaseModel):
     emr_smart_client_secret: str | None = None
     clear_emr_smart_client_secret: bool = False
     emr_smart_token_url: str | None = Field(default=None, max_length=500)
+    emr_smart_token_auth_style: str | None = Field(default=None, pattern=r'^(body|basic|basic_urlencoded|both|all)$')
     emr_smart_scopes: str | None = Field(default=None, max_length=500)
     emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
+    emr_periodic_check_enabled: bool | None = None
+    emr_periodic_check_interval_minutes: int | None = Field(default=None, ge=5, le=10080)
     facility_timezone: str | None = Field(default=None, max_length=80)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
     treatment_plan_loc_change_window_validated: bool | None = None
@@ -125,8 +128,16 @@ class AppSettingsOut(BaseModel):
     emr_smart_client_id: str
     emr_smart_client_secret_configured: bool
     emr_smart_token_url: str
+    emr_smart_token_auth_style: str
     emr_smart_scopes: str
     emr_api_timeout_seconds: int
+    emr_periodic_check_enabled: bool
+    emr_periodic_check_interval_minutes: int
+    emr_last_check_at: datetime | None = None
+    emr_last_check_status: str
+    emr_last_check_message: str
+    emr_last_successful_check_at: datetime | None = None
+    emr_last_failure_at: datetime | None = None
     facility_timezone: str
     effective_timezone: str
     effective_timezone_label: str
@@ -191,6 +202,69 @@ class EmrImportPlanOut(BaseModel):
     document_manager_sections: list[dict[str, str]]
     attachment_handling: str
     document_mapping: dict[str, str]
+
+
+class EmrEndpointProfileBase(BaseModel):
+    profile_key: str = Field(min_length=3, max_length=80, pattern=r'^[a-z0-9][a-z0-9_-]*$')
+    display_name: str = Field(min_length=1, max_length=120)
+    vendor_name: str = Field(default='Alleva', max_length=120)
+    adapter_key: str = Field(default='alleva-fhir-document-manager', max_length=120)
+    fhir_base_url: str = Field(default='', max_length=500)
+    openapi_url: str = Field(default='', max_length=500)
+    token_url: str = Field(default='', max_length=500)
+    token_auth_style: str = Field(default='body', pattern=r'^(body|basic|basic_urlencoded|both|all)$')
+    client_id: str = Field(default='', max_length=255)
+    scopes: str = Field(default='', max_length=500)
+    timeout_seconds: int = Field(default=10, ge=1, le=60)
+    is_active: bool = True
+    is_default: bool = False
+    notes: str = Field(default='', max_length=2000)
+
+
+class EmrEndpointProfileCreate(EmrEndpointProfileBase):
+    client_secret: str | None = None
+
+
+class EmrEndpointProfileUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    vendor_name: str | None = Field(default=None, max_length=120)
+    adapter_key: str | None = Field(default=None, max_length=120)
+    fhir_base_url: str | None = Field(default=None, max_length=500)
+    openapi_url: str | None = Field(default=None, max_length=500)
+    token_url: str | None = Field(default=None, max_length=500)
+    token_auth_style: str | None = Field(default=None, pattern=r'^(body|basic|basic_urlencoded|both|all)$')
+    client_id: str | None = Field(default=None, max_length=255)
+    client_secret: str | None = None
+    clear_client_secret: bool = False
+    scopes: str | None = Field(default=None, max_length=500)
+    timeout_seconds: int | None = Field(default=None, ge=1, le=60)
+    is_active: bool | None = None
+    is_default: bool | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class EmrEndpointProfileOut(BaseModel):
+    id: int
+    profile_key: str
+    display_name: str
+    vendor_name: str
+    adapter_key: str
+    fhir_base_url: str
+    openapi_url: str
+    token_url: str
+    token_auth_style: str
+    client_id: str
+    client_id_configured: bool
+    client_secret_configured: bool
+    scopes: str
+    timeout_seconds: int
+    is_active: bool
+    is_default: bool
+    notes: str
+    created_by_id: int | None = None
+    updated_by_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class AuditTemplateItemOut(BaseModel):
