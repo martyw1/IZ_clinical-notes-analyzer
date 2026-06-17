@@ -32,12 +32,10 @@ jobs:
       - run: npm test -- --run
       - run: npm run build
 
-  compose-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cp .env.example .env
-      - run: docker compose --profile internal-db up -d --build
-      - run: FRONTEND_PORT=5173 ./scripts/smoke.sh
-      - if: always()
-        run: docker compose --profile internal-db down -v
+# Version 1.3.0 note:
+# The previous Docker Compose smoke job is intentionally not active because
+# the current local-desktop branch no longer has an active root full-stack
+# docker-compose.yml. Legacy Docker/PostgreSQL files are preserved under
+# depriceated/ for history only. Reintroduce Compose CI only if R3 explicitly
+# restores Docker/server deployment and updates active compose files, docs,
+# and validation together.
