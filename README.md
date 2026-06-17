@@ -25,6 +25,126 @@ Version 1.3.0 is the current local-desktop patch. It includes:
 
 Version 1.3.0 still does not include live Alleva patient import or a signed MSI/MSIX. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
+## Interactive Architecture Diagram
+
+GitHub renders this Mermaid diagram directly in the README. In GitHub views that support Mermaid click targets, select a node to open the relevant file or folder. If click targets are unavailable in a viewer, use the `Key Files` section below.
+
+```mermaid
+flowchart TB
+    Staff["R3 staff<br/>Admin / Office manager / Counselor"]
+
+    subgraph Windows["Windows 10/11 local desktop runtime"]
+        Launcher["Double-click launcher<br/>scripts/Start-IZ-Clinical-Notes-Analyzer.cmd"]
+        Preflight["Preflight and setup<br/>scripts/preflight-windows.ps1"]
+        Desktop["FastAPI desktop runtime<br/>backend/app/desktop_main.py<br/>localhost:8000"]
+        StaticUI["Built React assets<br/>frontend/dist"]
+    end
+
+    subgraph Browser["Browser UI served from localhost:8000"]
+        ReactApp["React app<br/>frontend/src/App.tsx"]
+        Views["Main screens<br/>Dashboard, Treatment plans, Uploads,<br/>Review queue, Checklist, Help,<br/>Users, Workflow profiles, Settings, Logs"]
+        Feedback["Dialogs and progress UI<br/>frontend/src/components/feedback.tsx"]
+        Styles["Responsive styles and status colors<br/>frontend/src/app.css"]
+    end
+
+    subgraph Backend["FastAPI backend services"]
+        MainAPI["Main API and app factory<br/>backend/app/main.py"]
+        Auth["Auth, password reset, RBAC<br/>backend/app/api/auth_user_routes.py"]
+        Routes["Primary authenticated routes<br/>backend/app/api/routes.py"]
+        Uploads["Patient-note binder service<br/>backend/app/services/patient_notes.py"]
+        Timeliness["Treatment Plan Timeliness<br/>backend/app/services/timeliness.py"]
+        Rules["Deterministic rules engine<br/>backend/app/services/rules_engine.py"]
+        Workflow["Workflow profile versioning<br/>backend/app/api/workflow_routes.py"]
+        APIHarness["API/EMR readiness harness<br/>backend/app/api/api_config_routes.py"]
+        Audit["Forensic audit logging<br/>backend/app/services/audit.py"]
+        Version["Version and readiness<br/>backend/app/services/version.py<br/>backend/app/services/runtime_checks.py"]
+    end
+
+    subgraph Config["Repo configuration and product rules"]
+        Checklist["Canonical 42-step checklist<br/>config/checklists/treatment-plan-v1.json"]
+        RuleYaml["Treatment Plan Tracking rules<br/>config/rules/alleva_treatment_plan_completeness_rules.yaml"]
+        VersionFiles["Version metadata<br/>VERSION and VERSION.json"]
+    end
+
+    subgraph LocalData["Local app data outside the repo<br/>%LOCALAPPDATA%/IZ Clinical Notes Analyzer"]
+        Env[".env<br/>local secrets and bootstrap admin value"]
+        SQLite["SQLite database<br/>clinical-notes-analyzer.sqlite3"]
+        EncryptedUploads["Encrypted uploads<br/>clinical source files"]
+        Logs["Startup logs and fallback audit logs"]
+        Reports["Redacted API reports"]
+    end
+
+    subgraph External["External systems and optional integrations"]
+        Alleva["Alleva / future EMR / FHIR<br/>readiness and operation tests only"]
+        LLM["Optional OpenAI-compatible LLM<br/>disabled by default"]
+    end
+
+    subgraph Packaging["Packaging and legacy boundary"]
+        Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.3.0"]
+        Legacy["Deprecated Docker/PostgreSQL artifacts<br/>depriceated/ and legacy startup stubs"]
+    end
+
+    Staff --> Launcher --> Preflight --> Desktop
+    Desktop --> StaticUI --> ReactApp
+    Staff --> ReactApp
+    ReactApp --> Views
+    ReactApp --> Feedback
+    ReactApp --> Styles
+    ReactApp --> MainAPI
+    Desktop --> MainAPI
+    MainAPI --> Auth
+    MainAPI --> Routes
+    Routes --> Uploads
+    Routes --> Timeliness
+    Routes --> Workflow
+    Routes --> APIHarness
+    Routes --> Audit
+    Routes --> Version
+    Timeliness --> Rules
+    Rules --> RuleYaml
+    Routes --> Checklist
+    Version --> VersionFiles
+    Uploads --> EncryptedUploads
+    MainAPI --> SQLite
+    MainAPI --> Env
+    Audit --> Logs
+    APIHarness --> Reports
+    APIHarness -. readiness only; no live patient import .-> Alleva
+    MainAPI -. optional and disabled by default .-> LLM
+    Builder --> Release
+    Legacy -. not ordinary Windows runtime .-> Windows
+
+    click Launcher "scripts/Start-IZ-Clinical-Notes-Analyzer.cmd" "Open Windows launcher"
+    click Preflight "scripts/preflight-windows.ps1" "Open Windows preflight"
+    click Desktop "backend/app/desktop_main.py" "Open desktop runtime"
+    click ReactApp "frontend/src/App.tsx" "Open React app"
+    click Feedback "frontend/src/components/feedback.tsx" "Open feedback components"
+    click Styles "frontend/src/app.css" "Open app styles"
+    click MainAPI "backend/app/main.py" "Open main FastAPI app"
+    click Auth "backend/app/api/auth_user_routes.py" "Open auth and user routes"
+    click Routes "backend/app/api/routes.py" "Open primary routes"
+    click Uploads "backend/app/services/patient_notes.py" "Open patient-note service"
+    click Timeliness "backend/app/services/timeliness.py" "Open timeliness service"
+    click Rules "backend/app/services/rules_engine.py" "Open rules engine"
+    click Workflow "backend/app/api/workflow_routes.py" "Open workflow routes"
+    click APIHarness "backend/app/api/api_config_routes.py" "Open API configuration routes"
+    click Audit "backend/app/services/audit.py" "Open audit service"
+    click Checklist "config/checklists/treatment-plan-v1.json" "Open canonical checklist"
+    click RuleYaml "config/rules/alleva_treatment_plan_completeness_rules.yaml" "Open deterministic rules"
+    click VersionFiles "VERSION.json" "Open version metadata"
+    click Builder "scripts/build-windows-installer.ps1" "Open release builder"
+    click Legacy "depriceated/DEPRECATED-MANIFEST.md" "Open deprecated manifest"
+```
+
+Diagram boundaries:
+
+- The normal runtime is one local FastAPI desktop service at `http://localhost:8000` serving the React UI and API.
+- Runtime data lives under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, not inside the source checkout.
+- Alleva/FHIR/API paths are readiness and operation-test paths only; live patient import remains disabled.
+- Optional LLM configuration exists but is disabled by default and is not the primary review path.
+- Docker/PostgreSQL artifacts are legacy references, not ordinary Windows desktop requirements.
+
 ## Primary Docs
 
 - `docs\Windows-User-Guide-Version-1.md`
