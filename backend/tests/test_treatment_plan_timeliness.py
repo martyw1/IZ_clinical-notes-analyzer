@@ -97,8 +97,8 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert payload['loc_change_window_validated'] is False
         item = payload['items'][0]
         assert item['patient_id'] == 'PAT-TP-100'
-        assert item['next_due_date'] == '2026-05-29'
-        assert item['days_until_due'] == 2
+        assert item['next_due_date'] == '2026-04-06'
+        assert item['days_until_due'] == -51
         assert item['status'] == 'Needs Review'
         assert item['rule_used'] == 'TP-DUE-DATE-CONFLICT'
 
@@ -110,7 +110,12 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert len(detail_payload['level_of_care_history']) == 2
         assert detail_payload['evidence_comparison']['document_next_due_date'] is None
         assert detail_payload['evidence_comparison']['signature_anchor_due_date'] == '2026-06-01'
-        assert detail_payload['evidence_comparison']['loc_anchor_due_date'] == '2026-05-29'
+        assert detail_payload['evidence_comparison']['current_date'] == '2026-05-27'
+        assert detail_payload['evidence_comparison']['date_clock_anchor_date'] == '2026-04-02'
+        assert detail_payload['evidence_comparison']['date_clock_due_date'] == '2026-06-01'
+        assert detail_payload['evidence_comparison']['loc_anchor_due_date'] == '2026-04-06'
+        assert detail_payload['evidence_comparison']['loc_change_due_date'] == '2026-04-06'
+        assert detail_payload['evidence_comparison']['loc_change_window_days'] == 7
 
 
 def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
@@ -129,12 +134,14 @@ def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
         assert detail.status_code == 200
         payload = detail.json()
         assert payload['status'] == 'Needs Review'
-        assert payload['next_due_date'] == '2026-05-29'
+        assert payload['next_due_date'] == '2026-04-06'
         assert payload['rule_used'] == 'TP-DUE-DATE-CONFLICT'
         assert payload['evidence_comparison']['document_next_due_date'] == '2026-05-29'
         assert payload['evidence_comparison']['signature_anchor_due_date'] == '2026-06-01'
-        assert payload['evidence_comparison']['loc_anchor_due_date'] == '2026-05-29'
-        assert 'LOC-change anchor/window is unvalidated' in payload['evidence_comparison']['conflict_explanation']
+        assert payload['evidence_comparison']['loc_anchor_due_date'] == '2026-04-06'
+        assert payload['evidence_comparison']['loc_change_due_date'] == '2026-04-06'
+        assert payload['evidence_comparison']['loc_change_window_days'] == 7
+        assert 'LOC-change due date is 2026-04-06' in payload['evidence_comparison']['conflict_explanation']
         assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
 
 
@@ -147,13 +154,13 @@ def test_api_style_treatment_plan_repull_updates_record_and_reevaluates(app_with
         initial['permitted_name'] = ''
         created = client.post('/api/timeliness/clients', headers=headers, json=initial)
         assert created.status_code == 200
-        assert re.fullmatch(r'PAT-TP-REPULL_\d{8}_\d{6}', created.json()['permitted_name'])
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', created.json()['permitted_name'])
 
         first_dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-27', headers=headers)
         assert first_dashboard.status_code == 200
         first_item = first_dashboard.json()['items'][0]
         assert first_item['patient_id'] == 'PAT-TP-REPULL'
-        assert first_item['next_due_date'] == '2026-05-29'
+        assert first_item['next_due_date'] == '2026-04-06'
         assert first_item['status'] == 'Needs Review'
 
         updated_payload = _client_payload(patient_id='PAT-TP-REPULL', loc='PHP', review_date='2026-05-20')

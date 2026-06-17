@@ -54,6 +54,7 @@ class StoredUpload:
 class ExtractedText:
     text: str
     status: str
+    page_texts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -223,12 +224,19 @@ def _extract_pdf_text(path: Path) -> str:
     return _extract_pdf_text_from_bytes(path.read_bytes())
 
 
-def _extract_pdf_text_from_bytes(raw: bytes) -> str:
+def _extract_pdf_pages_from_bytes(raw: bytes) -> tuple[str, ...]:
     if PdfReader is None:
         raise RuntimeError('pypdf is not installed')
     reader = PdfReader(io.BytesIO(raw))
-    pages = [page.extract_text() or '' for page in reader.pages]
-    return '\n'.join(page for page in pages if page).strip()
+    return tuple(page.extract_text() or '' for page in reader.pages)
+
+
+def _format_pdf_pages(pages: tuple[str, ...]) -> str:
+    return '\n'.join(f'[page {index}] {page}' for index, page in enumerate(pages, start=1) if page).strip()
+
+
+def _extract_pdf_text_from_bytes(raw: bytes) -> str:
+    return _format_pdf_pages(_extract_pdf_pages_from_bytes(raw))
 
 
 def _extract_text_from_bytes(raw: bytes, suffix: str) -> ExtractedText:
@@ -240,7 +248,8 @@ def _extract_text_from_bytes(raw: bytes, suffix: str) -> ExtractedText:
         if suffix == '.docx':
             return ExtractedText(text=_extract_docx_text_from_bytes(raw), status='extracted')
         if suffix == '.pdf':
-            return ExtractedText(text=_extract_pdf_text_from_bytes(raw), status='extracted')
+            pages = _extract_pdf_pages_from_bytes(raw)
+            return ExtractedText(text=_format_pdf_pages(pages), status='extracted', page_texts=pages)
         if suffix in {'.doc', '.jpg', '.jpeg', '.png', '.zip'}:
             return ExtractedText(text='', status='unsupported')
     except Exception:
@@ -437,11 +446,12 @@ async def extract_upload_metadata_from_uploads(files: list[UploadFile]) -> Uploa
 
 def display_name_for_patient_name_status(status: str, timestamp: datetime | None = None, *, patient_id: str = '') -> str:
     stamp_source = timestamp or datetime.now(timezone.utc)
-    stamp = stamp_source.strftime('%Y%m%d_%H%M%S')
-    safe_patient_id = sanitize_patient_id(patient_id) if patient_id.strip() else ''
-    if status in {NAME_BLANK_STATUS, NAME_NOT_FOUND_STATUS, NAME_HIDDEN_STATUS}:
-        return f'{safe_patient_id or "generated-name"}_{stamp}'
-    return f'{safe_patient_id or "generated-name"}_{stamp}'
+    stamp = stamp_source.strftime('%Y-%m-%d_%H%M%S')
+    if status == NAME_BLANK_STATUS:
+        return f'no-value-found_{stamp}'
+    if status in {NAME_NOT_FOUND_STATUS, NAME_HIDDEN_STATUS}:
+        return f'no-name-found_{stamp}'
+    return f'no-name-found_{stamp}'
 
 
 async def _detect_patient_id_for_upload(upload: UploadFile) -> PatientIdDetection | None:

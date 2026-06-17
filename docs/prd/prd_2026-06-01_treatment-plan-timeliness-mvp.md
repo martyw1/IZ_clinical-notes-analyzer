@@ -12,7 +12,9 @@ This PRD defines the first MVP for a Treatment Plan Timeliness Tracker inside th
 
 This is not the full future clinical notes analyzer. The first release should solve the operational problem of trusted treatment-plan timeline tracking.
 
-Implementation note 2026-06-11: the production `Treatment plans` tab uses a compact work queue with quick status filters, selected-client evidence detail, date-anchor comparison, LOC history, evidence preview, and task-list copy/export for manual Asana tracking. Version `1.1.0` adds the 42-step PRD checklist, admin checklist-seeded workflow drafts, source-mode status cards, video-reference color alignment, and retained stale-build detection for Windows source-checkout launches. Because the LOC-change anchor/window is still unvalidated, source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date are shown side by side; conflicts remain `Needs Review`, `Missing Data`, or `Conflicting Evidence`.
+Implementation note 2026-06-11: the production `Treatment plans` tab uses a compact work queue with quick status filters, selected-client evidence detail, date-anchor comparison, LOC history, evidence preview, and task-list copy/export for manual Asana tracking. Version `1.1.0` adds the 42-step PRD checklist, admin checklist-seeded workflow drafts, source-mode status cards, video-reference color alignment, and retained stale-build detection for Windows source-checkout launches.
+
+Implementation note 2026-06-17: Version `1.4.0` updates the timeliness model to use the local current date, admission date, and latest valid treatment-plan review/update date as the recurring date clock. PHP uses 30 calendar days and other configured treatment levels use 60 calendar days. LOC changes use a manager-editable 7-calendar-day preset that remains visibly unvalidated until R3/Marleigh confirms the final rule. Source-document `Next Review Due`, date-clock due date, and LOC-change due date are shown side by side; conflicts remain `Needs Review`, `Missing Data`, or `Conflicting Evidence`.
 
 ## 2. MVP Positioning
 

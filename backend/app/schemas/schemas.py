@@ -728,6 +728,11 @@ class TimelinessEvidenceComparisonOut(BaseModel):
     document_next_due_date: str | None = None
     signature_anchor_due_date: str | None = None
     loc_anchor_due_date: str | None = None
+    current_date: str
+    date_clock_anchor_date: str | None = None
+    date_clock_anchor_source: str
+    date_clock_due_date: str | None = None
+    loc_change_due_date: str | None = None
     final_status: str
     conflict_explanation: str
     source_evidence: str
@@ -748,6 +753,7 @@ class TimelinessClientSummaryOut(BaseModel):
     last_valid_review_date: str | None = None
     next_due_date: str | None = None
     days_until_due: int | None = None
+    current_date: str
     status: str
     rule_used: str
     evidence_summary: str

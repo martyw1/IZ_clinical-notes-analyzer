@@ -138,7 +138,7 @@ class AppSetting(Base):
     emr_last_successful_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     emr_last_failure_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     facility_timezone: Mapped[str] = mapped_column(String(80), default='local_machine')
-    treatment_plan_loc_change_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    treatment_plan_loc_change_window_days: Mapped[int | None] = mapped_column(Integer, nullable=True, default=7)
     treatment_plan_loc_change_window_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

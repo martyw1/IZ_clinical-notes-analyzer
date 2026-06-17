@@ -102,28 +102,34 @@ def _validate_emr_enablement(settings_row: AppSetting) -> None:
     """Reject live EMR enablement until the minimum Alleva/FHIR contract exists."""
     if not settings_row.emr_api_enabled:
         return
+    missing_fields = []
     if not settings_row.emr_fhir_base_url.strip():
-        raise HTTPException(status_code=400, detail='FHIR base URL is required before enabling the EMR API connector')
-    settings_row.emr_fhir_base_url = normalize_fhir_base_url(settings_row.emr_fhir_base_url)
+        missing_fields.append('FHIR base URL')
+    else:
+        settings_row.emr_fhir_base_url = normalize_fhir_base_url(settings_row.emr_fhir_base_url)
     if not settings_row.emr_smart_client_id.strip():
-        raise HTTPException(status_code=400, detail='OAuth/FHIR client ID is required before enabling the EMR API connector')
+        missing_fields.append('OAuth/FHIR client ID')
     scopes = {scope for scope in settings_row.emr_smart_scopes.split() if scope}
     missing_scopes = sorted(REQUIRED_EMR_READ_SCOPES - scopes)
-    if missing_scopes:
-        raise HTTPException(status_code=400, detail=f'Missing required read scopes for Alleva document import: {", ".join(missing_scopes)}')
-
+    if missing_fields or missing_scopes:
+        field_message = f'Missing required EMR API field(s): {", ".join(missing_fields)}.' if missing_fields else ''
+        scope_message = f'Missing required read scope(s): {", ".join(missing_scopes)}.' if missing_scopes else ''
+        raise HTTPException(status_code=400, detail=' '.join(part for part in [field_message, scope_message] if part))
 
 def _validate_periodic_api_check(settings_row: AppSetting) -> None:
     if not settings_row.emr_periodic_check_enabled:
         return
+    missing_fields = []
     if not settings_row.emr_fhir_base_url.strip():
-        raise HTTPException(status_code=400, detail='API base URL is required before enabling periodic Alleva checks')
+        missing_fields.append('FHIR/API base URL')
     if not settings_row.emr_smart_token_url.strip():
-        raise HTTPException(status_code=400, detail='Token URL is required before enabling periodic Alleva checks')
+        missing_fields.append('OAuth token URL')
     if not settings_row.emr_smart_client_id.strip():
-        raise HTTPException(status_code=400, detail='Client ID is required before enabling periodic Alleva checks')
+        missing_fields.append('OAuth/FHIR client ID')
     if not settings_row.emr_smart_client_secret:
-        raise HTTPException(status_code=400, detail='Client secret is required before enabling periodic Alleva checks')
+        missing_fields.append('OAuth/FHIR client secret')
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f'Missing required periodic API check field(s): {", ".join(missing_fields)}')
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:

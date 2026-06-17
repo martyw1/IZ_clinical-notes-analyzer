@@ -115,3 +115,37 @@ def ensure_default_workflow_definitions(db: Session, *, actor_id: int) -> Workfl
     db.flush()
     definition.current_version_id = version.id
     return definition
+
+
+def current_treatment_plan_workflow_context(db: Session) -> dict[str, Any]:
+    definition = db.execute(
+        select(WorkflowDefinition).where(WorkflowDefinition.workflow_key == DEFAULT_TREATMENT_PLAN_WORKFLOW_KEY)
+    ).scalar_one_or_none()
+    if definition is None or definition.current_version_id is None:
+        return {
+            'workflow_key': DEFAULT_TREATMENT_PLAN_WORKFLOW_KEY,
+            'workflow_definition_id': None,
+            'workflow_version_id': None,
+            'workflow_version': None,
+            'checklist_version': None,
+            'status': 'not_seeded',
+        }
+    version = db.execute(
+        select(WorkflowDefinitionVersion).where(WorkflowDefinitionVersion.id == definition.current_version_id)
+    ).scalar_one_or_none()
+    snapshot: dict[str, Any] = {}
+    if version is not None:
+        try:
+            loaded = json.loads(version.definition_snapshot or '{}')
+            if isinstance(loaded, dict):
+                snapshot = loaded
+        except json.JSONDecodeError:
+            snapshot = {}
+    return {
+        'workflow_key': definition.workflow_key,
+        'workflow_definition_id': definition.id,
+        'workflow_version_id': version.id if version is not None else None,
+        'workflow_version': version.version if version is not None else None,
+        'checklist_version': snapshot.get('checklist_version') or snapshot.get('version'),
+        'status': version.status.value if version is not None else 'missing_current_version',
+    }

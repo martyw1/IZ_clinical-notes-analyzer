@@ -1,5 +1,29 @@
 # Version 1 Completion Log
 
+## 2026-06-17 1.4.0 Date Clock and Workflow Export Hardening
+
+What changed:
+- Updated version metadata to `1.4.0` / build `2026.06.17.1`.
+- Updated Treatment Plan Checklist/rules metadata to `1.2.0`.
+- Added local current-date clock logic using admission date or latest valid treatment-plan review/update date as the recurring anchor.
+- Applied PHP 30-calendar-day and non-PHP 60-calendar-day recurrence logic.
+- Added a manager-editable 7-calendar-day LOC-change preset while keeping the rule visibly unvalidated.
+- Added workflow version/checklist context to timeliness analysis audit logs.
+- Added source-evidence location output for manual PDF pages and API/FHIR source identifiers.
+- Added active workflow-step rows to CSV/JSON exports.
+- Added in-place draft workflow editing and clearer App settings/API validation guidance.
+
+Validation completed:
+- Backend tests passed with `93 passed, 2 skipped`.
+- Frontend Vitest passed with `15 passed`.
+- Frontend production build passed.
+- Example-treatment-plan upload smoke covered all 4 files currently in `example-treatment-plans` using synthetic patient IDs.
+
+Open external blockers:
+- LOC-change update window remains unvalidated by R3/Marleigh despite the 7-day preset.
+- Alleva FHIR base URL still requires vendor/tenant confirmation; public Swagger/OpenAPI URLs are not FHIR root endpoints.
+- Live Alleva patient import remains disabled pending official vendor/compliance approval.
+
 ## 2026-06-12 1.1.1 Deployment Readiness Hardening
 
 What changed:
@@ -64,7 +88,7 @@ Pass/fail status:
 - PASS: Windows local stack smoke passed.
 - PASS: Windows API configuration smoke passed.
 - PASS: Browser walkthrough verified dashboard source modes, video color tokens, 42 checklist cards, Treatment plans evidence comparison, and Settings workflow seed.
-- PASS: Deprecated archive moved to PRD-required `depriceated/` path with manifest.
+- PASS: Deprecated archive moved to PRD-required `depriceated/` path with manifest. Superseded on 2026-06-17 by removal after reference-scan proof; see `docs/removal-log.md`.
 
 ## 2026-06-09 07:40 Local Repo Safety Gate
 

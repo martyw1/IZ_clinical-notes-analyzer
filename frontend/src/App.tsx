@@ -186,6 +186,7 @@ type TimelinessClientSummary = {
   last_valid_review_date: string | null
   next_due_date: string | null
   days_until_due: number | null
+  current_date: string
   status: TimelinessStatus
   rule_used: string
   evidence_summary: string
@@ -262,6 +263,11 @@ type TimelinessEvidenceComparison = {
   document_next_due_date: string | null
   signature_anchor_due_date: string | null
   loc_anchor_due_date: string | null
+  current_date: string
+  date_clock_anchor_date: string | null
+  date_clock_anchor_source: string
+  date_clock_due_date: string | null
+  loc_change_due_date: string | null
   final_status: TimelinessStatus
   conflict_explanation: string
   source_evidence: string
@@ -793,9 +799,12 @@ const HELP_SECTIONS = [
   {
     title: 'Treatment Plans',
     items: [
+      'The date clock uses the local laptop/facility date, the admission date, and the last valid treatment-plan review/update date to calculate the next required update.',
+      'PHP levels use a 30-calendar-day recurring update window; IOP, OP, and other configured non-PHP levels use 60 calendar days.',
+      'Level-of-care changes use the separate manager-editable LOC-change window in App settings. The preset is 7 calendar days and the validation checkbox shows whether R3 has accepted the rule.',
       'Status filters narrow the queue by Overdue, Urgent, Due Soon, Returned, Needs Review, Missing Data, Conflicting Evidence, Unable to Evaluate, Compliant, or Approved.',
       'View evidence opens the exact date fields used for the selected due-date comparison.',
-      'Copy task list and Export task list create non-secret work lists for follow-up tracking.',
+      'Copy task list and Export task list create non-secret work lists for follow-up tracking. Export CSV/JSON includes rule results and the current 42-step workflow step statuses.',
       'Manual override is available only to admins and office managers and requires a reason.',
     ],
   },
@@ -804,7 +813,8 @@ const HELP_SECTIONS = [
     items: [
       'Initial creates the first binder for a patient ID; Update supersedes the active binder and re-runs evaluation.',
       'Detect patient ID reads supported synthetic/export files conservatively; conflicting IDs are blocked.',
-      'Upload and run automated evaluation stores files encrypted, creates a review chart, syncs treatment-plan tracker records, and evaluates deterministic rules.',
+      'Upload and run automated evaluation stores files encrypted, creates a review chart, syncs treatment-plan tracker records, and evaluates deterministic rules. When evidence is found in an uploaded PDF, the evidence location includes an uploaded page number when available.',
+      'If no approved client display name is supplied or detected, the app creates no-name-found_YYYY-MM-DD_HHMMSS or no-value-found_YYYY-MM-DD_HHMMSS as the display name.',
       'Delete uploaded binder removes the binder, linked generated review, upload-derived treatment-plan data, and encrypted stored files when authorized.',
     ],
   },
@@ -813,6 +823,7 @@ const HELP_SECTIONS = [
     items: [
       'Open automated review loads the selected chart and criterion workbench.',
       'Mark OK, Mark not OK, Not applicable, and Save criterion review changes are available to admins and office managers.',
+      'Export CSV and Export JSON keep the existing checklist-domain status rows and also include the current 42-step workflow statuses.',
       'Approve and Return to counselor are manager/admin decisions; returns require a correction note.',
       'Re-analyze reruns deterministic checks from the stored encrypted binder while preserving an operator-approved display name.',
     ],
@@ -830,6 +841,7 @@ const HELP_SECTIONS = [
     items: [
       'Create profile defines a versioned checklist/workflow logic container.',
       'Seed draft from 42-step checklist loads the canonical checklist into editable workflow JSON.',
+      'Edit draft changes the selected draft in place. Use as draft loads a published version as a new draft template without archiving the current profile.',
       'Create draft version records proposed logic changes; Publish makes that version current and archives the previous published version.',
       'Archive profile retires a workflow profile without deleting its audit history.',
     ],
@@ -838,10 +850,22 @@ const HELP_SECTIONS = [
     title: 'App Settings, API/EMR, And LLM',
     items: [
       'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
-      'FHIR base URL means the root FHIR R4 endpoint supplied by the EMR vendor, for example an Alleva tenant FHIR endpoint ending in /fhir/R4.',
+      'FHIR base URL means the root FHIR R4 endpoint supplied by the EMR vendor, for example an Alleva tenant FHIR endpoint ending in /fhir/R4. Alleva Swagger UI and swagger.json URLs are OpenAPI documentation URLs, not FHIR base URLs.',
       'OAuth/FHIR client ID, secret, token URL, and scopes are stored for readiness testing; secrets are encrypted and never returned to the browser.',
+      'Periodic API checks require the FHIR/API base URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
       'Stored EMR endpoint profiles let admins save future EMR/FHIR endpoint options and activate the one used by current readiness/API tests.',
       'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
+    ],
+  },
+  {
+    title: 'Field Guidance',
+    items: [
+      'Admission date is the treatment episode start date and is used when no later valid treatment-plan review/update date exists.',
+      'Last valid review/update date comes from a treatment-plan review or LOC-update record with usable source evidence and a staff/therapist signature date.',
+      'Current LOC must map to configured LOC aliases. PHP maps to a 30-day update clock; other configured treatment levels map to 60 days unless the rules config is changed.',
+      'FHIR base URL is only the root FHIR endpoint. Use the OpenAPI URL field or API harness for https://api.allevasoft.com/swagger/index.html and https://api.allevasoft.com/swagger/v1/swagger.json.',
+      'OpenAPI URL is the Swagger/OpenAPI JSON definition used by the API test harness to discover operations and required fields.',
+      'Client secret and API keys are write-only fields. A configured flag means a secret is stored; the secret itself is never returned to the browser.',
     ],
   },
   {
@@ -970,26 +994,26 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     emr_periodic_check_enabled: settings.emr_periodic_check_enabled,
     emr_periodic_check_interval_minutes: settings.emr_periodic_check_interval_minutes || 1440,
     facility_timezone: settings.facility_timezone || 'local_machine',
-    treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days,
+    treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days ?? 7,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
   }
 }
 
 function createEmrEndpointProfileForm(): EmrEndpointProfileForm {
   return {
-    profile_key: '',
-    display_name: '',
-    vendor_name: 'Alleva',
+    profile_key: 'alleva-rest-api',
+    display_name: 'Alleva REST API documentation profile',
+    vendor_name: 'Alleva Rest Api',
     adapter_key: 'alleva-fhir-document-manager',
     fhir_base_url: '',
-    openapi_url: '',
+    openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
     token_url: 'https://authorization.allevasoft.com/connect/token',
     token_auth_style: 'body',
     client_id: '',
     client_secret: '',
-    scopes: 'patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs',
+    scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     timeout_seconds: 10,
-    notes: '',
+    notes: 'Swagger/OpenAPI docs are available at https://api.allevasoft.com/swagger/index.html and /swagger/v1/swagger.json. R3/Alleva still needs to provide the separate tenant root FHIR R4 endpoint before FHIR discovery or live import can be enabled.',
   }
 }
 
@@ -1359,6 +1383,7 @@ export function App() {
   const [mustResetPassword, setMustResetPassword] = useState(false)
   const [activeView, setActiveView] = useState<AppView>(viewFromUrl)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [localNow, setLocalNow] = useState(() => new Date())
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [resetForm, setResetForm] = useState({ newPassword: '' })
@@ -1425,6 +1450,7 @@ export function App() {
   const [selectedWorkflowDefinitionId, setSelectedWorkflowDefinitionId] = useState<number | null>(null)
   const [workflowDefinitionForm, setWorkflowDefinitionForm] = useState<WorkflowDefinitionForm>(createWorkflowDefinitionForm())
   const [workflowVersionForm, setWorkflowVersionForm] = useState<WorkflowVersionForm>(createWorkflowVersionForm())
+  const [editingWorkflowVersionId, setEditingWorkflowVersionId] = useState<number | null>(null)
 
   const [profileForm, setProfileForm] = useState<ProfileForm>({ full_name: '' })
   const [passwordChangeForm, setPasswordChangeForm] = useState<PasswordChangeForm>({ current_password: '', new_password: '' })
@@ -1509,10 +1535,23 @@ export function App() {
     ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
   const timelinessBuildLabel = versionInfo?.version ? `v${versionInfo.version}` : 'current build'
+  const localClockLabel = localNow.toLocaleString(undefined, {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 
   useEffect(() => {
     storeSessionToken(token)
   }, [token])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setLocalNow(new Date()), 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1821,6 +1860,7 @@ export function App() {
     const selected = nextDefinitions.find((definition) => definition.id === selectedId) || nextDefinitions[0] || null
     setSelectedWorkflowDefinitionId(selected?.id ?? null)
     setWorkflowVersionForm(createWorkflowVersionForm(selected))
+    setEditingWorkflowVersionId(null)
   }
 
   async function loadWorkflowDefinitions(preferredId?: number | null) {
@@ -2451,13 +2491,84 @@ export function App() {
     }
   }
 
+  function activeTreatmentPlanWorkflow() {
+    return (
+      workflowDefinitions.find((definition) => definition.workflow_key === 'treatment_plan_timeliness') ||
+      workflowDefinitions.find((definition) => definition.category === 'treatment_plan') ||
+      selectedWorkflowDefinition ||
+      null
+    )
+  }
+
+  function workflowStepsForExport(chart: ChartDetail | null, client: TimelinessClientDetail | null) {
+    const workflow = activeTreatmentPlanWorkflow()
+    const rawSteps = workflow?.current_version?.definition_snapshot?.steps
+    const checklistSteps = Array.isArray(rawSteps) && rawSteps.length ? rawSteps : treatmentPlanChecklist?.steps || []
+    const chartResponses = new Map((chart?.checklist_items || []).map((item) => [item.item_key, item]))
+    const ruleResults = client?.rule_results || []
+    const hasRuleStatus = (rulePrefix: string) => ruleResults.find((result) => result.rule_id.startsWith(rulePrefix))?.status
+    const evidenceSummary = [client?.source_evidence, client?.evidence_comparison?.source_evidence].filter(Boolean).join('; ')
+
+    return checklistSteps.map((rawStep, index) => {
+      const step = rawStep as Partial<TreatmentPlanChecklistStep> & { label?: string }
+      const key = String(step.key || `workflow_step_${index + 1}`)
+      const chartResponse = chartResponses.get(key)
+      let status = chartResponse ? STATUS_LABELS[chartResponse.status] : 'not_reviewed'
+      let sourceEvidence = chartResponse?.evidence_location || evidenceSummary
+      let finding = chartResponse?.notes || ''
+
+      if (!chartResponse && client) {
+        if (key.includes('admission')) {
+          status = client.admission_date ? 'passed' : 'missing_data'
+          sourceEvidence = client.admission_date ? `Admission date ${client.admission_date}; ${client.source_evidence}` : client.source_evidence
+        } else if (key.includes('current_loc') || key.includes('loc_mapping') || key.includes('level_of_care')) {
+          status = client.current_level_of_care ? 'passed' : 'missing_data'
+          sourceEvidence = client.current_level_of_care ? `Current LOC ${client.current_level_of_care}; ${client.source_evidence}` : client.source_evidence
+        } else if (key.includes('latest_review') || key.includes('next_due') || key.includes('interval') || key.includes('overdue') || key.includes('due_soon')) {
+          status = client.status
+          sourceEvidence = client.evidence_summary || client.evidence_comparison?.source_evidence || client.source_evidence
+          finding = client.rule_used
+        } else if (key.includes('loc_change')) {
+          status = hasRuleStatus('TP-LOC-CHANGE') || (client.evidence_comparison?.loc_change_due_date ? client.status : 'not_reviewed')
+          sourceEvidence = client.evidence_comparison?.source_evidence || client.source_evidence
+          finding = client.evidence_comparison?.conflict_explanation || ''
+        } else if (key.includes('missing_data')) {
+          status = client.missing_evidence_fields.length ? 'missing_data' : 'passed'
+          finding = client.missing_evidence_fields.join(', ')
+        } else if (key.includes('final') || key.includes('worklist') || key.includes('approval')) {
+          status = chart?.state || client.status
+          sourceEvidence = chart?.system_summary || client.evidence_summary
+        }
+      }
+
+      return {
+        row_type: 'workflow_step',
+        workflow_key: workflow?.workflow_key || 'treatment_plan_timeliness',
+        workflow_version: workflow?.current_version?.version || null,
+        checklist_version: treatmentPlanChecklist?.version || workflow?.current_version?.definition_snapshot?.checklist_version || '',
+        step: Number(step.step || index + 1),
+        key,
+        label: String(step.title || step.label || key),
+        status,
+        source_evidence: sourceEvidence || '',
+        finding_message: finding,
+        severity: String(step.severity_default || ''),
+        reviewer_action: '',
+        override_reason: '',
+      }
+    })
+  }
+
   function exportSelectedChart(format: 'json' | 'csv') {
     if (!selectedChart) {
       setError('Select a review before exporting a report.')
       return
     }
     const safePatientId = selectedChart.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.1.0'
+    const checklistVersion = treatmentPlanChecklist?.version || '1.2.0'
+    const linkedTimelinessClient =
+      selectedTimelinessClient?.patient_id === selectedChart.patient_id ? selectedTimelinessClient : null
+    const workflowSteps = workflowStepsForExport(selectedChart, linkedTimelinessClient)
     if (format === 'json') {
       downloadTextFile(
         `review-report-${safePatientId}.json`,
@@ -2467,7 +2578,9 @@ export function App() {
             checklist_id: treatmentPlanChecklist?.checklist_id || 'treatment-plan-v1',
             checklist_version: checklistVersion,
             generated_at: new Date().toISOString(),
+            local_clock_at_export: localNow.toISOString(),
             chart: selectedChart,
+            workflow_steps: workflowSteps,
           },
           null,
           2,
@@ -2475,13 +2588,16 @@ export function App() {
         'application/json',
       )
     } else {
-      const header = ['step', 'section', 'label', 'status', 'notes', 'evidence_location', 'evidence_date', 'expiration_date', 'instructions']
-      const rows = selectedChart.checklist_items.map((item) =>
-        [item.step, item.section, item.label, STATUS_LABELS[item.status], item.notes, item.evidence_location, item.evidence_date, item.expiration_date, item.instructions]
+      const header = ['row_type', 'step', 'section_or_key', 'label', 'status', 'notes_or_finding', 'evidence_location', 'evidence_date', 'expiration_date', 'instructions_or_severity']
+      const checklistRows = selectedChart.checklist_items.map((item) =>
+        ['checklist_domain', item.step, item.section, item.label, STATUS_LABELS[item.status], item.notes, item.evidence_location, item.evidence_date, item.expiration_date, item.instructions]
           .map(csvCell)
           .join(','),
       )
-      downloadTextFile(`review-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows].join('\n'), 'text/csv')
+      const workflowRows = workflowSteps.map((item) =>
+        [item.row_type, item.step, item.key, item.label, item.status, item.finding_message, item.source_evidence, '', '', item.severity].map(csvCell).join(','),
+      )
+      downloadTextFile(`review-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...checklistRows, ...workflowRows].join('\n'), 'text/csv')
     }
     setStatus(`Exported review report for patient ${selectedChart.patient_id}.`)
   }
@@ -2492,7 +2608,8 @@ export function App() {
       return
     }
     const safePatientId = selectedTimelinessClient.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.1.0'
+    const checklistVersion = treatmentPlanChecklist?.version || '1.2.0'
+    const workflowSteps = workflowStepsForExport(null, selectedTimelinessClient)
     if (format === 'json') {
       downloadTextFile(
         `treatment-plan-report-${safePatientId}.json`,
@@ -2502,7 +2619,9 @@ export function App() {
             checklist_id: treatmentPlanChecklist?.checklist_id || 'treatment-plan-v1',
             checklist_version: checklistVersion,
             generated_at: new Date().toISOString(),
+            local_clock_at_export: localNow.toISOString(),
             client: selectedTimelinessClient,
+            workflow_steps: workflowSteps,
           },
           null,
           2,
@@ -2510,11 +2629,14 @@ export function App() {
         'application/json',
       )
     } else {
-      const header = ['rule_id', 'label', 'status', 'due_date', 'evidence_summary']
+      const header = ['row_type', 'id_or_step', 'label', 'status', 'due_date_or_key', 'evidence_summary_or_source', 'finding_or_rule']
       const rows = selectedTimelinessClient.rule_results.map((result) =>
-        [result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary].map(csvCell).join(','),
+        ['timeliness_rule', result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary, result.rule_id].map(csvCell).join(','),
       )
-      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows].join('\n'), 'text/csv')
+      const workflowRows = workflowSteps.map((item) =>
+        [item.row_type, item.step, item.label, item.status, item.key, item.source_evidence, item.finding_message].map(csvCell).join(','),
+      )
+      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows, ...workflowRows].join('\n'), 'text/csv')
     }
     setStatus(`Exported treatment-plan report for patient ${selectedTimelinessClient.patient_id}.`)
   }
@@ -2568,12 +2690,16 @@ export function App() {
       title: 'Review due-date evidence',
       subtitle: selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id,
       fields: [
+        { label: 'Current date used', value: displayDate(comparison.current_date), emphasis: true },
+        { label: 'Date-clock anchor', value: `${displayDate(comparison.date_clock_anchor_date)} (${comparison.date_clock_anchor_source || 'not selected'})`, emphasis: true },
+        { label: 'Date clock due date', value: displayDate(comparison.date_clock_due_date), emphasis: true },
         { label: 'Source-document Next Review Due', value: displayDate(comparison.document_next_due_date), emphasis: true },
         { label: 'Staff signature date', value: displayDate(comparison.staff_signature_date), emphasis: true },
-        { label: 'Staff signature + LOC cadence', value: displayDate(comparison.signature_anchor_due_date) },
+        { label: 'Review/admission anchor + LOC cadence', value: displayDate(comparison.signature_anchor_due_date) },
         { label: 'Current LOC effective date', value: displayDate(comparison.loc_effective_date), emphasis: true },
-        { label: 'LOC effective date + cadence', value: displayDate(comparison.loc_anchor_due_date) },
+        { label: 'LOC-change due date', value: displayDate(comparison.loc_change_due_date || comparison.loc_anchor_due_date) },
         { label: 'Cadence interval', value: comparison.interval_days == null ? 'Not configured' : `${comparison.interval_days} days` },
+        { label: 'LOC-change window', value: comparison.loc_change_window_days == null ? 'Not configured' : `${comparison.loc_change_window_days} days` },
         { label: 'Source evidence', value: comparison.source_evidence || selectedTimelinessClient.source_evidence || 'Not recorded' },
       ],
       note: comparison.conflict_explanation || 'No due-date comparison detail is available.',
@@ -2839,18 +2965,29 @@ export function App() {
     if (settingsForm.emr_api_enabled) {
       const scopes = new Set(settingsForm.emr_smart_scopes.split(/\s+/).filter(Boolean))
       const missingScopes = ['patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'].filter((scope) => !scopes.has(scope))
-      if (!settingsForm.emr_fhir_base_url.trim() || !settingsForm.emr_smart_client_id.trim() || missingScopes.length) {
-        setError(
-          `To enable the EMR API connector, enter the FHIR base URL, client ID, and required read scopes. Missing scopes: ${missingScopes.join(', ') || 'none'}.`,
-        )
+      const missingFields = [
+        !settingsForm.emr_fhir_base_url.trim() ? 'FHIR base URL' : '',
+        !settingsForm.emr_smart_client_id.trim() ? 'OAuth/FHIR client ID' : '',
+      ].filter(Boolean)
+      if (missingFields.length || missingScopes.length) {
+        setError(`Missing EMR API setting(s): ${[...missingFields, ...missingScopes.map((scope) => `scope ${scope}`)].join(', ')}.`)
         return
       }
     }
-    if (
-      settingsForm.emr_periodic_check_enabled &&
-      (!settingsForm.emr_fhir_base_url.trim() || !settingsForm.emr_smart_token_url.trim() || !settingsForm.emr_smart_client_id.trim() || !hasEmrSecret)
-    ) {
-      setError('To turn on periodic API checks, enter the FHIR base URL, OAuth token URL, client ID, and client secret, or keep the existing stored secret.')
+    if (settingsForm.emr_periodic_check_enabled) {
+      const missingFields = [
+        !settingsForm.emr_fhir_base_url.trim() ? 'FHIR/API base URL' : '',
+        !settingsForm.emr_smart_token_url.trim() ? 'OAuth token URL' : '',
+        !settingsForm.emr_smart_client_id.trim() ? 'OAuth/FHIR client ID' : '',
+        !hasEmrSecret ? 'OAuth/FHIR client secret' : '',
+      ].filter(Boolean)
+      if (missingFields.length) {
+        setError(`Missing periodic API check setting(s): ${missingFields.join(', ')}.`)
+        return
+      }
+    }
+    if (settingsForm.treatment_plan_loc_change_window_validated && settingsForm.treatment_plan_loc_change_window_days == null) {
+      setError('Missing treatment-plan setting: LOC-change update window days.')
       return
     }
     setIsBusy(true)
@@ -2957,18 +3094,49 @@ export function App() {
     setError('')
     try {
       const versionPayload = parseWorkflowVersionInput(workflowVersionForm)
-      await apiRequest<WorkflowDefinitionVersion>(`/workflow-definitions/${selectedWorkflowDefinition.id}/versions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(versionPayload),
-      })
-      await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
-      setStatus(`Draft workflow version created for ${selectedWorkflowDefinition.workflow_key}.`)
+      if (editingWorkflowVersionId) {
+        await apiRequest<WorkflowDefinitionVersion>(`/workflow-definitions/${selectedWorkflowDefinition.id}/versions/${editingWorkflowVersionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(versionPayload),
+        })
+        await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
+        setStatus(`Draft workflow version updated for ${selectedWorkflowDefinition.workflow_key}.`)
+      } else {
+        await apiRequest<WorkflowDefinitionVersion>(`/workflow-definitions/${selectedWorkflowDefinition.id}/versions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(versionPayload),
+        })
+        await loadWorkflowDefinitions(selectedWorkflowDefinition.id)
+        setStatus(`Draft workflow version created for ${selectedWorkflowDefinition.workflow_key}.`)
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to create workflow version')
+      setError(caught instanceof Error ? caught.message : editingWorkflowVersionId ? 'Failed to update workflow version' : 'Failed to create workflow version')
     } finally {
       setIsBusy(false)
     }
+  }
+
+  function loadWorkflowVersionForEditing(version: WorkflowDefinitionVersion) {
+    setWorkflowVersionForm({
+      version_notes: version.version_notes,
+      definition_snapshot_text: JSON.stringify(version.definition_snapshot, null, 2),
+      transition_rules_text: JSON.stringify(version.transition_rules, null, 2),
+    })
+    if (version.status === 'draft') {
+      setEditingWorkflowVersionId(version.id)
+      setStatus(`Draft workflow version ${version.version} loaded for editing.`)
+    } else {
+      setEditingWorkflowVersionId(null)
+      setStatus(`Published workflow version ${version.version} loaded as a new draft template.`)
+    }
+  }
+
+  function clearWorkflowVersionEditor() {
+    setWorkflowVersionForm(createWorkflowVersionForm(selectedWorkflowDefinition))
+    setEditingWorkflowVersionId(null)
+    setStatus('Workflow draft editor reset to the current published version.')
   }
 
   async function seedWorkflowDraftFromCanonicalChecklist() {
@@ -2983,6 +3151,7 @@ export function App() {
         definition_snapshot_text: JSON.stringify(workflowSnapshotFromChecklist(checklist), null, 2),
         transition_rules_text: JSON.stringify(defaultWorkflowTransitionsFromChecklist(), null, 2),
       })
+      setEditingWorkflowVersionId(null)
       setStatus('Canonical 42-step checklist loaded into the workflow draft editor. Review, edit, create draft, then publish when ready.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load canonical checklist into workflow editor')
@@ -3217,6 +3386,10 @@ export function App() {
               <span>{user.role}</span>
             </div>
           ) : null}
+          <div className='status-meta'>
+            <span>Local clock</span>
+            <span>{localClockLabel}</span>
+          </div>
         </div>
       </section>
 
@@ -3370,7 +3543,7 @@ export function App() {
                   </article>
                   <article className='mini-card'>
                     <span>Checklist</span>
-                    <strong>v{treatmentPlanChecklist?.version || '1.1.0'}</strong>
+                    <strong>v{treatmentPlanChecklist?.version || '1.2.0'}</strong>
                   </article>
                 </div>
 
@@ -3631,7 +3804,7 @@ export function App() {
 
 	                <section className='timeliness-release-banner' role='status' aria-label='Treatment plan timeliness update status'>
 	                  <strong>Updated evidence queue {timelinessBuildLabel}</strong>
-	                  <span>Source-document Next Review Due, staff-signature cadence, and LOC-effective cadence are shown side by side in the selected-client detail.</span>
+	                  <span>Source-document Next Review Due, date-clock due date, and LOC-change due date are shown side by side in the selected-client detail.</span>
 	                </section>
 
 	                <form
@@ -3789,6 +3962,16 @@ export function App() {
 	                      </div>
 	                      <dl>
 	                        <div>
+	                          <dt>Current date used</dt>
+	                          <dd>{selectedTimelinessClient.current_date || selectedTimelinessClient.evidence_comparison.current_date}</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Date-clock anchor</dt>
+	                          <dd>
+	                            {displayDate(selectedTimelinessClient.evidence_comparison.date_clock_anchor_date)} ({selectedTimelinessClient.evidence_comparison.date_clock_anchor_source})
+	                          </dd>
+	                        </div>
+	                        <div>
 	                          <dt>Admission date</dt>
 	                          <dd>{selectedTimelinessClient.admission_date || 'Missing'}</dd>
 	                        </div>
@@ -3821,7 +4004,7 @@ export function App() {
 	                      <div className='panel-heading'>
 	                        <div>
 	                          <h3>Evidence comparison</h3>
-	                          <p>Document due date, signature calculation, and LOC-anchor calculation are shown together.</p>
+	                          <p>Document due date, date-clock calculation, and LOC-change calculation are shown together.</p>
 	                        </div>
 	                        <button type='button' className='ghost-button' onClick={openComparisonEvidence}>
 	                          View evidence
@@ -3833,13 +4016,13 @@ export function App() {
 	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.document_next_due_date)}</strong>
 	                        </article>
 	                        <article>
-	                          <span>Staff signature + LOC interval</span>
-	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.signature_anchor_due_date)}</strong>
-	                          <small>{displayDate(selectedTimelinessClient.evidence_comparison.staff_signature_date)} staff signature</small>
+	                          <span>Date clock due date</span>
+	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.date_clock_due_date)}</strong>
+	                          <small>{displayDate(selectedTimelinessClient.evidence_comparison.date_clock_anchor_date)} anchor</small>
 	                        </article>
 	                        <article>
-	                          <span>Current LOC effective date + interval</span>
-	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.loc_anchor_due_date)}</strong>
+	                          <span>LOC-change due date</span>
+	                          <strong>{displayDate(selectedTimelinessClient.evidence_comparison.loc_change_due_date || selectedTimelinessClient.evidence_comparison.loc_anchor_due_date)}</strong>
 	                          <small>{displayDate(selectedTimelinessClient.evidence_comparison.loc_effective_date)} LOC effective</small>
 	                        </article>
 	                        <article>
@@ -4225,7 +4408,8 @@ export function App() {
                   <>
                     <div className='panel-heading'>
                       <div>
-                        <h2>Patient {selectedChart.patient_id}</h2>
+                        <h2>Patient Details</h2>
+                        <p>Patient ID: {selectedChart.patient_id}</p>
                         <p>{selectedChart.system_summary}</p>
                       </div>
                       <div className='button-row'>
@@ -5235,6 +5419,7 @@ export function App() {
                           onClick={() => {
                             setSelectedWorkflowDefinitionId(definition.id)
                             setWorkflowVersionForm(createWorkflowVersionForm(definition))
+                            setEditingWorkflowVersionId(null)
                           }}
                         >
                           <div>
@@ -5287,13 +5472,16 @@ export function App() {
                               <span className={`pill pill--${workflowVersionTone(version.status)}`}>{version.status}</span>
                             </span>
                             <span>{version.version_notes || 'No notes'}</span>
-                            <span>
+                            <span className='button-row'>
+                              <button type='button' className='ghost-button' onClick={() => loadWorkflowVersionForEditing(version)} disabled={isBusy}>
+                                {version.status === 'draft' ? 'Edit draft' : 'Use as draft'}
+                              </button>
                               {version.status === 'draft' ? (
                                 <button type='button' className='ghost-button' onClick={() => void publishWorkflowVersion(version.id)} disabled={isBusy}>
                                   Publish
                                 </button>
                               ) : (
-                                formatDateTime(version.published_at || version.archived_at)
+                                <span>{formatDateTime(version.published_at || version.archived_at)}</span>
                               )}
                             </span>
                           </div>
@@ -5386,13 +5574,16 @@ export function App() {
 
               {selectedWorkflowDefinition ? (
                 <section className='panel-subsection'>
-                  <h3>Create draft version</h3>
+                  <h3>{editingWorkflowVersionId ? 'Edit draft version' : 'Create draft version'}</h3>
                   <div className='rule-alert'>
                     <strong>Manager/admin-editable checklist workflow</strong>
                     <p>Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.</p>
                     <div className='form-actions'>
                       <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
                         Seed draft from 42-step checklist
+                      </button>
+                      <button type='button' className='ghost-button' onClick={clearWorkflowVersionEditor} disabled={isBusy}>
+                        Reset editor
                       </button>
                     </div>
                   </div>
@@ -5422,7 +5613,7 @@ export function App() {
                     </label>
                     <div className='full-width form-actions'>
                       <button type='submit' disabled={isBusy}>
-                        Create draft version
+                        {editingWorkflowVersionId ? 'Save draft edits' : 'Create draft version'}
                       </button>
                     </div>
                   </form>
@@ -5545,6 +5736,9 @@ export function App() {
 	                        }
 	                      />
 	                    </label>
+	                    <p className='muted-text field-note'>
+	                      PHP treatment plans use a 30-calendar-day update clock. IOP, OP, and other configured non-PHP levels use 60 calendar days. This field controls the separate LOC-change update clock; the preset is 7 calendar days and remains manager-editable.
+	                    </p>
 	                    <label className='checkbox-row'>
 	                      <input
 	                        type='checkbox'
@@ -5747,7 +5941,7 @@ export function App() {
                       />
                     </label>
                     <p className='muted-text field-note'>
-                      This is the vendor-supplied root FHIR endpoint used for Patient, DocumentReference, Binary, and Provenance requests.
+                      This must be the vendor-supplied root FHIR R4 endpoint used for Patient, DocumentReference, Binary, and Provenance requests. Alleva Swagger URLs such as https://api.allevasoft.com/swagger/index.html or /swagger/v1/swagger.json belong in the OpenAPI URL field or API harness, not here.
                     </p>
                     <label className='full-width'>
                       OAuth token URL (SMART/FHIR when used by the vendor)
@@ -5876,7 +6070,12 @@ export function App() {
                         <button type='button' className='ghost-button' onClick={handleEmrDiscovery} disabled={isBusy}>
                           Check FHIR/OAuth discovery
                         </button>
-                        <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy || !appSettings?.emr_periodic_check_enabled}>
+                        <button
+                          type='button'
+                          className='ghost-button'
+                          onClick={() => void runDailyReviewSourceCheck()}
+                          disabled={isBusy || !(settingsForm?.emr_periodic_check_enabled || appSettings?.emr_periodic_check_enabled)}
+                        >
                           Run API check now
                         </button>
                         <button type='button' className='ghost-button' onClick={openApiConnectivityHarness}>
@@ -6161,6 +6360,7 @@ export function App() {
                                   onClick={() => {
                                     setSelectedWorkflowDefinitionId(definition.id)
                                     setWorkflowVersionForm(createWorkflowVersionForm(definition))
+                                    setEditingWorkflowVersionId(null)
                                   }}
                                 >
                                   <div>
@@ -6213,13 +6413,16 @@ export function App() {
                                       <span className={`pill pill--${workflowVersionTone(version.status)}`}>{version.status}</span>
                                     </span>
                                     <span>{version.version_notes || 'No notes'}</span>
-                                    <span>
+                                    <span className='button-row'>
+                                      <button type='button' className='ghost-button' onClick={() => loadWorkflowVersionForEditing(version)} disabled={isBusy}>
+                                        {version.status === 'draft' ? 'Edit draft' : 'Use as draft'}
+                                      </button>
                                       {version.status === 'draft' ? (
                                         <button type='button' className='ghost-button' onClick={() => void publishWorkflowVersion(version.id)} disabled={isBusy}>
                                           Publish
                                         </button>
                                       ) : (
-                                        formatDateTime(version.published_at || version.archived_at)
+                                        <span>{formatDateTime(version.published_at || version.archived_at)}</span>
                                       )}
                                     </span>
                                   </div>
@@ -6312,7 +6515,7 @@ export function App() {
 
                       {selectedWorkflowDefinition ? (
                         <section className='panel-subsection'>
-                          <h4>Create draft version</h4>
+                          <h4>{editingWorkflowVersionId ? 'Edit draft version' : 'Create draft version'}</h4>
                           <div className='rule-alert'>
                             <strong>Manager/admin-editable checklist workflow</strong>
                             <p>
@@ -6321,6 +6524,9 @@ export function App() {
                             <div className='form-actions'>
                               <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
                                 Seed draft from 42-step checklist
+                              </button>
+                              <button type='button' className='ghost-button' onClick={clearWorkflowVersionEditor} disabled={isBusy}>
+                                Reset editor
                               </button>
                             </div>
                           </div>
@@ -6350,7 +6556,7 @@ export function App() {
                             </label>
                             <div className='full-width form-actions'>
                               <button type='submit' disabled={isBusy}>
-                                Create draft version
+                                {editingWorkflowVersionId ? 'Save draft edits' : 'Create draft version'}
                               </button>
                             </div>
                           </form>

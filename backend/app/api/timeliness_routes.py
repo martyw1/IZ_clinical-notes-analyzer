@@ -28,6 +28,7 @@ from app.services.timeliness import (
     summary_payload as timeliness_summary_payload,
     upsert_client as upsert_timeliness_client,
 )
+from app.services.workflow_definitions import current_treatment_plan_workflow_context
 
 
 router = APIRouter(prefix='/timeliness')
@@ -43,6 +44,34 @@ def _parse_evaluation_date(value: str | None):
         raise HTTPException(status_code=400, detail='evaluation_date must use YYYY-MM-DD') from exc
 
 
+def _log_timeliness_analysis_result(db: Session, request: Request, user: User, evaluation, workflow_context: dict[str, object]) -> None:
+    client = evaluation.client
+    log_event(
+        db,
+        request,
+        'timeliness.analysis.result',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'treatment_plan_client:{client.id}',
+        target_entity_type='treatment_plan_analysis',
+        target_entity_id=str(client.id),
+        patient_id=client.patient_id,
+        details={
+            'patient_id': client.patient_id,
+            'status': evaluation.status,
+            'next_due_date': evaluation.next_due_date,
+            'days_until_due': evaluation.days_until_due,
+            'current_date': evaluation.current_date,
+            'rule_used': evaluation.rule_used,
+            'workflow_key': workflow_context.get('workflow_key'),
+            'workflow_version_id': workflow_context.get('workflow_version_id'),
+            'workflow_version': workflow_context.get('workflow_version'),
+            'checklist_version': workflow_context.get('checklist_version'),
+        },
+        message=f'Treatment Plan Timeliness analysis produced {evaluation.status} for {client.patient_id}.',
+    )
+
+
 @router.get('/dashboard', response_model=TimelinessDashboardOut)
 def get_timeliness_dashboard(
     request: Request,
@@ -53,6 +82,9 @@ def get_timeliness_dashboard(
     app_settings = get_or_create_app_settings(db)
     as_of = _parse_evaluation_date(evaluation_date)
     evaluations = [evaluate_client(client, app_settings, evaluation_date=as_of) for client in list_timeliness_clients(db)]
+    workflow_context = current_treatment_plan_workflow_context(db)
+    for evaluation in evaluations:
+        _log_timeliness_analysis_result(db, request, user, evaluation, workflow_context)
     status_counts = {status: 0 for status in TIMELINESS_STATUS_PRIORITY}
     for evaluation in evaluations:
         status_counts[evaluation.status] = status_counts.get(evaluation.status, 0) + 1
@@ -115,6 +147,8 @@ def upsert_timeliness_client_endpoint(
     client = get_timeliness_client(db, client.id)
     app_settings = get_or_create_app_settings(db)
     evaluation = evaluate_client(client, app_settings)
+    workflow_context = current_treatment_plan_workflow_context(db)
+    _log_timeliness_analysis_result(db, request, user, evaluation, workflow_context)
     log_event(
         db,
         request,
@@ -145,6 +179,8 @@ def get_timeliness_client_detail(
         raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
     app_settings = get_or_create_app_settings(db)
     evaluation = evaluate_client(client, app_settings, evaluation_date=_parse_evaluation_date(evaluation_date))
+    workflow_context = current_treatment_plan_workflow_context(db)
+    _log_timeliness_analysis_result(db, request, user, evaluation, workflow_context)
     audit_history = list(
         db.execute(
             select(AuditLog)

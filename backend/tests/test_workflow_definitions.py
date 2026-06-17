@@ -213,7 +213,7 @@ def test_default_workflow_is_seeded_and_unused_drafts_can_be_deleted(app_with_sq
         default = next(item for item in listed.json() if item['workflow_key'] == 'treatment_plan_timeliness')
         assert default['current_version']['status'] == 'published'
         assert default['current_version']['definition_snapshot']['checklist_id'] == 'treatment-plan-v1'
-        assert default['current_version']['definition_snapshot']['version'] == '1.1.0'
+        assert default['current_version']['definition_snapshot']['version'] == '1.2.0'
         assert default['current_version']['definition_snapshot']['steps'][0]['label'] == 'Confirm this is the correct client chart'
         assert len(default['current_version']['definition_snapshot']['steps']) == 42
         assert default['current_version']['definition_snapshot']['steps'][33]['key'] == 'require_manual_override_reason'

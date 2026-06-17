@@ -1,20 +1,20 @@
-# Codebase Map - Current Version 1.3.0
+# Codebase Map - Current Version 1.4.0
 
 Date: 2026-06-17
 
 Branch: `main`
 
-Version: `1.3.0` / build `2026.06.16.1`
+Version: `1.4.0` / build `2026.06.17.1`
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.3.0 app shape.
+This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.0 app shape.
 
 ## Current architecture
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, role-based access control, deterministic Treatment Plan Tracking, workflow profiles, and local audit logs under per-user app data.
 
-Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 requirements and are not the active R3 desktop deployment path. Legacy Docker/PostgreSQL artifacts are preserved under `depriceated/` for history and rollback reference and must not be treated as current launch instructions.
+Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 requirements and are not the active R3 desktop deployment path. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after reference scans; deprecated legacy startup scripts remain for historical context and must not be treated as current launch instructions.
 
 ## Backend entrypoints
 
@@ -41,7 +41,7 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, password hashing/policy, role checks, and password-reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File validation, patient ID detection, encrypted file writes, path traversal prevention, encrypted text helper. |
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
-| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan due-date evaluation, LOC alias mapping, missing/conflict handling, LOC-change blocker, upload/API-style re-evaluation, fallback generated names, and manual override audit records. |
+| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, upload/API-style re-evaluation, fallback generated names, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
 | API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/emr_fhir.py` | OpenAPI/Swagger discovery, operation testing, OAuth/FHIR readiness, EMR endpoint profiles, and import planning. Live import is gated. |
 | Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF/FHIR-style payloads, fallback JSONL log. |
@@ -76,7 +76,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.3.0 local desktop startup. |
+| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.0 local desktop startup. |
 | `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
 | `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
 | `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
@@ -132,6 +132,8 @@ The active non-technical deployment target is Windows.
 3. The timeliness service models initial/master signature rules, ongoing review recurrences, unvalidated LOC-change review, status priority, source conflicts, missing data, fallback generated names, and manual override audit records.
 4. Workflow profile CRUD/versioning exists as admin/manager-managed definitions with draft/published/archived versions, transition rules, default Treatment Plan Timeliness seeding, validation, and draft-only delete limits.
 
+S2/S7 status: the dedicated timeliness service now models initial/master signature rules, local current-date clock behavior, ongoing PHP 30-day and non-PHP 60-day review recurrences, unvalidated configurable 7-day LOC-change `Needs Review`, status priority, source conflicts, missing data, source-evidence locations, manual override audit records, and per-analysis workflow version audit context. S5/S7 status: generic workflow profile CRUD/versioning exists as admin-managed definitions with draft/published/archived versions, JSON definition snapshots, transition rules, role-gated APIs, forensic audit events, default Treatment Plan Timeliness seeding, payload validation, draft-only delete limits, and in-place draft editing.
+
 ## Test commands
 
 Backend:
@@ -178,14 +180,17 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Version 1.3.0 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. A final hands-on packaged-install pass on the target Windows laptop should verify install, launch, shortcut, uninstall, and data-preservation behavior with synthetic data before broad rollout.
+`scripts/build-windows-installer.ps1` creates a Version 1.4.0 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only. | Do not promise live patient import until R3/Alleva clears the integration gate. |
-| LOC-change window is unvalidated | R3/Marleigh has not confirmed the rule. | Must stay configurable and visibly unresolved. |
-| Signed installer is not complete | Release folder builder exists, but no signed MSI/MSIX exists. | Non-technical rollout still needs final target-machine packaged validation. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.4.0 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
+| LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
+| Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, saved-key encryption, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
+| Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, secrets, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
+| Signed installer is not complete | Release folder builder exists, but no signed MSI/MSIX with repair/modify support exists. | Non-technical rollout still needs final target-machine packaged validation. |
 | Root diagnostic script can expose sensitive values | `Test-AllevaApi.ps1` is intentionally detailed by default. | Use only on approved private diagnostic machines; use redaction mode for shareable logs and still review output. |
-| Legacy Docker files can confuse operators | Old Docker files are preserved under `depriceated/`; legacy startup scripts are deprecated. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements. |
+| Legacy Docker files were removed from the active tree | Deprecated startup scripts remain, but the old Docker/nginx archive and compose overlay were removed after S1 cleanup evidence. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements or restore the old stack without an explicit R3/server decision. |

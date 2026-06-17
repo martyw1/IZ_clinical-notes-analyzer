@@ -21,9 +21,9 @@ This pass focused on turnkey production use: clearer UI wording/status colors, a
 - Clarified FHIR base URL and OAuth/FHIR labels; the API harness now reuses the existing admin session when opened from App settings.
 - Hardened the API harness session handoff with same-origin messaging after browser validation found opener `sessionStorage` was not reliable in every tab surface.
 - Fixed stale-session handling after repeated 401s from the morning app run.
-- Fixed treatment-plan fallback names:
-  - no name/no patient ID: `generated-name_YYYYMMDD_HHMMSS`
-  - no name/has patient ID: `patient-id_YYYYMMDD_HHMMSS`
+- Fixed treatment-plan fallback names. Version 1.4.0 supersedes the earlier generated/patient-ID prefix with:
+  - no name found in source evidence: `no-name-found_YYYY-MM-DD_HHMMSS`
+  - empty or unusable value found: `no-value-found_YYYY-MM-DD_HHMMSS`
 - Fixed compliant treatment-plan due-date selection and added API-style re-pull/re-evaluation coverage.
 - Verified optional LLM configuration against an OpenAI-compatible JSON response path while keeping LLM disabled by default.
 

@@ -2,9 +2,9 @@
 
 Use synthetic data only for this script.
 
-Current patch version: `1.3.0` / build `2026.06.16.1`.
+Current patch version: `1.4.0` / build `2026.06.17.1`.
 
-Version 1.3.0 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, and adds production usability, in-app Help, admin/manager Workflow profiles, manager-scoped counselor user management, admin-only App settings/API/LLM/logs, stored EMR endpoint profiles, and no-second-login API harness access from the main admin session.
+Version 1.4.0 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, and adds treatment-plan date-clock behavior, workflow-step exports, source-evidence page/API traceability, draft workflow editing, and clearer Alleva OpenAPI/FHIR setup guidance.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -14,17 +14,17 @@ Version 1.3.0 keeps the Windows startup reliability fixes, aligns app version me
 6. Confirm the acronym definitions are understandable.
 7. Confirm the LOC-change blocker says the timing window is unvalidated.
 8. Open Chart audit.
-9. Confirm the dashboard shows checklist version `v1.1.0`.
-10. Confirm `/api/version` reports app version `1.3.0` after this patch is installed.
-11. Confirm the app footer also shows version `1.3.0`.
+9. Confirm the dashboard shows checklist version `v1.2.0`.
+10. Confirm `/api/version` reports app version `1.4.0` after this patch is installed.
+11. Confirm the app footer also shows version `1.4.0`.
 12. Confirm the Review source section shows EMR/API access and Manual upload.
 13. Open Treatment plans.
-14. Confirm the `Updated evidence queue v1.3.0` banner is visible.
+14. Confirm the `Updated evidence queue v1.4.0` banner is visible.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
-17. Review rule results, evidence, and the source/staff/LOC due-date comparison.
+17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison.
 18. Add a manual override comment using synthetic text.
-19. Export the treatment-plan report as CSV or JSON.
+19. Export the treatment-plan report as CSV or JSON and confirm workflow-step statuses are included.
 20. Open Manual upload.
 21. Upload a synthetic supported file.
 22. Confirm the app creates a review case.
@@ -32,20 +32,20 @@ Version 1.3.0 keeps the Windows startup reliability fixes, aligns app version me
 24. Select the generated review.
 25. Review findings, evidence, and checklist steps.
 26. Add reviewer notes with synthetic text.
-27. Export the review report as CSV or JSON.
+27. Export the review report as CSV or JSON and confirm workflow-step statuses are included.
 28. Open Help and confirm role permissions, screen/button guidance, workflow, API/EMR, and LLM notes are understandable.
 29. Open App settings as admin.
-30. Review API settings, FHIR/OAuth discovery controls, stored EMR endpoint profiles, and optional LLM settings.
+30. Review API settings, FHIR/OAuth discovery controls, stored EMR endpoint profiles, Alleva OpenAPI URL guidance, and optional LLM settings.
 31. Open the API connectivity harness from App settings and confirm it uses the existing admin session without a second in-page login.
 32. Open Workflow profiles and confirm the profile screen includes `Seed draft from 42-step checklist`.
-33. Seed a draft, review the generated snapshot and transition rules, and confirm it can be edited before publish.
+33. Seed a draft, review the generated snapshot and transition rules, and confirm it can be edited before publish; save a draft edit in place.
 34. Run readiness checks.
 35. Open Forensic logs.
 36. Confirm sign-in, upload, review, override, API test, workflow, and settings actions appear without secrets or uploaded note text.
 37. Sign in as an office manager and confirm User management can manage counselor accounts, Workflow profiles is available, and App settings/Forensic logs are not available.
 38. Sign in as a counselor and confirm User management, Workflow profiles, App settings, Forensic logs, manager approvals, and treatment-plan overrides are not available.
 39. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
-40. Confirm the Version 1.3.0 local recovery utility exists at `scripts\update-local-admin.ps1`.
+40. Confirm the Version 1.4.0 local recovery utility exists at `scripts\update-local-admin.ps1`.
 41. Close the browser and app window.
 42. Relaunch and confirm prior review status is still present.
 43. Use the uninstall shortcut only after confirming no local data needs to be preserved.

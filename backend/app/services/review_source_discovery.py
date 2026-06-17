@@ -178,7 +178,7 @@ def discovery_payload(db: Session, app_settings: AppSetting, note_sets: list[Pat
     error_count = status_counts.get('Error', 0)
     return {
         'checklist_id': 'treatment-plan-v1',
-        'checklist_version': '1.1.0',
+        'checklist_version': '1.2.0',
         'last_refreshed_at': now.isoformat(),
         'last_refresh_at': app_settings.emr_last_check_at.isoformat() if app_settings.emr_last_check_at else now.isoformat(),
         'last_successful_check_at': app_settings.emr_last_successful_check_at.isoformat() if app_settings.emr_last_successful_check_at else now.isoformat(),

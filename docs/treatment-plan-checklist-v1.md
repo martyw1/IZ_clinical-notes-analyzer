@@ -4,13 +4,13 @@ Source of truth: `config/checklists/treatment-plan-v1.json`
 
 Checklist ID: `treatment-plan-v1`
 
-Version: `1.1.0`
+Version: `1.2.0`
 
-Last updated: `2026-06-11`
+Last updated: `2026-06-17`
 
 ## Purpose
 
-This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, and the default workflow profile seed.
+This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, CSV/JSON workflow-step exports, and the default workflow profile seed.
 
 It is deliberately deterministic. Missing or conflicting admission dates, LOC evidence, treatment-plan dates, signatures, or source documents must produce `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` instead of guessed compliance.
 
@@ -48,7 +48,7 @@ Legacy chart-review statuses remain available for existing records:
 - Error
 - Finalized
 
-Treatment-plan PRD statuses are available for Version 1.1.0 workflow steps:
+Treatment-plan PRD statuses are available for Version 1.2.0 workflow steps:
 
 - Current / Compliant
 - Due Soon
@@ -69,15 +69,23 @@ Manual upload mode is a point-in-time snapshot of the files selected by the oper
 
 ## Admin/Manager-Editable Workflow
 
-Admins and office managers can open Workflow profiles, use `Seed draft from 42-step checklist`, edit the generated workflow snapshot and transition rules, and publish a new workflow profile version. The seeded draft includes checklist steps, source modes, status options, reviewer actions, override rules, audit events, and export fields.
+Admins and office managers can open Workflow profiles, use `Seed draft from 42-step checklist`, edit the generated workflow snapshot and transition rules, and publish a new workflow profile version. The seeded draft includes checklist steps, source modes, status options, reviewer actions, override rules, audit events, and export fields. Draft versions can also be edited in place; published or archived versions can be loaded as a new draft template.
 
 Published workflow history is preserved. Only unused draft-only profiles that were never published can be hard-deleted.
 
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.1.0 keeps this setting configurable, marks it unvalidated in the app, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.4.0 ships a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
 
 Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
+
+## Date Clock and Source Evidence
+
+The timeliness date clock uses the laptop/facility-local current date every time the app starts and while it is running. It calculates the next update date from the admission date when no valid later treatment-plan review/update exists, otherwise from the latest valid treatment-plan review/update date.
+
+Configured PHP levels use 30 calendar days. Other configured treatment levels use 60 calendar days. LOC changes use the separate configurable LOC-change window described above.
+
+Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API/FHIR evidence should include source identifiers supplied by the API, such as source document ID, DocumentReference ID, attachment URL, or Provenance ID.
 
 ## Checklist Steps
 

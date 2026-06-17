@@ -1,12 +1,12 @@
 # Workflow Extensibility
 
-Date: 2026-06-16
+Date: 2026-06-17
 
 ## Purpose
 
 Workflow profiles let admins and office managers define future clinical workflows without changing deterministic Treatment Plan Timeliness code. Profiles are versioned, audited, and managed from the dedicated Workflow profiles screen.
 
-The current workflow profile system is for metadata, steps, transition rules, and future workflow planning. It does not replace the deterministic timeliness evaluator in `backend/app/services/timeliness.py`.
+The current workflow profile system is for metadata, steps, transition rules, export status context, and future workflow planning. It does not replace the deterministic timeliness evaluator in `backend/app/services/timeliness.py`, but timeliness audit events and CSV/JSON exports now include the active workflow definition/version/checklist context.
 
 ## Seeded Default
 
@@ -115,6 +115,8 @@ The `Workflow profiles` screen is available to admins and office managers for:
 - viewing published/draft/archived versions
 - creating a profile with an initial draft version
 - creating draft versions
+- editing draft versions in place
+- loading a published or archived version as a new draft template
 - publishing draft versions
 - archiving profiles
 - deleting unused draft-only profiles

@@ -1,5 +1,17 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-17 v1.4.0 treatment-plan date clock and workflow export hardening
+- Updated app/version metadata to `1.4.0` / build `2026.06.17.1` and checklist/rules metadata to `1.2.0`.
+- Added local current-date clock behavior for Treatment Plan Timeliness: PHP uses 30 calendar days, other configured LOC values use 60 calendar days, and the LOC-change preset defaults to 7 calendar days while remaining visibly unvalidated.
+- Added per-analysis forensic audit logging with patient ID, status, next due date, current date, rule used, and workflow definition/version/checklist context.
+- Added manual-upload page-level source evidence where PDF extraction can identify a page, and API/FHIR source identifiers for future Alleva/FHIR evidence traceability.
+- Added 42-step workflow rows to CSV/JSON review and treatment-plan exports while preserving the existing checklist/domain export rows.
+- Added in-place editing for draft workflow versions and clarified the UI distinction between editing a draft and using a published/archived version as a new draft template.
+- Fixed the Review Queue selected-patient heading, periodic API-check enablement, specific App settings missing-field validation, and safe missing-name fallback format.
+- Verified the public Alleva Swagger UI and `/swagger/v1/swagger.json` plus `/swagger/v2/swagger.json` are OpenAPI/REST API definitions, not FHIR base URLs; `/advanced-form-elements` is a protected REST path.
+- Updated README, Windows user/deployment/UAT/Dell docs, API/EMR docs, runbook, architecture, workflow, checklist, blocker register, changelog, validation report, and removal-log planning.
+- Verification passed full backend pytest (`93 passed, 2 skipped`), frontend Vitest (`15 passed`), frontend production build, and example-treatment-plan upload/timeliness smoke coverage across 4 files.
+
 ## 2026-06-16 v1.3.0 production usability and role-control hardening
 - Updated app/version metadata to `1.3.0` / build `2026.06.16.1`.
 - Reviewed the 2026-06-16 morning console/startup logs and local app logs; startup preflight was clean, while one settings `400` and repeated stale-session `401` loops were identified from the app session.

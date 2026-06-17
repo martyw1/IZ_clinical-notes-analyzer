@@ -66,3 +66,5 @@ depriceated/DEPRECATED-MANIFEST.md
 ```
 
 No active Windows desktop runtime files were moved into the deprecated archive.
+
+Superseded 2026-06-17: the deprecated archive itself was later removed after S0 validation and a reference scan proved it was not used by active runtime, test, launch, config, or CI paths. See `docs/removal-log.md`.

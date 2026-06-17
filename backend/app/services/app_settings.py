@@ -16,9 +16,13 @@ def _utc_now() -> datetime:
 def get_or_create_app_settings(db: Session) -> AppSetting:
     settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
     if settings_row is not None:
+        if settings_row.treatment_plan_loc_change_window_days is None:
+            settings_row.treatment_plan_loc_change_window_days = 7
+            db.commit()
+            db.refresh(settings_row)
         return settings_row
 
-    settings_row = AppSetting()
+    settings_row = AppSetting(treatment_plan_loc_change_window_days=7)
     db.add(settings_row)
     db.commit()
     db.refresh(settings_row)

@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current patch version: `1.3.0` / build `2026.06.16.1`.
+Current patch version: `1.4.0` / build `2026.06.17.1`.
 
-Version 1.3.0 keeps the Version 1 Windows startup reliability fixes and adds production-usability improvements: in-app Help, clearer status colors, admin/manager Workflow profiles, manager-scoped counselor user management, admin-only App settings/API/LLM/logs, stored EMR endpoint profiles, and no-second-login API harness access from the main admin session.
+Version 1.4.0 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, and exact App settings validation messages.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.3.0`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.0`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Version 1.3.0 local recovery path is:
+The Version 1.4.0 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -42,12 +42,12 @@ Run the utility from the repo root, save the generated value securely, restart t
 
 - Chart audit: summary, source selection, current queue, and checklist version.
 - Review queue: detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
-- Treatment plans: the default landing screen for admins and office managers, updated evidence queue banner, timeliness status, source/staff/LOC due-date comparison, LOC-change blocker, rule results, overrides, source-mode cards, and CSV/JSON export.
-- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.1.0 PRD steps.
+- Treatment plans: the default landing screen for admins and office managers, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, source-mode cards, and CSV/JSON export with workflow-step statuses.
+- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
 - Manual upload: upload exported clinical note or treatment plan files, inspect uploaded binder details, download stored documents when authorized, and delete an uploaded binder when it should be removed from the local app.
 - Help: role permissions, screen/button guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
 - User management: admins can manage admins, managers, and counselors; office managers can manage counselor accounts only; counselors manage only their own account.
-- Workflow profiles: admin/manager workflow logic screen, including `Seed draft from 42-step checklist`, draft creation, publish, archive, and unused-draft delete.
+- Workflow profiles: admin/manager workflow logic screen, including `Seed draft from 42-step checklist`, draft creation, in-place draft editing, publish, archive, and unused-draft delete.
 - App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, EMR endpoint profile, FHIR/OAuth discovery, and LOC-change settings.
 - Forensic logs: admin-only audit trail.
 
@@ -57,7 +57,7 @@ Version 1 includes a direct API readiness harness and mock source discovery. Liv
 
 Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings can also enable periodic safe API readiness checks after the API/FHIR base URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete.
 
-FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Stored EMR endpoint profiles let admins save current and future endpoint options and activate the one used by readiness/API tests.
+FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, not in the FHIR base URL field. Stored EMR endpoint profiles let admins save current and future endpoint options and activate the one used by readiness/API tests.
 
 When API monitoring is unavailable, manual upload is treated as an upload-time snapshot. Use the monthly compliance-check fallback for large chart sets instead of assuming weekly automatic monitoring.
 

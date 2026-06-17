@@ -1,16 +1,16 @@
 # Architecture Overview
 
-Date: 2026-06-16
+Date: 2026-06-17
 
-Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1`.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1`.
 
 ## Current architecture
 
 IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, encrypted saved API secrets, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
 
-The active Version 1.3.0 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
+The active Version 1.4.0 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
 
-Legacy Docker/PostgreSQL artifacts are preserved under `depriceated/` for history and rollback reference. The folder name is intentionally spelled `depriceated/` because that was the earlier project instruction. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
+The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
 
 ## Runtime components
 
@@ -46,26 +46,27 @@ Legacy Docker/PostgreSQL artifacts are preserved under `depriceated/` for histor
 
 - The app tracks work by `patient_id` instead of relying on patient name in the UI workflow.
 - Alleva-compatible document uploads are grouped into immutable `patient_note_sets`, with each update creating a new version and marking the previous active version as superseded.
-- Individual uploaded files are stored as encrypted `patient_note_documents` with bucket metadata, completion state, signature flags, document dates, size, content type, and SHA-256 digest.
+- Individual uploaded files are stored as encrypted `patient_note_documents` with Alleva bucket metadata, completion state, signature flags, document dates, size, content type, and SHA-256 digest.
 - The frontend presents note sets as a document-manager-style binder so counselors and office managers can upload, update, inspect, delete, and download source documents without overwriting historical evidence.
 - Authorized binder deletion removes the selected note set, linked generated review charts, upload-derived timeliness records, and encrypted stored files while retaining forensic audit logs.
+- PDF uploads retain page-level extracted text when available so deterministic findings can cite manual source locations such as `manual upload page 2` without logging raw clinical note text.
 
-## Treatment Plan Timeliness
+## Treatment-plan timeliness model
 
 - The Treatment Plans view is the default landing work queue for admins and office managers when no explicit view is requested.
-- The work queue shows active clients, LOC, counselor/primary clinician, admission date, last valid treatment-plan review date, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history.
-- The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side.
-- Uploaded and API-style re-pulled evidence re-runs deterministic evaluation while preserving historical audit context.
-- Missing names fall back to `generated-name_YYYYMMDD_HHMMSS` or `patient-id_YYYYMMDD_HHMMSS` according to whether a patient ID exists.
-- The LOC-change update window remains unvalidated by R3/Marleigh and must remain configurable and visibly marked as unresolved.
+- The timeliness evaluator uses the local/facility current date, admission date, latest valid treatment-plan review/update date, current LOC, and LOC history to calculate status.
+- PHP levels use a 30-calendar-day recurring update interval; other configured treatment levels use 60 calendar days.
+- LOC changes use a separate manager-editable 7-calendar-day preset that remains unvalidated until R3/Marleigh confirms the final rule.
+- Missing names fall back to `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
+- Timeliness analysis results are audited with workflow definition key/version/checklist context, and CSV/JSON exports include both checklist/domain rows and active workflow-step statuses.
 
 ## EMR/API integration boundary
 
 - The current production-style path remains local file upload from an EMR export.
-- Admin App settings capture vendor label, FHIR base URL, OAuth/FHIR client metadata, token URL, scopes, timeout, token auth style, and encrypted direct-API credential state.
+- Admin App settings capture a vendor label, FHIR base URL, OpenAPI URL, OAuth/FHIR client metadata, token URL, scopes, timeout, token auth style, and encrypted direct-API credential state.
 - Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with encrypted client secrets and an active/default profile used by readiness checks.
 - The backend exposes a FHIR/OAuth discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
-- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details.
+- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details. Alleva Swagger/OpenAPI URLs are not treated as FHIR base URLs.
 - Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval.
 
 ## Database connectivity model
@@ -75,7 +76,7 @@ Configuration is explicit and deterministic:
 - `DATABASE_BACKEND=sqlite` is the normal Windows local-desktop setting.
 - `DATABASE_URL` defaults to a SQLite file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` for the local desktop path.
 - Relative SQLite, upload, log, and report paths are resolved through the configured local app-data directory.
-- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.3.0 Windows product path does not require a PostgreSQL container.
+- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.0 Windows product path does not require a PostgreSQL container.
 
 ## Health model
 

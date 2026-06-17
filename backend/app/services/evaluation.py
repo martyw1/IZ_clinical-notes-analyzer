@@ -28,6 +28,7 @@ class EvaluationDocument:
     normalized_label: str
     normalized_description: str
     normalized_text: str
+    page_texts: tuple[str, ...]
     extracted_status: str
     parsed_date: datetime | None
 
@@ -70,8 +71,26 @@ def _bucket_label(document: PatientNoteDocument) -> str:
     return document.alleva_bucket.value.replace('_', ' ')
 
 
-def _document_location(document: PatientNoteDocument) -> str:
-    return f'{document.document_label} ({_bucket_label(document)})'
+def _api_source_details(document: PatientNoteDocument) -> list[str]:
+    details = []
+    if document.source_document_id.strip():
+        details.append(f'Alleva document ID {document.source_document_id.strip()}')
+    if document.source_document_reference_id.strip():
+        details.append(f'DocumentReference {document.source_document_reference_id.strip()}')
+    if document.source_attachment_url.strip():
+        details.append(f'attachment {document.source_attachment_url.strip()}')
+    if document.source_provenance_id.strip():
+        details.append(f'Provenance {document.source_provenance_id.strip()}')
+    return details
+
+
+def _document_location(document: PatientNoteDocument, *, page_number: int | None = None) -> str:
+    base = f'{document.document_label} ({_bucket_label(document)})'
+    parts = [base]
+    if page_number is not None:
+        parts.append(f'manual upload page {page_number}')
+    parts.extend(_api_source_details(document))
+    return '; '.join(parts)
 
 
 def _document_is_complete(document: PatientNoteDocument, *, require_signatures: bool = True) -> bool:
@@ -84,6 +103,20 @@ def _document_is_complete(document: PatientNoteDocument, *, require_signatures: 
 def _text_contains(document: EvaluationDocument, patterns: list[str]) -> bool:
     haystack = ' '.join([document.normalized_label, document.normalized_description, document.normalized_text])
     return any(pattern in haystack for pattern in patterns)
+
+
+def _first_matching_page(document: EvaluationDocument, patterns: list[str]) -> int | None:
+    if not document.page_texts:
+        return 1 if document.document.original_filename.lower().endswith('.pdf') else None
+    for index, page_text in enumerate(document.page_texts, start=1):
+        page_haystack = _normalize_text(page_text)
+        if any(pattern in page_haystack for pattern in patterns):
+            return index
+    return 1 if document.document.original_filename.lower().endswith('.pdf') else None
+
+
+def _match_location(document: EvaluationDocument, patterns: list[str]) -> str:
+    return _document_location(document.document, page_number=_first_matching_page(document, patterns))
 
 
 def _find_matching_documents(documents: list[EvaluationDocument], patterns: list[str]) -> list[EvaluationDocument]:
@@ -113,6 +146,7 @@ def _build_evaluation_documents(note_set: PatientNoteSet) -> list[EvaluationDocu
                 normalized_label=_normalize_text(document.document_label),
                 normalized_description=_normalize_text(document.description),
                 normalized_text=_normalize_text(extracted.text),
+                page_texts=extracted.page_texts,
                 extracted_status=extracted.status,
                 parsed_date=_parse_date(document.document_date),
             )
@@ -179,7 +213,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 item_key,
                 ComplianceStatus.yes,
                 note,
-                _document_location(document.document),
+                _match_location(document, patterns),
                 document.document.document_date,
                 _extract_expiration(document.normalized_text),
             )
@@ -187,7 +221,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
             item_key,
             ComplianceStatus.no,
             f'{document.document.document_label} is present but incomplete or missing signatures.',
-            _document_location(document.document),
+            _match_location(document, patterns),
             document.document.document_date,
         )
 
@@ -212,7 +246,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'release_pattern_review',
                 ComplianceStatus.no,
                 'At least one release or consent document is marked incomplete.',
-                ', '.join(_document_location(document.document) for document in release_documents[:3]),
+                ', '.join(_match_location(document, ['release', 'consent', 'roi', 'attendance policy', 'freedom of choice', 'client rights', 'emergency contact']) for document in release_documents[:3]),
             )
         )
     elif any(document.extracted_status == 'unsupported' for document in release_documents):
@@ -221,7 +255,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'release_pattern_review',
                 ComplianceStatus.pending,
                 'Release documents were found, but at least one file is not machine-readable enough to validate accept/decline and other-field rules automatically.',
-                ', '.join(_document_location(document.document) for document in release_documents[:3]),
+                ', '.join(_match_location(document, ['release', 'consent', 'roi', 'attendance policy', 'freedom of choice', 'client rights', 'emergency contact']) for document in release_documents[:3]),
             )
         )
     else:
@@ -230,7 +264,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'release_pattern_review',
                 ComplianceStatus.yes,
                 'Release documents are present and machine-readable; no obvious completeness pattern failures were detected automatically.',
-                ', '.join(_document_location(document.document) for document in release_documents[:3]),
+                ', '.join(_match_location(document, ['release', 'consent', 'roi', 'attendance policy', 'freedom of choice', 'client rights', 'emergency contact']) for document in release_documents[:3]),
             )
         )
 
@@ -247,7 +281,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'emergency_contact_release',
                 status,
                 note,
-                _document_location(document.document),
+                _match_location(document, ['emergency contact', 'contacts', 'roi']),
                 document.document.document_date,
                 expiration,
             )
@@ -267,7 +301,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'uds_labs',
                 ComplianceStatus.pending,
                 'Lab documents were found, but they do not have parseable dates for weekly cadence validation.',
-                ', '.join(_document_location(document.document) for document in lab_documents[:3]),
+                ', '.join(_match_location(document, ['lab', 'uds', 'urine drug', 'drug screen', 'breathalyzer']) for document in lab_documents[:3]),
             )
         )
     else:
@@ -283,7 +317,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                 'uds_labs',
                 status,
                 f'Lab dates were detected with a maximum gap of {max_gap} day(s).',
-                ', '.join(_document_location(document.document) for document in lab_documents[:3]),
+                ', '.join(_match_location(document, ['lab', 'uds', 'urine drug', 'drug screen', 'breathalyzer']) for document in lab_documents[:3]),
                 _format_date(lab_dates[0]),
             )
         )
@@ -310,7 +344,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                     'medication_list_accuracy',
                     ComplianceStatus.no,
                     'Medication evidence includes "prescribed" without confirming Home meds classification.',
-                    ', '.join(_document_location(document.document) for document in medication_documents[:3]),
+                    ', '.join(_match_location(document, ['medication', 'rx', 'home meds', 'prescribed']) for document in medication_documents[:3]),
                 )
             )
         else:
@@ -319,7 +353,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
                     'medication_list_accuracy',
                     ComplianceStatus.yes,
                     'Medication evidence was found and no classification conflict was detected automatically.',
-                    ', '.join(_document_location(document.document) for document in medication_documents[:3]),
+                    ', '.join(_match_location(document, ['medication', 'rx', 'home meds', 'prescribed']) for document in medication_documents[:3]),
                 )
             )
 
@@ -348,14 +382,14 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
         if 0 <= days_delta <= 365:
             hp_status = ComplianceStatus.yes
             hp_note = 'H&P or medical history evidence falls within the prior 12 months.'
-            hp_location = _document_location(document.document)
+            hp_location = _match_location(document, ['history and physical', 'h&p', 'medical history', 'referral'])
             hp_date = document.document.document_date
             break
         referral_delta = (document.parsed_date - admission_date).days
         if 'referral' in document.normalized_label and 0 <= referral_delta <= 30:
             hp_status = ComplianceStatus.yes
             hp_note = 'Referral evidence falls within 30 days of admission.'
-            hp_location = _document_location(document.document)
+            hp_location = _match_location(document, ['history and physical', 'h&p', 'medical history', 'referral'])
             hp_date = document.document.document_date
             break
     items.append(_build_item('medical_history_physical', hp_status, hp_note, hp_location, hp_date))
@@ -365,7 +399,7 @@ def _evaluate_note_set(note_set: PatientNoteSet, documents: list[EvaluationDocum
         if not matches:
             return _build_item(item_key, ComplianceStatus.no, f'{label} was not detected in the uploaded binder.')
         document = matches[0]
-        return _build_item(item_key, ComplianceStatus.yes, f'{label} detected automatically.', _document_location(document.document), document.document.document_date)
+        return _build_item(item_key, ComplianceStatus.yes, f'{label} detected automatically.', _match_location(document, patterns), document.document.document_date)
 
     items.append(evaluate_instrument('cssrs', ['columbia suicide', 'cssrs', 'columbia suicide severity'], 'Columbia Suicide Severity Rating Scale'))
     items.append(evaluate_instrument('barc', ['barc'], 'BARC'))

@@ -357,16 +357,22 @@ Two standalone scripts exist and have different safety profiles:
 
 Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API output out of Git, tickets, screenshots, chat, and email unless an approved secure workflow says otherwise. Do not use real PHI in API tests.
 
+Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations; they are not FHIR R4 base URLs. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials. The App settings `FHIR base URL` field should stay blank until Alleva/R3 supplies a tenant root FHIR R4 endpoint, such as an endpoint ending in `/fhir/R4`.
+
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.3.0` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.4.0` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history.
 
-The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking.
+The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
+
+The selected-client detail view compares source-document `Next Review Due`, date-clock due date, date-clock anchor, and LOC-change due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking. Every timeliness analysis result is written to the forensic audit trail with the workflow definition key/version/checklist context used for the assessment.
 
 If an uploaded or API-style pulled plan has no patient name, the app creates a safe fallback display name:
 
-- no name and no patient ID: `generated-name_YYYYMMDD_HHMMSS`
-- no name and a patient ID: `patient-id_YYYYMMDD_HHMMSS`
+- no name found in source evidence: `no-name-found_YYYY-MM-DD_HHMMSS`
+- empty or unusable value found: `no-value-found_YYYY-MM-DD_HHMMSS`
+
+Review and treatment-plan CSV/JSON exports preserve the existing domain/checklist status rows and also include the active Treatment Plan Timeliness workflow steps, their status, workflow version, checklist version, source evidence, findings, severity, reviewer action, and override reason where available.
 
 Deterministic rules live in:
 
@@ -386,7 +392,7 @@ Rules-file guardrails:
 
 Admins and office managers can manage versioned workflow profiles from the `Workflow profiles` screen. A profile has a stable key, display name, category, JSON definition snapshot, JSON transition rules, and draft/published/archived version status.
 
-The Workflow profiles screen includes `Seed draft from 42-step checklist`, which loads `config\checklists\treatment-plan-v1.json` and gives approved staff a draft starting point they can edit before publishing a new workflow version.
+The Workflow profiles screen includes a `Seed draft from 42-step checklist` action. It loads `config\checklists\treatment-plan-v1.json`, copies the 42 steps, review statuses, override requirements, source modes, audit events, and export fields into a draft workflow snapshot, and gives admins/managers a starting point they can edit before publishing a new workflow version. Draft versions can be edited in place; published/archived versions can be loaded as a new draft template without archiving the current profile.
 
 Published or archived workflow history must be archived instead of hard-deleted so historical metrics can be interpreted correctly.
 
@@ -425,7 +431,7 @@ bash .\scripts\smoke.sh
 
 ## Legacy Docker/PostgreSQL Status
 
-Docker/PostgreSQL is not the active ordinary Windows desktop path, and the current branch does not have an active root `docker-compose.yml` full-stack deployment file. Legacy Docker/nginx/PostgreSQL examples are preserved under `depriceated/` for history and rollback reference. The folder name is intentionally spelled `depriceated/` to match earlier project instructions.
+Docker/PostgreSQL is not the active ordinary Windows desktop path, and the current branch does not have an active root `docker-compose.yml` full-stack deployment file. The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them; see `docs\removal-log.md`.
 
 Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as ordinary R3 desktop-user requirements. Do not restore the old Docker stack to active paths unless R3 explicitly reintroduces Docker/server deployment and updates the README, Windows docs, CI, tests, and release instructions together.
 
@@ -457,7 +463,13 @@ Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as 
 
 ## Version Metadata
 
-The current app version is stored in `VERSION` and `VERSION.json`. The backend exposes it at:
+The current app version is:
+
+```text
+1.4.0
+```
+
+Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:
 
 ```text
 GET /api/version

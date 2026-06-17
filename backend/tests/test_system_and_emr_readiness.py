@@ -64,7 +64,7 @@ def test_review_source_discovery_provides_mock_api_queue_without_live_import(app
     assert response.status_code == 200
     payload = response.json()
     assert payload['checklist_id'] == 'treatment-plan-v1'
-    assert payload['checklist_version'] == '1.1.0'
+    assert payload['checklist_version'] == '1.2.0'
     assert payload['live_import_enabled'] is False
     assert payload['live_import_status'] == 'disabled_until_vendor_credentials_mapping_and_compliance_approval'
     assert payload['api_mode'] == 'mock_stub'
@@ -130,7 +130,10 @@ def test_emr_enablement_requires_minimum_alleva_smart_contract(app_with_sqlite):
         headers = _auth_headers(client)
         missing = client.patch('/api/settings', headers=headers, json={'emr_api_enabled': True})
         assert missing.status_code == 400
-        assert 'FHIR base URL is required' in missing.json()['detail']
+        missing_detail = missing.json()['detail']
+        assert 'Missing required EMR API field(s)' in missing_detail
+        assert 'FHIR base URL' in missing_detail
+        assert 'OAuth/FHIR client ID' in missing_detail
 
         response = client.patch(
             '/api/settings',

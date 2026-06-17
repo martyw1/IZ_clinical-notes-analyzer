@@ -202,7 +202,7 @@ function appSettingsPayload() {
     emr_last_check_message: '',
     emr_last_successful_check_at: null,
     emr_last_failure_at: null,
-    treatment_plan_loc_change_window_days: null,
+    treatment_plan_loc_change_window_days: 7,
     treatment_plan_loc_change_window_validated: false,
     updated_by_id: 1,
     updated_at: '2026-03-08T13:00:00Z',
@@ -272,7 +272,7 @@ function readinessPayload() {
 function reviewSourceDiscoveryPayload() {
   return {
     checklist_id: 'treatment-plan-v1',
-    checklist_version: '1.1.0',
+    checklist_version: '1.2.0',
     last_refreshed_at: '2026-06-11T12:00:00Z',
     last_refresh_at: '2026-06-11T12:00:00Z',
     next_refresh_at: '2026-06-12T12:00:00Z',
@@ -379,7 +379,7 @@ function workflowDefinitionsPayload() {
 function treatmentPlanChecklistPayload() {
   return {
     checklist_id: 'treatment-plan-v1',
-    version: '1.1.0',
+    version: '1.2.0',
     display_name: 'Treatment Plan Checklist Version 1 - 42 Step PRD',
     organization: 'R3 Recovery Services',
     status: 'version_1_ready_with_42_steps_and_loc_change_blocker',
@@ -454,7 +454,7 @@ function timelinessDashboardPayload() {
     unable_to_evaluate: 0,
     approved: 0,
     compliance_percentage: 0,
-    loc_change_window_days: null,
+    loc_change_window_days: 7,
     loc_change_window_validated: false,
     items: [
       {
@@ -467,6 +467,7 @@ function timelinessDashboardPayload() {
         last_valid_review_date: '2026-04-02',
         next_due_date: '2026-06-01',
         days_until_due: 9,
+        current_date: '2026-05-23',
         status: 'Due Soon',
         rule_used: 'TP-REVIEW-60',
         evidence_summary: 'Latest valid staff/therapist review signature was 2026-04-02 using IOP-5 60-day recurrence.',
@@ -487,15 +488,20 @@ function timelinessDetailPayload() {
     evidence_comparison: {
       document_next_due_date: null,
       signature_anchor_due_date: '2026-06-01',
-      loc_anchor_due_date: '2026-05-29',
+      loc_anchor_due_date: '2026-04-06',
+      current_date: '2026-05-23',
+      date_clock_anchor_date: '2026-04-02',
+      date_clock_anchor_source: 'last valid treatment-plan review/update date',
+      date_clock_due_date: '2026-06-01',
+      loc_change_due_date: '2026-04-06',
       final_status: 'Due Soon',
       conflict_explanation:
-        'source document Next Review Due is not recorded; staff signature anchor is 2026-06-01 (2026-04-02 + 60 days); LOC effective-date anchor is 2026-05-29 (2026-03-30 + 60 days); LOC-change anchor/window is unvalidated by R3/Marleigh.',
+        'source document Next Review Due is not recorded; date clock due date is 2026-06-01 from last valid treatment-plan review/update date 2026-04-02 plus 60 days; LOC-change due date is 2026-04-06 (2026-03-30 + 7 days); LOC-change window is set to 7 calendar days but remains unvalidated by R3/Marleigh.',
       source_evidence: 'Treatment Plan Review synthetic record; Synthetic LOC update',
       staff_signature_date: '2026-04-02',
       loc_effective_date: '2026-03-30',
       interval_days: 60,
-      loc_change_window_days: null,
+      loc_change_window_days: 7,
       loc_change_rule_validated: false,
     },
     rule_results: [
@@ -509,9 +515,9 @@ function timelinessDetailPayload() {
       {
         rule_id: 'TP-LOC-CHANGE-UNVALIDATED',
         label: 'Level-of-care change update',
-        due_date: '2026-03-30',
+        due_date: '2026-04-06',
         status: 'Needs Review',
-        evidence_summary: 'LOC-change update window is not validated by R3/Marleigh; manual review is required.',
+        evidence_summary: 'LOC-change update preset is 7 calendar days, but settings still mark the rule unvalidated; manual review is required.',
       },
     ],
     level_of_care_history: [
@@ -583,8 +589,9 @@ function timelinessConflictSummary() {
     counselor_name: 'Counselor Two',
     admission_date: '2026-02-26',
     last_valid_review_date: '2026-04-02',
-    next_due_date: '2026-05-29',
-    days_until_due: 2,
+    next_due_date: '2026-04-06',
+    days_until_due: -51,
+    current_date: '2026-05-27',
     status: 'Needs Review',
     rule_used: 'TP-DUE-DATE-CONFLICT',
     evidence_summary: 'Displayed Next Review Due conflicts with the staff-signature anchor while LOC-change timing remains unvalidated.',
@@ -602,15 +609,20 @@ function timelinessConflictDetailPayload() {
     evidence_comparison: {
       document_next_due_date: '2026-05-29',
       signature_anchor_due_date: '2026-06-01',
-      loc_anchor_due_date: '2026-05-29',
+      loc_anchor_due_date: '2026-04-06',
+      current_date: '2026-05-27',
+      date_clock_anchor_date: '2026-04-02',
+      date_clock_anchor_source: 'last valid treatment-plan review/update date',
+      date_clock_due_date: '2026-06-01',
+      loc_change_due_date: '2026-04-06',
       final_status: 'Needs Review',
       conflict_explanation:
-        'source document Next Review Due is 2026-05-29; staff signature anchor is 2026-06-01 (2026-04-02 + 60 days); LOC effective-date anchor is 2026-05-29 (2026-03-30 + 60 days); LOC-change anchor/window is unvalidated by R3/Marleigh.',
+        'source document Next Review Due is 2026-05-29; date clock due date is 2026-06-01 from last valid treatment-plan review/update date 2026-04-02 plus 60 days; LOC-change due date is 2026-04-06 (2026-03-30 + 7 days); LOC-change window is set to 7 calendar days but remains unvalidated by R3/Marleigh.',
       source_evidence: 'Treatment Plan Review synthetic record; Synthetic LOC update',
       staff_signature_date: '2026-04-02',
       loc_effective_date: '2026-03-30',
       interval_days: 60,
-      loc_change_window_days: null,
+      loc_change_window_days: 7,
       loc_change_rule_validated: false,
     },
     rule_results: [
@@ -618,7 +630,7 @@ function timelinessConflictDetailPayload() {
       {
         rule_id: 'TP-DUE-DATE-CONFLICT',
         label: 'Displayed and calculated due dates',
-        due_date: '2026-05-29',
+        due_date: '2026-04-06',
         status: 'Needs Review',
         evidence_summary: 'Due-date evidence conflicts and needs manual review.',
       },
@@ -884,7 +896,7 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Review due-date evidence' })).toBeInTheDocument())
     const evidenceDialog = within(screen.getByRole('dialog', { name: 'Review due-date evidence' }))
     expect(evidenceDialog.getByText('Source-document Next Review Due')).toBeInTheDocument()
-    expect(evidenceDialog.getByText('Staff signature + LOC cadence')).toBeInTheDocument()
+    expect(evidenceDialog.getByText('Date clock due date')).toBeInTheDocument()
   })
 
   it('copies an Asana-ready timeliness task list', async () => {
@@ -949,7 +961,8 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient PAT-001' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient Details' })).toBeInTheDocument())
+    expect(screen.getByText('Patient ID: PAT-001')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
 
@@ -1073,7 +1086,8 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Binder details' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Open automated review' }))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient PAT-001' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient Details' })).toBeInTheDocument())
+    expect(screen.getByText('Patient ID: PAT-001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Criterion review workbench' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open binder details' }))

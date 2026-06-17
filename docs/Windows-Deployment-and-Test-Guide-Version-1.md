@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current patch version: `1.3.0` / build `2026.06.16.1`.
+Current patch version: `1.4.0` / build `2026.06.17.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Version 1.3.0 is the production-usability and role-controls patch. It keeps the Version 1 startup reliability, stale-build safeguards, 42-step workflow coverage, redacted PDF handling, and API harness hardening while adding in-app Help, admin/manager Workflow profiles, manager-scoped counselor user management, admin-only App settings/API/LLM/logs, stored EMR endpoint profiles, no-second-login API harness session reuse, treatment-plan update/re-evaluation fixes, and expanded automated validation.
+Version 1.4.0 is the treatment-plan date-clock and workflow-export patch. It keeps the Version 1 startup reliability, stale-build safeguards, 42-step workflow coverage, redacted PDF handling, and API harness hardening while adding local current-date clock behavior, PHP/non-PHP recurrence logic, configurable unvalidated LOC-change preset handling, workflow-step exports, source-evidence location capture, draft workflow editing, and clearer Alleva OpenAPI/FHIR setup guidance.
 
 ## Prerequisites for Source Build
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Version 1.3.0 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Version 1.4.0 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.3.0`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.3.0.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.0`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.0.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Version 1.3.0 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Version 1.4.0 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 
@@ -126,7 +126,7 @@ Review every result. Synthetic placeholder words in code and docs are allowed on
 ## Known Version 1 Limits
 
 - Live Alleva patient import is disabled.
-- The LOC-change treatment-plan update window is unvalidated and must stay configurable.
+- The LOC-change treatment-plan update window ships with a manager-editable 7-calendar-day preset, remains unvalidated, and must stay configurable.
 - Manual upload is an upload-time snapshot; monthly compliance checks are the documented fallback when API refresh is unavailable.
 - Admins and office managers can edit future checklist workflow versions through Workflow profiles, but published workflow history is preserved.
 - App settings, API/EMR setup, LLM setup, and forensic logs are admin-only.

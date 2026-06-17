@@ -114,7 +114,7 @@ Ensure the app correctly handles:
 - IOP/IOP-5/IOP-19/IOP-3/OP/Outpatient 60-day interval
 - due soon, urgent, overdue/current status
 - conflicting source due date vs calculated due date
-- source-document due date, staff-signature cadence due date, and LOC-effective cadence due date side by side
+- source-document due date, date-clock due date, and LOC-change due date side by side in current builds; earlier June 2026 notes referenced staff-signature and LOC-effective cadence comparison before the 1.4.0 date-clock update
 - LOC-change update as unresolved/configurable/Needs Review until confirmed
 - PHP and IOP/OP individual-session evidence checks when source evidence exists
 
@@ -182,6 +182,8 @@ Preserve original relative paths where practical. For example:
 Create:
 
 `depriceated/DEPRECATED-MANIFEST.md`
+
+2026-06-17 update: files that were already quarantined and later proven unused may be removed instead, but only with `docs/removal-log.md` evidence and passing validation.
 
 The manifest must include:
 

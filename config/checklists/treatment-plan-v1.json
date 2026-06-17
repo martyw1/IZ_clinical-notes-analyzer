@@ -1,10 +1,10 @@
 {
   "checklist_id": "treatment-plan-v1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "display_name": "Treatment Plan Checklist Version 1 - 42 Step PRD",
   "organization": "R3 Recovery Services",
-  "status": "version_1_ready_with_42_steps_and_loc_change_blocker",
-  "last_updated": "2026-06-11",
+  "status": "version_1_ready_with_42_steps_date_clock_and_loc_change_blocker",
+  "last_updated": "2026-06-17",
   "source_of_truth": "config/checklists/treatment-plan-v1.json",
   "review_owner_roles": ["admin", "manager"],
   "viewer_roles": ["admin", "manager", "counselor"],
@@ -49,7 +49,7 @@
   "loc_change_blocker": {
     "status": "unvalidated",
     "owner": "R3/Marleigh",
-    "message": "The treatment-plan update window after a level-of-care change is not confirmed. Keep this setting configurable and mark LOC-change results as Needs Review until R3 confirms exact days, calendar/business basis, and clock-start date."
+    "message": "The treatment-plan update window after a level-of-care change is not confirmed. Version 1.4.0 ships a manager-editable 7-calendar-day preset, keeps the setting configurable, and marks LOC-change results as Needs Review until R3 confirms exact days, calendar/business basis, and clock-start date."
   },
   "steps": [
     {

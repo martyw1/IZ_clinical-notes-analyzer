@@ -24,7 +24,7 @@ This is the S0 cleanup audit. No files were deleted or moved in this station. S1
 | Deterministic rules | `config/rules/alleva_treatment_plan_completeness_rules.yaml` |
 | Windows launch/validation | `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts/startup-windows-local.ps1`, `scripts/test-local-app-stack.ps1`, `scripts/test-api-configuration-local.ps1`, `scripts/test-alleva-api-connectivity.ps1`, `scripts/start-desktop-local.ps1` |
 | Developer/server launch | `scripts/smoke.sh`, `scripts/startup-macos.sh`, `scripts/startup-ubuntu-24.04.sh`, `scripts/startup-windows.ps1`, `scripts/lib/dedicated-postgres.sh` |
-| Docker/CI | `docker-compose.yml`, `docker-compose.db-expose.yml`, `.github/workflows/ci.yml` |
+| Docker/CI | `.github/workflows/ci.yml`; Docker compose overlays removed from active source when proven unused for the Windows desktop path |
 | Operator/developer docs | `docs/*.md`, `docs/Product Requirements Document.pdf`, `docs/prd-treatment-plan-timeliness-mvp-2026-06-01.docx`, `docs/prd-ver0.0-old-original.rtf`, `docs/open-blockers.md` |
 | Synthetic examples | `docs/sample-clinical-notes/` |
 | Ignored local credential note | `docs/First sign-in credentials.txt` |
@@ -37,7 +37,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 | Candidate | Evidence | Safety assessment |
 |---|---|---|
 | `scripts/startup-windows.ps1` | Main README and AGENTS point to `startup-windows-local.ps1`; this script appears to be an older Docker/PostgreSQL Windows path. | Potentially removable only if no supported server-mode Windows workflow needs it. Retain for now. |
-| `docker-compose.db-expose.yml` | Minimal overlay exposes Postgres port and is not referenced by README or CI scan. | Candidate for removal or documentation, but keep until Compose workflow intent is confirmed. |
+| `docker-compose.db-expose.yml` | Minimal overlay exposed a Postgres port and was not referenced by active launch, test, backend, frontend, config, or CI paths. | Removed 2026-06-17 after S0 validation and reference scan; see `docs/removal-log.md`. |
 | `docs/prd-ver0.0-old-original.rtf` | Renamed legacy PRD archive. | Not dead if archive history is desired. Retain unless superseded archive policy says remove. |
 | `docs/chart-review-workflow-codex-build-prompt.md` | Historical build prompt for earlier chart-audit workflow. | Legacy reference, not runtime dead code. Retain until docs archive policy is set. |
 | `docs/windows-startup-known-issue-20260514.md` | Known issue doc may be stale after launcher hardening. | Candidate for archive/update, not deletion until current Windows behavior is verified. |
@@ -174,6 +174,6 @@ Not safe to remove yet:
 3. Compare the untracked root `Product Requirements Document.docx` with tracked PRD artifacts and decide keep/move/delete/ignore.
 4. Review `walkthroughs/` for PHI and decide whether it is local-only evidence, archive material, or safe synthetic documentation.
 5. Classify `scripts/startup-windows.ps1` as legacy/server-mode or remove it after references and product scope are resolved.
-6. Review `docker-compose.db-expose.yml` and either document it or remove it if truly unused.
+6. Completed 2026-06-17: `docker-compose.db-expose.yml` was removed after reference scan proved it unused in active paths.
 7. Continue S7 Windows Home packaging, installer/repair/uninstall planning, and target Dell validation now that S6 smoke coverage is hardened.
 8. Keep `docs/open-blockers.md`, README, and PRD implementation notes current until the unvalidated LOC-change window is resolved.

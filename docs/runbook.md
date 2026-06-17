@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-16
+Date: 2026-06-17
 
-Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -34,10 +34,10 @@ Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1` lo
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Version 1.3.0 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Version 1.4.0 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
-- Missing names use safe generated placeholders: `generated-name_YYYYMMDD_HHMMSS` or `patient-id_YYYYMMDD_HHMMSS`.
+- Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
 - The LOC-change treatment-plan update window is still unvalidated and must stay configurable and visibly marked as unresolved.
 
 ## API readiness checks
@@ -47,7 +47,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1` lo
 - The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
 - Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
 - Periodic API readiness checks can be enabled in App settings after saving API/FHIR base URL, token URL, client ID, encrypted client secret, token auth style, and interval.
-- FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor.
+- FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, and `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path, not a FHIR base URL.
 - Stored EMR endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
 - Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
 
@@ -58,13 +58,21 @@ Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1` lo
 - `.alleva.local.ps1` and `alleva-api-test-logs/` are gitignored but should still be treated as sensitive local diagnostic artifacts.
 - Do not use real PHI in API test payloads.
 
+## Treatment-plan date clock
+
+- The timeliness evaluator uses the laptop/facility-local current date on startup and during runtime.
+- The recurring update clock starts from the latest valid treatment-plan review/update date, or from admission date when no later valid review/update exists.
+- PHP levels use 30 calendar days; other configured treatment levels use 60 calendar days.
+- LOC changes use a separate manager-editable 7-calendar-day preset. The setting remains unvalidated until R3/Marleigh confirms the final rule.
+- Every timeliness analysis result is audited with patient ID, status, due date, rule used, current date, and active workflow key/version/checklist context.
+- Exports include both the legacy checklist/domain rows and active workflow-step statuses.
+
 ## Roles and workflow controls
 
 - Admins can use every screen and action, including all user roles, App settings, API/EMR, LLM, workflow profiles, logs, uploads, reviews, overrides, and exports.
 - Office managers can manage counselor accounts and Workflow profiles, approve/return reviews, and record treatment-plan overrides. They cannot open App settings, API/EMR setup, LLM setup, forensic logs, or manage admin/manager accounts.
 - Counselors can upload/update their own work, review returned work, view permitted details, export permitted work lists, and manage only their own account.
-- Workflow profile create/version/publish/archive/delete attempts are audited.
-- Published/archived workflow history must remain available for interpreting historical metrics.
+- Workflow profile create/version/edit-draft/publish/archive/delete attempts are audited. Published/archived workflow history must remain available for interpreting historical metrics.
 
 ## Windows desktop runtime
 
@@ -96,6 +104,6 @@ The `.env` file, SQLite database, and encrypted uploads must stay together. If t
 
 ## Legacy Docker/PostgreSQL artifacts
 
-Docker/PostgreSQL is not the current supported R3 Windows desktop path. The root full-stack `docker-compose.yml` is not active in this branch. Legacy Docker/nginx/PostgreSQL files are preserved under `depriceated/` for history and rollback reference.
+Docker/PostgreSQL is not the current supported R3 Windows desktop path. The root full-stack `docker-compose.yml` is not active in this branch. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after cleanup evidence; deprecated startup scripts remain as legacy references.
 
 Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as ordinary Windows desktop-user requirements. Do not restore the old Docker stack to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.

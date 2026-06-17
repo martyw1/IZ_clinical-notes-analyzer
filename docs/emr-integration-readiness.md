@@ -41,12 +41,16 @@ The app is stubbed around these primary standards and vendor patterns:
 - Vendor-specific pagination, retry, rate-limit, attachment URL, and Binary content behavior.
 - Confirmation whether the Alleva tenant exposes SMART/FHIR, Alleva open API endpoints, HL7 feeds, SFTP exports, or a vendor-managed connector for Document Manager content.
 - Written client approval for any external PHI movement, including optional LLM analysis.
+
+The FHIR base URL must be a vendor/tenant-supplied root FHIR R4 endpoint, for example an endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) are REST API documentation/definition URLs and belong in the OpenAPI/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and is not a FHIR base URL.
+
 ## Current Alleva Boundary
 
 Alleva publicly describes open/custom integrations and modern FHIR/HL7 integration patterns, but detailed tenant API specifications are not published in the open support material found during this review. The code therefore supports:
 
 - Local Alleva export/import now.
 - Read-only SMART/FHIR `Patient` + `DocumentReference` + `Binary` + optional `Provenance` planning now.
+- Direct OpenAPI/Swagger discovery and bounded operation testing against approved non-PHI operations now.
 - Live Alleva API execution only after vendor/client registration details are supplied.
 
 The app must not be configured for write-back into Alleva until a separate signed scope, data-ownership rule, and validation plan exist.

@@ -333,14 +333,14 @@ def test_redacted_example_pdf_upload_extracts_clinician_loc_and_placeholder_name
         chart_payload = chart.json()
         assert chart_payload['primary_clinician'] == payload['primary_clinician']
         assert chart_payload['level_of_care'] == 'GOP'
-        assert re.fullmatch(r'PAT-REDACTED-JTXP_\d{8}_\d{6}', chart_payload['client_name'])
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', chart_payload['client_name'])
         assert 'redacted_hidden' in chart_payload['other_details']
 
     db = session_local()
     try:
         stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REDACTED-JTXP')).scalar_one()
         assert stored_client.current_level_of_care == 'GOP'
-        assert re.fullmatch(r'PAT-REDACTED-JTXP_\d{8}_\d{6}', stored_client.permitted_name)
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
 
         upload_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.uploaded')).scalar_one()
         assert 'redacted_hidden' in upload_log.details

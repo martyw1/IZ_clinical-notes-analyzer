@@ -21,6 +21,7 @@ from app.models.models import (
 )
 from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
 from app.services.rules_engine import load_rules_config
+from app.services.timezone import localize_datetime
 
 STATUS_PRIORITY = [
     TimelinessStatus.overdue.value,
@@ -34,6 +35,7 @@ STATUS_PRIORITY = [
     TimelinessStatus.compliant.value,
     TimelinessStatus.approved.value,
 ]
+DEFAULT_LOC_CHANGE_WINDOW_DAYS = 7
 PLAN_KIND_ALIASES = {
     'initial': TreatmentPlanKind.initial,
     'initial_treatment_plan': TreatmentPlanKind.initial,
@@ -61,6 +63,11 @@ class EvidenceComparison:
     document_next_due_date: str | None
     signature_anchor_due_date: str | None
     loc_anchor_due_date: str | None
+    current_date: str
+    date_clock_anchor_date: str | None
+    date_clock_anchor_source: str
+    date_clock_due_date: str | None
+    loc_change_due_date: str | None
     final_status: str
     conflict_explanation: str
     source_evidence: str
@@ -77,6 +84,7 @@ class TimelinessEvaluation:
     status: str
     next_due_date: str | None
     days_until_due: int | None
+    current_date: str
     last_valid_review_date: str | None
     rule_used: str
     evidence_summary: str
@@ -117,6 +125,10 @@ def _add_days(anchor: date | None, days: int | None) -> date | None:
     if anchor is None or days is None:
         return None
     return date.fromordinal(anchor.toordinal() + days)
+
+
+def _loc_change_window_days(app_settings: AppSetting) -> int:
+    return app_settings.treatment_plan_loc_change_window_days if app_settings.treatment_plan_loc_change_window_days is not None else DEFAULT_LOC_CHANGE_WINDOW_DAYS
 
 
 def _status_from_due_date(due_date: date | None, evaluation_date: date) -> tuple[str | None, int | None]:
@@ -244,11 +256,13 @@ def _active_level_of_care(loc_history: list[LevelOfCareHistory]) -> LevelOfCareH
 def _describe_due_date_comparison(
     *,
     document_due: date | None,
-    signature_due: date | None,
-    loc_due: date | None,
-    staff_signature: date | None,
+    date_clock_due: date | None,
+    loc_change_due: date | None,
+    date_clock_anchor: date | None,
+    date_clock_anchor_source: str,
     loc_effective: date | None,
     interval_days: int | None,
+    loc_change_window_days: int | None,
     loc_change_validated: bool,
 ) -> str:
     parts = []
@@ -256,22 +270,26 @@ def _describe_due_date_comparison(
         parts.append(f'source document Next Review Due is {document_due.isoformat()}')
     else:
         parts.append('source document Next Review Due is not recorded')
-    if signature_due:
+    if date_clock_due:
         parts.append(
-            f'staff signature anchor is {signature_due.isoformat()}'
-            f' ({staff_signature.isoformat()} + {interval_days} days)' if staff_signature and interval_days else f'staff signature anchor is {signature_due.isoformat()}'
+            f'date clock due date is {date_clock_due.isoformat()}'
+            f' ({date_clock_anchor_source} {date_clock_anchor.isoformat()} + {interval_days} days)'
+            if date_clock_anchor and interval_days
+            else f'date clock due date is {date_clock_due.isoformat()}'
         )
     else:
-        parts.append('staff signature anchor could not be calculated')
-    if loc_due:
+        parts.append('date clock due date could not be calculated')
+    if loc_change_due:
         parts.append(
-            f'LOC effective-date anchor is {loc_due.isoformat()}'
-            f' ({loc_effective.isoformat()} + {interval_days} days)' if loc_effective and interval_days else f'LOC effective-date anchor is {loc_due.isoformat()}'
+            f'LOC-change due date is {loc_change_due.isoformat()}'
+            f' ({loc_effective.isoformat()} + {loc_change_window_days} days)'
+            if loc_effective and loc_change_window_days is not None
+            else f'LOC-change due date is {loc_change_due.isoformat()}'
         )
     else:
-        parts.append('LOC effective-date anchor could not be calculated')
+        parts.append('LOC-change due date could not be calculated or no LOC change is recorded')
     if not loc_change_validated:
-        parts.append('LOC-change anchor/window is unvalidated by R3/Marleigh')
+        parts.append('LOC-change window is still marked unvalidated in settings')
     return '; '.join(parts) + '.'
 
 
@@ -309,7 +327,7 @@ def _evidence_completeness(
 
 def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, evaluation_date: date | None = None) -> TimelinessEvaluation:
     checked_at = _utc_now()
-    today = evaluation_date or checked_at.date()
+    today = evaluation_date or localize_datetime(checked_at, app_settings.facility_timezone).date()
     plans = list(client.treatment_plans)
     loc_history = sorted(client.level_of_care_history, key=lambda item: _date(item.effective_date) or date.min)
     rule_results: list[RuleResult] = []
@@ -322,16 +340,22 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     document_due = _date(latest_review.displayed_next_due_date) if latest_review else None
     staff_signature = _date(latest_review.staff_signature_date) if latest_review else None
     loc_effective = _date(active_loc.effective_date) if active_loc else None
-    signature_anchor_due = _add_days(staff_signature, interval_days)
-    loc_anchor_due = _add_days(loc_effective, interval_days) if len(loc_history) > 1 else None
+    last_review = _valid_review_date(plans)
+    date_clock_anchor = last_review or admission
+    date_clock_anchor_source = 'last valid treatment-plan review/update date' if last_review else 'admission date'
+    signature_anchor_due = _add_days(date_clock_anchor, interval_days)
+    loc_change_window_days = _loc_change_window_days(app_settings)
+    loc_anchor_due = _add_days(loc_effective, loc_change_window_days) if len(loc_history) > 1 else None
     due_dates_for_comparison = {item for item in (document_due, signature_anchor_due, loc_anchor_due) if item is not None}
     comparison_explanation = _describe_due_date_comparison(
         document_due=document_due,
-        signature_due=signature_anchor_due,
-        loc_due=loc_anchor_due,
-        staff_signature=staff_signature,
+        date_clock_due=signature_anchor_due,
+        loc_change_due=loc_anchor_due,
+        date_clock_anchor=date_clock_anchor,
+        date_clock_anchor_source=date_clock_anchor_source,
         loc_effective=loc_effective,
         interval_days=interval_days,
+        loc_change_window_days=loc_change_window_days,
         loc_change_validated=app_settings.treatment_plan_loc_change_window_validated,
     )
 
@@ -378,9 +402,8 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
         else:
             rule_results.append(_result('TP-MASTER-SIGNATURES', 'Master Treatment Plan signatures', master_due_date, TimelinessStatus.needs_review.value, 'Master Treatment Plan signatures are missing, incomplete, or after the 30-day window.'))
 
-    last_review = _valid_review_date(plans)
-    if last_review and interval_days:
-        review_due = date.fromordinal(last_review.toordinal() + interval_days)
+    if date_clock_anchor and interval_days:
+        review_due = date.fromordinal(date_clock_anchor.toordinal() + interval_days)
         due_status, _ = _status_from_due_date(review_due, today)
         rule_results.append(
             _result(
@@ -388,9 +411,19 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
                 'Ongoing Treatment Plan Review',
                 review_due,
                 due_status or TimelinessStatus.compliant.value,
-                f'Latest valid staff/therapist review signature was {last_review.isoformat()} using {mapped_loc} {interval_days}-day recurrence.',
+                f'Date clock used {date_clock_anchor_source} {date_clock_anchor.isoformat()} against current date {today.isoformat()} using {mapped_loc} {interval_days}-calendar-day recurrence.',
             )
         )
+        if latest_review is not None and staff_signature is None:
+            rule_results.append(
+                _result(
+                    'TP-REVIEW-SIGNATURE-MISSING',
+                    'Treatment Plan Review signature',
+                    review_due,
+                    TimelinessStatus.needs_review.value,
+                    'A treatment-plan review/update record exists, but no staff/therapist signature date was found for the date clock.',
+                )
+            )
     elif mapped_loc:
         rule_results.append(_result('TP-REVIEW-MISSING', 'Ongoing Treatment Plan Review', None, TimelinessStatus.missing_data.value, 'No valid staff/therapist review signature date was found.'))
 
@@ -408,18 +441,18 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     if len(loc_history) > 1:
         latest_loc = loc_history[-1]
         loc_effective = _date(latest_loc.effective_date)
-        if not app_settings.treatment_plan_loc_change_window_validated or app_settings.treatment_plan_loc_change_window_days is None:
+        loc_due = _add_days(loc_effective, loc_change_window_days)
+        if not app_settings.treatment_plan_loc_change_window_validated:
             rule_results.append(
                 _result(
                     'TP-LOC-CHANGE-UNVALIDATED',
                     'Level-of-care change update',
-                    loc_effective,
+                    loc_due,
                     TimelinessStatus.needs_review.value,
-                    'LOC-change update window is not validated by R3/Marleigh; manual review is required.',
+                    f'LOC-change update preset is {loc_change_window_days} calendar days, but settings still mark the rule unvalidated; manual review is required.',
                 )
             )
-        elif loc_effective:
-            loc_due = date.fromordinal(loc_effective.toordinal() + app_settings.treatment_plan_loc_change_window_days)
+        elif loc_due:
             loc_update = _latest_plan(plans, TreatmentPlanKind.loc_update)
             signed = _date(loc_update.staff_signature_date) if loc_update else None
             if signed and signed <= loc_due:
@@ -427,6 +460,16 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
             else:
                 due_status, _ = _status_from_due_date(loc_due, today)
                 rule_results.append(_result('TP-LOC-CHANGE', 'Level-of-care change update', loc_due, due_status or TimelinessStatus.missing_data.value, 'LOC-change update is missing or outside the configured window.'))
+        else:
+            rule_results.append(
+                _result(
+                    'TP-LOC-CHANGE-MISSING-DATE',
+                    'Level-of-care change update',
+                    None,
+                    TimelinessStatus.missing_data.value,
+                    'A level-of-care change is present, but the effective date needed for the LOC-change clock is missing or unreadable.',
+                )
+            )
 
     if not rule_results:
         rule_results.append(_result('TP-MISSING-DATA', 'Treatment Plan Timeliness', None, TimelinessStatus.missing_data.value, 'Not enough source data to calculate timeliness.'))
@@ -445,13 +488,18 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
         document_next_due_date=_date_str(document_due),
         signature_anchor_due_date=_date_str(signature_anchor_due),
         loc_anchor_due_date=_date_str(loc_anchor_due),
+        current_date=today.isoformat(),
+        date_clock_anchor_date=_date_str(date_clock_anchor),
+        date_clock_anchor_source=date_clock_anchor_source,
+        date_clock_due_date=_date_str(signature_anchor_due),
+        loc_change_due_date=_date_str(loc_anchor_due),
         final_status=status,
         conflict_explanation=comparison_explanation,
         source_evidence=_comparison_source_evidence(latest_review, active_loc),
         staff_signature_date=_date_str(staff_signature),
         loc_effective_date=_date_str(loc_effective),
         interval_days=interval_days,
-        loc_change_window_days=app_settings.treatment_plan_loc_change_window_days,
+        loc_change_window_days=loc_change_window_days,
         loc_change_rule_validated=app_settings.treatment_plan_loc_change_window_validated,
     )
     return TimelinessEvaluation(
@@ -459,6 +507,7 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
         status=status,
         next_due_date=next_due_date,
         days_until_due=days_until_due,
+        current_date=today.isoformat(),
         last_valid_review_date=_date_str(last_review),
         rule_used=rule_used,
         evidence_summary=evidence_summary,
@@ -566,6 +615,22 @@ def _document_plan_kind(document: PatientNoteDocument) -> TreatmentPlanKind | No
     return None
 
 
+def _document_source_evidence(document: PatientNoteDocument, *, note_set_id: int) -> str:
+    label = document.document_label or document.original_filename or 'Treatment plan document'
+    parts = [f'{label} from note set {note_set_id}']
+    if document.original_filename.lower().endswith('.pdf'):
+        parts.append('manual upload page 1')
+    if document.source_document_id.strip():
+        parts.append(f'Alleva document ID {document.source_document_id.strip()}')
+    if document.source_document_reference_id.strip():
+        parts.append(f'DocumentReference {document.source_document_reference_id.strip()}')
+    if document.source_attachment_url.strip():
+        parts.append(f'attachment {document.source_attachment_url.strip()}')
+    if document.source_provenance_id.strip():
+        parts.append(f'Provenance {document.source_provenance_id.strip()}')
+    return '; '.join(parts)
+
+
 def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanClient:
     client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == note_set.patient_id)).scalar_one_or_none()
     if client is None:
@@ -573,7 +638,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
         db.add(client)
         db.flush()
 
-    client.permitted_name = client.permitted_name or note_set.patient_id
+    client.permitted_name = client.permitted_name or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=note_set.patient_id)
     client.is_active = not bool(note_set.discharge_date.strip())
     client.current_level_of_care = note_set.level_of_care
     client.counselor_name = note_set.primary_clinician
@@ -594,7 +659,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
                 facility=note_set.source_system,
                 effective_date=note_set.admission_date,
                 discharge_date=note_set.discharge_date,
-                source_evidence=f'Upload metadata from note set {note_set.id}',
+                source_evidence=f'Upload metadata from note set {note_set.id}; manual upload page 1',
                 source_note_set_id=note_set.id,
             )
         )
@@ -610,7 +675,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
                 document_date=document.document_date,
                 staff_signature_date=signature_date if document.staff_signed else '',
                 client_signature_date=signature_date if document.client_signed else '',
-                source_evidence=f'{document.document_label or document.original_filename} from note set {note_set.id}',
+                source_evidence=_document_source_evidence(document, note_set_id=note_set.id),
                 source_section=document.alleva_bucket.value,
                 source_document_id=document.source_document_id or document.source_document_reference_id or str(document.id),
                 source_note_set_id=note_set.id,
@@ -634,6 +699,7 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
         'last_valid_review_date': evaluation.last_valid_review_date,
         'next_due_date': evaluation.next_due_date,
         'days_until_due': evaluation.days_until_due,
+        'current_date': evaluation.current_date,
         'status': evaluation.status,
         'rule_used': evaluation.rule_used,
         'evidence_summary': evaluation.evidence_summary,

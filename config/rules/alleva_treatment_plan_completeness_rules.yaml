@@ -1,9 +1,9 @@
-config_version: "1.1.0"
-config_status: "version_1_ready_with_42_step_checklist"
+config_version: "1.2.0"
+config_status: "version_1_ready_with_42_step_checklist_date_clock"
 organization: "R3 Recovery Services"
-last_updated: "2026-06-11"
+last_updated: "2026-06-17"
 source_of_truth: "config/checklists/treatment-plan-v1.json"
-checklist_version: "1.1.0"
+checklist_version: "1.2.0"
 review_source_modes:
   manual_upload:
     mode: "point_in_time_snapshot"
@@ -13,7 +13,8 @@ review_source_modes:
     live_import_enabled: false
 loc_change_blocker:
   status: "unvalidated"
-  message: "The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh; keep it configurable and return Needs Review or Missing Data when evidence is incomplete or conflicting."
+  default_preset_calendar_days: 7
+  message: "The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh; Version 1.4.0 ships a manager-editable 7-calendar-day preset, keeps it configurable, and returns Needs Review or Missing Data when evidence is incomplete or conflicting."
 
 engine:
   name: "alleva_completeness_rules_engine"

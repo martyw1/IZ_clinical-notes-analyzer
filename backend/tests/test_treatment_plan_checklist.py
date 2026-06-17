@@ -16,7 +16,7 @@ def test_treatment_plan_v1_checklist_is_canonical_and_complete():
 
     assert validate_treatment_plan_checklist(checklist) == []
     assert checklist['checklist_id'] == 'treatment-plan-v1'
-    assert checklist['version'] == '1.1.0'
+    assert checklist['version'] == '1.2.0'
     assert [step['step'] for step in checklist['steps']] == list(range(1, 43))
     assert checklist['steps'][0]['key'] == 'confirm_correct_client_chart'
     assert checklist['steps'][-1]['key'] == 'use_synthetic_or_approved_non_phi_data'

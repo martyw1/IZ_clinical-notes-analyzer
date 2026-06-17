@@ -235,13 +235,13 @@ The app must implement, display, test, and document the following operational ch
 
 | LOC | Recurrence |
 |---|---|
-| PHP | Last valid treatment-plan review date + 30 calendar days |
-| IOP | Last valid treatment-plan review date + 60 calendar days |
-| IOP-5 | Last valid treatment-plan review date + 60 calendar days |
-| IOP-19 | Last valid treatment-plan review date + 60 calendar days |
-| IOP-3 | Last valid treatment-plan review date + 60 calendar days |
-| OP | Last valid treatment-plan review date + 60 calendar days |
-| Outpatient | Last valid treatment-plan review date + 60 calendar days |
+| PHP | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 30 calendar days |
+| IOP | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
+| IOP-5 | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
+| IOP-19 | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
+| IOP-3 | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
+| OP | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
+| Outpatient | Latest valid treatment-plan review/update date, or admission date when no later valid update exists, + 60 calendar days |
 
 LOC aliases such as `IOP5`, `IOP 5`, `O/P`, and `OUTPATIENT` must stay configurable.
 
@@ -251,7 +251,8 @@ The LOC-change treatment-plan update window remains unvalidated. The app must:
 
 - Keep the setting configurable.
 - Mark it unvalidated in Settings, Checklist, dashboard/detail UI, and docs.
-- Show source-document due date, staff-signature cadence due date, and LOC-effective cadence due date side by side.
+- Ship the current manager-editable 7-calendar-day preset only as an unvalidated default until R3 confirms the final rule.
+- Show source-document due date, date-clock due date, date-clock anchor, and LOC-change due date side by side.
 - Treat LOC-change conflicts as Needs Review or Missing Data.
 - Never hard-code a final LOC-change window until R3 confirms exact days, calendar/business basis, and clock-start date.
 
@@ -426,7 +427,7 @@ Minimum UI/UX requirements:
 
 - Rules, LOC aliases, and unresolved LOC-change settings must be configurable.
 - Keep deterministic rules separate from optional LLM features.
-- Deprecated files must be moved to `depriceated/` with a manifest rather than deleted.
+- Deprecated files must be either quarantined or removed only with a documented removal log and proof that no active runtime, test, launch, config, or docs path needs them.
 
 ---
 
@@ -534,7 +535,7 @@ Save validation report under `docs/validation/`.
 
 ## 17. Deprecated File Cleanup Requirement
 
-Codex must identify files no longer needed and move them, not delete them, into:
+Original 2026-06-11 requirement: Codex must identify files no longer needed and move them, not delete them, into:
 
 ```text
 depriceated/
@@ -550,7 +551,9 @@ depriceated/DEPRECATED-MANIFEST.md
 
 Manifest must include original path, new path, reason moved, replacement, date moved, and validation that tests/build still pass after move.
 
-Do not move active runtime files, active docs linked from README, migrations, configs, sample test data, current scripts, tests, or anything needed by build/start/test unless replacement behavior is verified.
+Superseding 2026-06-17 cleanup rule: because the deprecated Docker/nginx archive was already quarantined, already documented, and later proven unused, it may be removed when `docs/removal-log.md` records the path, reason, reference-scan evidence, and validation results. Do not remove active runtime files, active docs linked from README, migrations, configs, sample test data, current scripts, tests, or anything needed by build/start/test unless replacement behavior is verified.
+
+Do not move or remove active runtime files, active docs linked from README, migrations, configs, sample test data, current scripts, tests, or anything needed by build/start/test unless replacement behavior is verified.
 
 ---
 
@@ -575,7 +578,7 @@ Do not move active runtime files, active docs linked from README, migrations, co
 - API configuration tests pass.
 - Browser/computer-use walkthrough completed with synthetic data.
 - Docs updated.
-- Deprecated files moved to `depriceated/` with manifest.
+- Deprecated/unused files quarantined or removed with `docs/removal-log.md` evidence.
 
 ---
 

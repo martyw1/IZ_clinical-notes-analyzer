@@ -46,7 +46,7 @@ The browser result includes status code, content type, timing when available, pa
 
 Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
 
-For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`.
+For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields, not the FHIR base URL field. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path and is not a root FHIR endpoint.
 
 ## Periodic API readiness checks
 
@@ -58,6 +58,8 @@ Admins can turn on periodic safe Alleva/API checks from `App settings` after sav
 - encrypted client secret
 - token auth style
 - check interval in minutes
+
+The settings form validates these fields before save. If one or more required values are missing, the modal lists the exact missing field names instead of using a generic failure message.
 
 The background checker authenticates with the saved client ID/secret, applies the selected token auth style, and runs the same bounded OpenAPI/readiness probe used by the harness. App settings shows the last check time, status, message, last success/failure, and next scheduled check through the Review Source Discovery payload.
 
