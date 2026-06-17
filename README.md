@@ -110,7 +110,7 @@ flowchart TB
     MainAPI --> Env
     Audit --> Logs
     APIHarness --> Reports
-    APIHarness -. readiness only; no live patient import .-> Alleva
+    APIHarness -. readiness only, no live patient import .-> Alleva
     MainAPI -. optional and disabled by default .-> LLM
     Builder --> Release
     Legacy -. not ordinary Windows runtime .-> Windows
