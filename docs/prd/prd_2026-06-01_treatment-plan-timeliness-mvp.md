@@ -16,6 +16,8 @@ Implementation note 2026-06-11: the production `Treatment plans` tab uses a comp
 
 Implementation note 2026-06-17: Version `1.4.0` updates the timeliness model to use the local current date, admission date, and latest valid treatment-plan review/update date as the recurring date clock. PHP uses 30 calendar days and other configured treatment levels use 60 calendar days. LOC changes use a manager-editable 7-calendar-day preset that remains visibly unvalidated until R3/Marleigh confirms the final rule. Source-document `Next Review Due`, date-clock due date, and LOC-change due date are shown side by side; conflicts remain `Needs Review`, `Missing Data`, or `Conflicting Evidence`.
 
+Implementation note 2026-06-18: Version `1.4.1` adds a gated Alleva REST treatment-plan sync path. Alleva remains the source system for active-client, treatment-plan, and treatment-review data; R3's local deterministic rules remain the compliance decision engine. Startup sync is disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete.
+
 ## 2. MVP Positioning
 
 Use the product label **Treatment Plan Timeliness Tracker** in screens and planning. The broader repo can remain IZ Clinical Notes Analyzer, but this MVP should not imply broad clinical-note content scoring or AI judgment.

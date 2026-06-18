@@ -1,5 +1,13 @@
 # Version 1 Completion Log
 
+## 2026-06-18 1.4.1 Alleva REST Treatment-Plan Sync Readiness
+
+- Updated version metadata to `1.4.1` / build `2026.06.18.1`.
+- Added separate Alleva REST treatment-plan sync settings and startup/manual sync controls.
+- Kept FHIR base URL reserved for future SMART/FHIR endpoints; REST sync uses the Alleva REST API base and OpenAPI URL.
+- Added approval and endpoint-mapping gates before live startup sync can import treatment-plan data.
+- Documented that Alleva is the source system and R3's local rules perform compliance checks.
+
 ## 2026-06-17 1.4.0 Date Clock and Workflow Export Hardening
 
 What changed:

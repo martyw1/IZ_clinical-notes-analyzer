@@ -1,8 +1,8 @@
 # API Configuration and Connectivity Test
 
-Date: 2026-06-16
+Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.3.0` / build `2026.06.16.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.1` / build `2026.06.18.1` local Windows desktop runtime.
 
 ## Where to open it
 
@@ -47,6 +47,22 @@ The browser result includes status code, content type, timing when available, pa
 Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
 
 For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields, not the FHIR base URL field. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path and is not a root FHIR endpoint.
+
+## Alleva REST treatment-plan sync
+
+Version `1.4.1` adds a separate Alleva REST treatment-plan sync configuration. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+
+This sync path does not require a FHIR root. It is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+
+Startup sync is disabled by default. Before enabling it, admins must confirm and document:
+
+- R3/Alleva approval for live treatment-plan sync.
+- Validated endpoints for active clients, treatment plans, treatment reviews, and any required signature/status detail endpoints.
+- Pagination/cursor behavior, rate limits, date filters, and retry expectations.
+- Authoritative response fields for active/discharged status, admission date, current level of care, treatment-plan kind, completion status, client signature date, staff/creator signature date, last modified/update date, and next review due date.
+- Credential scopes and tenant/environment boundaries for R3 Recovery Services.
+
+If any required setting is missing, App settings lists the exact missing field and will not arm startup sync. The live sync route records a blocked status rather than importing partial or unmapped data.
 
 ## Periodic API readiness checks
 
@@ -99,6 +115,7 @@ POST  /api/api-configuration/pull-definitions
 POST  /api/api-configuration/test
 POST  /api/api-configuration/test-operation
 GET   /api/api-configuration/sample-openapi.json
+POST  /api/alleva/treatment-plan-sync/run
 ```
 
 The privileged endpoints require an authenticated admin bearer token. The sample OpenAPI JSON endpoint is intentionally non-sensitive and exists so local smoke tests can validate the pull-definition logic without live Alleva credentials or internet access.
@@ -120,7 +137,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.3.0 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 

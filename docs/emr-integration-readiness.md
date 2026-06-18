@@ -1,6 +1,6 @@
 # EMR Integration Readiness
 
-This app is business-ready for local Alleva EMR-export uploads today. Live EMR API import is intentionally behind a connector boundary until the client and Alleva provide registration details, approved scopes, credentials, and attachment behavior.
+This app is business-ready for local Alleva EMR-export uploads today. Live EMR API import is intentionally behind a connector boundary until the client and Alleva provide registration details, approved scopes, credentials, endpoint mapping, pagination behavior, and attachment/signature behavior.
 
 ## Current Supported Path
 
@@ -44,6 +44,23 @@ The app is stubbed around these primary standards and vendor patterns:
 
 The FHIR base URL must be a vendor/tenant-supplied root FHIR R4 endpoint, for example an endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) are REST API documentation/definition URLs and belong in the OpenAPI/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and is not a FHIR base URL.
 
+## Alleva REST Treatment-Plan Sync Boundary
+
+Version `1.4.1` adds a separate Alleva REST treatment-plan sync path for the workflow R3 actually wants: Alleva supplies active-client and treatment-plan source data, then the IZ Clinical Notes Analyzer runs R3's deterministic timeliness/compliance logic locally.
+
+This path does not require a FHIR base URL. It uses the Alleva REST API base URL and OpenAPI definition, with startup sync disabled by default. Startup/manual sync requires explicit R3/Alleva approval plus validated endpoint mapping for:
+
+- active clients and discharged/inactive filtering
+- treatment-plan records
+- treatment-review records
+- staff/creator signature date
+- client signature date
+- current level of care and admission date
+- next review due date
+- pagination/cursor/date range behavior
+
+The current implementation can normalize approved REST payloads into `TreatmentPlanClient`, `LevelOfCareHistory`, and `TreatmentPlanRecord` rows and then immediately run the local R3 timeliness evaluator. If mapping or approval is missing, the app records a blocked sync status instead of importing live patient data.
+
 ## Current Alleva Boundary
 
 Alleva publicly describes open/custom integrations and modern FHIR/HL7 integration patterns, but detailed tenant API specifications are not published in the open support material found during this review. The code therefore supports:
@@ -51,7 +68,7 @@ Alleva publicly describes open/custom integrations and modern FHIR/HL7 integrati
 - Local Alleva export/import now.
 - Read-only SMART/FHIR `Patient` + `DocumentReference` + `Binary` + optional `Provenance` planning now.
 - Direct OpenAPI/Swagger discovery and bounded operation testing against approved non-PHI operations now.
-- Live Alleva API execution only after vendor/client registration details are supplied.
+- Gated Alleva REST treatment-plan sync only after vendor/client registration details, endpoint mapping, and approval are supplied.
 
 The app must not be configured for write-back into Alleva until a separate signed scope, data-ownership rule, and validation plan exist.
 

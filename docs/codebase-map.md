@@ -1,14 +1,14 @@
-# Codebase Map - Current Version 1.4.0
+# Codebase Map - Current Version 1.4.1
 
 Date: 2026-06-17
 
 Branch: `main`
 
-Version: `1.4.0` / build `2026.06.17.1`
+Version: `1.4.1` / build `2026.06.18.1`
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.0 app shape.
+This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.1 app shape.
 
 ## Current architecture
 
@@ -43,7 +43,7 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
 | Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, upload/API-style re-evaluation, fallback generated names, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
-| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/emr_fhir.py` | OpenAPI/Swagger discovery, operation testing, OAuth/FHIR readiness, EMR endpoint profiles, and import planning. Live import is gated. |
+| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py`, `backend/app/services/emr_fhir.py` | OpenAPI/Swagger discovery, operation testing, OAuth/FHIR readiness, EMR endpoint profiles, gated Alleva REST treatment-plan sync into the R3 timeliness engine, and FHIR import planning. Ungated live import is disabled. |
 | Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF/FHIR-style payloads, fallback JSONL log. |
 | Runtime/version | `backend/app/services/runtime_checks.py`, `backend/app/services/version.py` | Readiness checks and `/api/version` payload from version files plus git values. |
 
@@ -76,7 +76,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.0 local desktop startup. |
+| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.1 local desktop startup. |
 | `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
 | `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
 | `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
@@ -180,13 +180,13 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Version 1.4.0 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
+`scripts/build-windows-installer.ps1` creates a Version 1.4.1 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Browser/full-stack smoke is source-checkout validated only | Version 1.4.0 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.4.1 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, saved-key encryption, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |

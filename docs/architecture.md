@@ -1,14 +1,14 @@
 # Architecture Overview
 
-Date: 2026-06-17
+Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1`.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.1` / build `2026.06.18.1`.
 
 ## Current architecture
 
 IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, encrypted saved API secrets, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
 
-The active Version 1.4.0 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
+The active Version 1.4.1 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
 
 The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
 
@@ -67,7 +67,8 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 - Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with encrypted client secrets and an active/default profile used by readiness checks.
 - The backend exposes a FHIR/OAuth discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
 - The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details. Alleva Swagger/OpenAPI URLs are not treated as FHIR base URLs.
-- Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval.
+- The gated Alleva REST treatment-plan sync path uses the Alleva REST API base URL/OpenAPI mapping, not the FHIR base URL, to normalize approved active-client, treatment-plan, and treatment-review payloads into the local R3 timeliness engine.
+- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
 
 ## Database connectivity model
 
@@ -76,7 +77,7 @@ Configuration is explicit and deterministic:
 - `DATABASE_BACKEND=sqlite` is the normal Windows local-desktop setting.
 - `DATABASE_URL` defaults to a SQLite file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` for the local desktop path.
 - Relative SQLite, upload, log, and report paths are resolved through the configured local app-data directory.
-- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.0 Windows product path does not require a PostgreSQL container.
+- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.1 Windows product path does not require a PostgreSQL container.
 
 ## Health model
 

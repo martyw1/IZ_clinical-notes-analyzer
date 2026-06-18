@@ -165,7 +165,9 @@ def _strip(value: str | None) -> str:
 
 
 def _default_openapi_url(settings_row: AppSetting) -> str:
-    base_url = _strip(settings_row.emr_fhir_base_url).rstrip('/')
+    if _strip(settings_row.alleva_openapi_url):
+        return _strip(settings_row.alleva_openapi_url)
+    base_url = _strip(settings_row.alleva_api_base_url).rstrip('/')
     if not base_url:
         return ''
     if base_url.endswith('/swagger/v1/swagger.json') or base_url.endswith('/openapi.json') or base_url.endswith('/swagger.json'):
@@ -176,7 +178,7 @@ def _default_openapi_url(settings_row: AppSetting) -> str:
 def _configuration_out(settings_row: AppSetting) -> ApiConfigurationOut:
     return ApiConfigurationOut(
         vendor_name=settings_row.emr_vendor_name or 'Alleva API',
-        api_base_url=settings_row.emr_fhir_base_url or '',
+        api_base_url=settings_row.alleva_api_base_url or '',
         swagger_ui_url=DEFAULT_ALLEVA_SWAGGER_UI_URL,
         openapi_url=_default_openapi_url(settings_row),
         api_key_configured=bool(settings_row.emr_smart_client_secret),
@@ -328,7 +330,9 @@ def update_api_configuration(
     if payload.vendor_name is not None:
         settings_row.emr_vendor_name = _strip(payload.vendor_name) or 'Alleva API'
     if payload.api_base_url is not None:
-        settings_row.emr_fhir_base_url = _strip(payload.api_base_url)
+        settings_row.alleva_api_base_url = _strip(payload.api_base_url) or 'https://api.allevasoft.com'
+    if payload.openapi_url is not None:
+        settings_row.alleva_openapi_url = _strip(payload.openapi_url) or 'https://api.allevasoft.com/swagger/v1/swagger.json'
     if payload.timeout_seconds is not None:
         settings_row.emr_api_timeout_seconds = payload.timeout_seconds
     if payload.api_enabled is not None:
@@ -371,7 +375,7 @@ def update_api_configuration(
             'api_key_changed': api_key_changed,
             'api_key_cleared': api_key_cleared,
             'vendor_name': settings_row.emr_vendor_name,
-            'api_base_url_configured': bool(settings_row.emr_fhir_base_url),
+            'api_base_url_configured': bool(settings_row.alleva_api_base_url),
             'client_id_configured': bool(settings_row.emr_smart_client_id),
             'token_url_configured': bool(settings_row.emr_smart_token_url),
             'token_auth_style': getattr(settings_row, 'emr_smart_token_auth_style', 'body'),
@@ -391,7 +395,7 @@ def pull_api_configuration_definitions(
     db: Session = Depends(get_db),
 ):
     settings_row = get_or_create_app_settings(db)
-    api_base_url = _strip(payload.api_base_url) or settings_row.emr_fhir_base_url
+    api_base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url
     swagger_ui_url = _strip(payload.swagger_ui_url) or DEFAULT_ALLEVA_SWAGGER_UI_URL
     openapi_url = _strip(payload.openapi_url) or _default_openapi_url(settings_row)
     timeout_seconds = payload.timeout_seconds or settings_row.emr_api_timeout_seconds
@@ -512,7 +516,7 @@ def test_api_configuration_operation(
     auth_request_payload = {
         'method': payload.method.upper(),
         'path': payload.path,
-        'api_base_url': _strip(payload.api_base_url) or settings_row.emr_fhir_base_url,
+        'api_base_url': _strip(payload.api_base_url) or settings_row.alleva_api_base_url,
         'selected_definition_url': _strip(payload.selected_definition_url),
         'api_key': auth_context['api_key'],
         'api_key_source': auth_context['api_key_source'],
@@ -556,7 +560,7 @@ def test_api_configuration_operation(
     result = execute_openapi_operation(
         definition=payload.definition,
         selected_definition_url=_strip(payload.selected_definition_url),
-        api_base_url=_strip(payload.api_base_url) or settings_row.emr_fhir_base_url,
+        api_base_url=_strip(payload.api_base_url) or settings_row.alleva_api_base_url,
         method=payload.method,
         path=payload.path,
         parameters=payload.parameters,

@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current patch version: `1.4.0` / build `2026.06.17.1`.
+Current patch version: `1.4.1` / build `2026.06.18.1`.
 
-Version 1.4.0 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, and exact App settings validation messages.
+Version 1.4.1 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, exact App settings validation messages, and gated Alleva REST treatment-plan sync controls.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.0`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Version 1.4.0 local recovery path is:
+The Version 1.4.1 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1

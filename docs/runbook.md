@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-17
+Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.1` / build `2026.06.18.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -34,7 +34,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1` lo
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Version 1.4.0 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Version 1.4.1 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
@@ -50,6 +50,15 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.0` / build `2026.06.17.1` lo
 - FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, and `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path, not a FHIR base URL.
 - Stored EMR endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
 - Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
+
+## Alleva REST treatment-plan sync
+
+- `Test-AllevaApi.ps1` works without a FHIR root because it uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
+- App startup sync uses the same REST concept, not FHIR discovery. It is disabled by default.
+- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
+- Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
+- When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
+- If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.
 
 ## Standalone API diagnostics
 

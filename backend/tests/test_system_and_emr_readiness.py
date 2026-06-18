@@ -158,6 +158,62 @@ def test_emr_enablement_requires_minimum_alleva_smart_contract(app_with_sqlite):
             db.close()
 
 
+def test_alleva_rest_treatment_plan_sync_does_not_require_fhir_base_url(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        response = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_api_base_url': 'https://api.allevasoft.com',
+                'alleva_openapi_url': 'https://api.allevasoft.com/swagger/v1/swagger.json',
+                'alleva_api_version': '1.0',
+                'emr_smart_token_url': 'https://authorization.allevasoft.com/connect/token',
+                'emr_smart_client_id': 'alleva-rest-client',
+                'emr_smart_client_secret': 'alleva-rest-secret',
+                'alleva_treatment_plan_sync_enabled': True,
+                'alleva_treatment_plan_sync_on_startup': True,
+                'alleva_treatment_plan_sync_approved': True,
+                'alleva_treatment_plan_endpoint_mapping_validated': True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload['emr_fhir_base_url'] == ''
+        assert payload['alleva_treatment_plan_sync_enabled'] is True
+        assert payload['alleva_treatment_plan_sync_on_startup'] is True
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
+        assert settings_row.emr_fhir_base_url == ''
+        assert settings_row.alleva_api_base_url == 'https://api.allevasoft.com'
+        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+    finally:
+        db.close()
+
+
+def test_alleva_rest_sync_enablement_lists_missing_approval_and_mapping(app_with_sqlite):
+    app, _session_local = app_with_sqlite
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        response = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_treatment_plan_sync_enabled': True,
+                'alleva_treatment_plan_sync_on_startup': True,
+            },
+        )
+        assert response.status_code == 400
+        detail = response.json()['detail']
+        assert 'R3/Alleva live treatment-plan sync approval' in detail
+        assert 'validated Alleva treatment-plan endpoint mapping' in detail
+        assert 'Alleva API client secret' in detail
+        assert 'FHIR base URL' not in detail
+
+
 def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sqlite):
     app, session_local = app_with_sqlite
 

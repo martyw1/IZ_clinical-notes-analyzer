@@ -3,7 +3,24 @@
 ## Unreleased
 
 ### Changed
-- Updated documentation and legacy startup references so the repository reflects the current Version 1.3.0 Windows local desktop app state.
+- No unreleased changes.
+
+## 1.4.1 - 2026-06-18
+
+### Added
+- Added separate Alleva REST API base/OpenAPI/startup-sync settings so `Test-AllevaApi.ps1` style REST connectivity no longer depends on the FHIR base URL field.
+- Added a gated Alleva REST treatment-plan sync service that can pull active-client, treatment-plan, and treatment-review REST payloads into the local R3 timeliness engine after live-sync approval and endpoint mapping validation.
+- Added startup-sync and manual-sync controls in App settings, including exact missing-field validation and last sync status/message display.
+- Added audit events for Alleva REST sync blocked/skipped/failure/completion and per-client R3 compliance analysis results.
+
+### Changed
+- Promoted version metadata to `1.4.1` / build `2026.06.18.1`.
+- Updated the API connectivity harness to use the Alleva REST API base URL and OpenAPI URL fields instead of reusing the FHIR base URL.
+- Clarified docs and Help text that Alleva supplies source data while R3 runs compliance checks locally.
+
+### Verified
+- Focused backend tests passed with `18 passed`.
+- Frontend Vitest passed with `15 passed`.
 
 ## 1.4.0 - 2026-06-17
 

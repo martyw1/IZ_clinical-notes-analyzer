@@ -320,6 +320,19 @@ type AppSettings = {
   emr_last_check_message: string
   emr_last_successful_check_at: string | null
   emr_last_failure_at: string | null
+  alleva_api_base_url: string
+  alleva_openapi_url: string
+  alleva_api_version: string
+  alleva_treatment_plan_sync_enabled: boolean
+  alleva_treatment_plan_sync_on_startup: boolean
+  alleva_treatment_plan_sync_approved: boolean
+  alleva_treatment_plan_endpoint_mapping_validated: boolean
+  alleva_treatment_plan_sync_limit: number
+  alleva_treatment_plan_sync_last_at: string | null
+  alleva_treatment_plan_sync_last_status: string
+  alleva_treatment_plan_sync_last_message: string
+  alleva_treatment_plan_sync_last_success_at: string | null
+  alleva_treatment_plan_sync_last_failure_at: string | null
   facility_timezone: string
   effective_timezone: string
   effective_timezone_label: string
@@ -358,9 +371,30 @@ type AppSettingsForm = {
   emr_api_timeout_seconds: number
   emr_periodic_check_enabled: boolean
   emr_periodic_check_interval_minutes: number
+  alleva_api_base_url: string
+  alleva_openapi_url: string
+  alleva_api_version: string
+  alleva_treatment_plan_sync_enabled: boolean
+  alleva_treatment_plan_sync_on_startup: boolean
+  alleva_treatment_plan_sync_approved: boolean
+  alleva_treatment_plan_endpoint_mapping_validated: boolean
+  alleva_treatment_plan_sync_limit: number
   facility_timezone: string
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
+}
+
+type AllevaTreatmentPlanSyncResponse = {
+  sync_result: {
+    status: string
+    message: string
+    upserted_client_count?: number
+    active_client_count?: number
+    treatment_plan_count?: number
+    treatment_review_count?: number
+    missing_fields?: string[]
+  }
+  settings: AppSettings
 }
 
 type WorkflowDefinitionVersionStatus = 'draft' | 'published' | 'archived'
@@ -851,7 +885,8 @@ const HELP_SECTIONS = [
     items: [
       'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
       'FHIR base URL means the root FHIR R4 endpoint supplied by the EMR vendor, for example an Alleva tenant FHIR endpoint ending in /fhir/R4. Alleva Swagger UI and swagger.json URLs are OpenAPI documentation URLs, not FHIR base URLs.',
-      'OAuth/FHIR client ID, secret, token URL, and scopes are stored for readiness testing; secrets are encrypted and never returned to the browser.',
+      'Alleva REST treatment-plan sync uses the Alleva REST API base URL and OpenAPI documentation URL, not the FHIR base URL. R3 runs compliance checks locally after the app imports mapped treatment-plan data.',
+      'OAuth/API client ID, secret, token URL, and scopes are stored for readiness testing and approved REST sync; secrets are encrypted and never returned to the browser.',
       'Periodic API checks require the FHIR/API base URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
       'Stored EMR endpoint profiles let admins save future EMR/FHIR endpoint options and activate the one used by current readiness/API tests.',
       'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
@@ -864,6 +899,7 @@ const HELP_SECTIONS = [
       'Last valid review/update date comes from a treatment-plan review or LOC-update record with usable source evidence and a staff/therapist signature date.',
       'Current LOC must map to configured LOC aliases. PHP maps to a 30-day update clock; other configured treatment levels map to 60 days unless the rules config is changed.',
       'FHIR base URL is only the root FHIR endpoint. Use the OpenAPI URL field or API harness for https://api.allevasoft.com/swagger/index.html and https://api.allevasoft.com/swagger/v1/swagger.json.',
+      'Alleva REST API base URL is the source for startup treatment-plan sync. Leave startup sync off until R3 and Alleva approve live sync and validate active-client, treatment-plan, treatment-review, pagination, and field mapping.',
       'OpenAPI URL is the Swagger/OpenAPI JSON definition used by the API test harness to discover operations and required fields.',
       'Client secret and API keys are write-only fields. A configured flag means a secret is stored; the secret itself is never returned to the browser.',
     ],
@@ -993,6 +1029,14 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
     emr_periodic_check_enabled: settings.emr_periodic_check_enabled,
     emr_periodic_check_interval_minutes: settings.emr_periodic_check_interval_minutes || 1440,
+    alleva_api_base_url: settings.alleva_api_base_url || 'https://api.allevasoft.com',
+    alleva_openapi_url: settings.alleva_openapi_url || 'https://api.allevasoft.com/swagger/v1/swagger.json',
+    alleva_api_version: settings.alleva_api_version || '1.0',
+    alleva_treatment_plan_sync_enabled: settings.alleva_treatment_plan_sync_enabled,
+    alleva_treatment_plan_sync_on_startup: settings.alleva_treatment_plan_sync_on_startup,
+    alleva_treatment_plan_sync_approved: settings.alleva_treatment_plan_sync_approved,
+    alleva_treatment_plan_endpoint_mapping_validated: settings.alleva_treatment_plan_endpoint_mapping_validated,
+    alleva_treatment_plan_sync_limit: settings.alleva_treatment_plan_sync_limit || 250,
     facility_timezone: settings.facility_timezone || 'local_machine',
     treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days ?? 7,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
@@ -1902,6 +1946,23 @@ export function App() {
       setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to run daily review-source check')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function runAllevaTreatmentPlanSyncNow() {
+    setIsBusy(true)
+    setError('')
+    setStatus('Running Alleva REST treatment-plan sync...')
+    try {
+      const payload = await apiRequest<AllevaTreatmentPlanSyncResponse>('/alleva/treatment-plan-sync/run', { method: 'POST' })
+      setAppSettings(payload.settings)
+      setSettingsForm(createSettingsForm(payload.settings))
+      await loadTimelinessDashboard()
+      setStatus(payload.sync_result.message)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync')
     } finally {
       setIsBusy(false)
     }
@@ -2983,6 +3044,20 @@ export function App() {
       ].filter(Boolean)
       if (missingFields.length) {
         setError(`Missing periodic API check setting(s): ${missingFields.join(', ')}.`)
+        return
+      }
+    }
+    if (settingsForm.alleva_treatment_plan_sync_enabled || settingsForm.alleva_treatment_plan_sync_on_startup) {
+      const missingFields = [
+        !settingsForm.alleva_api_base_url.trim() ? 'Alleva REST API base URL' : '',
+        !settingsForm.emr_smart_token_url.trim() ? 'Alleva OAuth token URL' : '',
+        !settingsForm.emr_smart_client_id.trim() ? 'Alleva API client ID' : '',
+        !hasEmrSecret ? 'Alleva API client secret' : '',
+        !settingsForm.alleva_treatment_plan_sync_approved ? 'R3/Alleva live treatment-plan sync approval' : '',
+        !settingsForm.alleva_treatment_plan_endpoint_mapping_validated ? 'validated Alleva treatment-plan endpoint mapping' : '',
+      ].filter(Boolean)
+      if (missingFields.length) {
+        setError(`Missing Alleva treatment-plan sync setting(s): ${missingFields.join(', ')}.`)
         return
       }
     }
@@ -5672,6 +5747,24 @@ export function App() {
                         : 'Not run'}
                     </dd>
                   </div>
+                  <div>
+                    <dt>Alleva REST sync</dt>
+                    <dd>
+                      {appSettings?.alleva_treatment_plan_sync_enabled
+                        ? appSettings.alleva_treatment_plan_sync_on_startup
+                          ? 'On at startup'
+                          : 'Manual only'
+                        : 'Off'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Last Alleva sync</dt>
+                    <dd>
+                      {appSettings?.alleva_treatment_plan_sync_last_at
+                        ? `${appSettings.alleva_treatment_plan_sync_last_status || 'checked'} at ${formatDateTime(appSettings.alleva_treatment_plan_sync_last_at)}`
+                        : 'Not run'}
+                    </dd>
+                  </div>
 	                  <div>
 	                    <dt>Runtime readiness</dt>
 	                    <dd>{readiness ? `${readiness.status} (${readiness.failed} failed, ${readiness.warnings} warnings)` : 'Not loaded'}</dd>
@@ -6046,6 +6139,112 @@ export function App() {
                         }
                       />
                     </label>
+                    <section className='panel-subsection full-width'>
+                      <h3>Alleva REST treatment-plan sync</h3>
+                      <p className='muted-text field-note'>
+                        This path uses Alleva REST endpoints such as /clients, /treatment-plans, and /treatment-reviews. It does not need a FHIR base URL. R3 compliance checks run inside this app after the mapped data is imported.
+                      </p>
+                      <div className='form-grid'>
+                        <label>
+                          Alleva REST API base URL
+                          <input
+                            value={settingsForm.alleva_api_base_url}
+                            placeholder='https://api.allevasoft.com'
+                            onChange={(event) => setSettingsForm((current) => (current ? { ...current, alleva_api_base_url: event.target.value } : current))}
+                          />
+                        </label>
+                        <label>
+                          Alleva OpenAPI URL
+                          <input
+                            value={settingsForm.alleva_openapi_url}
+                            placeholder='https://api.allevasoft.com/swagger/v1/swagger.json'
+                            onChange={(event) => setSettingsForm((current) => (current ? { ...current, alleva_openapi_url: event.target.value } : current))}
+                          />
+                        </label>
+                        <label>
+                          Alleva API version
+                          <input
+                            value={settingsForm.alleva_api_version}
+                            onChange={(event) => setSettingsForm((current) => (current ? { ...current, alleva_api_version: event.target.value } : current))}
+                          />
+                        </label>
+                        <label>
+                          Max records per sync endpoint
+                          <input
+                            type='number'
+                            min={1}
+                            max={5000}
+                            value={settingsForm.alleva_treatment_plan_sync_limit}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_sync_limit: Number(event.target.value || 250) } : current
+                              )
+                            }
+                          />
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_sync_enabled}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_sync_enabled: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Enable Alleva REST treatment-plan sync
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_sync_on_startup}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_sync_on_startup: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Run sync every time the app starts
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_sync_approved}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_sync_approved: event.target.checked } : current
+                              )
+                            }
+                          />
+                          R3 and Alleva have approved live treatment-plan sync
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_endpoint_mapping_validated}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_endpoint_mapping_validated: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Active-client, treatment-plan, review, pagination, and status fields are validated
+                        </label>
+                      </div>
+                      <div className='form-actions'>
+                        <button
+                          type='button'
+                          className='ghost-button'
+                          onClick={() => void runAllevaTreatmentPlanSyncNow()}
+                          disabled={isBusy || !appSettings?.alleva_treatment_plan_sync_enabled}
+                        >
+                          Run treatment-plan sync now
+                        </button>
+                      </div>
+                      {appSettings?.alleva_treatment_plan_sync_last_message ? (
+                        <p className='muted-text'>Last Alleva treatment-plan sync: {appSettings.alleva_treatment_plan_sync_last_message}</p>
+                      ) : null}
+                    </section>
                     <section className='panel-subsection full-width'>
                       <h3>Alleva import profile</h3>
                       <div className='fact-list'>

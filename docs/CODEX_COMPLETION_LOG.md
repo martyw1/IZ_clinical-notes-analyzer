@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-18 v1.4.1 Alleva REST treatment-plan sync readiness
+- Updated app/version metadata to `1.4.1` / build `2026.06.18.1`.
+- Separated Alleva REST API base/OpenAPI settings from FHIR readiness so REST diagnostics and sync do not require a FHIR root.
+- Added gated startup/manual Alleva REST treatment-plan sync into the R3 timeliness engine with approval and endpoint-mapping validation requirements.
+- Added exact App settings validation, last sync status display, startup sync hook, manual sync endpoint, and audit events for sync outcomes and per-client R3 compliance analysis.
+- Updated API harness defaults to use the Alleva REST base URL and OpenAPI URL.
+
 ## 2026-06-17 v1.4.0 treatment-plan date clock and workflow export hardening
 - Updated app/version metadata to `1.4.0` / build `2026.06.17.1` and checklist/rules metadata to `1.2.0`.
 - Added local current-date clock behavior for Treatment Plan Timeliness: PHP uses 30 calendar days, other configured LOC values use 60 calendar days, and the LOC-change preset defaults to 7 calendar days while remaining visibly unvalidated.

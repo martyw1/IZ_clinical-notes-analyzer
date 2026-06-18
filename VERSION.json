@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.4.0",
-  "build": "2026.06.17.1",
+  "version": "1.4.1",
+  "build": "2026.06.18.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-06-17",
+  "release_date": "2026-06-18",
   "git_branch": "main",
-  "version_name": "Version 1.4.0 treatment-plan date clock, workflow exports, and Alleva readiness guidance",
-  "description": "Adds the local date-clock treatment-plan evaluator with PHP 30-day, non-PHP 60-day, and configurable unvalidated LOC-change presets; logs each timeliness analysis with workflow version context; includes workflow-step statuses in CSV/JSON exports; records source evidence locations; supports draft workflow editing; improves API settings validation and Alleva OpenAPI/FHIR guidance; and updates safe fallback names for missing patient names."
+  "version_name": "Version 1.4.1 Alleva REST treatment-plan sync readiness",
+  "description": "Separates Alleva REST API sync settings from FHIR readiness; adds a gated startup/manual Alleva treatment-plan sync path that imports active-client, treatment-plan, and treatment-review REST payloads into the R3 timeliness engine after approval and endpoint mapping validation; keeps compliance checking local to R3; and updates the API harness to use the REST API base URL without requiring a FHIR root."
 }

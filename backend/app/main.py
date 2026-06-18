@@ -21,6 +21,7 @@ from app.db.bootstrap import ensure_schema_compatibility
 from app.db.session import SessionLocal, engine
 from app.models.models import Role, User
 from app.services.audit import bind_request_context, log_event, log_request_completed, log_unhandled_exception, reset_audit_context, system_audit_context
+from app.services.alleva_treatment_plan_sync import run_alleva_treatment_plan_sync
 from app.services.api_monitor import periodic_check_due, run_periodic_api_check
 from app.services.app_settings import get_or_create_app_settings
 from app.services.runtime_checks import assert_startup_ready, readiness_payload
@@ -105,6 +106,8 @@ def initialize_database() -> None:
                     details={'workflow_key': seeded_workflow.workflow_key, 'version': 1},
                     message='Default Treatment Plan Timeliness workflow profile seeded during startup.',
                 )
+            settings_row = get_or_create_app_settings(db)
+            run_alleva_treatment_plan_sync(db, settings_row, startup=True)
         finally:
             db.close()
 

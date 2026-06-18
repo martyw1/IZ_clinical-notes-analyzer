@@ -53,7 +53,7 @@ def _api_configuration_page() -> HTMLResponse:
         <h2>2. API settings</h2>
         <div class="grid">
           <label>Vendor name <input id="vendorName" value="Alleva API" /></label>
-          <label>API or FHIR base URL <input id="apiBaseUrl" placeholder="https://api.allevasoft.com or https://your-alleva-tenant.example.com/fhir/R4" /></label>
+          <label>REST API base URL <input id="apiBaseUrl" placeholder="https://api.allevasoft.com" /></label>
         </div>
         <label>Swagger UI URL <input id="swaggerUiUrl" value="https://api.allevasoft.com/swagger/index.html" /></label>
         <label>OpenAPI/Swagger JSON URL <input id="openApiUrl" placeholder="https://api.allevasoft.com/swagger/v1/swagger.json" /></label>
@@ -87,7 +87,7 @@ def _api_configuration_page() -> HTMLResponse:
         <button onclick="loadConfig()" class="secondary">Load saved config</button>
         <button onclick="saveConfig()">Save config and encrypted secret</button>
         <button onclick="clearSavedKey()" class="danger">Clear saved secret</button>
-        <p class="hint">For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
+        <p class="hint">For Alleva REST tests, use the REST API base URL, usually https://api.allevasoft.com, and the Swagger/OpenAPI JSON URL. FHIR discovery uses a separate vendor-supplied FHIR R4 root if one is ever provided. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
       </section>
 
       <section>

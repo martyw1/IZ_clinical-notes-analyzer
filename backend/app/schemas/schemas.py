@@ -102,6 +102,14 @@ class AppSettingsUpdate(BaseModel):
     emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
     emr_periodic_check_enabled: bool | None = None
     emr_periodic_check_interval_minutes: int | None = Field(default=None, ge=5, le=10080)
+    alleva_api_base_url: str | None = Field(default=None, max_length=255)
+    alleva_openapi_url: str | None = Field(default=None, max_length=500)
+    alleva_api_version: str | None = Field(default=None, max_length=20)
+    alleva_treatment_plan_sync_enabled: bool | None = None
+    alleva_treatment_plan_sync_on_startup: bool | None = None
+    alleva_treatment_plan_sync_approved: bool | None = None
+    alleva_treatment_plan_endpoint_mapping_validated: bool | None = None
+    alleva_treatment_plan_sync_limit: int | None = Field(default=None, ge=1, le=5000)
     facility_timezone: str | None = Field(default=None, max_length=80)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
     treatment_plan_loc_change_window_validated: bool | None = None
@@ -138,6 +146,19 @@ class AppSettingsOut(BaseModel):
     emr_last_check_message: str
     emr_last_successful_check_at: datetime | None = None
     emr_last_failure_at: datetime | None = None
+    alleva_api_base_url: str
+    alleva_openapi_url: str
+    alleva_api_version: str
+    alleva_treatment_plan_sync_enabled: bool
+    alleva_treatment_plan_sync_on_startup: bool
+    alleva_treatment_plan_sync_approved: bool
+    alleva_treatment_plan_endpoint_mapping_validated: bool
+    alleva_treatment_plan_sync_limit: int
+    alleva_treatment_plan_sync_last_at: datetime | None = None
+    alleva_treatment_plan_sync_last_status: str
+    alleva_treatment_plan_sync_last_message: str
+    alleva_treatment_plan_sync_last_success_at: datetime | None = None
+    alleva_treatment_plan_sync_last_failure_at: datetime | None = None
     facility_timezone: str
     effective_timezone: str
     effective_timezone_label: str

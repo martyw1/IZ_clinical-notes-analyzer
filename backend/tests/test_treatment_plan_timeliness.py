@@ -1,11 +1,14 @@
 import json
 import re
+from datetime import date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.models import AppSetting, AuditLog, Role, TreatmentPlanClient, User
+from app.services.alleva_treatment_plan_sync import sync_alleva_rest_payloads
+from app.services.timeliness import evaluate_client
 from app.services.secure_storage import text_secret_is_encrypted
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
@@ -184,6 +187,72 @@ def test_api_style_treatment_plan_repull_updates_record_and_reevaluates(app_with
         assert second_item['next_due_date'] == '2026-06-19'
         assert second_item['status'] == 'Compliant'
         assert second_item['rule_used'] == 'TP-REVIEW-30'
+
+
+def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
+        summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=[
+                {
+                    'id': 101,
+                    'clientId': 1001,
+                    'name': {'clientFullName': 'Synthetic Client'},
+                    'levelOfCare': 'PHP',
+                    'admissionDateTime': '2026-02-26T09:00:00Z',
+                    'facilityName': 'Synthetic Facility',
+                    'primaryClinicians': 'Synthetic Clinician',
+                }
+            ],
+            treatment_plans_payload=[
+                {
+                    'id': 501,
+                    'client': {'id': 101},
+                    'isInitialTP': True,
+                    'isComplete': True,
+                    'startDate': '2026-02-26T10:00:00Z',
+                    'staffSignatureDate': '2026-02-26',
+                    'clientSignature': {'signatureDateTime': '2026-02-26T11:00:00Z'},
+                },
+                {
+                    'id': 502,
+                    'client': {'id': 101},
+                    'isInitialTP': False,
+                    'isComplete': True,
+                    'startDate': '2026-03-03T10:00:00Z',
+                    'staffSignatureDate': '2026-03-03',
+                    'clientSignature': {'signatureDateTime': '2026-03-03T11:00:00Z'},
+                }
+            ],
+            treatment_reviews_payload=[
+                {
+                    'id': 701,
+                    'clientName': 'Synthetic Client',
+                    'createdDated': '2026-03-20T12:00:00Z',
+                    'creatorSignatureDate': '2026-03-20',
+                    'clientSignatureDate': '2026-03-20',
+                    'nextReviewDue': '2026-04-19',
+                }
+            ],
+        )
+        db.commit()
+
+        assert summary['upserted_client_count'] == 1
+        assert summary['unmapped_treatment_review_count'] == 0
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == '1001')).scalar_one()
+        evaluation = evaluate_client(stored_client, settings_row, evaluation_date=date(2026, 4, 1))
+        assert evaluation.status == 'Compliant'
+        assert evaluation.next_due_date == '2026-04-19'
+        assert evaluation.rule_used == 'TP-REVIEW-30'
+        assert any(plan.source_section == 'Alleva REST treatment-reviews' for plan in stored_client.treatment_plans)
+    finally:
+        db.close()
 
 
 def test_timeliness_missing_data_and_manual_override_are_audited(app_with_sqlite):

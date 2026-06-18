@@ -62,6 +62,7 @@ from app.schemas.schemas import (
     UiEventInput,
 )
 from app.services.audit import log_event
+from app.services.alleva_treatment_plan_sync import run_alleva_treatment_plan_sync
 from app.services.api_monitor import run_periodic_api_check
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
 from app.services.emr_fhir import build_document_reference_import_plan, discover_smart_configuration, emr_connection_profile, normalize_fhir_base_url
@@ -130,6 +131,26 @@ def _validate_periodic_api_check(settings_row: AppSetting) -> None:
         missing_fields.append('OAuth/FHIR client secret')
     if missing_fields:
         raise HTTPException(status_code=400, detail=f'Missing required periodic API check field(s): {", ".join(missing_fields)}')
+
+
+def _validate_alleva_treatment_plan_sync(settings_row: AppSetting) -> None:
+    if not (settings_row.alleva_treatment_plan_sync_enabled or settings_row.alleva_treatment_plan_sync_on_startup):
+        return
+    missing_fields = []
+    if not settings_row.alleva_api_base_url.strip():
+        missing_fields.append('Alleva REST API base URL')
+    if not settings_row.emr_smart_token_url.strip():
+        missing_fields.append('Alleva OAuth token URL')
+    if not settings_row.emr_smart_client_id.strip():
+        missing_fields.append('Alleva API client ID')
+    if not settings_row.emr_smart_client_secret:
+        missing_fields.append('Alleva API client secret')
+    if not settings_row.alleva_treatment_plan_sync_approved:
+        missing_fields.append('R3/Alleva live treatment-plan sync approval')
+    if not settings_row.alleva_treatment_plan_endpoint_mapping_validated:
+        missing_fields.append('validated Alleva treatment-plan endpoint mapping')
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f'Missing required Alleva treatment-plan sync setting(s): {", ".join(missing_fields)}')
 
 
 def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowState) -> bool:
@@ -333,6 +354,19 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'emr_last_check_message': settings_row.emr_last_check_message,
         'emr_last_successful_check_at': settings_row.emr_last_successful_check_at,
         'emr_last_failure_at': settings_row.emr_last_failure_at,
+        'alleva_api_base_url': settings_row.alleva_api_base_url,
+        'alleva_openapi_url': settings_row.alleva_openapi_url,
+        'alleva_api_version': settings_row.alleva_api_version,
+        'alleva_treatment_plan_sync_enabled': settings_row.alleva_treatment_plan_sync_enabled,
+        'alleva_treatment_plan_sync_on_startup': settings_row.alleva_treatment_plan_sync_on_startup,
+        'alleva_treatment_plan_sync_approved': settings_row.alleva_treatment_plan_sync_approved,
+        'alleva_treatment_plan_endpoint_mapping_validated': settings_row.alleva_treatment_plan_endpoint_mapping_validated,
+        'alleva_treatment_plan_sync_limit': settings_row.alleva_treatment_plan_sync_limit,
+        'alleva_treatment_plan_sync_last_at': settings_row.alleva_treatment_plan_sync_last_at,
+        'alleva_treatment_plan_sync_last_status': settings_row.alleva_treatment_plan_sync_last_status,
+        'alleva_treatment_plan_sync_last_message': settings_row.alleva_treatment_plan_sync_last_message,
+        'alleva_treatment_plan_sync_last_success_at': settings_row.alleva_treatment_plan_sync_last_success_at,
+        'alleva_treatment_plan_sync_last_failure_at': settings_row.alleva_treatment_plan_sync_last_failure_at,
         'facility_timezone': settings_row.facility_timezone,
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
@@ -745,6 +779,22 @@ def update_app_settings(
         settings_row.emr_periodic_check_enabled = payload.emr_periodic_check_enabled
     if payload.emr_periodic_check_interval_minutes is not None:
         settings_row.emr_periodic_check_interval_minutes = payload.emr_periodic_check_interval_minutes
+    if payload.alleva_api_base_url is not None:
+        settings_row.alleva_api_base_url = payload.alleva_api_base_url.strip() or 'https://api.allevasoft.com'
+    if payload.alleva_openapi_url is not None:
+        settings_row.alleva_openapi_url = payload.alleva_openapi_url.strip() or 'https://api.allevasoft.com/swagger/v1/swagger.json'
+    if payload.alleva_api_version is not None:
+        settings_row.alleva_api_version = payload.alleva_api_version.strip() or '1.0'
+    if payload.alleva_treatment_plan_sync_enabled is not None:
+        settings_row.alleva_treatment_plan_sync_enabled = payload.alleva_treatment_plan_sync_enabled
+    if payload.alleva_treatment_plan_sync_on_startup is not None:
+        settings_row.alleva_treatment_plan_sync_on_startup = payload.alleva_treatment_plan_sync_on_startup
+    if payload.alleva_treatment_plan_sync_approved is not None:
+        settings_row.alleva_treatment_plan_sync_approved = payload.alleva_treatment_plan_sync_approved
+    if payload.alleva_treatment_plan_endpoint_mapping_validated is not None:
+        settings_row.alleva_treatment_plan_endpoint_mapping_validated = payload.alleva_treatment_plan_endpoint_mapping_validated
+    if payload.alleva_treatment_plan_sync_limit is not None:
+        settings_row.alleva_treatment_plan_sync_limit = payload.alleva_treatment_plan_sync_limit
     if payload.facility_timezone is not None:
         try:
             settings_row.facility_timezone = normalize_timezone_name(payload.facility_timezone)
@@ -756,6 +806,7 @@ def update_app_settings(
         settings_row.treatment_plan_loc_change_window_validated = payload.treatment_plan_loc_change_window_validated
     _validate_emr_enablement(settings_row)
     _validate_periodic_api_check(settings_row)
+    _validate_alleva_treatment_plan_sync(settings_row)
 
     touch_app_settings(settings_row, actor=user)
     db.commit()
@@ -1169,6 +1220,27 @@ def run_review_source_daily_check(
         message='Daily review-source check run in safe readiness/mock mode.',
     )
     return payload
+
+
+@router.post('/alleva/treatment-plan-sync/run')
+def run_alleva_treatment_plan_sync_now(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    settings_row = get_or_create_app_settings(db)
+    result = run_alleva_treatment_plan_sync(db, settings_row, actor=user, startup=False)
+    db.refresh(settings_row)
+    log_event(
+        db,
+        request,
+        'alleva.treatment_plan_sync.manual_run',
+        actor=user,
+        event_category='integration',
+        target_entity='alleva_treatment_plan_sync',
+        target_entity_type='integration_sync',
+        details={'status': result.get('status'), 'upserted_client_count': result.get('upserted_client_count', 0)},
+        outcome_status='success' if result.get('status') in {'ok', 'skipped'} else 'failure',
+        severity='info' if result.get('status') in {'ok', 'skipped'} else 'warning',
+        message='Manual Alleva REST treatment-plan sync requested.',
+    )
+    return {'sync_result': result, 'settings': app_settings_public_payload(settings_row)}
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
