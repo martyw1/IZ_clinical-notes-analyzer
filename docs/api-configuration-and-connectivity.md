@@ -2,7 +2,7 @@
 
 Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.1` / build `2026.06.18.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` local Windows desktop runtime.
 
 ## Where to open it
 
@@ -50,7 +50,7 @@ For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or 
 
 ## Alleva REST treatment-plan sync
 
-Version `1.4.1` adds a separate Alleva REST treatment-plan sync configuration. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Version `1.4.2` adds a separate Alleva REST treatment-plan sync configuration. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path does not require a FHIR root. It is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
@@ -137,7 +137,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.2 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 

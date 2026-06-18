@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current patch version: `1.4.1` / build `2026.06.18.1`.
+Current patch version: `1.4.2` / build `2026.06.18.2`.
 
-Version 1.4.1 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, exact App settings validation messages, and gated Alleva REST treatment-plan sync controls.
+Version 1.4.2 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, exact App settings validation messages, and gated Alleva REST treatment-plan sync controls.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.1`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.2`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Version 1.4.1 local recovery path is:
+The Version 1.4.2 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -65,7 +65,7 @@ When API monitoring is unavailable, manual upload is treated as an upload-time s
 
 Supported file types are shown in the upload screen. Use synthetic data for testing. Production use with PHI requires R3-approved controls and secure local handling.
 
-To delete a binder that was uploaded and analyzed, open `Manual upload`, select the binder, type the patient ID exactly in the delete confirmation field, and click `Delete uploaded binder`. This removes the local uploaded binder, its linked automated review, linked upload-derived timeliness records, and encrypted stored files from the computer. Forensic audit logs remain.
+To delete a binder that was uploaded and analyzed, open `Manual upload`, select the binder, type the patient ID exactly in the delete confirmation field, and click `Delete uploaded binder`. If you click before the confirmation matches, the app shows exact guidance instead of leaving the button unavailable. This removes the local uploaded binder, its linked automated review, linked upload-derived timeliness records, and encrypted stored files from the computer. Forensic audit logs remain.
 
 ## Troubleshooting
 

@@ -1,5 +1,19 @@
 # Version 1 Completion Log
 
+## 2026-06-18 1.4.2 Manual Upload Button Usability
+
+- Updated version metadata to `1.4.2` / build `2026.06.18.2`.
+- Fixed disabled button styling so unavailable controls no longer show the Windows busy cursor.
+- Kept `Delete uploaded binder` clickable before patient-ID confirmation matches so the app can show exact confirmation guidance.
+- Updated Help, Windows user guidance, UAT steps, README, changelog, and active operator/developer version references.
+
+Validation completed:
+- Backend tests passed with `96 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+- Example-treatment-plan upload/timeliness smoke covered all 4 files in `example-treatment-plans`.
+- Live in-app browser and Computer Use-assisted button sweep passed against a disposable local desktop server. The Manual upload delete hover reported `cursor: pointer`, `disabled: false`, and `pointerEvents: auto`; button cursor scans across active screens reported zero wait/progress issues.
+
 ## 2026-06-18 1.4.1 Alleva REST Treatment-Plan Sync Readiness
 
 - Updated version metadata to `1.4.1` / build `2026.06.18.1`.

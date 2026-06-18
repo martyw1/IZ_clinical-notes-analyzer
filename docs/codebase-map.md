@@ -1,14 +1,14 @@
-# Codebase Map - Current Version 1.4.1
+# Codebase Map - Current Version 1.4.2
 
 Date: 2026-06-17
 
 Branch: `main`
 
-Version: `1.4.1` / build `2026.06.18.1`
+Version: `1.4.2` / build `2026.06.18.2`
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.1 app shape.
+This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.2 app shape.
 
 ## Current architecture
 
@@ -76,7 +76,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.1 local desktop startup. |
+| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.2 local desktop startup. |
 | `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
 | `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
 | `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
@@ -180,13 +180,13 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Version 1.4.1 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
+`scripts/build-windows-installer.ps1` creates a Version 1.4.2 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Browser/full-stack smoke is source-checkout validated only | Version 1.4.1 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.4.2 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, saved-key encryption, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |

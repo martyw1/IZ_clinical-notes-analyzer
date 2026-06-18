@@ -1076,6 +1076,43 @@ describe('App turnkey workflow', () => {
     expect(screen.queryByRole('button', { name: /PAT-001/i })).not.toBeInTheDocument()
   })
 
+  it('keeps the delete uploaded binder button clickable before confirmation so guidance is shown', async () => {
+    window.history.replaceState(null, '', '/?view=uploads')
+    let deleteCalls = 0
+
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-delete-guidance', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'DELETE /api/patient-note-sets/5': () => {
+        deleteCalls += 1
+        return { body: { status: 'deleted' } }
+      },
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Uploaded binders' })).toBeInTheDocument())
+    const deleteButton = screen.getByRole('button', { name: 'Delete uploaded binder' })
+
+    expect(deleteButton).toBeEnabled()
+    fireEvent.click(deleteButton)
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Type the patient ID exactly before deleting this uploaded binder.').length).toBeGreaterThan(0),
+    )
+    expect(deleteCalls).toBe(0)
+  })
+
   it('opens an existing uploaded binder review from the manual upload screen', async () => {
     window.history.replaceState(null, '', '/?view=uploads')
 

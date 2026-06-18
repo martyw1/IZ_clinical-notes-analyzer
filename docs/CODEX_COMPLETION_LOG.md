@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-18 v1.4.2 manual upload button usability
+- Updated app/version metadata to `1.4.2` / build `2026.06.18.2`.
+- Fixed Manual upload binder deletion usability so disabled buttons no longer show the Windows busy cursor.
+- Kept `Delete uploaded binder` clickable before the patient-ID confirmation matches, surfacing the exact confirmation guidance instead of leaving the button unavailable.
+- Added a frontend regression test for clicking `Delete uploaded binder` before confirmation.
+- Verification passed backend pytest (`96 passed, 2 skipped`), frontend Vitest (`16 passed`), frontend production build, example-treatment-plan upload/timeliness smoke across 4 files, and a live in-app browser/Computer Use-assisted button sweep against a disposable local server.
+
 ## 2026-06-18 v1.4.1 Alleva REST treatment-plan sync readiness
 - Updated app/version metadata to `1.4.1` / build `2026.06.18.1`.
 - Separated Alleva REST API base/OpenAPI settings from FHIR readiness so REST diagnostics and sync do not require a FHIR root.

@@ -2,13 +2,13 @@
 
 Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.1` / build `2026.06.18.1`.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2`.
 
 ## Current architecture
 
 IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, encrypted saved API secrets, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
 
-The active Version 1.4.1 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
+The active Version 1.4.2 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
 
 The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
 
@@ -77,7 +77,7 @@ Configuration is explicit and deterministic:
 - `DATABASE_BACKEND=sqlite` is the normal Windows local-desktop setting.
 - `DATABASE_URL` defaults to a SQLite file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` for the local desktop path.
 - Relative SQLite, upload, log, and report paths are resolved through the configured local app-data directory.
-- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.1 Windows product path does not require a PostgreSQL container.
+- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.2 Windows product path does not require a PostgreSQL container.
 
 ## Health model
 

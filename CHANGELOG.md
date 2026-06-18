@@ -5,6 +5,22 @@
 ### Changed
 - No unreleased changes.
 
+## 1.4.2 - 2026-06-18
+
+### Fixed
+- Fixed Manual upload binder deletion usability so disabled controls no longer show the Windows busy cursor.
+- Kept `Delete uploaded binder` clickable before the patient-ID confirmation matches, showing the exact confirmation guidance instead of feeling unresponsive.
+
+### Changed
+- Promoted version metadata to `1.4.2` / build `2026.06.18.2`.
+
+### Verified
+- Backend pytest passed with `96 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+- Example-treatment-plan upload/timeliness smoke passed across all 4 files in `example-treatment-plans`.
+- Live in-app browser and Computer Use-assisted UI sweep passed on a disposable local desktop server, including Manual upload delete hover/click guidance, Review Queue exports, Treatment Plan exports/task buttons/status filters, all main navigation tabs, and button cursor scans across active screens.
+
 ## 1.4.1 - 2026-06-18
 
 ### Added

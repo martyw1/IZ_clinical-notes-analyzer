@@ -849,7 +849,7 @@ const HELP_SECTIONS = [
       'Detect patient ID reads supported synthetic/export files conservatively; conflicting IDs are blocked.',
       'Upload and run automated evaluation stores files encrypted, creates a review chart, syncs treatment-plan tracker records, and evaluates deterministic rules. When evidence is found in an uploaded PDF, the evidence location includes an uploaded page number when available.',
       'If no approved client display name is supplied or detected, the app creates no-name-found_YYYY-MM-DD_HHMMSS or no-value-found_YYYY-MM-DD_HHMMSS as the display name.',
-      'Delete uploaded binder removes the binder, linked generated review, upload-derived treatment-plan data, and encrypted stored files when authorized.',
+      'Delete uploaded binder stays clickable so it can show exact patient-ID confirmation guidance; once confirmed, it removes the binder, linked generated review, upload-derived treatment-plan data, and encrypted stored files when authorized.',
     ],
   },
   {
@@ -1458,6 +1458,7 @@ export function App() {
   const [patientIdTouched, setPatientIdTouched] = useState(false)
   const [lastAutoFilledPatientId, setLastAutoFilledPatientId] = useState('')
   const [deleteNoteSetConfirmation, setDeleteNoteSetConfirmation] = useState('')
+  const [deletingNoteSetId, setDeletingNoteSetId] = useState<number | null>(null)
   const uploadPatientIdRef = useRef('')
   const patientIdTouchedRef = useRef(false)
   const lastAutoFilledPatientIdRef = useRef('')
@@ -1834,6 +1835,7 @@ export function App() {
     syncWorkflowDefinitions([])
     setUploadProgress(null)
     setDeleteNoteSetConfirmation('')
+    setDeletingNoteSetId(null)
     setReviewDirty(false)
   }
 
@@ -2534,6 +2536,7 @@ export function App() {
 
     const deletedPatientId = selectedNoteSet.patient_id
     const deletedVersion = selectedNoteSet.version
+    setDeletingNoteSetId(selectedNoteSet.id)
     setIsBusy(true)
     setError('')
     try {
@@ -2548,6 +2551,7 @@ export function App() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to delete uploaded binder')
     } finally {
+      setDeletingNoteSetId(null)
       setIsBusy(false)
     }
   }
@@ -5043,9 +5047,10 @@ export function App() {
                         type='button'
                         className='danger-button'
                         onClick={() => void deleteSelectedNoteSet()}
-                        disabled={isBusy || deleteNoteSetConfirmation.trim() !== selectedNoteSet.patient_id}
+                        disabled={deletingNoteSetId === selectedNoteSet.id}
+                        aria-busy={deletingNoteSetId === selectedNoteSet.id ? 'true' : undefined}
                       >
-                        Delete uploaded binder
+                        {deletingNoteSetId === selectedNoteSet.id ? 'Deleting...' : 'Delete uploaded binder'}
                       </button>
                     </div>
                   </section>
