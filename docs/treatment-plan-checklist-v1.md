@@ -85,7 +85,7 @@ The timeliness date clock uses the laptop/facility-local current date every time
 
 Configured PHP levels use 30 calendar days. Other configured treatment levels use 60 calendar days. LOC changes use the separate configurable LOC-change window described above.
 
-Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API/FHIR evidence should include source identifiers supplied by the API, such as source document ID, DocumentReference ID, attachment URL, or Provenance ID.
+Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API evidence should include source identifiers supplied by approved REST/OpenAPI payloads, such as source document ID, attachment URL, endpoint name, or response field path.
 
 ## Checklist Steps
 

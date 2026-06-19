@@ -5,6 +5,18 @@
 ### Changed
 - No unreleased changes.
 
+## 1.4.3 - 2026-06-19
+
+### Changed
+- Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan routes, read scopes, UI fields, defaults, validation requirements, and tests from Alleva workflows.
+- Reframed Alleva setup as REST/OpenAPI/HL7-readiness only, using the Alleva API base URL, OpenAPI URL, token URL, API client ID, encrypted API client secret, token auth style, and validated endpoint mapping.
+- Updated endpoint profiles, settings payloads, audit payloads, upload/source-evidence examples, operator docs, readiness docs, and version metadata for the REST/OpenAPI boundary.
+
+### Verified
+- Backend pytest passed with `95 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+
 ## 1.4.2 - 2026-06-18
 
 ### Fixed

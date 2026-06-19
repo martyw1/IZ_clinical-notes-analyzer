@@ -2,7 +2,7 @@
 
 Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.3` / build `2026.06.19.1` local Windows desktop runtime.
 
 ## Where to open it
 
@@ -46,13 +46,13 @@ The browser result includes status code, content type, timing when available, pa
 
 Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
 
-For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields, not the FHIR base URL field. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path and is not a root FHIR endpoint.
+Alleva has confirmed it does not currently support FHIR. Active Alleva integration in this app is REST/OpenAPI/HL7-readiness only. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path.
 
 ## Alleva REST treatment-plan sync
 
-Version `1.4.2` adds a separate Alleva REST treatment-plan sync configuration. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Version `1.4.3` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
-This sync path does not require a FHIR root. It is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
 Startup sync is disabled by default. Before enabling it, admins must confirm and document:
 
@@ -68,7 +68,8 @@ If any required setting is missing, App settings lists the exact missing field a
 
 Admins can turn on periodic safe Alleva/API checks from `App settings` after saving:
 
-- API or FHIR base URL
+- REST API base URL
+- OpenAPI URL
 - token URL
 - client ID
 - encrypted client secret
@@ -79,13 +80,13 @@ The settings form validates these fields before save. If one or more required va
 
 The background checker authenticates with the saved client ID/secret, applies the selected token auth style, and runs the same bounded OpenAPI/readiness probe used by the harness. App settings shows the last check time, status, message, last success/failure, and next scheduled check through the Review Source Discovery payload.
 
-Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, scopes, pagination/rate limits, attachment handling, documentation, and compliance approval.
+Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, pagination/rate limits, attachment handling, documentation, and compliance approval.
 
-## EMR endpoint profiles
+## API endpoint profiles
 
-Admins can save multiple endpoint profiles for Alleva and future EMR/FHIR integrations from App settings. Each profile stores vendor label, adapter key, FHIR base URL, optional OpenAPI URL, token URL, token auth style, client ID, encrypted client secret, scopes, timeout, active/default flags, and notes.
+Admins can save multiple endpoint profiles for Alleva REST/OpenAPI testing from App settings. Each profile stores vendor label, adapter key, REST API base URL, OpenAPI URL, token URL, token auth style, client ID, encrypted client secret, timeout, active/default flags, and notes.
 
-Browser responses return only configured flags for secrets. Activating a profile copies it into the current App settings EMR/API configuration used by discovery, import-plan, and readiness tests.
+Browser responses return only configured flags for secrets. Activating a profile copies it into the current App settings API configuration used by readiness checks and operation tests.
 
 ## Secret handling inside the app
 
@@ -137,7 +138,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.2 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.3 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 
@@ -167,7 +168,7 @@ The app supports configuration and connectivity testing without pretending to im
 - **client-credentials token blocked** when the token endpoint returns an error such as HTTP 400
 - **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import
 
-Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, scopes, tenant, and auth style. Do not fake live import without official tenant credentials and endpoint mapping.
+Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, tenant, auth style, and endpoint mapping. Do not fake live import without official tenant credentials and endpoint mapping.
 
 ## Local report files
 

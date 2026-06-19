@@ -8,7 +8,7 @@ Status: unvalidated.
 
 The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/App settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
 
-Current implementation state: the setting exists in the database and admin App settings UI. Version 1.4.2 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, and LOC-change due date side by side. The 42-step checklist also includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
+Current implementation state: the setting exists in the database and admin App settings UI. Version 1.4.3 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, and LOC-change due date side by side. The 42-step checklist also includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
 
 ## Alleva REST treatment-plan sync approval and mapping
 
@@ -16,7 +16,7 @@ Owner: R3 + Alleva
 
 Status: Open
 
-Current implementation state: Version 1.4.2 has a separate Alleva REST treatment-plan sync path that does not require a FHIR root and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping.
+Current implementation state: Version 1.4.3 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping.
 
 Required before live startup sync:
 
@@ -42,13 +42,13 @@ Status: in progress for Version 1.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
-Current implementation state: Version 1.4.2 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, and AppData preflight reports. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
+Current implementation state: Version 1.4.3 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, and AppData preflight reports. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.4.2` on that machine.
-- The `Treatment plans` tab shows the updated evidence queue and footer version `1.4.2`, proving the date-clock/source-evidence workflow UI is the currently served build.
+- `/api/version` and the UI footer show `1.4.3` on that machine.
+- The `Treatment plans` tab shows the updated evidence queue and footer version `1.4.3`, proving the date-clock/source-evidence workflow UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
@@ -56,14 +56,14 @@ Required resolution evidence:
 
 Status: blocked by vendor/auth response.
 
-The public Alleva Swagger UI and OpenAPI JSON are reachable, but the provided client-credentials token request returned HTTP 400 on 2026-06-12. On 2026-06-17, the public Swagger UI and both `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` were reachable and described Alleva REST API operations, not a FHIR R4 root endpoint. The app and `scripts\test-alleva-api-connectivity.ps1` now support client-credentials token testing, keep returned access tokens in memory only, and redact token/secret values from reports and audit logs.
+The public Alleva Swagger UI and OpenAPI JSON are reachable, but the provided client-credentials token request returned HTTP 400 on 2026-06-12. On 2026-06-17, the public Swagger UI and both `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` were reachable and described Alleva REST API operations. Alleva later confirmed it does not currently support FHIR, so active app configuration now excludes FHIR/SMART-on-FHIR fields, discovery, scopes, and import-plan workflows. The app and `scripts\test-alleva-api-connectivity.ps1` support client-credentials token testing, keep returned access tokens in memory only, and redact token/secret values from reports and audit logs.
 
 Current evidence:
 
 - `https://api.allevasoft.com/swagger/index.html`: HTTP 200.
 - `https://api.allevasoft.com/swagger/v1/swagger.json`: HTTP 200, 942906 bytes.
 - `https://api.allevasoft.com/swagger/v2/swagger.json`: HTTP 200.
-- `https://api.allevasoft.com/advanced-form-elements`: HTTP 401 without credentials; protected REST operation path, not FHIR base URL.
+- `https://api.allevasoft.com/advanced-form-elements`: HTTP 401 without credentials; protected REST operation path.
 - `https://authorization.allevasoft.com/connect/token`: HTTP 400 for the provided client ID/secret using form-encoded `grant_type=client_credentials`.
 - HTTP Basic client-auth with `grant_type=client_credentials` was also attempted and returned HTTP 400.
 - Sanitized report files were written under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports`.

@@ -52,7 +52,7 @@ TRACKED_MODELS = (
 )
 SENSITIVE_FIELDS: dict[str, set[str]] = {
     'User': {'password_hash'},
-    'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'emr_smart_client_secret'},
+    'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'api_client_secret'},
     'Chart': {'notes', 'other_details', 'system_summary', 'manager_comment'},
     'AuditItemResponse': {'notes', 'evidence_location'},
     'PatientNoteSet': {'upload_notes'},
@@ -62,7 +62,6 @@ SENSITIVE_FIELDS: dict[str, set[str]] = {
         'storage_path',
         'description',
         'source_document_id',
-        'source_document_reference_id',
         'source_attachment_url',
         'source_author',
         'source_custodian',
@@ -340,66 +339,6 @@ def _cef_extension(record: dict[str, Any]) -> str:
     return ' '.join(f'{key}={_escape_cef(value)}' for key, value in parts.items() if value not in (None, ''))
 
 
-def _fhir_action(action: str) -> str:
-    if action.endswith('create') or action.endswith('insert.commit'):
-        return 'C'
-    if action.endswith('update') or action.endswith('update.commit'):
-        return 'U'
-    if action.endswith('delete') or action.endswith('delete.commit'):
-        return 'D'
-    if action.endswith('read') or action.endswith('list') or action.startswith('http.request'):
-        return 'R'
-    if action.endswith('login') or action.endswith('transition') or action.startswith('system.'):
-        return 'E'
-    return 'E'
-
-
-def _fhir_outcome(outcome_status: str) -> str:
-    return {
-        'success': '0',
-        'failure': '4',
-        'rolled_back': '8',
-    }.get(outcome_status, '12')
-
-
-def _build_fhir_audit_event(record: dict[str, Any]) -> dict[str, Any]:
-    entity: list[dict[str, Any]] = []
-    if record.get('target_entity'):
-        entity.append(
-            {
-                'name': record['target_entity'],
-                'detail': [
-                    {'type': 'beforeState', 'valueString': record['before_state'] or ''},
-                    {'type': 'afterState', 'valueString': record['after_state'] or ''},
-                    {'type': 'diffState', 'valueString': record['diff_state'] or ''},
-                ],
-            }
-        )
-    if record.get('patient_id'):
-        entity.append({'name': f"patient:{record['patient_id']}"})
-
-    return {
-        'resourceType': 'AuditEvent',
-        'id': record['event_id'],
-        'type': {'code': record['event_category'], 'display': record['action']},
-        'action': _fhir_action(record['action']),
-        'recorded': _serialize_scalar(record['timestamp_utc']),
-        'outcome': _fhir_outcome(record['outcome_status']),
-        'outcomeDesc': record['message'],
-        'agent': [
-            {
-                'requestor': record.get('actor_type') == 'human',
-                'type': {'text': record.get('actor_type') or 'system'},
-                'who': {'display': record.get('actor_username') or 'system'},
-                'role': [{'text': record.get('actor_role') or 'system'}],
-                'network': {'address': record.get('source_ip') or '', 'type': '2'},
-            }
-        ],
-        'source': {'observer': {'display': settings.app_name}},
-        'entity': entity,
-    }
-
-
 def _build_record(
     *,
     action: str,
@@ -462,7 +401,6 @@ def _build_record(
         'cef_severity': _cef_severity(severity),
         'cef_extension': '',
         'cef_payload': '',
-        'fhir_audit_event': '',
     }
     record['cef_extension'] = _cef_extension(record)
     record['cef_payload'] = (
@@ -471,7 +409,6 @@ def _build_record(
         f"{_escape_cef(record['cef_signature_id'])}|{_escape_cef(record['cef_name'])}|"
         f"{record['cef_severity']}|{record['cef_extension']}"
     )
-    record['fhir_audit_event'] = _canonical_json(_build_fhir_audit_event(record))
     return record
 
 
@@ -743,6 +680,5 @@ def register_session_audit_events(session_factory: sessionmaker) -> None:
                 f"{_escape_cef(updated['cef_signature_id'])}|{_escape_cef(updated['cef_name'])}|"
                 f"{updated['cef_severity']}|{updated['cef_extension']}"
             )
-            updated['fhir_audit_event'] = _canonical_json(_build_fhir_audit_event(updated))
             rolled_back.append(updated)
         _persist_records(rolled_back)

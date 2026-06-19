@@ -3,7 +3,6 @@ from sqlalchemy import select
 
 from app.core.config import REPO_ROOT
 from app.models.models import AppSetting, AuditLog, EmrEndpointProfile
-from app.services.emr_fhir import map_document_reference_to_patient_note_metadata
 from app.services.secure_storage import text_secret_is_encrypted
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
@@ -25,35 +24,33 @@ def test_admin_can_view_runtime_readiness(app_with_sqlite):
         assert any(check['name'] == 'data_encryption_key' for check in payload['checks'])
 
 
-def test_emr_profile_and_import_plan_are_fhir_r4_oriented(app_with_sqlite):
+def test_api_profile_is_rest_openapi_oriented_and_removed_routes_are_unreachable(app_with_sqlite):
     app, session_local = app_with_sqlite
     with TestClient(app) as client:
         headers = _auth_headers(client)
         db = session_local()
         try:
             settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
-            settings_row.emr_fhir_base_url = 'https://ehr.example.test/fhir/R4'
-            settings_row.emr_smart_client_id = 'client-id'
+            settings_row.alleva_api_base_url = 'https://api.example.test'
+            settings_row.alleva_openapi_url = 'https://api.example.test/openapi.json'
+            settings_row.api_client_id = 'client-id'
             db.commit()
         finally:
             db.close()
 
         profile = client.get('/api/emr/profile', headers=headers)
         assert profile.status_code == 200
-        assert 'DocumentReference' in profile.json()['supported_resources']
-        assert profile.json()['adapter_key'] == 'alleva-smart-fhir-document-manager'
+        assert profile.json()['api_base_url'] == 'https://api.example.test'
+        assert profile.json()['openapi_url'] == 'https://api.example.test/openapi.json'
+        assert profile.json()['adapter_key'] == 'alleva-rest-api'
         assert 'PDF' in profile.json()['supported_export_formats']
         assert any(section['key'] == 'custom_forms' for section in profile.json()['document_manager_sections'])
         assert profile.json()['client_id_configured'] is True
 
+        discovery = client.post('/api/emr/discover', headers=headers, json={})
+        assert discovery.status_code == 404
         plan = client.get('/api/emr/import-plan?patient_id=PAT-200', headers=headers)
-        assert plan.status_code == 200
-        payload = plan.json()
-        assert payload['patient_id'] == 'PAT-200'
-        assert payload['planned_requests'][0]['url'].endswith('/Patient?identifier=PAT-200')
-        assert 'DocumentReference' in payload['planned_requests'][1]['url']
-        assert 'PatientNoteDocument.alleva_bucket' in payload['document_mapping']
-        assert 'Binary.contentType' in payload['attachment_handling']
+        assert plan.status_code == 404
 
 
 def test_review_source_discovery_provides_mock_api_queue_without_live_import(app_with_sqlite):
@@ -98,67 +95,44 @@ def test_daily_review_source_check_is_safe_and_audited(app_with_sqlite):
         db.close()
 
 
-def test_alleva_document_reference_mapping_preserves_source_traceability():
-    mapped = map_document_reference_to_patient_note_metadata(
-        {
-            'resourceType': 'DocumentReference',
-            'id': 'docref-123',
-            'date': '2026-04-28T15:30:00Z',
-            'description': 'Client Rights completed custom form',
-            'type': {'text': 'Client Rights Form'},
-            'content': [
-                {
-                    'attachment': {
-                        'title': 'Client Rights.pdf',
-                        'contentType': 'application/pdf',
-                        'url': 'Binary/bin-123',
-                    }
-                }
-            ],
-        }
-    )
-    assert mapped['alleva_bucket'] == 'custom_forms'
-    assert mapped['document_label'] == 'Client Rights.pdf'
-    assert mapped['document_date'] == '2026-04-28'
-    assert mapped['source_document_reference_id'] == 'docref-123'
-    assert mapped['source_attachment_url'] == 'Binary/bin-123'
-
-
-def test_emr_enablement_requires_minimum_alleva_smart_contract(app_with_sqlite):
+def test_api_enablement_uses_rest_credentials_without_legacy_endpoint_requirements(app_with_sqlite):
     app, session_local = app_with_sqlite
     with TestClient(app) as client:
         headers = _auth_headers(client)
         missing = client.patch('/api/settings', headers=headers, json={'emr_api_enabled': True})
         assert missing.status_code == 400
         missing_detail = missing.json()['detail']
-        assert 'Missing required EMR API field(s)' in missing_detail
-        assert 'FHIR base URL' in missing_detail
-        assert 'OAuth/FHIR client ID' in missing_detail
+        assert 'Missing required API setting(s)' in missing_detail
+        assert 'Alleva REST API base URL' not in missing_detail
+        assert 'OAuth token URL' not in missing_detail
+        assert 'API client ID' in missing_detail
+        assert 'API client secret' in missing_detail
 
         response = client.patch(
             '/api/settings',
             headers=headers,
             json={
                 'emr_api_enabled': True,
-                'emr_fhir_base_url': 'https://alleva.example.test/fhir/R4/',
-                'emr_smart_client_id': 'alleva-client',
-                'emr_smart_client_secret': 'vendor-secret-value',
-                'emr_smart_scopes': 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs',
+                'alleva_api_base_url': 'https://api.allevasoft.com',
+                'alleva_openapi_url': 'https://api.allevasoft.com/swagger/v1/swagger.json',
+                'api_oauth_token_url': 'https://authorization.allevasoft.com/connect/token',
+                'api_client_id': 'alleva-client',
+                'api_client_secret': 'vendor-secret-value',
             },
         )
         assert response.status_code == 200
-        assert response.json()['emr_smart_client_secret_configured'] is True
+        assert response.json()['api_client_secret_configured'] is True
 
         db = session_local()
         try:
             settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
-            assert settings_row.emr_fhir_base_url == 'https://alleva.example.test/fhir/R4'
-            assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+            assert settings_row.alleva_api_base_url == 'https://api.allevasoft.com'
+            assert text_secret_is_encrypted(settings_row.api_client_secret)
         finally:
             db.close()
 
 
-def test_alleva_rest_treatment_plan_sync_does_not_require_fhir_base_url(app_with_sqlite):
+def test_alleva_rest_treatment_plan_sync_uses_rest_settings(app_with_sqlite):
     app, session_local = app_with_sqlite
     with TestClient(app) as client:
         headers = _auth_headers(client)
@@ -169,9 +143,9 @@ def test_alleva_rest_treatment_plan_sync_does_not_require_fhir_base_url(app_with
                 'alleva_api_base_url': 'https://api.allevasoft.com',
                 'alleva_openapi_url': 'https://api.allevasoft.com/swagger/v1/swagger.json',
                 'alleva_api_version': '1.0',
-                'emr_smart_token_url': 'https://authorization.allevasoft.com/connect/token',
-                'emr_smart_client_id': 'alleva-rest-client',
-                'emr_smart_client_secret': 'alleva-rest-secret',
+                'api_oauth_token_url': 'https://authorization.allevasoft.com/connect/token',
+                'api_client_id': 'alleva-rest-client',
+                'api_client_secret': 'alleva-rest-secret',
                 'alleva_treatment_plan_sync_enabled': True,
                 'alleva_treatment_plan_sync_on_startup': True,
                 'alleva_treatment_plan_sync_approved': True,
@@ -180,16 +154,15 @@ def test_alleva_rest_treatment_plan_sync_does_not_require_fhir_base_url(app_with
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload['emr_fhir_base_url'] == ''
         assert payload['alleva_treatment_plan_sync_enabled'] is True
         assert payload['alleva_treatment_plan_sync_on_startup'] is True
+        assert payload['api_client_id'] == 'alleva-rest-client'
 
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
-        assert settings_row.emr_fhir_base_url == ''
         assert settings_row.alleva_api_base_url == 'https://api.allevasoft.com'
-        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+        assert text_secret_is_encrypted(settings_row.api_client_secret)
     finally:
         db.close()
 
@@ -211,7 +184,6 @@ def test_alleva_rest_sync_enablement_lists_missing_approval_and_mapping(app_with
         assert 'R3/Alleva live treatment-plan sync approval' in detail
         assert 'validated Alleva treatment-plan endpoint mapping' in detail
         assert 'Alleva API client secret' in detail
-        assert 'FHIR base URL' not in detail
 
 
 def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sqlite):
@@ -229,19 +201,18 @@ def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sq
             headers=headers,
             json={
                 'profile_key': 'future_emr_sandbox',
-                'display_name': 'Future EMR sandbox',
-                'vendor_name': 'Future EMR',
-                'adapter_key': 'future-fhir-document-manager',
-                'fhir_base_url': 'https://future.example.test/fhir/R4',
-                'openapi_url': 'https://future.example.test/openapi.json',
-                'token_url': 'https://future.example.test/oauth/token',
+                'display_name': 'Alleva REST sandbox',
+                'vendor_name': 'Alleva REST API',
+                'adapter_key': 'alleva-rest-api',
+                'api_base_url': 'https://api.example.test',
+                'openapi_url': 'https://api.example.test/openapi.json',
+                'token_url': 'https://authorization.example.test/connect/token',
                 'token_auth_style': 'basic',
                 'client_id': 'future-client',
                 'client_secret': 'future-secret',
-                'scopes': 'patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs',
                 'timeout_seconds': 12,
                 'is_default': False,
-                'notes': 'Synthetic future endpoint profile.',
+                'notes': 'Synthetic REST endpoint profile.',
             },
         )
         assert created.status_code == 200
@@ -252,17 +223,17 @@ def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sq
         activated = client.post(f"/api/emr/profiles/{profile['id']}/activate", headers=headers)
         assert activated.status_code == 200
         payload = activated.json()
-        assert payload['emr_vendor_name'] == 'Future EMR'
-        assert payload['emr_fhir_base_url'] == 'https://future.example.test/fhir/R4'
-        assert payload['emr_smart_client_id'] == 'future-client'
-        assert payload['emr_smart_client_secret_configured'] is True
+        assert payload['emr_vendor_name'] == 'Alleva REST API'
+        assert payload['alleva_api_base_url'] == 'https://api.example.test'
+        assert payload['api_client_id'] == 'future-client'
+        assert payload['api_client_secret_configured'] is True
         assert 'future-secret' not in activated.text
 
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting)).scalar_one()
-        assert settings_row.emr_vendor_name == 'Future EMR'
-        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+        assert settings_row.emr_vendor_name == 'Alleva REST API'
+        assert text_secret_is_encrypted(settings_row.api_client_secret)
         stored_profile = db.execute(select(EmrEndpointProfile).where(EmrEndpointProfile.profile_key == 'future_emr_sandbox')).scalar_one()
         assert stored_profile.is_default is True
         assert text_secret_is_encrypted(stored_profile.client_secret)

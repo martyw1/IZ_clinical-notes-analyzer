@@ -195,7 +195,7 @@ def test_client_credentials_token_request_returns_redacted_public_result(monkeyp
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
     )
 
@@ -214,7 +214,7 @@ def test_client_credentials_token_request_supports_basic_auth_style(monkeypatch)
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
         token_auth_style='basic',
     )
@@ -232,7 +232,7 @@ def test_pull_api_definitions_can_use_client_credentials_bearer_token(monkeypatc
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
     )
     result = pull_api_definitions(
@@ -404,7 +404,7 @@ def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting)).scalar_one()
-        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+        assert text_secret_is_encrypted(settings_row.api_client_secret)
     finally:
         db.close()
 
@@ -555,11 +555,12 @@ def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite
             '/api/settings',
             headers=headers,
             json={
-                'emr_fhir_base_url': 'https://api.example.test',
-                'emr_smart_client_id': 'saved-client',
-                'emr_smart_client_secret': 'saved-secret',
-                'emr_smart_token_url': 'https://authorization.example.test/connect/token',
-                'emr_smart_token_auth_style': 'all',
+                'alleva_api_base_url': 'https://api.example.test',
+                'alleva_openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'api_client_id': 'saved-client',
+                'api_client_secret': 'saved-secret',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_token_auth_style': 'all',
                 'emr_periodic_check_enabled': True,
                 'emr_periodic_check_interval_minutes': 60,
             },

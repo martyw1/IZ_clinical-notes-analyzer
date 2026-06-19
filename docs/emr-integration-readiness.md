@@ -1,84 +1,42 @@
-# EMR Integration Readiness
+# Alleva REST / OpenAPI / HL7 Readiness
 
-This app is business-ready for local Alleva EMR-export uploads today. Live EMR API import is intentionally behind a connector boundary until the client and Alleva provide registration details, approved scopes, credentials, endpoint mapping, pagination behavior, and attachment/signature behavior.
+Date: 2026-06-19
 
-## Current Supported Path
+Applies to: IZ Clinical Notes Analyzer Version `1.4.3` local Windows desktop runtime.
 
-1. Export PDF, DOCX, TXT, CSV, RTF, image, or ZIP documents from the EMR.
-2. Upload the binder in the app under the patient ID or let the app detect the patient ID from readable file content.
-3. The app encrypts source files at rest, records a SHA-256 digest, creates an immutable binder version, and generates the review chart.
+## Current vendor boundary
 
-Alleva-specific local import support is centered on the public Document Manager shape:
+Alleva confirmed: "Unfortunately, we dont have any support for FHIR. Just HL7 at the moment."
 
-- Custom Forms: client-specific forms that can be filled, signed, completed, canceled, and viewed.
-- Uploaded Documents: stored client documents that are not native Alleva forms.
-- Portal Documents: forms completed through the Client/Family Portal and opened from the client chart.
-- Labs, medications, and clinical notes are supported as source buckets when exported or exposed by the client environment.
+The active app therefore treats Alleva integration as REST/OpenAPI/HL7-readiness only. FHIR/SMART-on-FHIR configuration, discovery, read scopes, import-plan generation, and validation requirements have been removed from active Alleva workflows. No FHIR endpoint is required for Alleva API readiness checks or Alleva REST treatment-plan sync.
 
-The app now preserves source traceability fields for future export-package and live-FHIR import work: source export ID, FHIR Patient resource ID, DocumentReference ID, attachment URL, author, custodian, security label, and Provenance ID.
+## Active app behavior
 
-## SMART/FHIR Boundary
+- App settings collect Alleva REST API base URL, Alleva OpenAPI URL, OAuth token URL, API client ID, encrypted API client secret, token auth style, timeout, periodic-check interval, and gated treatment-plan sync controls.
+- Stored API endpoint profiles save REST/OpenAPI endpoint options and encrypted client-secret state without returning secrets to the browser.
+- The direct API harness discovers Swagger/OpenAPI definitions and tests selected operations using API-key, no-auth, or OAuth client-credentials modes.
+- Periodic API checks authenticate, pull/summarize OpenAPI definitions, and do not import live patient records.
+- Alleva REST treatment-plan sync remains disabled by default and cannot run until R3/Alleva approval and endpoint mapping validation are recorded.
 
-The app is stubbed around these primary standards and vendor patterns:
+## Removed active workflows
 
-- SMART App Launch: app registration, `.well-known/smart-configuration`, OAuth authorization/token endpoints, launch context, and scopes.
-- FHIR R4 `Patient`: resolve the EMR patient resource from a local identifier or MRN.
-- FHIR R4 `DocumentReference`: list clinical notes, scanned paper, PDFs, Word documents, and related document metadata. The app maps these records into Alleva bucket metadata before import.
-- FHIR R4 `Binary`: fetch document bytes when a `DocumentReference.content.attachment.url` points to a Binary or vendor document endpoint; verify local SHA-256 after fetch.
-- Optional FHIR `Provenance`: capture source traceability when the EMR supports it.
+The active app no longer exposes:
 
-## Implemented Stub Endpoints
+- FHIR base URL fields.
+- SMART-on-FHIR discovery.
+- SMART/FHIR read scopes.
+- FHIR import-plan routes or UI.
+- Patient document planning through FHIR resources.
+- FHIR AuditEvent payloads in forensic log responses.
 
-- `GET /api/emr/profile`: shows the configured vendor label, FHIR base URL, SMART client metadata state, scopes, supported resources, and standards.
-- `POST /api/emr/discover`: checks SMART discovery for a configured or submitted FHIR base URL.
-- `GET /api/emr/import-plan?patient_id=...`: returns the planned `Patient`, `DocumentReference`, `Binary`, and `Provenance` request flow for a patient.
+## Live sync gate
 
-## Required Before Live API Import
+Before any live Alleva REST treatment-plan sync can be enabled, R3 must confirm:
 
-- EMR vendor name and production/sandbox FHIR base URL.
-- SMART registration approval, redirect URLs, client ID, and client secret or private-key auth details.
-- Confirmed scopes for `Patient`, `DocumentReference`, `Binary`, and any required launch context.
-- Vendor-specific pagination, retry, rate-limit, attachment URL, and Binary content behavior.
-- Confirmation whether the Alleva tenant exposes SMART/FHIR, Alleva open API endpoints, HL7 feeds, SFTP exports, or a vendor-managed connector for Document Manager content.
-- Written client approval for any external PHI movement, including optional LLM analysis.
+- Official tenant credentials and approved auth style.
+- Active-client, treatment-plan, treatment-review, pagination, status, date, and signature endpoint mapping.
+- Rate limits, retry rules, filtering behavior, and production/sandbox boundaries.
+- Attachment behavior if document material is later approved for import.
+- Compliance approval for live patient data import.
 
-The FHIR base URL must be a vendor/tenant-supplied root FHIR R4 endpoint, for example an endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) are REST API documentation/definition URLs and belong in the OpenAPI/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and is not a FHIR base URL.
-
-## Alleva REST Treatment-Plan Sync Boundary
-
-Version `1.4.1` adds a separate Alleva REST treatment-plan sync path for the workflow R3 actually wants: Alleva supplies active-client and treatment-plan source data, then the IZ Clinical Notes Analyzer runs R3's deterministic timeliness/compliance logic locally.
-
-This path does not require a FHIR base URL. It uses the Alleva REST API base URL and OpenAPI definition, with startup sync disabled by default. Startup/manual sync requires explicit R3/Alleva approval plus validated endpoint mapping for:
-
-- active clients and discharged/inactive filtering
-- treatment-plan records
-- treatment-review records
-- staff/creator signature date
-- client signature date
-- current level of care and admission date
-- next review due date
-- pagination/cursor/date range behavior
-
-The current implementation can normalize approved REST payloads into `TreatmentPlanClient`, `LevelOfCareHistory`, and `TreatmentPlanRecord` rows and then immediately run the local R3 timeliness evaluator. If mapping or approval is missing, the app records a blocked sync status instead of importing live patient data.
-
-## Current Alleva Boundary
-
-Alleva publicly describes open/custom integrations and modern FHIR/HL7 integration patterns, but detailed tenant API specifications are not published in the open support material found during this review. The code therefore supports:
-
-- Local Alleva export/import now.
-- Read-only SMART/FHIR `Patient` + `DocumentReference` + `Binary` + optional `Provenance` planning now.
-- Direct OpenAPI/Swagger discovery and bounded operation testing against approved non-PHI operations now.
-- Gated Alleva REST treatment-plan sync only after vendor/client registration details, endpoint mapping, and approval are supplied.
-
-The app must not be configured for write-back into Alleva until a separate signed scope, data-ownership rule, and validation plan exist.
-
-## Primary References
-
-- HL7 FHIR R4 DocumentReference: https://www.hl7.org/fhir/R4/documentreference.html
-- HL7 FHIR R4 Binary: https://www.hl7.org/fhir/R4/binary.html
-- SMART App Launch authorization and discovery: https://build.fhir.org/ig/HL7/smart-app-launch/app-launch.html
-- SMART scopes and launch context: https://build.fhir.org/ig/HL7/smart-app-launch/scopes-and-launch-context.html
-- Alleva Document Manager overview: https://support.helloalleva.com/document-manager
-- Epic FHIR guidance: https://fhir.epic.com/Documentation?docId=developerguidelines&section=fn-g9
-- Oracle Health Millennium DocumentReference: https://docs.oracle.com/en/industries/health/millennium-platform-apis/mfrap/op-documentreference-get.html
-- Alleva integration overview: https://helloalleva.com/2026/04/21/ehr-integration/
+Until that gate is complete, the app remains local-first and upload-first. Readiness checks and operation tests are safe configuration workflows only.

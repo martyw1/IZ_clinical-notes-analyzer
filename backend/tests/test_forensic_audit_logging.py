@@ -71,7 +71,6 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
         assert http_log.correlation_id
         assert http_log.http_status_code == 200
         assert http_log.cef_payload.startswith('CEF:0|')
-        assert '"resourceType":"AuditEvent"' in http_log.fhir_audit_event
 
         insert_log = next(
             log for log in logs if log.action == 'data.insert.commit' and log.target_entity_type == 'chart' and log.target_entity_id == str(chart_id)
@@ -106,7 +105,6 @@ def test_audit_log_endpoint_returns_enriched_records(app_with_sqlite):
         assert payload
         first_record = payload[0]
         assert 'cef_payload' in first_record
-        assert 'fhir_audit_event' in first_record
         assert 'event_category' in first_record
 
     db = session_local()

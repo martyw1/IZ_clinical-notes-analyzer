@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current patch version: `1.4.2` / build `2026.06.18.2`.
+Current patch version: `1.4.3` / build `2026.06.19.1`.
 
-Version 1.4.2 keeps the Version 1 Windows startup reliability fixes and adds treatment-plan date-clock behavior, workflow-step exports, draft workflow editing, field-level Help, clearer Alleva OpenAPI/FHIR guidance, exact App settings validation messages, and gated Alleva REST treatment-plan sync controls.
+Version 1.4.3 keeps the Version 1 Windows startup reliability fixes and removes active FHIR/SMART-on-FHIR configuration from Alleva workflows. Alleva integration is now REST/OpenAPI/HL7-readiness only, with exact App settings validation messages and gated Alleva REST treatment-plan sync controls.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.2`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.3`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Version 1.4.2 local recovery path is:
+The Version 1.4.3 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -48,16 +48,16 @@ Run the utility from the repo root, save the generated value securely, restart t
 - Help: role permissions, screen/button guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
 - User management: admins can manage admins, managers, and counselors; office managers can manage counselor accounts only; counselors manage only their own account.
 - Workflow profiles: admin/manager workflow logic screen, including `Seed draft from 42-step checklist`, draft creation, in-place draft editing, publish, archive, and unused-draft delete.
-- App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, EMR endpoint profile, FHIR/OAuth discovery, and LOC-change settings.
+- App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, API endpoint profiles, Alleva REST/OpenAPI settings, and LOC-change settings.
 - Forensic logs: admin-only audit trail.
 
 ## API Mode
 
 Version 1 includes a direct API readiness harness and mock source discovery. Live Alleva patient import is disabled until official credentials, endpoint mapping, scopes, pagination/rate limits, attachment handling, vendor documentation, and compliance approval exist.
 
-Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings can also enable periodic safe API readiness checks after the API/FHIR base URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete.
+Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete.
 
-FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, not in the FHIR base URL field. Stored EMR endpoint profiles let admins save current and future endpoint options and activate the one used by readiness/API tests.
+Alleva confirmed it does not currently support FHIR. Stored API endpoint profiles let admins save current Alleva REST/OpenAPI endpoint options and activate the one used by readiness/API tests.
 
 When API monitoring is unavailable, manual upload is treated as an upload-time snapshot. Use the monthly compliance-check fallback for large chart sets instead of assuming weekly automatic monitoring.
 

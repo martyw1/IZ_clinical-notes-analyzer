@@ -39,13 +39,15 @@ def next_periodic_check_at(settings_row: AppSetting, *, now: datetime | None = N
 
 def _missing_configuration(settings_row: AppSetting) -> list[str]:
     missing = []
-    if not settings_row.emr_fhir_base_url.strip():
-        missing.append('API base URL')
-    if not settings_row.emr_smart_token_url.strip():
+    if not settings_row.alleva_api_base_url.strip():
+        missing.append('REST API base URL')
+    if not settings_row.alleva_openapi_url.strip():
+        missing.append('OpenAPI URL')
+    if not settings_row.api_oauth_token_url.strip():
         missing.append('token URL')
-    if not settings_row.emr_smart_client_id.strip():
+    if not settings_row.api_client_id.strip():
         missing.append('client ID')
-    if not settings_row.emr_smart_client_secret:
+    if not settings_row.api_client_secret:
         missing.append('client secret')
     return missing
 
@@ -63,14 +65,14 @@ def run_periodic_api_check(db: Session, settings_row: AppSetting) -> dict[str, A
         db.commit()
         return {'status': 'skipped', 'message': message, 'token_result': {}, 'definition_summary': {}, 'operation_count': 0}
 
-    client_secret = decrypt_text_secret(settings_row.emr_smart_client_secret)
+    client_secret = decrypt_text_secret(settings_row.api_client_secret)
     token_result, bearer_token = request_client_credentials_token(
-        token_url=settings_row.emr_smart_token_url,
-        client_id=settings_row.emr_smart_client_id,
+        token_url=settings_row.api_oauth_token_url,
+        client_id=settings_row.api_client_id,
         client_secret=client_secret,
-        scope=settings_row.emr_smart_scopes,
+        scope='',
         timeout_seconds=settings_row.emr_api_timeout_seconds,
-        token_auth_style=settings_row.emr_smart_token_auth_style,
+        token_auth_style=settings_row.api_token_auth_style,
     )
     if not bearer_token:
         message = token_result.get('message') or 'Client-credentials token request failed.'
@@ -83,7 +85,8 @@ def run_periodic_api_check(db: Session, settings_row: AppSetting) -> dict[str, A
 
     definition_result = pull_api_definitions(
         swagger_ui_url=DEFAULT_ALLEVA_SWAGGER_UI_URL,
-        api_base_url=settings_row.emr_fhir_base_url,
+        api_base_url=settings_row.alleva_api_base_url,
+        openapi_url=settings_row.alleva_openapi_url,
         bearer_token=bearer_token,
         timeout_seconds=settings_row.emr_api_timeout_seconds,
     )

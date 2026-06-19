@@ -1,10 +1,10 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.4.2",
-  "build": "2026.06.18.2",
+  "version": "1.4.3",
+  "build": "2026.06.19.1",
   "release_channel": "local-desktop",
-  "release_date": "2026-06-18",
-  "git_branch": "main",
-  "version_name": "Version 1.4.2 manual upload button usability",
-  "description": "Fixes manual-upload binder deletion usability so unavailable buttons no longer show the Windows busy cursor and the delete-binder action remains clickable to show exact patient-ID confirmation guidance; keeps the gated Alleva REST treatment-plan sync readiness from 1.4.1."
+  "release_date": "2026-06-19",
+  "git_branch": "remove-fhir-from-active-app",
+  "version_name": "Version 1.4.3 Alleva REST/OpenAPI readiness cleanup",
+  "description": "Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. Alleva integration is now REST/OpenAPI/HL7-readiness only."
 }

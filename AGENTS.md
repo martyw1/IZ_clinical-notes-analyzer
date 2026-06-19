@@ -4,7 +4,7 @@
 Local-first Windows 10/11 clinical-notes completeness-check app for R3 Recovery Services. The v0.5.0 direction is the Treatment Plan Timeliness Tracker MVP while preserving the existing upload-first chart-review workflow. Normal Windows desktop use must not require Docker, PostgreSQL, Git, Node.js, or command-line work.
 
 ## R3 project architecture
-- Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, EMR/FHIR readiness boundary, and version/readiness endpoints.
+- Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, REST/OpenAPI/HL7 readiness boundary, and version/readiness endpoints.
 - Frontend: `frontend/src/` React/Vite single-page UI for login, dashboard, uploads, review queue, users, logs, settings, API/EMR status, and version footer.
 - Desktop runtime: `backend/app/desktop_main.py` mounts the built React app plus desktop-only rules/API/intake pages for one-service localhost use.
 - Data: default SQLite, uploads, logs, and user `.env` live in OS-local app data, not the repo. Relative runtime paths must resolve through `Settings.local_app_data_dir`.
@@ -32,7 +32,7 @@ Local-first Windows 10/11 clinical-notes completeness-check app for R3 Recovery 
 - Keep uploads encrypted at rest with the existing local encryption envelope.
 - Saved API credentials must be encrypted at rest and never returned to the browser. Browser responses should expose only boolean configured flags.
 - Keep direct API probes and OpenAPI discovery limited to configuration/testing/future-readiness unless official production import approval exists.
-- Do not fake Alleva live patient import. Live patient import remains disabled until official tenant credentials, endpoint mapping, scopes, pagination, rate limits, attachment behavior, vendor documentation, and compliance approval exist.
+- Do not fake Alleva live patient import. Live patient import remains disabled until official tenant credentials, endpoint mapping, auth requirements, pagination, rate limits, attachment behavior, vendor documentation, and compliance approval exist.
 - Do not add Docker or PostgreSQL as Windows desktop requirements.
 
 ## Treatment Plan Timeliness Tracker blockers
@@ -44,7 +44,7 @@ Local-first Windows 10/11 clinical-notes completeness-check app for R3 Recovery 
 - The API configuration page, OpenAPI discovery, and operation-test endpoints are a direct API harness for readiness and tenant/vendor testing.
 - Saved API keys/secrets must use encrypted storage and should never appear in audit details, browser payloads, console output, docs, tests, or screenshots.
 - Local sample OpenAPI/operation endpoints may use synthetic patient IDs only.
-- Alleva/FHIR import plans are planning artifacts until the live import gate above is satisfied.
+- Alleva live import plans are planning artifacts until the live import gate above is satisfied.
 
 ## Commit and validation expectations
 - Work in stations and do not perform destructive cleanup before the S0 validation gate.

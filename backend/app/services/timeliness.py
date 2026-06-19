@@ -622,12 +622,8 @@ def _document_source_evidence(document: PatientNoteDocument, *, note_set_id: int
         parts.append('manual upload page 1')
     if document.source_document_id.strip():
         parts.append(f'Alleva document ID {document.source_document_id.strip()}')
-    if document.source_document_reference_id.strip():
-        parts.append(f'DocumentReference {document.source_document_reference_id.strip()}')
     if document.source_attachment_url.strip():
         parts.append(f'attachment {document.source_attachment_url.strip()}')
-    if document.source_provenance_id.strip():
-        parts.append(f'Provenance {document.source_provenance_id.strip()}')
     return '; '.join(parts)
 
 
@@ -677,7 +673,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
                 client_signature_date=signature_date if document.client_signed else '',
                 source_evidence=_document_source_evidence(document, note_set_id=note_set.id),
                 source_section=document.alleva_bucket.value,
-                source_document_id=document.source_document_id or document.source_document_reference_id or str(document.id),
+                source_document_id=document.source_document_id or str(document.id),
                 source_note_set_id=note_set.id,
                 is_valid=document.completion_status.value == 'completed',
                 conflict_note='' if document.completion_status.value == 'completed' else 'Document is not marked completed.',

@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-19 v1.4.3 Alleva REST/OpenAPI readiness cleanup
+- Updated app/version metadata to `1.4.3` / build `2026.06.19.1`.
+- Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan routes, read scopes, UI fields, defaults, validation requirements, tests, and synthetic examples from Alleva workflows.
+- Reframed Alleva integration as REST/OpenAPI/HL7-readiness only, preserving encrypted API credentials, OpenAPI operation testing, HL7 readiness language, and the gated Alleva REST treatment-plan sync path.
+- Updated README, API configuration docs, architecture/runbook/codebase docs, Windows/UAT guides, blocker notes, changelog, and synthetic Alleva examples for the new boundary.
+- Verification passed backend pytest (`95 passed, 2 skipped`), frontend Vitest (`16 passed`), and frontend production build.
+
 ## 2026-06-18 v1.4.2 manual upload button usability
 - Updated app/version metadata to `1.4.2` / build `2026.06.18.2`.
 - Fixed Manual upload binder deletion usability so disabled buttons no longer show the Windows busy cursor.

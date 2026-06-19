@@ -87,7 +87,7 @@ def _api_configuration_page() -> HTMLResponse:
         <button onclick="loadConfig()" class="secondary">Load saved config</button>
         <button onclick="saveConfig()">Save config and encrypted secret</button>
         <button onclick="clearSavedKey()" class="danger">Clear saved secret</button>
-        <p class="hint">For Alleva REST tests, use the REST API base URL, usually https://api.allevasoft.com, and the Swagger/OpenAPI JSON URL. FHIR discovery uses a separate vendor-supplied FHIR R4 root if one is ever provided. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
+        <p class="hint">For Alleva REST/OpenAPI tests, use the REST API base URL, usually https://api.allevasoft.com, and the Swagger/OpenAPI JSON URL. Alleva has confirmed HL7 is the current standards path. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
       </section>
 
       <section>

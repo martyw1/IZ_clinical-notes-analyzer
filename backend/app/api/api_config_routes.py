@@ -181,12 +181,12 @@ def _configuration_out(settings_row: AppSetting) -> ApiConfigurationOut:
         api_base_url=settings_row.alleva_api_base_url or '',
         swagger_ui_url=DEFAULT_ALLEVA_SWAGGER_UI_URL,
         openapi_url=_default_openapi_url(settings_row),
-        api_key_configured=bool(settings_row.emr_smart_client_secret),
-        client_id=settings_row.emr_smart_client_id or '',
-        client_id_configured=bool(settings_row.emr_smart_client_id),
-        client_secret_configured=bool(settings_row.emr_smart_client_secret),
-        token_url=settings_row.emr_smart_token_url or DEFAULT_ALLEVA_TOKEN_URL,
-        token_auth_style=getattr(settings_row, 'emr_smart_token_auth_style', 'body') or 'body',
+        api_key_configured=bool(settings_row.api_client_secret),
+        client_id=settings_row.api_client_id or '',
+        client_id_configured=bool(settings_row.api_client_id),
+        client_secret_configured=bool(settings_row.api_client_secret),
+        token_url=settings_row.api_oauth_token_url or DEFAULT_ALLEVA_TOKEN_URL,
+        token_auth_style=getattr(settings_row, 'api_token_auth_style', 'body') or 'body',
         api_key_header_name=DEFAULT_API_KEY_HEADER_NAME,
         timeout_seconds=settings_row.emr_api_timeout_seconds,
         api_enabled=settings_row.emr_api_enabled,
@@ -198,9 +198,9 @@ def _snapshot(settings_row: AppSetting) -> dict[str, Any]:
 
 
 def _saved_api_key(settings_row: AppSetting) -> str:
-    if not settings_row.emr_smart_client_secret:
+    if not settings_row.api_client_secret:
         return ''
-    return decrypt_text_secret(settings_row.emr_smart_client_secret)
+    return decrypt_text_secret(settings_row.api_client_secret)
 
 
 def _auth_context(
@@ -217,9 +217,9 @@ def _auth_context(
         'bearer_token': '',
         'api_key_source': 'none',
         'credential_source': 'none',
-        'token_url': _strip(payload.token_url) or settings_row.emr_smart_token_url or DEFAULT_ALLEVA_TOKEN_URL,
-        'token_auth_style': payload.token_auth_style or getattr(settings_row, 'emr_smart_token_auth_style', 'body') or 'body',
-        'scope': _strip(payload.scope) or settings_row.emr_smart_scopes,
+        'token_url': _strip(payload.token_url) or settings_row.api_oauth_token_url or DEFAULT_ALLEVA_TOKEN_URL,
+        'token_auth_style': payload.token_auth_style or getattr(settings_row, 'api_token_auth_style', 'body') or 'body',
+        'scope': _strip(payload.scope),
         'token_result': {},
     }
     if payload.auth_mode == 'none':
@@ -231,7 +231,7 @@ def _auth_context(
 
     supplied_client_id = _strip(payload.client_id)
     supplied_client_secret = _strip(payload.client_secret)
-    saved_client_id = settings_row.emr_smart_client_id.strip() if payload.use_saved_client_credentials else ''
+    saved_client_id = settings_row.api_client_id.strip() if payload.use_saved_client_credentials else ''
     saved_client_secret = _saved_api_key(settings_row) if payload.use_saved_client_credentials else ''
     client_id = supplied_client_id or saved_client_id
     client_secret = supplied_client_secret or saved_client_secret
@@ -309,7 +309,7 @@ def get_api_configuration(request: Request, user: User = Depends(require_roles(R
         target_entity='api_configuration',
         target_entity_type='app_settings',
         target_entity_id=str(settings_row.id),
-        details={'vendor_name': settings_row.emr_vendor_name, 'api_key_configured': bool(settings_row.emr_smart_client_secret)},
+        details={'vendor_name': settings_row.emr_vendor_name, 'api_key_configured': bool(settings_row.api_client_secret)},
         message='API configuration viewed.',
     )
     return _configuration_out(settings_row)
@@ -338,23 +338,23 @@ def update_api_configuration(
     if payload.api_enabled is not None:
         settings_row.emr_api_enabled = payload.api_enabled
     if payload.clear_api_key:
-        settings_row.emr_smart_client_secret = ''
+        settings_row.api_client_secret = ''
         api_key_cleared = True
     elif payload.api_key and payload.api_key.strip():
-        settings_row.emr_smart_client_secret = encrypt_text_secret(payload.api_key.strip())
+        settings_row.api_client_secret = encrypt_text_secret(payload.api_key.strip())
         api_key_changed = True
     if payload.client_id is not None:
-        settings_row.emr_smart_client_id = _strip(payload.client_id)
+        settings_row.api_client_id = _strip(payload.client_id)
     if payload.clear_client_secret:
-        settings_row.emr_smart_client_secret = ''
+        settings_row.api_client_secret = ''
         api_key_cleared = True
     elif payload.client_secret and payload.client_secret.strip():
-        settings_row.emr_smart_client_secret = encrypt_text_secret(payload.client_secret.strip())
+        settings_row.api_client_secret = encrypt_text_secret(payload.client_secret.strip())
         api_key_changed = True
     if payload.token_url is not None:
-        settings_row.emr_smart_token_url = _strip(payload.token_url) or DEFAULT_ALLEVA_TOKEN_URL
+        settings_row.api_oauth_token_url = _strip(payload.token_url) or DEFAULT_ALLEVA_TOKEN_URL
     if payload.token_auth_style is not None:
-        settings_row.emr_smart_token_auth_style = payload.token_auth_style
+        settings_row.api_token_auth_style = payload.token_auth_style
 
     settings_row.updated_by_id = user.id
     settings_row.updated_at = _utc_now()
@@ -376,9 +376,9 @@ def update_api_configuration(
             'api_key_cleared': api_key_cleared,
             'vendor_name': settings_row.emr_vendor_name,
             'api_base_url_configured': bool(settings_row.alleva_api_base_url),
-            'client_id_configured': bool(settings_row.emr_smart_client_id),
-            'token_url_configured': bool(settings_row.emr_smart_token_url),
-            'token_auth_style': getattr(settings_row, 'emr_smart_token_auth_style', 'body'),
+            'client_id_configured': bool(settings_row.api_client_id),
+            'token_url_configured': bool(settings_row.api_oauth_token_url),
+            'token_auth_style': getattr(settings_row, 'api_token_auth_style', 'body'),
         },
         before_state=before,
         after_state=after,
@@ -409,7 +409,7 @@ def pull_api_configuration_definitions(
         'auth_mode': auth_context['auth_mode'],
         'token_url': auth_context['token_url'],
         'token_auth_style': auth_context['token_auth_style'],
-        'client_id_configured': bool(_strip(payload.client_id) or settings_row.emr_smart_client_id),
+        'client_id_configured': bool(_strip(payload.client_id) or settings_row.api_client_id),
         'client_secret': _strip(payload.client_secret) or (_saved_api_key(settings_row) if payload.use_saved_client_credentials else ''),
         'credential_source': auth_context['credential_source'],
         'scope': auth_context['scope'],
@@ -523,7 +523,7 @@ def test_api_configuration_operation(
         'auth_mode': auth_context['auth_mode'],
         'token_url': auth_context['token_url'],
         'token_auth_style': auth_context['token_auth_style'],
-        'client_id_configured': bool(_strip(payload.client_id) or settings_row.emr_smart_client_id),
+        'client_id_configured': bool(_strip(payload.client_id) or settings_row.api_client_id),
         'client_secret': _strip(payload.client_secret) or (_saved_api_key(settings_row) if payload.use_saved_client_credentials else ''),
         'credential_source': auth_context['credential_source'],
         'scope': auth_context['scope'],

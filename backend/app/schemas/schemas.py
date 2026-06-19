@@ -92,13 +92,11 @@ class AppSettingsUpdate(BaseModel):
     llm_analysis_instructions: str | None = None
     emr_api_enabled: bool | None = None
     emr_vendor_name: str | None = Field(default=None, max_length=120)
-    emr_fhir_base_url: str | None = Field(default=None, max_length=255)
-    emr_smart_client_id: str | None = Field(default=None, max_length=255)
-    emr_smart_client_secret: str | None = None
-    clear_emr_smart_client_secret: bool = False
-    emr_smart_token_url: str | None = Field(default=None, max_length=500)
-    emr_smart_token_auth_style: str | None = Field(default=None, pattern=r'^(body|basic|basic_urlencoded|both|all)$')
-    emr_smart_scopes: str | None = Field(default=None, max_length=500)
+    api_client_id: str | None = Field(default=None, max_length=255)
+    api_client_secret: str | None = None
+    clear_api_client_secret: bool = False
+    api_oauth_token_url: str | None = Field(default=None, max_length=500)
+    api_token_auth_style: str | None = Field(default=None, pattern=r'^(body|basic|basic_urlencoded|both|all)$')
     emr_api_timeout_seconds: int | None = Field(default=None, ge=1, le=60)
     emr_periodic_check_enabled: bool | None = None
     emr_periodic_check_interval_minutes: int | None = Field(default=None, ge=5, le=10080)
@@ -132,12 +130,10 @@ class AppSettingsOut(BaseModel):
     llm_analysis_instructions: str
     emr_api_enabled: bool
     emr_vendor_name: str
-    emr_fhir_base_url: str
-    emr_smart_client_id: str
-    emr_smart_client_secret_configured: bool
-    emr_smart_token_url: str
-    emr_smart_token_auth_style: str
-    emr_smart_scopes: str
+    api_client_id: str
+    api_client_secret_configured: bool
+    api_oauth_token_url: str
+    api_token_auth_style: str
     emr_api_timeout_seconds: int
     emr_periodic_check_enabled: bool
     emr_periodic_check_interval_minutes: int
@@ -182,60 +178,32 @@ class ReadinessOut(BaseModel):
     checks: list[RuntimeCheckOut]
 
 
-class EmrDiscoveryInput(BaseModel):
-    fhir_base_url: str | None = Field(default=None, max_length=255)
-
-
-class EmrDiscoveryOut(BaseModel):
-    status: str
-    fhir_base_url: str
-    smart_configuration_url: str
-    authorization_endpoint_configured: bool
-    token_endpoint_configured: bool
-    capabilities: list[str]
-    message: str
-
-
 class EmrConnectionProfileOut(BaseModel):
     adapter_key: str
     enabled: bool
     vendor_name: str
     live_import_status: str
-    fhir_base_url: str
-    smart_discovery_url: str | None
+    api_base_url: str
+    openapi_url: str
+    oauth_token_url_configured: bool
     client_id_configured: bool
     client_secret_configured: bool
-    scopes: list[str]
-    supported_resources: list[str]
     standards: list[str]
     supported_export_formats: list[str]
     document_manager_sections: list[dict[str, str]]
     required_vendor_inputs: list[str]
 
 
-class EmrImportPlanOut(BaseModel):
-    patient_id: str
-    fhir_base_url: str
-    source_identifier_note: str
-    planned_requests: list[dict[str, str]]
-    alleva_notes: list[str]
-    supported_export_formats: list[str]
-    document_manager_sections: list[dict[str, str]]
-    attachment_handling: str
-    document_mapping: dict[str, str]
-
-
 class EmrEndpointProfileBase(BaseModel):
     profile_key: str = Field(min_length=3, max_length=80, pattern=r'^[a-z0-9][a-z0-9_-]*$')
     display_name: str = Field(min_length=1, max_length=120)
     vendor_name: str = Field(default='Alleva', max_length=120)
-    adapter_key: str = Field(default='alleva-fhir-document-manager', max_length=120)
-    fhir_base_url: str = Field(default='', max_length=500)
+    adapter_key: str = Field(default='alleva-rest-api', max_length=120)
+    api_base_url: str = Field(default='https://api.allevasoft.com', max_length=500)
     openapi_url: str = Field(default='', max_length=500)
     token_url: str = Field(default='', max_length=500)
     token_auth_style: str = Field(default='body', pattern=r'^(body|basic|basic_urlencoded|both|all)$')
     client_id: str = Field(default='', max_length=255)
-    scopes: str = Field(default='', max_length=500)
     timeout_seconds: int = Field(default=10, ge=1, le=60)
     is_active: bool = True
     is_default: bool = False
@@ -250,14 +218,13 @@ class EmrEndpointProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     vendor_name: str | None = Field(default=None, max_length=120)
     adapter_key: str | None = Field(default=None, max_length=120)
-    fhir_base_url: str | None = Field(default=None, max_length=500)
+    api_base_url: str | None = Field(default=None, max_length=500)
     openapi_url: str | None = Field(default=None, max_length=500)
     token_url: str | None = Field(default=None, max_length=500)
     token_auth_style: str | None = Field(default=None, pattern=r'^(body|basic|basic_urlencoded|both|all)$')
     client_id: str | None = Field(default=None, max_length=255)
     client_secret: str | None = None
     clear_client_secret: bool = False
-    scopes: str | None = Field(default=None, max_length=500)
     timeout_seconds: int | None = Field(default=None, ge=1, le=60)
     is_active: bool | None = None
     is_default: bool | None = None
@@ -270,14 +237,13 @@ class EmrEndpointProfileOut(BaseModel):
     display_name: str
     vendor_name: str
     adapter_key: str
-    fhir_base_url: str
+    api_base_url: str
     openapi_url: str
     token_url: str
     token_auth_style: str
     client_id: str
     client_id_configured: bool
     client_secret_configured: bool
-    scopes: str
     timeout_seconds: int
     is_active: bool
     is_default: bool
@@ -543,12 +509,10 @@ class PatientNoteDocumentUploadInput(BaseModel):
     document_date: str = ''
     description: str = ''
     source_document_id: str = ''
-    source_document_reference_id: str = ''
     source_attachment_url: str = ''
     source_author: str = ''
     source_custodian: str = ''
     source_security_label: str = ''
-    source_provenance_id: str = ''
 
 
 class PatientNoteDocumentOut(BaseModel):
@@ -568,12 +532,10 @@ class PatientNoteDocumentOut(BaseModel):
     document_date: str
     description: str
     source_document_id: str
-    source_document_reference_id: str
     source_attachment_url: str
     source_author: str
     source_custodian: str
     source_security_label: str
-    source_provenance_id: str
     created_at: datetime
 
 
@@ -651,7 +613,6 @@ class AuditLogOut(BaseModel):
     diff_state: str | None
     cef_extension: str
     cef_payload: str
-    fhir_audit_event: str
     outcome_status: str
     severity: str
     prev_hash: str | None
