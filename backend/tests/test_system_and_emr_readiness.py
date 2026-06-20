@@ -24,9 +24,36 @@ class TreatmentReviewsUnauthorizedHttpxClient:
     def _handler(request: httpx.Request) -> httpx.Response:
         assert request.headers.get('authorization') == 'Bearer synced-token'
         if request.url.path == '/clients':
-            return httpx.Response(200, json=[])
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        'id': 201,
+                        'clientId': 'PAT-ACTIVE-001',
+                        'name': {'clientFullName': 'Synthetic Active Client'},
+                        'status': 'Active',
+                        'isClient': True,
+                        'admissionDateTime': '2026-02-03T09:00:00',
+                        'facilityName': 'Synthetic Facility',
+                        'levelOfCare': 'IOP',
+                    }
+                ],
+            )
         if request.url.path == '/treatment-plans':
-            return httpx.Response(200, json=[])
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        'id': 301,
+                        'client': {'clientId': 'PAT-ACTIVE-001'},
+                        'isInitialTP': False,
+                        'isComplete': True,
+                        'startDate': '2026-04-02T00:00:00',
+                        'staffSignatureDate': '2026-04-02',
+                        'clientSignature': {'signatureDateTime': '2026-04-02T09:00:00'},
+                    }
+                ],
+            )
         if request.url.path == '/treatment-reviews':
             return httpx.Response(401, json={'message': 'synthetic unauthorized'})
         return httpx.Response(404, text='not found')
@@ -210,7 +237,7 @@ def test_alleva_rest_sync_enablement_lists_missing_approval_and_mapping(app_with
         assert 'Alleva API client secret' in detail
 
 
-def test_manual_alleva_sync_classifies_endpoint_unauthorized(app_with_sqlite, monkeypatch):
+def test_manual_alleva_sync_warns_on_optional_treatment_reviews_unauthorized(app_with_sqlite, monkeypatch):
     monkeypatch.setattr(
         'app.services.alleva_treatment_plan_sync.request_client_credentials_token',
         lambda **_kwargs: ({'status': 'ok', 'message': 'Client-credentials token obtained.'}, 'synced-token'),
@@ -241,22 +268,28 @@ def test_manual_alleva_sync_classifies_endpoint_unauthorized(app_with_sqlite, mo
         assert response.status_code == 200
         payload = response.json()
         result = payload['sync_result']
-        assert result['status'] == 'fail'
-        assert result['failure_stage'] == 'endpoint_request'
-        assert result['category'] == 'endpoint_authorization_failed'
-        assert result['endpoint'] == '/treatment-reviews'
-        assert result['status_code'] == 401
-        assert 'token request succeeded' in result['message']
-        assert 'GET /treatment-reviews' in result['message']
+        assert result['status'] == 'warn'
+        assert result['upserted_client_count'] == 1
+        assert result['treatment_plan_count'] == 1
+        assert result['treatment_review_count'] == 0
+        assert result['optional_endpoint_failures'][0]['endpoint'] == '/treatment-reviews'
+        assert result['optional_endpoint_failures'][0]['category'] == 'endpoint_authorization_failed'
+        assert result['optional_endpoint_failures'][0]['status_code'] == 401
+        assert 'Optional Alleva treatment-review endpoint /treatment-reviews could not be read' in result['message']
         assert 'HTTP 401 Unauthorized' in result['message']
         assert 'HTTPStatusError' not in result['message']
 
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting)).scalar_one()
-        assert settings_row.alleva_treatment_plan_sync_last_status == 'fail'
-        assert 'GET /treatment-reviews' in settings_row.alleva_treatment_plan_sync_last_message
+        assert settings_row.alleva_treatment_plan_sync_last_status == 'warn'
+        assert 'Optional Alleva treatment-review endpoint /treatment-reviews could not be read' in settings_row.alleva_treatment_plan_sync_last_message
         assert 'HTTPStatusError' not in settings_row.alleva_treatment_plan_sync_last_message
+        from app.models.models import TreatmentPlanClient
+
+        synced_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-ACTIVE-001')).scalar_one()
+        assert synced_client.current_level_of_care == 'IOP'
+        assert len(synced_client.treatment_plans) == 1
     finally:
         db.close()
 

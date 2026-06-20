@@ -106,8 +106,7 @@ def initialize_database() -> None:
                     details={'workflow_key': seeded_workflow.workflow_key, 'version': 1},
                     message='Default Treatment Plan Timeliness workflow profile seeded during startup.',
                 )
-            settings_row = get_or_create_app_settings(db)
-            run_alleva_treatment_plan_sync(db, settings_row, startup=True)
+            get_or_create_app_settings(db)
         finally:
             db.close()
 
@@ -123,6 +122,27 @@ def initialize_database() -> None:
             },
             message='Application startup and schema compatibility checks completed.',
         )
+
+
+def startup_alleva_sync_enabled() -> bool:
+    db = SessionLocal()
+    try:
+        settings_row = get_or_create_app_settings(db)
+        return bool(settings_row.alleva_treatment_plan_sync_enabled and settings_row.alleva_treatment_plan_sync_on_startup)
+    finally:
+        db.close()
+
+
+def run_startup_alleva_sync_once() -> None:
+    db = SessionLocal()
+    try:
+        with system_audit_context():
+            settings_row = get_or_create_app_settings(db)
+            run_alleva_treatment_plan_sync(db, settings_row, startup=True)
+    except Exception as exc:  # pragma: no cover - defensive background guard
+        logger.warning('Startup Alleva treatment-plan sync failed: %s', exc)
+    finally:
+        db.close()
 
 
 def run_due_periodic_api_check_once() -> None:
@@ -153,12 +173,22 @@ def create_app() -> FastAPI:
     async def lifespan(_: FastAPI):
         initialize_database()
         stop_event = asyncio.Event()
+        startup_sync_task = (
+            asyncio.create_task(asyncio.to_thread(run_startup_alleva_sync_once))
+            if startup_alleva_sync_enabled()
+            else None
+        )
         monitor_task = asyncio.create_task(periodic_api_monitor_loop(stop_event))
         try:
             yield
         finally:
             stop_event.set()
             monitor_task.cancel()
+            if startup_sync_task and startup_sync_task.done():
+                try:
+                    await startup_sync_task
+                except Exception as exc:  # pragma: no cover - defensive shutdown guard
+                    logger.warning('Startup Alleva treatment-plan sync task failed: %s', exc)
             try:
                 await monitor_task
             except asyncio.CancelledError:

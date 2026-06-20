@@ -277,6 +277,48 @@ def _fetch_collection(
     return records[:limit]
 
 
+def _fetch_optional_collection(
+    *,
+    base_url: str,
+    path: str,
+    bearer_token: str,
+    api_version: str,
+    limit: int,
+    timeout_seconds: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    try:
+        return (
+            _fetch_collection(
+                base_url=base_url,
+                path=path,
+                bearer_token=bearer_token,
+                api_version=api_version,
+                limit=limit,
+                timeout_seconds=timeout_seconds,
+            ),
+            None,
+        )
+    except AllevaSyncExternalError as exc:
+        logger.warning(
+            'Alleva treatment-plan sync optional endpoint skipped stage=%s category=%s endpoint=%s status_code=%s',
+            exc.stage,
+            exc.category,
+            exc.endpoint,
+            exc.status_code,
+        )
+        status_label = _http_status_label(exc.status_code) if exc.status_code is not None else exc.category.replace('_', ' ')
+        return [], {
+            'endpoint': exc.endpoint or path,
+            'failure_stage': exc.stage,
+            'category': exc.category,
+            'status_code': exc.status_code,
+            'message': (
+                f'Optional Alleva treatment-review endpoint {path} could not be read ({status_label}). '
+                'The app continued with /clients and /treatment-plans only.'
+            ),
+        }
+
+
 def _missing_sync_configuration(settings_row: AppSetting, *, startup: bool) -> list[str]:
     missing = []
     if not settings_row.alleva_treatment_plan_sync_enabled:
@@ -548,7 +590,14 @@ def run_alleva_treatment_plan_sync(
         api_version = settings_row.alleva_api_version.strip() or '1.0'
         clients = _fetch_collection(base_url=base_url, path=SYNC_ENDPOINTS['clients'], bearer_token=bearer_token, api_version=api_version, limit=limit, timeout_seconds=settings_row.emr_api_timeout_seconds)
         treatment_plans = _fetch_collection(base_url=base_url, path=SYNC_ENDPOINTS['treatment_plans'], bearer_token=bearer_token, api_version=api_version, limit=limit, timeout_seconds=settings_row.emr_api_timeout_seconds)
-        treatment_reviews = _fetch_collection(base_url=base_url, path=SYNC_ENDPOINTS['treatment_reviews'], bearer_token=bearer_token, api_version=api_version, limit=limit, timeout_seconds=settings_row.emr_api_timeout_seconds)
+        treatment_reviews, optional_review_failure = _fetch_optional_collection(
+            base_url=base_url,
+            path=SYNC_ENDPOINTS['treatment_reviews'],
+            bearer_token=bearer_token,
+            api_version=api_version,
+            limit=limit,
+            timeout_seconds=settings_row.emr_api_timeout_seconds,
+        )
         summary = sync_alleva_rest_payloads(db, clients_payload=clients, treatment_plans_payload=treatment_plans, treatment_reviews_payload=treatment_reviews)
         db.commit()
         touched_clients = (
@@ -586,6 +635,8 @@ def run_alleva_treatment_plan_sync(
                 message='Alleva REST treatment-plan sync analyzed one active client with R3 compliance rules.',
             )
         warning_parts: list[str] = []
+        if optional_review_failure:
+            warning_parts.append(str(optional_review_failure['message']))
         if not clients and not treatment_plans and not treatment_reviews:
             warning_parts.append('Alleva returned no client, treatment-plan, or treatment-review records for the configured query.')
         elif summary['active_client_count'] == 0:
@@ -615,7 +666,10 @@ def run_alleva_treatment_plan_sync(
             severity='info' if status == 'ok' else 'warning',
             message=message,
         )
-        return {'status': status, 'message': message, 'warnings': warning_parts, **{key: value for key, value in summary.items() if key != 'client_ids'}}
+        result = {'status': status, 'message': message, 'warnings': warning_parts, **{key: value for key, value in summary.items() if key != 'client_ids'}}
+        if optional_review_failure:
+            result['optional_endpoint_failures'] = [optional_review_failure]
+        return result
     except AllevaSyncExternalError as exc:
         logger.warning(
             'Alleva treatment-plan sync external failure stage=%s category=%s endpoint=%s status_code=%s',
@@ -623,7 +677,6 @@ def run_alleva_treatment_plan_sync(
             exc.category,
             exc.endpoint,
             exc.status_code,
-            exc_info=True,
         )
         db.rollback()
         _mark_status(db, settings_row, status=exc.status, message=exc.public_message)

@@ -1,5 +1,11 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-20 v1.4.4 Alleva treatment-plan sync follow-up
+- Kept `/clients` and `/treatment-plans` as required Alleva REST sync endpoints while treating `/treatment-reviews` failures as warning-only optional endpoint failures.
+- Moved enabled startup Alleva sync into a non-blocking background startup task and removed traceback logging for expected external sync failures.
+- Added the admin-only Review Queue `Pull active treatment plans` action backed by the same approved sync endpoint used in App Settings.
+- Verification passed targeted Alleva sync regression, relevant backend API/timeliness/connectivity tests (`39 passed`), full backend pytest (`101 passed, 2 skipped`), frontend Vitest (`17 passed`), and frontend production build.
+
 ## 2026-06-19 v1.4.4 API settings consolidation and startup audit repair
 - Updated app/version metadata to `1.4.4` / build `2026.06.19.2`.
 - Repaired startup and button-click audit persistence for legacy SQLite databases that still had the retired `audit_logs.fhir_audit_event` column marked `NOT NULL`.

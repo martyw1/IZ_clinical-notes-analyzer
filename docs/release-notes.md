@@ -19,6 +19,8 @@ Summary:
 - Preserves the gated Alleva REST treatment-plan sync readiness boundary and manual-upload binder deletion usability behavior.
 - Replaces generic manual Alleva treatment-plan sync failure text with stage-specific user messages for token, endpoint permission, endpoint mapping/version, timeout, empty-result, warning, and success states.
 - Simplifies the API Testing Harness into a step-by-step flow and keeps one Alleva quick action: `ALL Patient Records`, backed by `GET /clients` with Excel-ready TSV output.
+- Lets approved Alleva treatment-plan sync continue when the optional `/treatment-reviews` endpoint is unauthorized or unavailable, while keeping `/clients` and `/treatment-plans` required.
+- Adds an admin-only Review Queue button to pull active treatment plans through the same approved sync path and then open the Treatment Plans queue.
 
 ## 1.4.2 - Manual upload button usability
 

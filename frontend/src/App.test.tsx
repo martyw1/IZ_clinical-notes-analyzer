@@ -986,6 +986,53 @@ describe('App turnkey workflow', () => {
     expect(revokeObjectUrl).toHaveBeenCalledTimes(5)
   })
 
+  it('runs the Alleva treatment-plan sync from the review queue and opens treatment plans', async () => {
+    let syncRequested = false
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'token-review-sync', must_reset_password: false },
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+      'POST /api/alleva/treatment-plan-sync/run': () => {
+        syncRequested = true
+        return {
+          body: {
+            sync_result: {
+              status: 'ok',
+              message: 'Alleva treatment-plan sync completed; 1 active client(s) loaded, 1 treatment plan record(s), 0 review record(s).',
+              upserted_client_count: 1,
+              active_client_count: 1,
+              treatment_plan_count: 1,
+              treatment_review_count: 0,
+            },
+            settings: appSettingsPayload(),
+          },
+        }
+      },
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pull active treatment plans' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Pull active treatment plans' }))
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.getByText(/1 active client\(s\) loaded/)).toBeInTheDocument()
+    expect(syncRequested).toBe(true)
+  })
+
   it('uploads a note binder and opens the generated automated review', async () => {
     let chartCalls = 0
     let noteSetCalls = 0

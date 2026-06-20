@@ -5,6 +5,9 @@
 - Replaced generic manual Alleva treatment-plan sync user-facing failure text with stage-specific status messages for token request, endpoint authorization/permission, endpoint mapping/API version, timeout/reachability, empty results, warning completion, and success.
 - Reworked the standalone API Testing Harness into a step-by-step flow: admin session, active settings, auth/connectivity test, `ALL Patient Records`, and advanced operation testing.
 - Reduced the user-facing Alleva quick-pull area to one `ALL Patient Records` action backed by `GET /clients`, with visible request parameters and Excel-ready TSV output.
+- Updated Alleva REST treatment-plan sync so `/clients` and `/treatment-plans` remain required, while `/treatment-reviews` authorization or mapping failures are reported as warnings and do not roll back core active-client/treatment-plan imports.
+- Moved enabled startup Alleva treatment-plan sync into a background startup task so local login is not delayed by vendor endpoint checks.
+- Added an admin-only `Pull active treatment plans` action to the Review Queue that runs the approved Alleva treatment-plan sync and opens the Treatment Plans queue after successful or warning-level completion.
 - Updated Chart audit/App Settings labels so safe API readiness checks are clearly described as connection/readiness checks that do not import live patient charts.
 - Verified public Alleva v1 Swagger still lists `/clients`, `/treatment-plans`, and `/treatment-reviews` with `Limit`, `Cursor`, optional `StartDate`/`EndDate`, `fields`, `api-version`, and `X-Version`.
 

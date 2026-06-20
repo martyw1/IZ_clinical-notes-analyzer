@@ -836,6 +836,7 @@ const HELP_SECTIONS = [
     title: 'Review Queue',
     items: [
       'Open automated review loads the selected chart and criterion workbench.',
+      'Admins can pull approved Alleva REST active treatment-plan data from the Review Queue using the saved App Settings API connection.',
       'Mark OK, Mark not OK, Not applicable, and Save criterion review changes are available to admins and office managers.',
       'Export CSV and Export JSON keep the existing checklist-domain status rows and also include the current 42-step workflow statuses.',
       'Approve and Return to counselor are manager/admin decisions; returns require a correction note.',
@@ -1497,6 +1498,7 @@ export function App() {
   }, [selectedChart, user])
   const canEditCriteria = user?.role === 'admin' || user?.role === 'manager'
   const canOverrideTimeliness = user?.role === 'admin' || user?.role === 'manager'
+  const canRunAllevaTreatmentPlanSync = user?.role === 'admin'
 
   const selectedManagedUser = useMemo(
     () => users.find((candidate) => candidate.id === selectedManagedUserId) || null,
@@ -1942,7 +1944,7 @@ export function App() {
     }
   }
 
-  async function runAllevaTreatmentPlanSyncNow() {
+  async function runAllevaTreatmentPlanSyncNow(options: { revealTimeliness?: boolean } = {}) {
     setIsBusy(true)
     setError('')
     setStatus('Running Alleva REST treatment-plan sync...')
@@ -1955,6 +1957,8 @@ export function App() {
       setStatus(payload.sync_result.message)
       if (payload.sync_result.status === 'fail' || payload.sync_result.status === 'blocked') {
         setError(payload.sync_result.message)
+      } else if (options.revealTimeliness) {
+        changeView('timeliness')
       }
       appendSettingsActivity(`Treatment-plan sync ${payload.sync_result.status}: ${payload.sync_result.message}`)
     } catch (caught) {
@@ -4422,9 +4426,21 @@ export function App() {
               <aside className='panel queue-panel'>
                 <div className='panel-heading'>
                   <h2>Automated review queue</h2>
-                  <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
-                    Refresh
-                  </button>
+                  <div className='button-row'>
+                    {canRunAllevaTreatmentPlanSync ? (
+                      <button
+                        type='button'
+                        className='ghost-button'
+                        onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })}
+                        disabled={isBusy}
+                      >
+                        Pull active treatment plans
+                      </button>
+                    ) : null}
+                    <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
+                      Refresh
+                    </button>
+                  </div>
                 </div>
                 {charts.length ? (
                   <ul className='queue-list'>
