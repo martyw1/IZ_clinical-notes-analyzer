@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-18
+Date: 2026-06-20
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -19,7 +19,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` lo
 - If database persistence fails during logging, the app writes JSONL fallback records under the local app-data log directory.
 - Admin access to forensic logs is available through `GET /api/audit/logs` and the `Forensic logs` screen.
 - Preserve UTC timestamps during exports, use the app-provided local timestamp for operator review, and correlate events using `request_id` and `correlation_id`.
-- Audit snapshots must not expose uploaded note text, original filenames, storage paths, API keys, bearer tokens, passwords, encryption keys, or PHI-like clinical content.
+- Audit snapshots must not expose uploaded note text, original filenames, storage paths, vendor connection material, local access material, encryption material, or PHI-like clinical content.
 
 ## Patient note set handling
 
@@ -34,7 +34,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` lo
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Version 1.4.2 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Version 1.4.4 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
@@ -46,26 +46,19 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` lo
 - When opened from App settings, the harness uses the current admin session; it should not prompt for a second admin login inside the harness.
 - The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
 - Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
-- Periodic API readiness checks can be enabled in App settings after saving API/FHIR base URL, token URL, client ID, encrypted client secret, token auth style, and interval.
+- Periodic API readiness checks can be enabled in App settings after saving API/FHIR base URL, token URL, client ID, protected client configuration, token auth style, and interval.
 - FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, and `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path, not a FHIR base URL.
-- Stored EMR endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
+- Stored EMR endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning protected values to the browser.
 - Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
 
 ## Alleva REST treatment-plan sync
 
 - `Test-AllevaApi.ps1` works without a FHIR root because it uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
 - App startup sync uses the same REST concept, not FHIR discovery. It is disabled by default.
-- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
+- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, protected client configuration, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
 - Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
 - If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.
-
-## Standalone API diagnostics
-
-- `scripts\test-alleva-api-connectivity.ps1` is the simple redacted reachability/report script.
-- Root `Test-AllevaApi.ps1` is a full diagnostic script and is sensitive by default. It can print and save tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used.
-- `.alleva.local.ps1` and `alleva-api-test-logs/` are gitignored but should still be treated as sensitive local diagnostic artifacts.
-- Do not use real PHI in API test payloads.
 
 ## Treatment-plan date clock
 
@@ -98,7 +91,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` lo
 - If the Windows app will not start, inspect `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json` and the startup logs in the same AppData tree.
 - If no local admin can sign in, follow `docs\admin-access-reset.md`.
 - If the browser shows an old UI, rebuild `frontend\dist` or use a freshly built release folder.
-- If API readiness fails, use `docs\api-configuration-and-connectivity.md` and keep live patient import disabled until credentials and endpoint mapping are approved.
+- If API readiness fails, use `docs\api-configuration-and-connectivity.md` and keep live patient import disabled until approved vendor details and endpoint mapping are available.
 
 ## Backup and restore
 
@@ -109,7 +102,7 @@ For ordinary Windows desktop installs:
 3. Keep the backup encrypted and access-controlled because it can contain local SQLite data, encrypted uploads, audit logs, and configuration.
 4. Restore by stopping the local app, replacing the AppData directory from the approved backup, and restarting the app.
 
-The `.env` file, SQLite database, and encrypted uploads must stay together. If the `.env` file is lost, encrypted uploads and saved API secrets may not be recoverable.
+The `.env` file, SQLite database, and encrypted uploads must stay together. If the `.env` file is lost, encrypted uploads and saved API configuration may not be recoverable.
 
 ## Legacy Docker/PostgreSQL artifacts
 
