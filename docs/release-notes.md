@@ -1,0 +1,75 @@
+# Release Notes
+
+Current app version: `1.4.2` / build `2026.06.18.2`.
+
+Current release channel: `local-desktop`.
+
+Current release date in version metadata: `2026-06-18`.
+
+## 1.4.2 - Manual upload button usability
+
+Build: `2026.06.18.2`
+
+Version metadata name: `Version 1.4.2 manual upload button usability`
+
+Summary:
+
+- Fixes manual-upload binder deletion usability.
+- The delete-binder action remains clickable enough to show exact patient-ID confirmation guidance when clicked before the confirmation value matches.
+- The app no longer presents unavailable delete buttons with a Windows busy cursor in the manual-upload workflow.
+- Keeps the gated Alleva REST treatment-plan sync readiness work from Version 1.4.1.
+- Keeps Version 1 local Windows desktop runtime, built React/Vite frontend assets, FastAPI desktop service, SQLite local data, encrypted uploaded-file storage, encrypted saved API-secret storage, role-based access control, deterministic Treatment Plan Tracking rules, Workflow profiles, in-app Help, readiness checks, and forensic audit logging.
+
+## 1.4.1 - Alleva REST treatment-plan sync readiness
+
+Summary:
+
+- Added a separate Alleva REST treatment-plan sync configuration path that does not require a FHIR root.
+- Kept live startup sync disabled by default.
+- Required explicit R3/Alleva live-sync approval and validated endpoint mapping before any live patient treatment-plan data can be imported.
+- Preserved the boundary that Alleva is the source system while R3's deterministic local timeliness engine performs compliance decisions.
+
+## 1.4.0 - Treatment-plan hardening and generated-name fallback
+
+Summary:
+
+- Hardened Treatment Plan Timeliness behavior, evidence handling, and export details.
+- Superseded earlier generated/patient-ID fallback naming with:
+  - `no-name-found_YYYY-MM-DD_HHMMSS` when no name is found in source evidence.
+  - `no-value-found_YYYY-MM-DD_HHMMSS` when an empty or unusable value is found.
+
+## Current implementation boundaries
+
+- Live Alleva patient import remains disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
+- The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The app ships a manager-editable 7-calendar-day preset, but this must stay configurable and visibly unresolved until confirmed.
+- Manual upload remains an upload-time snapshot. Use the monthly compliance-check fallback when API refresh is unavailable.
+- Optional LLM setup exists but is disabled by default and is not the primary review path.
+- Docker, PostgreSQL, and nginx are not ordinary Windows desktop requirements for the current R3 local-desktop path.
+- The package is still not a signed MSI/MSIX with repair/modify support; the release-folder builder is the current packaging path.
+
+## Version metadata files
+
+Current version values must stay aligned in:
+
+- `VERSION`
+- `VERSION.json`
+- `frontend/package.json`
+- README and primary docs
+- `/api/version`
+- UI footer
+
+## Primary current docs
+
+- `README.md`
+- `docs\Windows-User-Guide-Version-1.md`
+- `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
+- `docs\UAT-Version-1-Marleigh.md`
+- `docs\treatment-plan-checklist-v1.md`
+- `docs\open-blockers.md`
+- `docs\api-configuration-and-connectivity.md`
+- `docs\architecture.md`
+- `docs\runbook.md`
+- `docs\codebase-map.md`
+- `docs\admin-access-reset.md`
+
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.2`.
