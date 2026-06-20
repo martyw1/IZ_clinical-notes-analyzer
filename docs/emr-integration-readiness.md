@@ -2,7 +2,7 @@
 
 Date: 2026-06-19
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.3` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` local Windows desktop runtime.
 
 ## Current vendor boundary
 
@@ -12,9 +12,10 @@ The active app therefore treats Alleva integration as REST/OpenAPI/HL7-readiness
 
 ## Active app behavior
 
-- App settings collect Alleva REST API base URL, Alleva OpenAPI URL, OAuth token URL, API client ID, encrypted API client secret, token auth style, timeout, periodic-check interval, and gated treatment-plan sync controls.
-- Stored API endpoint profiles save REST/OpenAPI endpoint options and encrypted client-secret state without returning secrets to the browser.
+- App settings collect the one active Alleva/API connection: Alleva REST API base URL, Alleva OpenAPI URL, OAuth token URL, API client ID, encrypted API client secret, token auth style, timeout, periodic-check interval, and gated treatment-plan sync controls.
+- Stored API endpoint profiles are optional presets that save REST/OpenAPI endpoint options and encrypted client-secret state without returning secrets to the browser. Activating a profile copies it into the active connection.
 - The direct API harness discovers Swagger/OpenAPI definitions and tests selected operations using API-key, no-auth, or OAuth client-credentials modes.
+- Pasting the R3/Alleva client ID and client secret is expected for OAuth client credentials. The saved secret remains encrypted locally and write-only after save.
 - Periodic API checks authenticate, pull/summarize OpenAPI definitions, and do not import live patient records.
 - Alleva REST treatment-plan sync remains disabled by default and cannot run until R3/Alleva approval and endpoint mapping validation are recorded.
 

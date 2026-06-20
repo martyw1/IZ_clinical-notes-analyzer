@@ -2,7 +2,7 @@
 
 Date: 2026-06-18
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.3` / build `2026.06.19.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.19.2` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -34,7 +34,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.3` / build `2026.06.19.1` lo
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Version 1.4.3 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Version 1.4.4 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
@@ -44,6 +44,8 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.3` / build `2026.06.19.1` lo
 
 - The admin API harness is available at `/api-configuration` in the Windows desktop runtime.
 - When opened from App settings, the harness uses the current admin session; it should not prompt for a second admin login inside the harness.
+- App settings holds the single active Alleva/API connection. The harness loads and tests that active connection; saved endpoint profiles are optional presets that must be activated before they affect readiness checks or sync.
+- Pasting the R3/Alleva client ID and client secret is expected for OAuth client-credentials setup. Stored secrets are encrypted locally and are never returned to the browser after save.
 - The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
 - Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
 - Periodic API readiness checks can be enabled in App settings after saving REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and interval.

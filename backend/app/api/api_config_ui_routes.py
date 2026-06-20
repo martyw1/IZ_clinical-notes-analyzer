@@ -35,12 +35,17 @@ def _api_configuration_page() -> HTMLResponse:
       .operation-row { display: grid; grid-template-columns: 110px 1fr; gap: 0.8rem; align-items: end; }
       .field-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.8rem; background: #f8fafc; }
       .required { color: #b91c1c; font-weight: 800; }
+      .preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; }
+      .preset-grid button { width: 100%; text-align: left; }
+      .status-frame { margin-top: 0.85rem; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; padding: 0.75rem; }
+      .status-frame strong { display: block; margin-bottom: 0.35rem; }
+      .status-frame pre { margin: 0; max-height: 8rem; overflow: auto; background: transparent; color: #334155; padding: 0; font-size: 0.9rem; }
     </style>
   </head>
   <body onload="initializeSession()">
     <main>
       <h1>API Configuration and Connectivity Test</h1>
-      <p class="hint">Use this local admin page to test API-key or OAuth client-credentials connectivity without putting credentials into source files.</p>
+      <p class="hint">Use this local admin page to test the same active Alleva/API connection saved in App settings without putting credentials into source files.</p>
 
       <section>
         <h2>1. Admin session</h2>
@@ -50,7 +55,8 @@ def _api_configuration_page() -> HTMLResponse:
       </section>
 
       <section>
-        <h2>2. API settings</h2>
+        <h2>2. Active API settings</h2>
+        <p class="hint">App settings is the source of truth. This page loads and saves those same active values. Saved endpoint profiles in the main app are presets; activating one copies its values into these fields.</p>
         <div class="grid">
           <label>Vendor name <input id="vendorName" value="Alleva API" /></label>
           <label>REST API base URL <input id="apiBaseUrl" placeholder="https://api.allevasoft.com" /></label>
@@ -68,10 +74,10 @@ def _api_configuration_page() -> HTMLResponse:
             <option value="none">No auth</option>
           </select>
         </label>
-        <label>API key for one-time test or saved configuration <input id="apiKey" type="password" autocomplete="off" placeholder="Paste key here; it is never shown in results or logs" /></label>
+        <label>API key for one-time test or saved configuration <input id="apiKey" type="password" autocomplete="off" placeholder="Optional for API-key vendors; not usually used for Alleva OAuth" /></label>
         <div class="grid">
-          <label>Client ID <input id="clientId" autocomplete="off" /></label>
-          <label>Client secret <input id="clientSecret" type="password" autocomplete="off" placeholder="Saved encrypted; never shown in results" /></label>
+          <label>OAuth client ID <input id="clientId" autocomplete="off" /></label>
+          <label>OAuth client secret <input id="clientSecret" type="password" autocomplete="off" placeholder="Paste secret here; saved encrypted and never shown after save" /></label>
         </div>
         <label>Token URL <input id="tokenUrl" value="https://authorization.allevasoft.com/connect/token" /></label>
         <label>Token auth style
@@ -85,13 +91,33 @@ def _api_configuration_page() -> HTMLResponse:
         </label>
         <label>OAuth scopes <input id="scope" placeholder="Optional client-credentials scope string" /></label>
         <button onclick="loadConfig()" class="secondary">Load saved config</button>
-        <button onclick="saveConfig()">Save config and encrypted secret</button>
+        <button onclick="saveConfig()">Save active config and encrypted secret</button>
         <button onclick="clearSavedKey()" class="danger">Clear saved secret</button>
-        <p class="hint">For Alleva REST/OpenAPI tests, use the REST API base URL, usually https://api.allevasoft.com, and the Swagger/OpenAPI JSON URL. Alleva has confirmed HL7 is the current standards path. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
+        <p class="hint">For Alleva REST/OpenAPI tests, use the REST API base URL, usually https://api.allevasoft.com, and the Swagger/OpenAPI JSON URL. Alleva has confirmed HL7 is the current standards path. Pasting the client ID and secret supplied by Alleva/R3 is expected for OAuth client credentials. Saving stores the API key or client secret encrypted in the local app database. One-time values can be used for a test without saving.</p>
       </section>
 
       <section>
-        <h2>3. Test a specific API call</h2>
+        <h2>3. Alleva treatment-plan quick pulls</h2>
+        <p class="hint">These buttons use the public Alleva v1 Swagger operations GET /treatment-plans and GET /clients. The POST payload below is editable before each run.</p>
+        <div class="preset-grid">
+          <button onclick="prepareAllevaQuickPull('active_treatment_plans')">Pull all active treatment plans</button>
+          <button onclick="prepareAllevaQuickPull('overdue_treatment_plans')">Pull overdue treatment plans and compute why</button>
+          <button onclick="prepareAllevaQuickPull('inactive_treatment_plans')">Pull inactive treatment plans and compute why</button>
+          <button onclick="prepareAllevaQuickPull('active_patients')">Pull active patients with patient ID and first admission</button>
+        </div>
+        <label>Editable quick-pull POST fields
+          <textarea id="quickPullPayload" spellcheck="false"></textarea>
+        </label>
+        <button onclick="runAllevaQuickPull()">Run quick pull</button>
+        <div class="status-frame" role="status" aria-live="polite">
+          <strong>Quick-pull status</strong>
+          <pre id="quickPullStatus">Choose a quick pull to prefill the POST fields.</pre>
+        </div>
+        <pre id="quickPullResult">Quick-pull computed rows will appear here.</pre>
+      </section>
+
+      <section>
+        <h2>4. Test a specific API call</h2>
         <p class="hint">After pulling an OpenAPI/Swagger definition, choose an operation. The form below is generated from that operation's path, query, header, and request body requirements.</p>
         <label>API call / operation
           <select id="operationSelect" onchange="renderOperationForm()">
@@ -105,9 +131,13 @@ def _api_configuration_page() -> HTMLResponse:
       </section>
 
       <section>
-        <h2>4. Pull definitions and test connectivity</h2>
+        <h2>5. Pull definitions and test connectivity</h2>
         <button onclick="testConnectivity()">Pull API definitions / test connectivity</button>
         <button onclick="useLocalSample()" class="secondary">Use local sample definition</button>
+        <div class="status-frame" role="status" aria-live="polite">
+          <strong>Harness status</strong>
+          <pre id="statusFrame">No API harness action has run yet.</pre>
+        </div>
         <p id="testStatus" class="hint">No test run yet.</p>
         <pre id="result">Results will appear here.</pre>
       </section>
@@ -141,6 +171,44 @@ def _api_configuration_page() -> HTMLResponse:
         }
         setText(id, JSON.stringify(clone, null, 2));
       };
+      function appendStatus(id, message) {
+        const element = byId(id);
+        const stamp = new Date().toLocaleTimeString();
+        const line = `${stamp} ${message}`;
+        const existing = element.textContent && !element.textContent.startsWith('No ') && !element.textContent.startsWith('Choose ')
+          ? element.textContent.split('\\n')
+          : [];
+        element.textContent = [line, ...existing].slice(0, 8).join('\\n');
+      }
+
+      function allevaVersion() {
+        return '1.0';
+      }
+
+      function quickPullOperationParameters(report) {
+        const version = allevaVersion();
+        const common = {
+          Limit: 500,
+          Cursor: 0,
+          StartDate: '',
+          EndDate: '',
+          fields: report === 'active_patients'
+            ? ['id', 'clientId', 'uniqueId', 'mrn', 'status', 'isClient', 'admissionDateTime', 'firstContactDate', 'dischargeDateTime', 'facilityName', 'levelOfCare', 'primaryClinician']
+            : ['id', 'client', 'description', 'startDate', 'endDate', 'isActive', 'isComplete', 'lastModified', 'clientSignature', 'guardianSignature'],
+          'api-version': version,
+          'X-Version': version
+        };
+        return common;
+      }
+
+      function quickPullLabel(report) {
+        return {
+          active_treatment_plans: 'all active treatment plans',
+          overdue_treatment_plans: 'overdue treatment plans with computed reasons',
+          inactive_treatment_plans: 'inactive treatment plans with computed reasons',
+          active_patients: 'active patients with patient ID and first admission'
+        }[report] || report;
+      }
 
       async function readJson(response) {
         const text = await response.text();
@@ -210,6 +278,8 @@ def _api_configuration_page() -> HTMLResponse:
         byId('clientId').value = config.client_id || '';
         byId('tokenUrl').value = config.token_url || 'https://authorization.allevasoft.com/connect/token';
         byId('tokenAuthStyle').value = config.token_auth_style || 'body';
+        byId('authMode').value = config.recommended_auth_mode || (config.client_secret_configured && config.client_id_configured ? 'client_credentials' : 'api_key');
+        if (!getValue('quickPullPayload')) prepareAllevaQuickPull('active_treatment_plans');
         displayResult('result', config);
       }
 
@@ -218,17 +288,19 @@ def _api_configuration_page() -> HTMLResponse:
         const body = {
           vendor_name: getValue('vendorName'),
           api_base_url: getValue('apiBaseUrl'),
+          openapi_url: getValue('openApiUrl'),
           api_key: getValue('apiKey') || null,
           client_id: getValue('clientId') || null,
           client_secret: getValue('clientSecret') || null,
           token_url: getValue('tokenUrl') || null,
           token_auth_style: getValue('tokenAuthStyle') || 'body',
           timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
-          api_enabled: false
+          api_enabled: true
         };
         const config = await readJson(await fetch(`${api}/api-configuration`, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }));
         byId('apiKey').value = '';
         byId('clientSecret').value = '';
+        appendStatus('statusFrame', 'Saved active API config. Stored secrets were cleared from the browser fields.');
         displayResult('result', config);
       }
 
@@ -239,6 +311,7 @@ def _api_configuration_page() -> HTMLResponse:
           headers: authHeaders(),
           body: JSON.stringify({ clear_api_key: true, clear_client_secret: true })
         }));
+        appendStatus('statusFrame', 'Cleared saved API secret.');
         displayResult('result', config);
       }
 
@@ -250,6 +323,7 @@ def _api_configuration_page() -> HTMLResponse:
           return;
         }
         setText('testStatus', 'Testing...');
+        appendStatus('statusFrame', 'Pulling API definitions and testing connectivity...');
         byId('testStatus').className = 'hint';
         const body = {
           swagger_ui_url: getValue('swaggerUiUrl'),
@@ -279,10 +353,12 @@ def _api_configuration_page() -> HTMLResponse:
           populateOperations();
           setText('testStatus', `Result: ${result.status} - ${result.message}`);
           byId('testStatus').className = result.status === 'ok' ? 'ok' : 'warn';
+          appendStatus('statusFrame', `Definition pull ${result.status}: ${result.message}`);
           displayResult('result', result);
         } catch (error) {
           setText('testStatus', error.message);
           byId('testStatus').className = 'warn';
+          appendStatus('statusFrame', `Definition pull failed: ${error.message}`);
         }
       }
 
@@ -293,12 +369,76 @@ def _api_configuration_page() -> HTMLResponse:
         byId('apiBaseUrl').value = origin;
         setText('testStatus', 'Local sample definition selected. Sign in, then click Pull API definitions / test connectivity.');
         byId('testStatus').className = 'ok';
+        appendStatus('statusFrame', 'Loaded local sample OpenAPI definition fields.');
         setText('result', JSON.stringify({
           swagger_ui_url: byId('swaggerUiUrl').value,
           openapi_url: byId('openApiUrl').value,
           api_base_url: byId('apiBaseUrl').value,
           next_step: 'Click Pull API definitions / test connectivity.'
         }, null, 2));
+      }
+
+      function prepareAllevaQuickPull(report) {
+        byId('authMode').value = 'client_credentials';
+        const payload = {
+          report,
+          swagger_ui_url: getValue('swaggerUiUrl') || 'https://api.allevasoft.com/swagger/index.html',
+          api_base_url: getValue('apiBaseUrl') || 'https://api.allevasoft.com',
+          openapi_url: getValue('openApiUrl') || 'https://api.allevasoft.com/swagger/v1/swagger.json',
+          auth_mode: 'client_credentials',
+          token_url: getValue('tokenUrl') || 'https://authorization.allevasoft.com/connect/token',
+          token_auth_style: getValue('tokenAuthStyle') || 'body',
+          client_id: getValue('clientId') || null,
+          client_secret: null,
+          use_saved_client_credentials: true,
+          api_key: null,
+          use_saved_api_key: true,
+          api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
+          scope: getValue('scope') || null,
+          timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
+          max_pages: 20,
+          operation_parameters: quickPullOperationParameters(report)
+        };
+        byId('quickPullPayload').value = JSON.stringify(payload, null, 2);
+        appendStatus('quickPullStatus', `Prepared ${quickPullLabel(report)}. Review/edit the POST fields, then run.`);
+      }
+
+      async function runAllevaQuickPull() {
+        if (!token) {
+          setText('loginStatus', 'Sign in first.');
+          appendStatus('quickPullStatus', 'Sign in with the admin account before running a quick pull.');
+          return;
+        }
+        let body = {};
+        try {
+          body = JSON.parse(byId('quickPullPayload').value || '{}');
+        } catch (error) {
+          appendStatus('quickPullStatus', `POST fields are not valid JSON: ${error.message}`);
+          return;
+        }
+        body.api_base_url = body.api_base_url || getValue('apiBaseUrl') || 'https://api.allevasoft.com';
+        body.openapi_url = body.openapi_url || getValue('openApiUrl') || 'https://api.allevasoft.com/swagger/v1/swagger.json';
+        body.swagger_ui_url = body.swagger_ui_url || getValue('swaggerUiUrl') || 'https://api.allevasoft.com/swagger/index.html';
+        body.token_url = body.token_url || getValue('tokenUrl') || 'https://authorization.allevasoft.com/connect/token';
+        body.token_auth_style = body.token_auth_style || getValue('tokenAuthStyle') || 'body';
+        body.client_id = body.client_id || getValue('clientId') || null;
+        body.client_secret = body.client_secret || getValue('clientSecret') || null;
+        body.api_key = body.api_key || getValue('apiKey') || null;
+        body.api_key_header_name = body.api_key_header_name || getValue('apiKeyHeaderName') || 'x-api-key';
+        body.scope = body.scope || getValue('scope') || null;
+        body.timeout_seconds = Number(body.timeout_seconds || getValue('timeoutSeconds') || '10');
+        appendStatus('quickPullStatus', `Running ${quickPullLabel(body.report)}...`);
+        try {
+          const result = await readJson(await fetch(`${api}/api-configuration/alleva-quick-pull`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(body)
+          }));
+          appendStatus('quickPullStatus', `${result.status}: ${result.message}`);
+          displayResult('quickPullResult', result);
+        } catch (error) {
+          appendStatus('quickPullStatus', `Quick pull failed: ${error.message}`);
+        }
       }
 
       function populateOperations() {
@@ -371,6 +511,7 @@ def _api_configuration_page() -> HTMLResponse:
         const operation = operationByKey();
         if (!operation) { setText('operationStatus', 'Choose an API call first.'); return; }
         setText('operationStatus', 'Testing selected API call...');
+        appendStatus('statusFrame', `Testing selected operation ${operation.method} ${operation.path}...`);
         byId('operationStatus').className = 'hint';
         const body = {
           definition: currentDefinition,
@@ -400,10 +541,12 @@ def _api_configuration_page() -> HTMLResponse:
           }));
           setText('operationStatus', `${result.status}: ${result.message}`);
           byId('operationStatus').className = result.status === 'ok' ? 'ok' : 'warn';
+          appendStatus('statusFrame', `Operation test ${result.status}: ${result.message}`);
           displayResult('operationResult', result);
         } catch (error) {
           setText('operationStatus', error.message);
           byId('operationStatus').className = 'warn';
+          appendStatus('statusFrame', `Operation test failed: ${error.message}`);
         }
       }
     </script>

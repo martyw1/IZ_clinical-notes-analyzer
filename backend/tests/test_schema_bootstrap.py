@@ -1,6 +1,8 @@
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.orm import sessionmaker
 
 from app.db.bootstrap import ensure_schema_compatibility
+from app.models.models import AuditLog
 
 
 def test_ensure_schema_compatibility_adds_missing_legacy_columns(tmp_path):
@@ -92,3 +94,61 @@ def test_ensure_schema_compatibility_adds_workflow_definition_columns(tmp_path):
     assert 'definition_snapshot' in version_columns
     assert 'transition_rules' in version_columns
     assert 'published_at' in version_columns
+
+
+def test_ensure_schema_compatibility_repairs_retired_required_audit_columns(tmp_path):
+    db_path = tmp_path / 'legacy-audit-fhir.db'
+    engine = create_engine(f'sqlite:///{db_path}')
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                'CREATE TABLE audit_logs ('
+                'id INTEGER PRIMARY KEY, '
+                'event_id TEXT UNIQUE NOT NULL, '
+                'timestamp_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+                'request_id TEXT NOT NULL, '
+                'correlation_id TEXT NOT NULL, '
+                'event_category TEXT NOT NULL, '
+                'action TEXT NOT NULL, '
+                'details TEXT NOT NULL DEFAULT "", '
+                'fhir_audit_event TEXT NOT NULL, '
+                'hash TEXT NOT NULL'
+                ')'
+            )
+        )
+        connection.execute(
+            text(
+                'INSERT INTO audit_logs (event_id, request_id, correlation_id, event_category, action, fhir_audit_event, hash) '
+                'VALUES ("legacy-event", "legacy-request", "legacy-correlation", "system", "system.legacy", "{}", "legacy-hash")'
+            )
+        )
+
+    updates = ensure_schema_compatibility(engine)
+
+    columns = {column['name'] for column in inspect(engine).get_columns('audit_logs')}
+    assert 'fhir_audit_event' not in columns
+    assert any(update['table'] == 'audit_logs' and 'fhir_audit_event' in update['column'] for update in updates)
+    indexes = {index['name'] for index in inspect(engine).get_indexes('audit_logs')}
+    assert {'idx_audit_action', 'idx_audit_request_id', 'idx_audit_patient_id'} <= indexes
+
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    try:
+        db.add(
+            AuditLog(
+                event_id='new-event',
+                request_id='new-request',
+                correlation_id='new-correlation',
+                event_category='system',
+                action='system.startup.completed',
+                message='Startup completed without legacy FHIR audit columns.',
+                details='{}',
+                hash='new-hash',
+            )
+        )
+        db.commit()
+        logs = db.execute(select(AuditLog).order_by(AuditLog.id.asc())).scalars().all()
+        assert [log.event_id for log in logs] == ['legacy-event', 'new-event']
+    finally:
+        db.close()

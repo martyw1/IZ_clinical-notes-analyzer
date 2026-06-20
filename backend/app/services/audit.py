@@ -138,10 +138,16 @@ def _extract_request_context(request: Request | None = None) -> AuditContext:
 
     route = request.scope.get('route')
     route_template = getattr(route, 'path', None)
+    existing = _audit_context_var.get()
+    request_actor_context = getattr(request.state, 'audit_actor_context', None)
+    actor_context = request_actor_context if isinstance(request_actor_context, AuditContext) else existing
     return AuditContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor_type='human',
+        actor_id=actor_context.actor_id if actor_context else None,
+        actor_username=actor_context.actor_username if actor_context else None,
+        actor_role=actor_context.actor_role if actor_context else None,
+        actor_type=actor_context.actor_type if actor_context else 'human',
         source_ip=source_ip,
         forwarded_for=forwarded_for,
         source_host=request.headers.get('host'),
@@ -168,6 +174,7 @@ def bind_request_context(request: Request) -> Token:
     request.state.request_id = context.request_id
     request.state.correlation_id = context.correlation_id
     request.state.audit_actor = None
+    request.state.audit_actor_context = None
     return _audit_context_var.set(context)
 
 
@@ -216,18 +223,44 @@ def reset_audit_context(token: Token) -> None:
     _audit_context_var.reset(token)
 
 
-def set_actor_context(user: User, request: Request | None = None) -> None:
-    current = _extract_request_context(request)
-    updated = replace(
-        current,
-        actor_id=user.id,
-        actor_username=user.username,
-        actor_role=user.role.value,
+def _role_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
+
+
+def _actor_context_from_user(user: User, base: AuditContext) -> AuditContext:
+    actor_id = base.actor_id
+    actor_username = base.actor_username
+    actor_role = base.actor_role
+    try:
+        state = inspect(user)
+        if state.identity and state.identity[0] is not None:
+            actor_id = int(state.identity[0])
+        values = getattr(state, 'dict', {}) or {}
+        actor_username = str(values.get('username') or actor_username or '')
+        actor_role = _role_value(values.get('role')) or actor_role
+    except Exception:
+        # Detached or otherwise unusual ORM objects should never break audit logging.
+        pass
+    return replace(
+        base,
+        actor_id=actor_id,
+        actor_username=actor_username or None,
+        actor_role=actor_role,
         actor_type='human',
     )
+
+
+def set_actor_context(user: User, request: Request | None = None) -> None:
+    current = _extract_request_context(request)
+    updated = _actor_context_from_user(user, current)
     _audit_context_var.set(updated)
     if request is not None:
-        request.state.audit_actor = user
+        request.state.audit_actor = None
+        request.state.audit_actor_context = updated
         request.state.request_id = updated.request_id
         request.state.correlation_id = updated.correlation_id
 
@@ -478,7 +511,7 @@ def log_event(
         set_actor_context(actor, request)
     context = _extract_request_context(request) if request is not None else current_audit_context()
     if actor is not None:
-        context = replace(context, actor_id=actor.id, actor_username=actor.username, actor_role=actor.role.value, actor_type='human')
+        context = _actor_context_from_user(actor, context)
     _persist_records(
         [
             _build_record(
@@ -503,10 +536,8 @@ def log_event(
 
 
 def log_request_completed(request: Request, *, status_code: int, duration_ms: float, severity: str = 'info') -> None:
-    actor = getattr(request.state, 'audit_actor', None)
     log_event(
         request=request,
-        actor=actor,
         action='http.request.completed',
         event_category='http_request',
         outcome_status='success' if status_code < 400 else 'failure',
@@ -521,10 +552,8 @@ def log_request_completed(request: Request, *, status_code: int, duration_ms: fl
 
 
 def log_unhandled_exception(request: Request, exc: Exception, *, duration_ms: float) -> None:
-    actor = getattr(request.state, 'audit_actor', None)
     log_event(
         request=request,
-        actor=actor,
         action='http.request.exception',
         event_category='http_request',
         outcome_status='failure',

@@ -1,5 +1,13 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-19 v1.4.4 API settings consolidation and startup audit repair
+- Updated app/version metadata to `1.4.4` / build `2026.06.19.2`.
+- Repaired startup and button-click audit persistence for legacy SQLite databases that still had the retired `audit_logs.fhir_audit_event` column marked `NOT NULL`.
+- Clarified App settings, the Help tab, the standalone API harness, README, runbook, API guide, and Windows user guide around one active Alleva/API connection plus optional saved endpoint presets.
+- Documented that pasting the R3/Alleva client ID and client secret is expected for OAuth client-credentials setup while saved secrets remain encrypted and write-only.
+- Fixed the API harness save action so the active OpenAPI URL is saved with the rest of the active API configuration.
+- Verification passed full backend pytest (`96 passed, 2 skipped`), frontend Vitest (`16 passed`), frontend production build, Windows local stack smoke, API configuration smoke, normal AppData startup, and authenticated UI button-event audit check with no legacy audit error patterns.
+
 ## 2026-06-19 v1.4.3 Alleva REST/OpenAPI readiness cleanup
 - Updated app/version metadata to `1.4.3` / build `2026.06.19.1`.
 - Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan routes, read scopes, UI fields, defaults, validation requirements, tests, and synthetic examples from Alleva workflows.

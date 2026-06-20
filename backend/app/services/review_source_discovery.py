@@ -39,7 +39,12 @@ def _status_counts(items: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _api_mode(app_settings: AppSetting) -> str:
-    configured = bool(app_settings.alleva_api_base_url.strip() and (app_settings.api_client_id.strip() or app_settings.api_client_secret))
+    configured = bool(
+        app_settings.alleva_api_base_url.strip()
+        and app_settings.api_oauth_token_url.strip()
+        and app_settings.api_client_id.strip()
+        and app_settings.api_client_secret
+    )
     if app_settings.emr_periodic_check_enabled and configured:
         return 'periodic_readiness_check'
     if app_settings.emr_api_enabled and configured:

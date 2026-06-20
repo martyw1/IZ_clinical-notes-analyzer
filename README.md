@@ -1,14 +1,14 @@
 # IZ Clinical Notes Analyzer
 
-Current app version: `1.4.3` / build `2026.06.19.1`.
+Current app version: `1.4.4` / build `2026.06.19.2`.
 
 IZ Clinical Notes Analyzer is a local-first clinical chart-review app for Windows 10/11 desktop use. It helps R3 staff check clinical-note binders and Treatment Plan Tracking evidence before office-manager approval. The current app runs as one local FastAPI desktop service with a React/Vite browser interface at `http://localhost:8000`, SQLite under the user's local app-data folder, encrypted local uploaded-file and API-secret storage, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, API configuration/testing, optional LLM configuration disabled by default, and forensic audit logging.
 
 The normal R3 Windows user path does not require Docker, PostgreSQL, cloud hosting, Git, Node.js, or a database administrator when a prepared release folder with built frontend assets is used.
 
-## Current Version 1.4.3 State
+## Current Version 1.4.4 State
 
-Version 1.4.3 is the current local-desktop patch. It includes:
+Version 1.4.4 is the current local-desktop patch. It includes:
 
 - Treatment Plan Checklist Version 1 as the canonical source in `config\checklists\treatment-plan-v1.json`.
 - A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 42 PRD checklist steps.
@@ -19,13 +19,14 @@ Version 1.4.3 is the current local-desktop patch. It includes:
 - Admin/manager Workflow profiles with draft, publish, archive, unused-draft delete, and `Seed draft from 42-step checklist` actions.
 - Role-scoped User management: admins can manage all roles; office managers can manage counselor accounts only; counselors manage only their own account.
 - In-app Help with role permissions, screen guides, button behavior, setup notes, workflow guidance, API/EMR definitions, and LLM configuration notes.
-- Stored Alleva REST/OpenAPI endpoint profiles, with encrypted client-secret storage and one-click activation for readiness/API tests.
+- One active Alleva/API connection in App settings, with encrypted client-secret storage and optional saved endpoint-profile presets that can be activated into that active connection.
 - Alleva REST/OpenAPI/HL7-readiness setup with active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements removed.
+- Legacy local SQLite audit-log repair for databases that still contain retired FHIR-era required audit columns.
 - Admin-only App settings, API/EMR setup, LLM setup, and Forensic logs.
 - Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, stale-session handling, button-event audit logging, safe periodic source checks, bounded API operation responses, and API client-credentials testing.
 - Windows preflight, setup/start wrappers, release-folder packaging scripts, and install/launch/uninstall commands for a prepared release folder.
 
-Version 1.4.3 still does not include ungated live Alleva patient import or a signed MSI/MSIX. The Alleva REST treatment-plan sync path is present but disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
+Version 1.4.4 still does not include ungated live Alleva patient import or a signed MSI/MSIX. The Alleva REST treatment-plan sync path is present but disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
 ## Interactive Architecture Diagram
 
@@ -83,7 +84,7 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.3"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.4"]
         Legacy["Deprecated Docker/PostgreSQL artifacts<br/>depriceated/ and legacy startup stubs"]
     end
 
@@ -193,14 +194,14 @@ Important boundaries:
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by `scripts\build-windows-installer.ps1`. For Version 1.4.3 it writes:
+A release folder is created by `scripts\build-windows-installer.ps1`. For Version 1.4.4 it writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.3`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.3.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4.zip`
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.3`.
+1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -331,20 +332,25 @@ The `.env`, database, and uploads must be backed up together. If the `.env` file
 
 ## API Configuration and Alleva Readiness
 
-Admins can open `http://localhost:8000/api-configuration` from App settings or directly. When opened from the app, the page reuses the current admin session and does not require a second in-page admin login.
+Admins can open `http://localhost:8000/api-configuration` from App settings or directly. When opened from the app, the page reuses the current admin session and does not require a second in-page admin login. App settings is the source of truth for the one active Alleva/API connection; the harness loads and tests those same active values.
 
 The app API harness can:
 
 - save vendor/base URL settings
-- use a one-time API key for a test
+- use a one-time API key for a test when a vendor uses API-key auth
 - save API keys and client secrets in encrypted form
 - use OAuth2 client credentials to request a bearer token for a test
+- save the OpenAPI URL used by readiness checks and operation tests
 - choose body, Basic, URL-encoded Basic, try-both, or try-all token auth styles
 - pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL
 - test selected OpenAPI operations with generated path/query/header/body fields
 - show bounded, redacted, non-secret results
 
 Alleva confirmed that it does not currently support FHIR; the active app does not ask for or require a FHIR endpoint.
+
+For Alleva OAuth, pasting the client ID and client secret supplied by R3/Alleva is expected. The client secret is write-only after save: the browser only receives configured/not-configured flags, and stored secrets are encrypted in the local SQLite database.
+
+Stored API endpoint profiles are optional presets for alternate Alleva or future vendor connection values. Activating a profile copies its REST API base URL, OpenAPI URL, token URL, token auth style, client ID, and encrypted client secret into the active App settings connection. Only the active connection is used by readiness checks, the API harness, periodic checks, and approved REST treatment-plan sync.
 
 Periodic API readiness checks are readiness checks only. They authenticate and test configuration; they do not import live patient charts or treatment plans.
 
@@ -361,11 +367,11 @@ Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API outp
 
 Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials.
 
-Version `1.4.3` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The REST sync path uses the Alleva API base URL (`https://api.allevasoft.com`), OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run.
+Version `1.4.4` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The REST sync path uses the active Alleva API base URL (`https://api.allevasoft.com` by default), OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run.
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.4.3` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.4.4` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history.
 
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
@@ -470,7 +476,7 @@ Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as 
 The current app version is:
 
 ```text
-1.4.3
+1.4.4
 ```
 
 Version metadata is stored in `VERSION` and `VERSION.json`. The backend exposes it at:

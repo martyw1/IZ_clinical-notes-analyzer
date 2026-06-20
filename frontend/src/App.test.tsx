@@ -1191,6 +1191,7 @@ describe('App turnkey workflow', () => {
   it('shows profile management, admin user management, and forensic logs', async () => {
     window.history.replaceState(null, '', '/?view=dashboard')
     let directory = [userPayload('admin'), userPayload('manager')]
+    let savedSettings = appSettingsPayload()
 
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-d', must_reset_password: false },
@@ -1200,42 +1201,42 @@ describe('App turnkey workflow', () => {
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': () => ({ body: directory }),
-      'GET /api/settings': appSettingsPayload(),
+      'GET /api/settings': () => ({ body: savedSettings }),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
       'GET /api/workflow-definitions': workflowDefinitionsPayload(),
       'PATCH /api/settings': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
-        return {
-          body: {
-            ...appSettingsPayload(),
-            organization_name: body.organization_name,
-            llm_enabled: body.llm_enabled,
-            llm_provider_name: body.llm_provider_name,
-            llm_base_url: body.llm_base_url,
-            llm_model: body.llm_model,
-            llm_api_key_configured: true,
-            emr_api_enabled: body.emr_api_enabled,
-            emr_vendor_name: body.emr_vendor_name,
-            api_client_id: body.api_client_id,
-            api_client_secret_configured: Boolean(body.api_client_secret),
-            api_oauth_token_url: body.api_oauth_token_url,
-            api_token_auth_style: body.api_token_auth_style,
-            emr_api_timeout_seconds: body.emr_api_timeout_seconds,
-            emr_periodic_check_enabled: body.emr_periodic_check_enabled,
-            emr_periodic_check_interval_minutes: body.emr_periodic_check_interval_minutes,
-            alleva_api_base_url: body.alleva_api_base_url,
-            alleva_openapi_url: body.alleva_openapi_url,
-            alleva_api_version: body.alleva_api_version,
-            alleva_treatment_plan_sync_enabled: body.alleva_treatment_plan_sync_enabled,
-            alleva_treatment_plan_sync_on_startup: body.alleva_treatment_plan_sync_on_startup,
-            alleva_treatment_plan_sync_approved: body.alleva_treatment_plan_sync_approved,
-            alleva_treatment_plan_endpoint_mapping_validated: body.alleva_treatment_plan_endpoint_mapping_validated,
-            alleva_treatment_plan_sync_limit: body.alleva_treatment_plan_sync_limit,
-            treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
-            treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
-          },
+        savedSettings = {
+          ...savedSettings,
+          organization_name: body.organization_name,
+          llm_enabled: body.llm_enabled,
+          llm_provider_name: body.llm_provider_name,
+          llm_base_url: body.llm_base_url,
+          llm_model: body.llm_model,
+          llm_api_key_configured: Boolean(body.llm_api_key) || savedSettings.llm_api_key_configured,
+          emr_api_enabled: body.emr_api_enabled,
+          emr_vendor_name: body.emr_vendor_name,
+          api_client_id: body.api_client_id,
+          api_client_secret_configured:
+            Boolean(body.api_client_secret) || (savedSettings.api_client_secret_configured && !body.clear_api_client_secret),
+          api_oauth_token_url: body.api_oauth_token_url,
+          api_token_auth_style: body.api_token_auth_style,
+          emr_api_timeout_seconds: body.emr_api_timeout_seconds,
+          emr_periodic_check_enabled: body.emr_periodic_check_enabled,
+          emr_periodic_check_interval_minutes: body.emr_periodic_check_interval_minutes,
+          alleva_api_base_url: body.alleva_api_base_url,
+          alleva_openapi_url: body.alleva_openapi_url,
+          alleva_api_version: body.alleva_api_version,
+          alleva_treatment_plan_sync_enabled: body.alleva_treatment_plan_sync_enabled,
+          alleva_treatment_plan_sync_on_startup: body.alleva_treatment_plan_sync_on_startup,
+          alleva_treatment_plan_sync_approved: body.alleva_treatment_plan_sync_approved,
+          alleva_treatment_plan_endpoint_mapping_validated: body.alleva_treatment_plan_endpoint_mapping_validated,
+          alleva_treatment_plan_sync_limit: body.alleva_treatment_plan_sync_limit,
+          treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
+          treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
         }
+        return { body: savedSettings }
       },
       'POST /api/users': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
@@ -1297,8 +1298,12 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'App settings' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Active Alleva/API connection' })).toBeInTheDocument()
+    expect(screen.getByText(/source of truth for readiness checks/i)).toBeInTheDocument()
+    expect(screen.getByText(/pasting the client ID and client secret here is expected/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Alleva REST/OpenAPI readiness' })).toBeInTheDocument()
     expect(screen.getByText('alleva-rest-api')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use for active API settings' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /discovery/i })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument()
     expect(screen.getByText('treatment_plan_followup')).toBeInTheDocument()
@@ -1309,7 +1314,9 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('API client ID'), { target: { value: 'rest-client' } })
     fireEvent.change(screen.getByLabelText('API client secret'), { target: { value: 'rest-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-    await waitFor(() => expect(screen.getByText('Application settings have been updated.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Application settings have been saved and verified.')).toBeInTheDocument())
+    expect(savedSettings.api_client_id).toBe('rest-client')
+    expect(savedSettings.api_client_secret_configured).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())

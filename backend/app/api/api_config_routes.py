@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Literal
+from urllib.parse import urljoin
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -19,6 +21,7 @@ from app.services.api_connectivity import (
     persist_api_connectivity_report,
     pull_api_definitions,
     redact_url,
+    redact_sensitive_text,
     request_client_credentials_token,
 )
 from app.services.app_settings import get_or_create_app_settings
@@ -113,6 +116,7 @@ class ApiConfigurationOut(BaseModel):
     api_key_header_name: str
     timeout_seconds: int
     api_enabled: bool
+    recommended_auth_mode: Literal['api_key', 'client_credentials', 'none']
 
 
 class ApiConfigurationUpdate(BaseModel):
@@ -156,6 +160,12 @@ class ApiOperationTestInput(ApiDefinitionPullInput):
     request_body: Any | None = None
 
 
+class AllevaQuickPullInput(ApiDefinitionPullInput):
+    report: Literal['active_treatment_plans', 'overdue_treatment_plans', 'inactive_treatment_plans', 'active_patients']
+    operation_parameters: dict[str, Any] = Field(default_factory=dict)
+    max_pages: int = Field(default=10, ge=1, le=50)
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -176,6 +186,7 @@ def _default_openapi_url(settings_row: AppSetting) -> str:
 
 
 def _configuration_out(settings_row: AppSetting) -> ApiConfigurationOut:
+    has_client_credentials = bool(settings_row.api_client_id and settings_row.api_client_secret and settings_row.api_oauth_token_url)
     return ApiConfigurationOut(
         vendor_name=settings_row.emr_vendor_name or 'Alleva API',
         api_base_url=settings_row.alleva_api_base_url or '',
@@ -190,6 +201,7 @@ def _configuration_out(settings_row: AppSetting) -> ApiConfigurationOut:
         api_key_header_name=DEFAULT_API_KEY_HEADER_NAME,
         timeout_seconds=settings_row.emr_api_timeout_seconds,
         api_enabled=settings_row.emr_api_enabled,
+        recommended_auth_mode='client_credentials' if has_client_credentials else ('api_key' if settings_row.api_client_secret else 'none'),
     )
 
 
@@ -268,6 +280,238 @@ def _auth_failure_result(*, auth_context: dict[str, Any], report_type: str, requ
     result['report'] = build_api_connectivity_report(report_type=report_type, request=request_payload, result=result)
     result['report_path'] = persist_api_connectivity_report(result['report'])
     return result
+
+
+def _list_records(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ('items', 'data', 'results', 'value', 'records'):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _text(value: Any) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    return str(value).strip()
+
+
+def _first_text(payload: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            nested = _first_text(value, 'clientId', 'id', 'uniqueId', 'mrn', 'name', 'clientFullName', 'status', 'admissionDateTime')
+            if nested:
+                return nested
+            continue
+        text = _text(value)
+        if text:
+            return text
+    return ''
+
+
+def _date_only(value: Any) -> str:
+    text = _text(value)
+    if not text:
+        return ''
+    if 'T' in text:
+        return text.split('T', 1)[0]
+    if len(text) >= 10 and text[4:5] == '-' and text[7:8] == '-':
+        return text[:10]
+    return text
+
+
+def _parse_date(value: Any) -> date | None:
+    text = _date_only(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _bool_value(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {'true', '1', 'yes', 'y', 'active'}:
+        return True
+    if text in {'false', '0', 'no', 'n', 'inactive'}:
+        return False
+    return default
+
+
+def _patient_id(payload: dict[str, Any]) -> str:
+    client = payload.get('client')
+    if isinstance(client, dict):
+        nested = _first_text(client, 'clientId', 'id', 'uniqueId', 'mrn')
+        if nested:
+            return nested
+    return _first_text(payload, 'clientId', 'id', 'uniqueId', 'mrn')
+
+
+def _plan_client_id(payload: dict[str, Any]) -> str:
+    client = payload.get('client')
+    if isinstance(client, dict):
+        nested = _first_text(client, 'clientId', 'id', 'uniqueId', 'mrn')
+        if nested:
+            return nested
+    return _first_text(payload, 'clientId', 'patientId', 'leadId', 'id')
+
+
+def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
+    end_date = _parse_date(payload.get('endDate'))
+    start_date = _parse_date(payload.get('startDate'))
+    is_active = _bool_value(payload.get('isActive'), default=True)
+    is_complete = _bool_value(payload.get('isComplete'), default=False)
+    reasons: list[str] = []
+    if is_active:
+        reasons.append('isActive is true or not provided by Alleva')
+    else:
+        reasons.append('isActive is false')
+    if end_date is None:
+        reasons.append('endDate missing; due status needs review')
+    elif end_date < today:
+        reasons.append(f'endDate {end_date.isoformat()} is before {today.isoformat()}')
+    else:
+        reasons.append(f'endDate {end_date.isoformat()} is not overdue as of {today.isoformat()}')
+    if not is_complete:
+        reasons.append('isComplete is false or missing')
+    return {
+        'treatment_plan_id': _first_text(payload, 'id'),
+        'patient_id': _plan_client_id(payload),
+        'description': _first_text(payload, 'description'),
+        'start_date': start_date.isoformat() if start_date else _date_only(payload.get('startDate')),
+        'end_date': end_date.isoformat() if end_date else _date_only(payload.get('endDate')),
+        'is_active': is_active,
+        'is_complete': is_complete,
+        'last_modified': _date_only(payload.get('lastModified')),
+        'why': '; '.join(reasons),
+    }
+
+
+def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    discharge_date = _date_only(payload.get('dischargeDateTime'))
+    status = _first_text(payload, 'status')
+    reasons = []
+    if not discharge_date:
+        reasons.append('no dischargeDateTime returned')
+    if not status or not any(word in status.lower() for word in ('inactive', 'discharge', 'closed', 'deceased')):
+        reasons.append('status is active-compatible')
+    return {
+        'patient_id': _patient_id(payload),
+        'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
+        'first_admitted': _date_only(payload.get('admissionDateTime') or payload.get('firstContactDate')),
+        'status': status,
+        'level_of_care': _first_text(payload, 'levelOfCare'),
+        'facility': _first_text(payload, 'facilityName'),
+        'why_active': '; '.join(reasons) or 'active-compatible fields returned',
+    }
+
+
+def _is_active_patient(payload: dict[str, Any]) -> bool:
+    if _text(payload.get('dischargeDateTime')):
+        return False
+    status = _first_text(payload, 'status').lower()
+    if status and any(word in status for word in ('inactive', 'discharge', 'closed', 'deceased')):
+        return False
+    if payload.get('isClient') is not None and not _bool_value(payload.get('isClient'), default=True):
+        return False
+    return True
+
+
+def _quick_pull_path(report: str) -> str:
+    return '/clients' if report == 'active_patients' else '/treatment-plans'
+
+
+def _row_end_date_before(row: dict[str, Any], today: date) -> bool:
+    try:
+        return bool(row.get('end_date')) and date.fromisoformat(str(row['end_date'])[:10]) < today
+    except ValueError:
+        return False
+
+
+def _query_and_headers(operation_parameters: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    query: dict[str, Any] = {}
+    headers = {'Accept': 'application/json'}
+    for key, value in operation_parameters.items():
+        if value in (None, ''):
+            continue
+        if key.lower() == 'x-version':
+            headers['X-Version'] = str(value)
+        else:
+            query[key] = value
+    api_version = _text(operation_parameters.get('api-version')) or _text(operation_parameters.get('X-Version')) or '1.0'
+    query.setdefault('api-version', api_version)
+    headers.setdefault('X-Version', api_version)
+    return query, headers
+
+
+def _fetch_alleva_collection(
+    *,
+    base_url: str,
+    path: str,
+    operation_parameters: dict[str, Any],
+    api_key: str,
+    bearer_token: str,
+    api_key_header_name: str,
+    timeout_seconds: int,
+    max_pages: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    query, headers = _query_and_headers(operation_parameters)
+    if api_key:
+        headers[api_key_header_name or DEFAULT_API_KEY_HEADER_NAME] = api_key
+    if bearer_token:
+        headers['Authorization'] = f'Bearer {bearer_token}'
+    try:
+        limit = max(1, min(int(query.get('Limit') or 500), 5000))
+    except (TypeError, ValueError):
+        limit = 500
+    try:
+        cursor = max(0, int(query.get('Cursor') or 0))
+    except (TypeError, ValueError):
+        cursor = 0
+
+    records: list[dict[str, Any]] = []
+    url = urljoin(base_url.rstrip('/') + '/', path.lstrip('/'))
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+        for page_index in range(max_pages):
+            page_query = dict(query)
+            page_query['Limit'] = limit
+            page_query['Cursor'] = cursor
+            response = client.get(url, params=page_query, headers=headers)
+            response.read()
+            if not 200 <= response.status_code < 300:
+                return records, {
+                    'status_code': response.status_code,
+                    'message': f'HTTP {response.status_code}',
+                    'response_body_preview': redact_sensitive_text(response.text[:600]),
+                    'page_index': page_index,
+                    'url': redact_url(str(response.url)),
+                }
+            try:
+                page_records = _list_records(response.json())
+            except ValueError:
+                return records, {
+                    'status_code': response.status_code,
+                    'message': 'Response was not JSON.',
+                    'response_body_preview': redact_sensitive_text(response.text[:600]),
+                    'page_index': page_index,
+                    'url': redact_url(str(response.url)),
+                }
+            records.extend(page_records)
+            if len(page_records) < limit:
+                break
+            cursor += limit
+    return records, None
 
 
 @router.get('/api-configuration/sample-openapi.json', include_in_schema=False)
@@ -604,5 +848,135 @@ def test_api_configuration_operation(
         outcome_status='success' if status == 'ok' else 'failure',
         severity='info' if status == 'ok' else 'warning',
         message=f"API operation test completed for {payload.method.upper()} {payload.path} with status {status}.",
+    )
+    return result
+
+
+@router.post('/api-configuration/alleva-quick-pull')
+def run_alleva_quick_pull(
+    payload: AllevaQuickPullInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    settings_row = get_or_create_app_settings(db)
+    timeout_seconds = payload.timeout_seconds or settings_row.emr_api_timeout_seconds
+    auth_context = _auth_context(payload, settings_row, timeout_seconds=timeout_seconds)
+    operation_parameters = dict(payload.operation_parameters or {})
+    operation_parameters.setdefault('Limit', 500)
+    operation_parameters.setdefault('Cursor', 0)
+    operation_parameters.setdefault('api-version', '1.0')
+    operation_parameters.setdefault('X-Version', '1.0')
+    path = _quick_pull_path(payload.report)
+    source_operation = f'GET {path}'
+
+    if payload.auth_mode == 'client_credentials' and not auth_context['bearer_token']:
+        token_result = auth_context.get('token_result') if isinstance(auth_context.get('token_result'), dict) else {}
+        result = {
+            'status': 'fail',
+            'message': token_result.get('message') or 'Authentication did not complete.',
+            'report': payload.report,
+            'source_operation': source_operation,
+            'operation_parameters': operation_parameters,
+            'rows': [],
+            'total_records_seen': 0,
+            'returned_count': 0,
+            'token_result': token_result,
+        }
+        log_event(
+            db,
+            request,
+            'api_configuration.alleva_quick_pull',
+            actor=user,
+            event_category='api_connectivity',
+            target_entity=source_operation,
+            target_entity_type='external_api_operation',
+            details={
+                'status': result['status'],
+                'report': payload.report,
+                'auth_mode': payload.auth_mode,
+                'credential_source': auth_context['credential_source'],
+                'token_status': token_result.get('status'),
+                'returned_count': 0,
+            },
+            outcome_status='failure',
+            severity='warning',
+            message=f'Alleva quick pull authentication failed for {payload.report}.',
+        )
+        return result
+
+    base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url or 'https://api.allevasoft.com'
+    records, fetch_error = _fetch_alleva_collection(
+        base_url=base_url,
+        path=path,
+        operation_parameters=operation_parameters,
+        api_key=auth_context['api_key'],
+        bearer_token=auth_context['bearer_token'],
+        api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
+        timeout_seconds=timeout_seconds,
+        max_pages=payload.max_pages,
+    )
+
+    today = _utc_now().date()
+    if payload.report == 'active_patients':
+        rows = [_active_patient_summary(item) for item in records if _is_active_patient(item)]
+        message_subject = 'active patient(s)'
+    else:
+        plan_rows = [_plan_summary(item, today=today) for item in records]
+        if payload.report == 'active_treatment_plans':
+            rows = [item for item in plan_rows if item['is_active']]
+            message_subject = 'active treatment plan(s)'
+        elif payload.report == 'overdue_treatment_plans':
+            rows = [item for item in plan_rows if item['is_active'] and _row_end_date_before(item, today)]
+            message_subject = 'overdue active treatment plan(s)'
+        else:
+            rows = [item for item in plan_rows if not item['is_active']]
+            message_subject = 'inactive treatment plan(s)'
+
+    status = 'warn' if fetch_error else 'ok'
+    message = (
+        f'Alleva quick pull stopped with {fetch_error["message"]}; returned {len(rows)} computed row(s) from {len(records)} record(s) fetched.'
+        if fetch_error
+        else f'Alleva quick pull found {len(rows)} {message_subject} from {len(records)} fetched record(s).'
+    )
+    result = {
+        'status': status,
+        'message': message,
+        'report': payload.report,
+        'source_operation': source_operation,
+        'operation_parameters': operation_parameters,
+        'max_pages': payload.max_pages,
+        'total_records_seen': len(records),
+        'returned_count': len(rows),
+        'rows': rows,
+        'fetch_error': fetch_error,
+        'auth_mode': payload.auth_mode,
+        'api_key_used': bool(auth_context['api_key']),
+        'bearer_token_used': bool(auth_context['bearer_token']),
+        'credential_source': auth_context['credential_source'],
+        'token_result': auth_context['token_result'] if auth_context.get('token_result') else {},
+    }
+    log_event(
+        db,
+        request,
+        'api_configuration.alleva_quick_pull',
+        actor=user,
+        event_category='api_connectivity',
+        target_entity=source_operation,
+        target_entity_type='external_api_operation',
+        details={
+            'status': status,
+            'report': payload.report,
+            'auth_mode': payload.auth_mode,
+            'api_key_used': bool(auth_context['api_key']),
+            'bearer_token_used': bool(auth_context['bearer_token']),
+            'credential_source': auth_context['credential_source'],
+            'total_records_seen': len(records),
+            'returned_count': len(rows),
+            'fetch_error_status_code': fetch_error.get('status_code') if fetch_error else None,
+        },
+        outcome_status='success' if status == 'ok' else 'failure',
+        severity='info' if status == 'ok' else 'warning',
+        message=f'Alleva quick pull completed for {payload.report} with status {status}.',
     )
     return result

@@ -1185,11 +1185,19 @@ def run_review_source_daily_check(
     settings_row = get_or_create_app_settings(db)
     note_set_stmt = _note_set_stmt().where(PatientNoteSet.status == NoteSetStatus.active)
     note_sets = list(db.execute(note_set_stmt.order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())).scalars().unique().all())
-    api_check_result = run_periodic_api_check(db, settings_row) if settings_row.emr_periodic_check_enabled else None
+    api_check_result = run_periodic_api_check(db, settings_row)
     db.refresh(settings_row)
     payload = review_source_discovery_payload(db, settings_row, note_sets)
     if api_check_result is not None:
-        payload['last_check_mode'] = 'periodic_api_readiness_check'
+        payload['last_check_mode'] = 'manual_api_readiness_check'
+        payload['plain_english_status'] = (
+            f"Manual API readiness check used the active App settings connection and returned "
+            f"{api_check_result.get('status', 'unknown')}: {api_check_result.get('message', 'No message returned.')}"
+        )
+        if api_check_result.get('status') == 'ok':
+            payload['api_mode_label'] = 'Manual readiness check succeeded'
+        elif api_check_result.get('status') in {'fail', 'skipped'}:
+            payload['api_mode_label'] = 'Manual readiness check needs attention'
     log_event(
         db,
         request,
@@ -1206,7 +1214,7 @@ def run_review_source_daily_check(
             'api_mode': payload['api_mode'],
             'api_check_status': api_check_result.get('status') if isinstance(api_check_result, dict) else '',
         },
-        message='Daily review-source check run in safe readiness/mock mode.',
+        message='Manual API readiness/review-source check run in safe readiness/mock mode.',
     )
     return payload
 

@@ -2,7 +2,7 @@
 
 Date: 2026-06-16
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.3` / build `2026.06.19.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.19.2` local Windows desktop runtime.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Use this path when at least one working admin account can sign in.
 7. Communicate any one-time credential only through an R3-approved secure channel.
 8. Confirm the action appears in `Forensic logs` without exposing the credential value.
 
-Version 1.4.3 role scope reminder:
+Version 1.4.4 role scope reminder:
 
 - Admins can manage admin, manager, and counselor accounts.
 - Office managers can manage counselor accounts only.
@@ -85,4 +85,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected patch version: `1.4.3` / build `2026.06.19.1`.
+Expected patch version: `1.4.4` / build `2026.06.19.2`.

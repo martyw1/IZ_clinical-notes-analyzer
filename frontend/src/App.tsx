@@ -466,7 +466,8 @@ type TransitionAction = {
 }
 
 type ApiError = {
-  detail?: string | { msg?: string }
+  detail?: string | { msg?: string } | { msg?: string }[]
+  raw?: string
 }
 
 type UploadFormState = {
@@ -859,10 +860,11 @@ const HELP_SECTIONS = [
     items: [
       'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
       'Alleva currently identifies HL7 as the standards-based integration path; active app integration is Alleva REST/OpenAPI/HL7 readiness.',
-      'Alleva REST treatment-plan sync uses the Alleva REST API base URL and OpenAPI documentation URL. R3 runs compliance checks locally after the app imports mapped treatment-plan data.',
-      'OAuth/API client ID, secret, token URL, and token auth style are stored for readiness testing and approved REST sync; secrets are encrypted and never returned to the browser.',
+      'There is one active Alleva/API connection in App settings. The API test harness loads these same active values.',
+      'Pasting the client ID and client secret supplied by Alleva/R3 is the normal OAuth client-credentials setup. The saved secret is encrypted and never returned to the browser.',
+      'Alleva REST treatment-plan sync uses the active REST API base URL and OpenAPI documentation URL. R3 runs compliance checks locally after the app imports approved mapped treatment-plan data.',
       'Periodic API checks require the REST API base URL, OpenAPI URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
-      'Stored API endpoint profiles let admins save Alleva REST/OpenAPI endpoint options and activate the one used by readiness/API tests.',
+      'Saved API endpoint profiles are presets. Activating one copies its values into the active App settings connection used by readiness/API tests.',
       'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
     ],
   },
@@ -902,9 +904,14 @@ function readErrorMessage(status: number, payload: ApiError | null) {
   const detailText =
     typeof detail === 'string' && detail.trim()
       ? detail.trim()
+      : Array.isArray(detail)
+        ? detail
+            .map((item) => (typeof item?.msg === 'string' ? item.msg.trim() : ''))
+            .filter(Boolean)
+            .join('; ')
       : detail && typeof detail === 'object' && typeof detail.msg === 'string'
         ? detail.msg.trim()
-        : ''
+        : payload?.raw?.trim() || ''
 
   if (status === 401) return 'Your session has expired. Sign in again to continue.'
   if (status === 403) return detailText || 'Your account does not have access to that action.'
@@ -1027,7 +1034,7 @@ function createEmrEndpointProfileForm(): EmrEndpointProfileForm {
     client_id: '',
     client_secret: '',
     timeout_seconds: 10,
-    notes: 'Swagger/OpenAPI docs are available at https://api.allevasoft.com/swagger/index.html and /swagger/v1/swagger.json. REST sync remains gated by R3/Alleva approval and endpoint mapping validation.',
+    notes: 'Saved preset only. Activate this profile to copy its values into the active App settings API connection. REST sync remains gated by R3/Alleva approval and endpoint mapping validation.',
   }
 }
 
@@ -1381,7 +1388,11 @@ function buildTrend(points: (string | null | undefined)[], lookbackDays = 7): Tr
 async function readJson(response: Response) {
   const text = await response.text()
   if (!text) return null
-  return JSON.parse(text)
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { detail: response.ok ? '' : response.statusText, raw: text }
+  }
 }
 
 export function App() {
@@ -1392,6 +1403,7 @@ export function App() {
   const [status, setStatus] = useState('Sign in to upload notes, review findings, and manage approvals.')
   const [error, setError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
+  const [settingsActivityLog, setSettingsActivityLog] = useState<string[]>([])
   const [mustResetPassword, setMustResetPassword] = useState(false)
   const [activeView, setActiveView] = useState<AppView>(viewFromUrl)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
@@ -1663,6 +1675,11 @@ export function App() {
   const linkedNoteSet =
     selectedChart?.source_note_set_id != null ? noteSets.find((noteSet) => noteSet.id === selectedChart.source_note_set_id) || null : null
 
+  function appendSettingsActivity(message: string) {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setSettingsActivityLog((current) => [`${timestamp} ${message}`, ...current].slice(0, 8))
+  }
+
   async function apiRequest<T>(path: string, init?: RequestInit, includeAuth = true): Promise<T> {
     const headers = new Headers(init?.headers)
     if (includeAuth && token) headers.set('Authorization', `Bearer ${token}`)
@@ -1900,17 +1917,21 @@ export function App() {
     setIsBusy(true)
     setError('')
     setStatus('Running the safe daily review-source check...')
+    appendSettingsActivity('Started manual API readiness check.')
     try {
       const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery/run-daily-check', { method: 'POST' })
       setReviewSourceDiscovery(payload)
-      if (activeView === 'settings' && user?.role === 'admin') {
+      if (user?.role === 'admin') {
         const latestSettings = await apiRequest<AppSettings>('/settings')
         setAppSettings(latestSettings)
         setSettingsForm(createSettingsForm(latestSettings))
       }
       setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
+      appendSettingsActivity(`API check completed: ${payload.last_check_mode || payload.refresh_mode}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to run daily review-source check')
+      const message = caught instanceof Error ? caught.message : 'Failed to run daily review-source check'
+      appendSettingsActivity(`API check failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -1920,14 +1941,18 @@ export function App() {
     setIsBusy(true)
     setError('')
     setStatus('Running Alleva REST treatment-plan sync...')
+    appendSettingsActivity('Started manual Alleva treatment-plan sync.')
     try {
       const payload = await apiRequest<AllevaTreatmentPlanSyncResponse>('/alleva/treatment-plan-sync/run', { method: 'POST' })
       setAppSettings(payload.settings)
       setSettingsForm(createSettingsForm(payload.settings))
       await loadTimelinessDashboard()
       setStatus(payload.sync_result.message)
+      appendSettingsActivity(`Treatment-plan sync ${payload.sync_result.status}: ${payload.sync_result.message}`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync')
+      const message = caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync'
+      appendSettingsActivity(`Treatment-plan sync failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3030,18 +3055,27 @@ export function App() {
     }
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Saving App settings.')
     try {
       const payload = await apiRequest<AppSettings>('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settingsForm),
       })
-      setAppSettings(payload)
-      setSettingsForm(createSettingsForm(payload))
+      const verifiedSettings = await apiRequest<AppSettings>('/settings')
+      setAppSettings(verifiedSettings)
+      setSettingsForm(createSettingsForm(verifiedSettings))
       setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
-      setStatus('Application settings have been updated.')
+      setStatus('Application settings have been saved and verified.')
+      appendSettingsActivity(
+        `App settings saved and verified. API client ${verifiedSettings.api_client_id ? 'stored' : 'missing'}, secret ${
+          verifiedSettings.api_client_secret_configured ? 'configured' : 'missing'
+        }.`,
+      )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+      const message = caught instanceof Error ? caught.message : 'Failed to update application settings'
+      appendSettingsActivity(`App settings save failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3051,6 +3085,7 @@ export function App() {
     event?.preventDefault()
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Saving endpoint profile preset.')
     try {
       const created = await apiRequest<EmrEndpointProfile>('/emr/profiles', {
         method: 'POST',
@@ -3060,8 +3095,11 @@ export function App() {
       setEmrEndpointProfileForm(createEmrEndpointProfileForm())
       await loadEmrEndpointProfiles(created.id)
       setStatus(`Stored EMR endpoint profile ${created.display_name}.`)
+      appendSettingsActivity(`Endpoint profile saved: ${created.display_name}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to create EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to create EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile save failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3070,15 +3108,19 @@ export function App() {
   async function activateEmrEndpointProfile(profileId: number) {
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Activating endpoint profile preset.')
     try {
       const updatedSettings = await apiRequest<AppSettings>(`/emr/profiles/${profileId}/activate`, { method: 'POST' })
       setAppSettings(updatedSettings)
       setSettingsForm(createSettingsForm(updatedSettings))
       await loadEmrEndpointProfiles(profileId)
       setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
-      setStatus('EMR endpoint profile activated for API readiness testing.')
+      setStatus('Endpoint profile copied into the active App settings API connection.')
+      appendSettingsActivity('Endpoint profile copied into active API settings.')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to activate EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to activate EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile activation failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3087,12 +3129,16 @@ export function App() {
   async function deleteEmrEndpointProfile(profileId: number) {
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Deleting endpoint profile preset.')
     try {
       const deleted = await apiRequest<{ status: string; profile_key: string }>(`/emr/profiles/${profileId}`, { method: 'DELETE' })
       await loadEmrEndpointProfiles(null)
       setStatus(`Deleted EMR endpoint profile ${deleted.profile_key}.`)
+      appendSettingsActivity(`Endpoint profile deleted: ${deleted.profile_key}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to delete EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to delete EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile delete failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -5625,7 +5671,7 @@ export function App() {
                 <div className='panel-heading'>
                   <div>
                     <h2>Application settings</h2>
-                    <p>Configure external access intelligence and the LLM used for gap-filling analysis.</p>
+                    <p>Configure local settings, the single active Alleva/API connection, optional saved endpoint presets, and disabled-by-default LLM support.</p>
                   </div>
                   <button type='button' className='ghost-button' onClick={() => void loadSettings()} disabled={isBusy}>
                     Refresh
@@ -5932,6 +5978,18 @@ export function App() {
                         }
                       />
                     </label>
+                    <section className='panel-subsection full-width'>
+                      <h3>Active Alleva/API connection</h3>
+                      <p className='muted-text field-note'>
+                        These fields are the source of truth for readiness checks, the API connectivity harness, and approved Alleva REST treatment-plan sync.
+                        Paste the client ID and client secret supplied by Alleva/R3 when using OAuth client credentials. The saved secret is encrypted locally,
+                        write-only after save, and never returned to the browser.
+                      </p>
+                      <div className='compact-status-frame' aria-live='polite'>
+                        <strong>Connection activity</strong>
+                        <pre>{settingsActivityLog.length ? settingsActivityLog.join('\n') : 'No App settings/API action has run in this browser session.'}</pre>
+                      </div>
+                    </section>
                     <label className='checkbox-row full-width'>
                       <input
                         type='checkbox'
@@ -6007,6 +6065,10 @@ export function App() {
                       />
                       Clear stored API client secret
                     </label>
+                    <p className='muted-text field-note full-width'>
+                      For Alleva OAuth, pasting the client ID and client secret here is expected. To avoid duplicate entry, save reusable alternatives under
+                      API endpoint presets below, then activate a preset to copy it into these active fields.
+                    </p>
                     <label>
                       EMR timeout (seconds)
                       <input
@@ -6029,6 +6091,9 @@ export function App() {
                       />
                       Periodically run safe Alleva API checks
                     </label>
+                    <p className='muted-text field-note full-width'>
+                      This checkbox only turns on the background schedule. The manual Run API check now button below stays available for one-time configuration tests.
+                    </p>
                     <label>
                       Check interval (minutes)
                       <input
@@ -6135,12 +6200,16 @@ export function App() {
                           Active-client, treatment-plan, review, pagination, and status fields are validated
                         </label>
                       </div>
+                      <p className='muted-text field-note'>
+                        The sync, startup, approval, and mapping checkboxes are separate safety gates. The manual button below will still run and report skipped or
+                        blocked until the saved connection, approval, and mapped Alleva fields are ready.
+                      </p>
                       <div className='form-actions'>
                         <button
                           type='button'
                           className='ghost-button'
                           onClick={() => void runAllevaTreatmentPlanSyncNow()}
-                          disabled={isBusy || !appSettings?.alleva_treatment_plan_sync_enabled}
+                          disabled={isBusy}
                         >
                           Run treatment-plan sync now
                         </button>
@@ -6151,6 +6220,10 @@ export function App() {
                     </section>
                     <section className='panel-subsection full-width'>
                       <h3>Alleva REST/OpenAPI readiness</h3>
+                      <p className='muted-text field-note'>
+                        This readiness panel uses the active connection saved above. Use the API connectivity harness for one-time tests or OpenAPI operation
+                        checks; use endpoint presets only when you need to save alternate Alleva or future vendor connection values.
+                      </p>
                       <div className='fact-list'>
                         <div>
                           <dt>Adapter</dt>
@@ -6174,7 +6247,7 @@ export function App() {
                           type='button'
                           className='ghost-button'
                           onClick={() => void runDailyReviewSourceCheck()}
-                          disabled={isBusy || !(settingsForm?.emr_periodic_check_enabled || appSettings?.emr_periodic_check_enabled)}
+                          disabled={isBusy}
                         >
                           Run API check now
                         </button>
@@ -6188,7 +6261,7 @@ export function App() {
                       <div className='panel-heading'>
                         <div>
                           <h3>Stored API endpoint profiles</h3>
-                          <p>Save Alleva REST/OpenAPI endpoint options without exposing stored secrets back to the browser.</p>
+                          <p>Save optional presets. Activating a preset copies it into the active connection above without exposing stored secrets back to the browser.</p>
                         </div>
                         <button type='button' className='ghost-button' onClick={() => void loadEmrEndpointProfiles(selectedEmrEndpointProfileId)} disabled={isBusy}>
                           Refresh profiles
@@ -6254,7 +6327,7 @@ export function App() {
                                   onClick={() => void activateEmrEndpointProfile(selectedEmrEndpointProfile.id)}
                                   disabled={isBusy || selectedEmrEndpointProfile.is_default}
                                 >
-                                  Use for API tests
+                                  Use for active API settings
                                 </button>
                                 <button
                                   type='button'

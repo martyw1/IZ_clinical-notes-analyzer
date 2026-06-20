@@ -376,9 +376,13 @@ def run_alleva_treatment_plan_sync(
     startup: bool = False,
 ) -> dict[str, Any]:
     if not settings_row.alleva_treatment_plan_sync_enabled:
-        return {'status': 'skipped', 'message': 'Alleva treatment-plan REST sync is disabled.'}
+        message = 'Alleva treatment-plan REST sync is disabled.'
+        _mark_status(db, settings_row, status='skipped', message=message)
+        return {'status': 'skipped', 'message': message}
     if startup and not settings_row.alleva_treatment_plan_sync_on_startup:
-        return {'status': 'skipped', 'message': 'Alleva treatment-plan REST sync on startup is disabled.'}
+        message = 'Alleva treatment-plan REST sync on startup is disabled.'
+        _mark_status(db, settings_row, status='skipped', message=message)
+        return {'status': 'skipped', 'message': message}
 
     missing = _missing_sync_configuration(settings_row, startup=startup)
     if missing:

@@ -84,7 +84,7 @@ def test_daily_review_source_check_is_safe_and_audited(app_with_sqlite):
     payload = response.json()
     assert payload['live_import_enabled'] is False
     assert payload['last_successful_check_at']
-    assert payload['last_check_mode'] == 'manual_safe_mock_check'
+    assert payload['last_check_mode'] == 'manual_api_readiness_check'
 
     db = session_local()
     try:
@@ -239,6 +239,32 @@ def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sq
         assert text_secret_is_encrypted(stored_profile.client_secret)
     finally:
         db.close()
+
+
+def test_audit_logging_tolerates_detached_actor_after_commit(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    from app.models.models import User
+    from app.services.audit import log_event, set_actor_context
+
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        user = db.execute(select(User).where(User.username == 'admin')).scalar_one()
+        set_actor_context(user)
+        db.commit()
+    finally:
+        db.close()
+
+    log_event(
+        action='audit.detached_actor.regression',
+        actor=user,
+        event_category='system',
+        target_entity='audit_actor',
+        target_entity_type='regression_test',
+        message='Detached audit actor regression event.',
+    )
 
 
 def test_version_endpoint_reports_repo_version(app_with_sqlite):
