@@ -1,5 +1,13 @@
 # Version 1 Completion Log
 
+## 2026-06-20 1.4.4 API Harness and Alleva Sync Status Hardening
+
+- Replaced generic manual Alleva treatment-plan sync user-facing failure text with stage-specific status messages for token request, endpoint authorization/permission, endpoint mapping/API version, timeout/reachability, empty results, warning completion, and success.
+- Reworked the standalone API Testing Harness into a step-by-step flow: admin session, active settings, auth/connectivity test, `ALL Patient Records`, and advanced operation testing.
+- Reduced the user-facing Alleva quick-pull area to one `ALL Patient Records` action backed by `GET /clients`, with visible request parameters and Excel-ready TSV output.
+- Updated Chart audit/App Settings labels so safe API readiness checks are clearly described as connection/readiness checks that do not import live patient charts.
+- Verified public Alleva v1 Swagger still lists `/clients`, `/treatment-plans`, and `/treatment-reviews` with `Limit`, `Cursor`, optional `StartDate`/`EndDate`, `fields`, `api-version`, and `X-Version`.
+
 ## 2026-06-19 1.4.4 API Settings Consolidation and Startup Audit Repair
 
 - Updated version metadata to `1.4.4` / build `2026.06.19.2`.

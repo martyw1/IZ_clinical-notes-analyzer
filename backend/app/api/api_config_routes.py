@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from http import HTTPStatus
 from typing import Any, Literal
 from urllib.parse import urljoin
 
@@ -161,7 +162,7 @@ class ApiOperationTestInput(ApiDefinitionPullInput):
 
 
 class AllevaQuickPullInput(ApiDefinitionPullInput):
-    report: Literal['active_treatment_plans', 'overdue_treatment_plans', 'inactive_treatment_plans', 'active_patients']
+    report: Literal['all_patient_records', 'active_treatment_plans', 'overdue_treatment_plans', 'inactive_treatment_plans', 'active_patients']
     operation_parameters: dict[str, Any] = Field(default_factory=dict)
     max_pages: int = Field(default=10, ge=1, le=50)
 
@@ -358,6 +359,18 @@ def _patient_id(payload: dict[str, Any]) -> str:
     return _first_text(payload, 'clientId', 'id', 'uniqueId', 'mrn')
 
 
+def _patient_name(payload: dict[str, Any]) -> str:
+    name = payload.get('name')
+    if isinstance(name, dict):
+        full = _first_text(name, 'clientFullName', 'fullName', 'displayName', 'preferred')
+        if full:
+            return full
+        first = _first_text(name, 'first', 'firstName', 'givenName')
+        last = _first_text(name, 'last', 'lastName', 'familyName')
+        return ' '.join(part for part in [first, last] if part)
+    return _first_text(payload, 'clientFullName', 'fullName', 'name')
+
+
 def _plan_client_id(payload: dict[str, Any]) -> str:
     client = payload.get('client')
     if isinstance(client, dict):
@@ -417,6 +430,62 @@ def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+ALL_PATIENT_RECORD_COLUMNS = [
+    'patient_id',
+    'source_id',
+    'client_name',
+    'admission_date',
+    'status',
+    'is_client',
+    'discharge_date',
+    'level_of_care',
+    'facility',
+    'primary_clinician',
+    'first_contact_date',
+]
+
+ALL_PATIENT_RECORD_FIELDS = [
+    'id',
+    'clientId',
+    'uniqueId',
+    'mrn',
+    'name',
+    'status',
+    'isClient',
+    'admissionDateTime',
+    'firstContactDate',
+    'dischargeDateTime',
+    'facilityName',
+    'levelOfCare',
+    'primaryClinician',
+    'primaryClinicians',
+]
+
+
+def _all_patient_record_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'patient_id': _patient_id(payload),
+        'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
+        'client_name': _patient_name(payload),
+        'admission_date': _date_only(payload.get('admissionDateTime') or payload.get('admissionDate')),
+        'status': _first_text(payload, 'status'),
+        'is_client': _bool_value(payload.get('isClient'), default=True),
+        'discharge_date': _date_only(payload.get('dischargeDateTime')),
+        'level_of_care': _first_text(payload, 'levelOfCare'),
+        'facility': _first_text(payload, 'facilityName'),
+        'primary_clinician': _first_text(payload, 'primaryClinician', 'primaryClinicians'),
+        'first_contact_date': _date_only(payload.get('firstContactDate')),
+    }
+
+
+def _tsv_value(value: Any) -> str:
+    return _text(value).replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
+
+
+def _rows_to_tsv(rows: list[dict[str, Any]], columns: list[str]) -> str:
+    return '\n'.join(['\t'.join(columns), *['\t'.join(_tsv_value(row.get(column)) for column in columns) for row in rows]])
+
+
 def _is_active_patient(payload: dict[str, Any]) -> bool:
     if _text(payload.get('dischargeDateTime')):
         return False
@@ -429,7 +498,43 @@ def _is_active_patient(payload: dict[str, Any]) -> bool:
 
 
 def _quick_pull_path(report: str) -> str:
-    return '/clients' if report == 'active_patients' else '/treatment-plans'
+    return '/clients' if report in {'all_patient_records', 'active_patients'} else '/treatment-plans'
+
+
+def _http_status_label(status_code: int) -> str:
+    try:
+        phrase = HTTPStatus(status_code).phrase
+    except ValueError:
+        phrase = ''
+    return f'HTTP {status_code}{f" {phrase}" if phrase else ""}'
+
+
+def _quick_pull_http_failure_message(*, path: str, status_code: int, api_version: str) -> tuple[str, str]:
+    status_label = _http_status_label(status_code)
+    if status_code == 401:
+        return (
+            'endpoint_authorization_failed',
+            (
+                f'Authentication reached Alleva, but Alleva rejected GET {path} with {status_label}. '
+                f'Ask R3/Alleva to confirm this client ID has tenant access and read permission for {path}, '
+                f'the correct token audience/scope, and API version {api_version}.'
+            ),
+        )
+    if status_code == 403:
+        return (
+            'endpoint_permission_denied',
+            f'Authentication worked, but the saved credentials are not permitted to read GET {path} ({status_label}). Ask Alleva to add the required read permission/scope.',
+        )
+    if status_code in {400, 404, 405}:
+        return (
+            'endpoint_mapping_or_version_failed',
+            f'Alleva rejected GET {path} with {status_label}. Confirm the path, Limit/Cursor/api-version parameters, X-Version header, and approved API version.',
+        )
+    if status_code == 429:
+        return ('endpoint_rate_limited', f'Alleva rate-limited GET {path} ({status_label}). Wait and try again, or ask Alleva about tenant rate limits.')
+    if 500 <= status_code <= 599:
+        return ('endpoint_vendor_unavailable', f'Alleva returned {status_label} for GET {path}. Try again later or confirm vendor availability.')
+    return ('endpoint_request_failed', f'Alleva returned {status_label} for GET {path}. Confirm credentials, endpoint mapping, and API version.')
 
 
 def _row_end_date_before(row: dict[str, Any], today: date) -> bool:
@@ -487,12 +592,30 @@ def _fetch_alleva_collection(
             page_query = dict(query)
             page_query['Limit'] = limit
             page_query['Cursor'] = cursor
-            response = client.get(url, params=page_query, headers=headers)
-            response.read()
-            if not 200 <= response.status_code < 300:
+            api_version = _text(page_query.get('api-version')) or _text(headers.get('X-Version')) or '1.0'
+            try:
+                response = client.get(url, params=page_query, headers=headers)
+                response.read()
+            except httpx.TimeoutException:
                 return records, {
+                    'category': 'network_timeout',
+                    'message': f'Alleva did not respond before the configured timeout while reading GET {path}. Increase the timeout or try again when the network is stable.',
+                    'page_index': page_index,
+                    'url': redact_url(url),
+                }
+            except httpx.RequestError:
+                return records, {
+                    'category': 'network_failure',
+                    'message': f'The app could not reach Alleva GET {path}. Check internet access, the REST API base URL, and local firewall/proxy settings.',
+                    'page_index': page_index,
+                    'url': redact_url(url),
+                }
+            if not 200 <= response.status_code < 300:
+                category, message = _quick_pull_http_failure_message(path=path, status_code=response.status_code, api_version=api_version)
+                return records, {
+                    'category': category,
                     'status_code': response.status_code,
-                    'message': f'HTTP {response.status_code}',
+                    'message': message,
                     'response_body_preview': redact_sensitive_text(response.text[:600]),
                     'page_index': page_index,
                     'url': redact_url(str(response.url)),
@@ -501,8 +624,9 @@ def _fetch_alleva_collection(
                 page_records = _list_records(response.json())
             except ValueError:
                 return records, {
+                    'category': 'endpoint_non_json_response',
                     'status_code': response.status_code,
-                    'message': 'Response was not JSON.',
+                    'message': f'Alleva GET {path} responded, but the response was not JSON. Confirm this endpoint path and API version {api_version}.',
                     'response_body_preview': redact_sensitive_text(response.text[:600]),
                     'page_index': page_index,
                     'url': redact_url(str(response.url)),
@@ -869,15 +993,22 @@ def run_alleva_quick_pull(
     operation_parameters.setdefault('X-Version', '1.0')
     path = _quick_pull_path(payload.report)
     source_operation = f'GET {path}'
+    if payload.report == 'all_patient_records':
+        operation_parameters.setdefault('fields', ALL_PATIENT_RECORD_FIELDS)
 
     if payload.auth_mode == 'client_credentials' and not auth_context['bearer_token']:
         token_result = auth_context.get('token_result') if isinstance(auth_context.get('token_result'), dict) else {}
+        message = f"Authentication failed before the Alleva pull could run: {token_result.get('message') or 'token request did not return an access token.'}"
         result = {
             'status': 'fail',
-            'message': token_result.get('message') or 'Authentication did not complete.',
+            'message': message,
             'report': payload.report,
             'source_operation': source_operation,
             'operation_parameters': operation_parameters,
+            'category': 'token_request_failed',
+            'columns': ALL_PATIENT_RECORD_COLUMNS if payload.report == 'all_patient_records' else [],
+            'tsv': _rows_to_tsv([], ALL_PATIENT_RECORD_COLUMNS) if payload.report == 'all_patient_records' else '',
+            'copy_format': 'tsv' if payload.report == 'all_patient_records' else '',
             'rows': [],
             'total_records_seen': 0,
             'returned_count': 0,
@@ -918,7 +1049,16 @@ def run_alleva_quick_pull(
     )
 
     today = _utc_now().date()
-    if payload.report == 'active_patients':
+    columns: list[str] = []
+    tsv = ''
+    copy_format = ''
+    if payload.report == 'all_patient_records':
+        rows = [_all_patient_record_summary(item) for item in records]
+        columns = ALL_PATIENT_RECORD_COLUMNS
+        tsv = _rows_to_tsv(rows, columns)
+        copy_format = 'tsv'
+        message_subject = 'patient record(s)'
+    elif payload.report == 'active_patients':
         rows = [_active_patient_summary(item) for item in records if _is_active_patient(item)]
         message_subject = 'active patient(s)'
     else:
@@ -933,12 +1073,24 @@ def run_alleva_quick_pull(
             rows = [item for item in plan_rows if not item['is_active']]
             message_subject = 'inactive treatment plan(s)'
 
-    status = 'warn' if fetch_error else 'ok'
-    message = (
-        f'Alleva quick pull stopped with {fetch_error["message"]}; returned {len(rows)} computed row(s) from {len(records)} record(s) fetched.'
-        if fetch_error
-        else f'Alleva quick pull found {len(rows)} {message_subject} from {len(records)} fetched record(s).'
-    )
+    if fetch_error:
+        status = 'warn' if records else 'fail'
+        message = (
+            f'Alleva pull could not finish: {fetch_error["message"]} '
+            f'Returned {len(rows)} row(s) from {len(records)} record(s) fetched before the stop.'
+        )
+    elif not rows:
+        status = 'warn'
+        message = f'Alleva pull reached {source_operation} but returned no {message_subject}. Confirm the tenant, date filters, and API permissions if records were expected.'
+    elif payload.report == 'all_patient_records':
+        status = 'ok'
+        message = (
+            f'ALL Patient Records pull returned {len(rows)} row(s) from {len(records)} fetched record(s). '
+            'Copy the TSV output into Excel if needed.'
+        )
+    else:
+        status = 'ok'
+        message = f'Alleva quick pull found {len(rows)} {message_subject} from {len(records)} fetched record(s).'
     result = {
         'status': status,
         'message': message,
@@ -948,8 +1100,12 @@ def run_alleva_quick_pull(
         'max_pages': payload.max_pages,
         'total_records_seen': len(records),
         'returned_count': len(rows),
+        'columns': columns,
+        'tsv': tsv,
+        'copy_format': copy_format,
         'rows': rows,
         'fetch_error': fetch_error,
+        'category': fetch_error.get('category') if fetch_error else ('no_records_returned' if not rows else 'completed'),
         'auth_mode': payload.auth_mode,
         'api_key_used': bool(auth_context['api_key']),
         'bearer_token_used': bool(auth_context['bearer_token']),
@@ -974,8 +1130,9 @@ def run_alleva_quick_pull(
             'total_records_seen': len(records),
             'returned_count': len(rows),
             'fetch_error_status_code': fetch_error.get('status_code') if fetch_error else None,
+            'fetch_error_category': fetch_error.get('category') if fetch_error else '',
         },
-        outcome_status='success' if status == 'ok' else 'failure',
+        outcome_status='failure' if status == 'fail' else 'success',
         severity='info' if status == 'ok' else 'warning',
         message=f'Alleva quick pull completed for {payload.report} with status {status}.',
     )

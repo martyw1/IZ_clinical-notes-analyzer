@@ -1233,8 +1233,8 @@ def run_alleva_treatment_plan_sync_now(request: Request, user: User = Depends(re
         target_entity='alleva_treatment_plan_sync',
         target_entity_type='integration_sync',
         details={'status': result.get('status'), 'upserted_client_count': result.get('upserted_client_count', 0)},
-        outcome_status='success' if result.get('status') in {'ok', 'skipped'} else 'failure',
-        severity='info' if result.get('status') in {'ok', 'skipped'} else 'warning',
+        outcome_status='success' if result.get('status') in {'ok', 'skipped', 'warn'} else 'failure',
+        severity='warning' if result.get('status') == 'warn' else ('info' if result.get('status') in {'ok', 'skipped'} else 'warning'),
         message='Manual Alleva REST treatment-plan sync requested.',
     )
     return {'sync_result': result, 'settings': app_settings_public_payload(settings_row)}

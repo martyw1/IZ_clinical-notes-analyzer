@@ -1,3 +1,4 @@
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -6,6 +7,29 @@ from app.models.models import AppSetting, AuditLog, EmrEndpointProfile
 from app.services.secure_storage import text_secret_is_encrypted
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
+OriginalHttpxClient = httpx.Client
+
+
+class TreatmentReviewsUnauthorizedHttpxClient:
+    def __init__(self, *args, **kwargs):
+        self._client = OriginalHttpxClient(transport=httpx.MockTransport(self._handler), follow_redirects=True)
+
+    def __enter__(self):
+        return self._client
+
+    def __exit__(self, exc_type, exc, tb):
+        self._client.close()
+
+    @staticmethod
+    def _handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get('authorization') == 'Bearer synced-token'
+        if request.url.path == '/clients':
+            return httpx.Response(200, json=[])
+        if request.url.path == '/treatment-plans':
+            return httpx.Response(200, json=[])
+        if request.url.path == '/treatment-reviews':
+            return httpx.Response(401, json={'message': 'synthetic unauthorized'})
+        return httpx.Response(404, text='not found')
 
 
 def _auth_headers(client: TestClient) -> dict[str, str]:
@@ -184,6 +208,57 @@ def test_alleva_rest_sync_enablement_lists_missing_approval_and_mapping(app_with
         assert 'R3/Alleva live treatment-plan sync approval' in detail
         assert 'validated Alleva treatment-plan endpoint mapping' in detail
         assert 'Alleva API client secret' in detail
+
+
+def test_manual_alleva_sync_classifies_endpoint_unauthorized(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr(
+        'app.services.alleva_treatment_plan_sync.request_client_credentials_token',
+        lambda **_kwargs: ({'status': 'ok', 'message': 'Client-credentials token obtained.'}, 'synced-token'),
+    )
+    monkeypatch.setattr('app.services.alleva_treatment_plan_sync.httpx.Client', TreatmentReviewsUnauthorizedHttpxClient)
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        saved = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_api_base_url': 'https://api.example.test',
+                'alleva_openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'alleva_api_version': '1.0',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_client_id': 'alleva-rest-client',
+                'api_client_secret': 'alleva-rest-secret',
+                'alleva_treatment_plan_sync_enabled': True,
+                'alleva_treatment_plan_sync_approved': True,
+                'alleva_treatment_plan_endpoint_mapping_validated': True,
+            },
+        )
+        assert saved.status_code == 200
+
+        response = client.post('/api/alleva/treatment-plan-sync/run', headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+        result = payload['sync_result']
+        assert result['status'] == 'fail'
+        assert result['failure_stage'] == 'endpoint_request'
+        assert result['category'] == 'endpoint_authorization_failed'
+        assert result['endpoint'] == '/treatment-reviews'
+        assert result['status_code'] == 401
+        assert 'token request succeeded' in result['message']
+        assert 'GET /treatment-reviews' in result['message']
+        assert 'HTTP 401 Unauthorized' in result['message']
+        assert 'HTTPStatusError' not in result['message']
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting)).scalar_one()
+        assert settings_row.alleva_treatment_plan_sync_last_status == 'fail'
+        assert 'GET /treatment-reviews' in settings_row.alleva_treatment_plan_sync_last_message
+        assert 'HTTPStatusError' not in settings_row.alleva_treatment_plan_sync_last_message
+    finally:
+        db.close()
 
 
 def test_admin_can_store_and_activate_multiple_emr_endpoint_profiles(app_with_sqlite):

@@ -18,7 +18,7 @@ def _api_configuration_page() -> HTMLResponse:
       :root { color-scheme: light; }
       body { font-family: Segoe UI, Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
       main { max-width: 1040px; margin: 0 auto; padding: 2rem; }
-      section { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.25rem; margin: 1rem 0; box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06); }
+      section { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; margin: 1rem 0; box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06); }
       h1 { margin-bottom: 0.25rem; }
       h2 { margin-top: 0; }
       label { display: block; font-weight: 650; margin-top: 0.8rem; }
@@ -40,12 +40,23 @@ def _api_configuration_page() -> HTMLResponse:
       .status-frame { margin-top: 0.85rem; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; padding: 0.75rem; }
       .status-frame strong { display: block; margin-bottom: 0.35rem; }
       .status-frame pre { margin: 0; max-height: 8rem; overflow: auto; background: transparent; color: #334155; padding: 0; font-size: 0.9rem; }
+      .workflow-list { margin: 0.75rem 0 0; padding-left: 1.4rem; color: #334155; }
+      .workflow-list li { margin: 0.35rem 0; }
+      .parameter-list { margin: 0.5rem 0 0; padding-left: 1.2rem; color: #475569; }
+      .primary-action { font-size: 1rem; padding: 0.8rem 1rem; }
+      .copy-output { min-height: 12rem; font-family: Consolas, 'Courier New', monospace; white-space: pre; overflow: auto; }
     </style>
   </head>
   <body onload="initializeSession()">
     <main>
       <h1>API Configuration and Connectivity Test</h1>
       <p class="hint">Use this local admin page to test the same active Alleva/API connection saved in App settings without putting credentials into source files.</p>
+      <ol class="workflow-list">
+        <li>Use the current admin session.</li>
+        <li>Load or save the active API settings from App Settings.</li>
+        <li>Test authentication and OpenAPI connectivity.</li>
+        <li>Run ALL Patient Records only after the auth/connectivity test is understood.</li>
+      </ol>
 
       <section>
         <h2>1. Admin session</h2>
@@ -97,27 +108,44 @@ def _api_configuration_page() -> HTMLResponse:
       </section>
 
       <section>
-        <h2>3. Alleva treatment-plan quick pulls</h2>
-        <p class="hint">These buttons use the public Alleva v1 Swagger operations GET /treatment-plans and GET /clients. The POST payload below is editable before each run.</p>
-        <div class="preset-grid">
-          <button onclick="prepareAllevaQuickPull('active_treatment_plans')">Pull all active treatment plans</button>
-          <button onclick="prepareAllevaQuickPull('overdue_treatment_plans')">Pull overdue treatment plans and compute why</button>
-          <button onclick="prepareAllevaQuickPull('inactive_treatment_plans')">Pull inactive treatment plans and compute why</button>
-          <button onclick="prepareAllevaQuickPull('active_patients')">Pull active patients with patient ID and first admission</button>
-        </div>
-        <label>Editable quick-pull POST fields
-          <textarea id="quickPullPayload" spellcheck="false"></textarea>
-        </label>
-        <button onclick="runAllevaQuickPull()">Run quick pull</button>
+        <h2>3. Test authentication and connectivity</h2>
+        <p class="hint">Run this after settings are saved. It requests a client-credentials token when OAuth is selected, then loads the OpenAPI definition so you can tell whether credentials, token style, base URL, and API documentation are usable.</p>
+        <button onclick="testConnectivity()">Test saved auth and load API definition</button>
+        <button onclick="useLocalSample()" class="secondary">Use local sample definition</button>
         <div class="status-frame" role="status" aria-live="polite">
-          <strong>Quick-pull status</strong>
-          <pre id="quickPullStatus">Choose a quick pull to prefill the POST fields.</pre>
+          <strong>Harness status</strong>
+          <pre id="statusFrame">No API harness action has run yet.</pre>
         </div>
-        <pre id="quickPullResult">Quick-pull computed rows will appear here.</pre>
+        <p id="testStatus" class="hint">No test run yet.</p>
+        <pre id="result">Results will appear here.</pre>
       </section>
 
       <section>
-        <h2>4. Test a specific API call</h2>
+        <h2>4. Pull ALL Patient Records</h2>
+        <p class="hint">Use this after Step 3 succeeds. The button sends GET /clients to the active Alleva REST API connection and formats the returned list as tab-separated rows that can be pasted into Excel.</p>
+        <ul class="parameter-list">
+          <li>Endpoint: GET /clients</li>
+          <li>Parameters: Limit, Cursor, optional StartDate/EndDate, fields, api-version</li>
+          <li>Header: X-Version</li>
+          <li>Output fields: patient/client ID, source ID, client name if returned by Alleva, admission date, status, client flag, discharge date, level of care, facility, primary clinician, first contact date</li>
+        </ul>
+        <button onclick="prepareAllevaQuickPull('all_patient_records')" class="secondary">Reset ALL Patient Records request</button>
+        <button onclick="runAllevaQuickPull()" class="primary-action">Run ALL Patient Records pull</button>
+        <label>Request details that will be sent
+          <textarea id="quickPullPayload" spellcheck="false"></textarea>
+        </label>
+        <div class="status-frame" role="status" aria-live="polite">
+          <strong>ALL Patient Records status</strong>
+          <pre id="quickPullStatus">The ALL Patient Records request is prepared after settings load.</pre>
+        </div>
+        <label>Excel-ready TSV output
+          <textarea id="quickPullTsv" class="copy-output" readonly spellcheck="false">Run the ALL Patient Records pull to create copy/paste rows for Excel.</textarea>
+        </label>
+        <pre id="quickPullResult">Detailed non-secret pull result will appear here.</pre>
+      </section>
+
+      <section>
+        <h2>5. Advanced: test a specific API call</h2>
         <p class="hint">After pulling an OpenAPI/Swagger definition, choose an operation. The form below is generated from that operation's path, query, header, and request body requirements.</p>
         <label>API call / operation
           <select id="operationSelect" onchange="renderOperationForm()">
@@ -128,18 +156,6 @@ def _api_configuration_page() -> HTMLResponse:
         <button onclick="testSelectedOperation()">Test selected API call</button>
         <p id="operationStatus" class="hint">No API call selected.</p>
         <pre id="operationResult">API call test results will appear here.</pre>
-      </section>
-
-      <section>
-        <h2>5. Pull definitions and test connectivity</h2>
-        <button onclick="testConnectivity()">Pull API definitions / test connectivity</button>
-        <button onclick="useLocalSample()" class="secondary">Use local sample definition</button>
-        <div class="status-frame" role="status" aria-live="polite">
-          <strong>Harness status</strong>
-          <pre id="statusFrame">No API harness action has run yet.</pre>
-        </div>
-        <p id="testStatus" class="hint">No test run yet.</p>
-        <pre id="result">Results will appear here.</pre>
       </section>
     </main>
 
@@ -185,16 +201,14 @@ def _api_configuration_page() -> HTMLResponse:
         return '1.0';
       }
 
-      function quickPullOperationParameters(report) {
+      function quickPullOperationParameters(_report) {
         const version = allevaVersion();
         const common = {
           Limit: 500,
           Cursor: 0,
           StartDate: '',
           EndDate: '',
-          fields: report === 'active_patients'
-            ? ['id', 'clientId', 'uniqueId', 'mrn', 'status', 'isClient', 'admissionDateTime', 'firstContactDate', 'dischargeDateTime', 'facilityName', 'levelOfCare', 'primaryClinician']
-            : ['id', 'client', 'description', 'startDate', 'endDate', 'isActive', 'isComplete', 'lastModified', 'clientSignature', 'guardianSignature'],
+          fields: ['id', 'clientId', 'uniqueId', 'mrn', 'name', 'status', 'isClient', 'admissionDateTime', 'firstContactDate', 'dischargeDateTime', 'facilityName', 'levelOfCare', 'primaryClinician', 'primaryClinicians'],
           'api-version': version,
           'X-Version': version
         };
@@ -203,6 +217,7 @@ def _api_configuration_page() -> HTMLResponse:
 
       function quickPullLabel(report) {
         return {
+          all_patient_records: 'ALL Patient Records',
           active_treatment_plans: 'all active treatment plans',
           overdue_treatment_plans: 'overdue treatment plans with computed reasons',
           inactive_treatment_plans: 'inactive treatment plans with computed reasons',
@@ -279,7 +294,7 @@ def _api_configuration_page() -> HTMLResponse:
         byId('tokenUrl').value = config.token_url || 'https://authorization.allevasoft.com/connect/token';
         byId('tokenAuthStyle').value = config.token_auth_style || 'body';
         byId('authMode').value = config.recommended_auth_mode || (config.client_secret_configured && config.client_id_configured ? 'client_credentials' : 'api_key');
-        if (!getValue('quickPullPayload')) prepareAllevaQuickPull('active_treatment_plans');
+        if (!getValue('quickPullPayload')) prepareAllevaQuickPull('all_patient_records');
         displayResult('result', config);
       }
 
@@ -400,7 +415,7 @@ def _api_configuration_page() -> HTMLResponse:
           operation_parameters: quickPullOperationParameters(report)
         };
         byId('quickPullPayload').value = JSON.stringify(payload, null, 2);
-        appendStatus('quickPullStatus', `Prepared ${quickPullLabel(report)}. Review/edit the POST fields, then run.`);
+        appendStatus('quickPullStatus', `Prepared ${quickPullLabel(report)} using GET /clients with Limit, Cursor, fields, api-version, and X-Version.`);
       }
 
       async function runAllevaQuickPull() {
@@ -435,6 +450,7 @@ def _api_configuration_page() -> HTMLResponse:
             body: JSON.stringify(body)
           }));
           appendStatus('quickPullStatus', `${result.status}: ${result.message}`);
+          byId('quickPullTsv').value = result.tsv || 'No TSV rows returned.';
           displayResult('quickPullResult', result);
         } catch (error) {
           appendStatus('quickPullStatus', `Quick pull failed: ${error.message}`);

@@ -382,6 +382,11 @@ type AllevaTreatmentPlanSyncResponse = {
   sync_result: {
     status: string
     message: string
+    warnings?: string[]
+    failure_stage?: string
+    category?: string
+    endpoint?: string
+    status_code?: number
     upserted_client_count?: number
     active_client_count?: number
     treatment_plan_count?: number
@@ -801,7 +806,7 @@ const HELP_SECTIONS = [
     items: [
       'Refresh reloads the current workspace and clears stale queue data.',
       'EMR/API access shows readiness-only status until vendor mapping and compliance approval are complete.',
-      'Run daily check performs a safe readiness check only; it does not import live Alleva patient charts.',
+      'Run safe API readiness check performs a connection/readiness check only; it does not import live Alleva patient charts.',
       'Upload binder starts a manual upload or update workflow; Open review queue opens generated chart-review work.',
     ],
   },
@@ -1916,8 +1921,8 @@ export function App() {
   async function runDailyReviewSourceCheck() {
     setIsBusy(true)
     setError('')
-    setStatus('Running the safe daily review-source check...')
-    appendSettingsActivity('Started manual API readiness check.')
+    setStatus('Running the safe API readiness check...')
+    appendSettingsActivity('Started safe API readiness check.')
     try {
       const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery/run-daily-check', { method: 'POST' })
       setReviewSourceDiscovery(payload)
@@ -1926,11 +1931,11 @@ export function App() {
         setAppSettings(latestSettings)
         setSettingsForm(createSettingsForm(latestSettings))
       }
-      setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
-      appendSettingsActivity(`API check completed: ${payload.last_check_mode || payload.refresh_mode}.`)
+      setStatus(`Safe API readiness check finished: ${payload.api_mode_label || payload.last_check_mode || payload.refresh_mode}.`)
+      appendSettingsActivity(`API readiness check finished: ${payload.api_mode_label || payload.last_check_mode || payload.refresh_mode}.`)
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Failed to run daily review-source check'
-      appendSettingsActivity(`API check failed: ${message}`)
+      const message = caught instanceof Error ? caught.message : 'Failed to run safe API readiness check'
+      appendSettingsActivity(`API readiness check failed: ${message}`)
       setError(message)
     } finally {
       setIsBusy(false)
@@ -1948,6 +1953,9 @@ export function App() {
       setSettingsForm(createSettingsForm(payload.settings))
       await loadTimelinessDashboard()
       setStatus(payload.sync_result.message)
+      if (payload.sync_result.status === 'fail' || payload.sync_result.status === 'blocked') {
+        setError(payload.sync_result.message)
+      }
       appendSettingsActivity(`Treatment-plan sync ${payload.sync_result.status}: ${payload.sync_result.message}`)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync'
@@ -3629,16 +3637,16 @@ export function App() {
                       </dl>
                       <div className='decision-actions'>
                         <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
-                          View Details
+                          Open Treatment plans
                         </button>
                         {user?.role === 'admin' || user?.role === 'manager' ? (
                           <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy}>
-                            Run daily check
+                            Run safe API readiness check
                           </button>
                         ) : null}
                         {user?.role === 'admin' ? (
                           <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
-                            API settings
+                            Open API settings
                           </button>
                         ) : null}
                       </div>
@@ -6092,7 +6100,7 @@ export function App() {
                       Periodically run safe Alleva API checks
                     </label>
                     <p className='muted-text field-note full-width'>
-                      This checkbox only turns on the background schedule. The manual Run API check now button below stays available for one-time configuration tests.
+                      This checkbox only turns on the background schedule. The manual safe API readiness check below stays available for one-time configuration tests and does not import patient charts.
                     </p>
                     <label>
                       Check interval (minutes)
@@ -6201,8 +6209,8 @@ export function App() {
                         </label>
                       </div>
                       <p className='muted-text field-note'>
-                        The sync, startup, approval, and mapping checkboxes are separate safety gates. The manual button below will still run and report skipped or
-                        blocked until the saved connection, approval, and mapped Alleva fields are ready.
+                        The sync, startup, approval, and mapping checkboxes are separate safety gates. The manual button below reports whether sync is off,
+                        blocked by missing approval/mapping, blocked by authentication, blocked by endpoint permission/version, empty, completed with warnings, or completed successfully.
                       </p>
                       <div className='form-actions'>
                         <button
@@ -6215,14 +6223,20 @@ export function App() {
                         </button>
                       </div>
                       {appSettings?.alleva_treatment_plan_sync_last_message ? (
-                        <p className='muted-text'>Last Alleva treatment-plan sync: {appSettings.alleva_treatment_plan_sync_last_message}</p>
+                        <p className='muted-text'>
+                          Last Alleva treatment-plan sync
+                          {appSettings.alleva_treatment_plan_sync_last_status
+                            ? ` (${appSettings.alleva_treatment_plan_sync_last_status}${appSettings.alleva_treatment_plan_sync_last_at ? ` at ${formatDateTime(appSettings.alleva_treatment_plan_sync_last_at)}` : ''})`
+                            : ''}
+                          : {appSettings.alleva_treatment_plan_sync_last_message}
+                        </p>
                       ) : null}
                     </section>
                     <section className='panel-subsection full-width'>
                       <h3>Alleva REST/OpenAPI readiness</h3>
                       <p className='muted-text field-note'>
-                        This readiness panel uses the active connection saved above. Use the API connectivity harness for one-time tests or OpenAPI operation
-                        checks; use endpoint presets only when you need to save alternate Alleva or future vendor connection values.
+                        This readiness panel uses the active connection saved above. The safe readiness check tests authentication and API documentation access;
+                        it does not import live patient charts. Use the API connectivity harness for the ALL Patient Records pull or advanced OpenAPI operation checks.
                       </p>
                       <div className='fact-list'>
                         <div>
@@ -6249,10 +6263,10 @@ export function App() {
                           onClick={() => void runDailyReviewSourceCheck()}
                           disabled={isBusy}
                         >
-                          Run API check now
+                          Run safe API readiness check now
                         </button>
                         <button type='button' className='ghost-button' onClick={openApiConnectivityHarness}>
-                          API connectivity test harness
+                          Open API Testing Harness
                         </button>
                       </div>
                       {appSettings?.emr_last_check_message ? <p className='muted-text'>Last API check: {appSettings.emr_last_check_message}</p> : null}

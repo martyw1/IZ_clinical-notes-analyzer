@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
+from http import HTTPStatus
 from typing import Any
 from urllib.parse import urljoin
 
@@ -11,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.models import AppSetting, LevelOfCareHistory, TreatmentPlanClient, TreatmentPlanKind, TreatmentPlanRecord, User
-from app.services.api_connectivity import request_client_credentials_token
+from app.services.api_connectivity import request_client_credentials_token, redact_url
 from app.services.audit import log_event
 from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
 from app.services.secure_storage import decrypt_text_secret
@@ -28,6 +29,26 @@ SYNC_ENDPOINTS = {
     'treatment_plans': '/treatment-plans',
     'treatment_reviews': '/treatment-reviews',
 }
+
+
+class AllevaSyncExternalError(Exception):
+    def __init__(
+        self,
+        public_message: str,
+        *,
+        stage: str,
+        category: str,
+        endpoint: str = '',
+        status_code: int | None = None,
+        status: str = 'fail',
+    ) -> None:
+        super().__init__(public_message)
+        self.public_message = public_message
+        self.stage = stage
+        self.category = category
+        self.endpoint = endpoint
+        self.status_code = status_code
+        self.status = status
 
 
 def _utc_now() -> datetime:
@@ -132,6 +153,76 @@ def _endpoint_url(base_url: str, path: str) -> str:
     return urljoin(base_url.rstrip('/') + '/', path.lstrip('/'))
 
 
+def _http_status_label(status_code: int) -> str:
+    try:
+        phrase = HTTPStatus(status_code).phrase
+    except ValueError:
+        phrase = ''
+    return f'HTTP {status_code}{f" {phrase}" if phrase else ""}'
+
+
+def _endpoint_http_failure_message(*, path: str, status_code: int, api_version: str) -> tuple[str, str]:
+    status_label = _http_status_label(status_code)
+    if status_code == 401:
+        return (
+            'endpoint_authorization_failed',
+            (
+                f'The Alleva token request succeeded, but Alleva rejected access to GET {path} with {status_label}. '
+                f'Ask R3/Alleva to confirm this client ID has tenant access and read permission for {path}, '
+                f'that the token audience/scope is correct, and that API version {api_version} is approved for this endpoint.'
+            ),
+        )
+    if status_code == 403:
+        return (
+            'endpoint_permission_denied',
+            (
+                f'The Alleva token request succeeded, but the saved credentials are not permitted to read GET {path} '
+                f'({status_label}). Ask R3/Alleva to add the required read permission/scope for API version {api_version}.'
+            ),
+        )
+    if status_code in {400, 404, 405}:
+        return (
+            'endpoint_mapping_or_version_failed',
+            (
+                f'Alleva rejected GET {path} with {status_label}. Confirm the endpoint path, Limit/Cursor/api-version '
+                f'parameters, X-Version header, and API version {api_version} against the approved Alleva mapping.'
+            ),
+        )
+    if status_code == 429:
+        return (
+            'endpoint_rate_limited',
+            f'Alleva rate-limited GET {path} ({status_label}). Wait and try again, or ask Alleva about rate limits for this tenant.',
+        )
+    if 500 <= status_code <= 599:
+        return (
+            'endpoint_vendor_unavailable',
+            f'Alleva returned {status_label} for GET {path}. This looks like a vendor-side or temporary service problem; try again later.',
+        )
+    return (
+        'endpoint_request_failed',
+        (
+            f'Alleva returned {status_label} for GET {path}. Confirm the saved credentials, endpoint path, API version, '
+            'and tenant permissions before running sync again.'
+        ),
+    )
+
+
+def _raise_request_failure(*, path: str, api_version: str, exc: httpx.RequestError) -> None:
+    if isinstance(exc, httpx.TimeoutException):
+        raise AllevaSyncExternalError(
+            f'Alleva did not respond before the configured timeout while reading GET {path}. Increase the timeout or try again when the network is stable.',
+            stage='endpoint_request',
+            category='network_timeout',
+            endpoint=path,
+        ) from exc
+    raise AllevaSyncExternalError(
+        f'The app could not reach Alleva GET {path}. Check internet access, the REST API base URL, and local firewall/proxy settings.',
+        stage='endpoint_request',
+        category='network_failure',
+        endpoint=path,
+    ) from exc
+
+
 def _fetch_collection(
     *,
     base_url: str,
@@ -151,12 +242,34 @@ def _fetch_collection(
         'Authorization': f'Bearer {bearer_token}',
         'X-Version': api_version,
     }
-    with httpx.Client(timeout=timeout_seconds) as client:
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
         for _page in range(max_pages):
             params = {'Limit': page_size, 'Cursor': cursor, 'api-version': api_version}
-            response = client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            page_records = _extract_records(response.json())
+            try:
+                response = client.get(url, headers=headers, params=params)
+                response.read()
+            except httpx.RequestError as exc:
+                _raise_request_failure(path=path, api_version=api_version, exc=exc)
+            if not 200 <= response.status_code < 300:
+                category, message = _endpoint_http_failure_message(path=path, status_code=response.status_code, api_version=api_version)
+                logger.warning('Alleva treatment-plan sync endpoint returned %s for %s url=%s', response.status_code, path, redact_url(str(response.url)))
+                raise AllevaSyncExternalError(
+                    message,
+                    stage='endpoint_request',
+                    category=category,
+                    endpoint=path,
+                    status_code=response.status_code,
+                )
+            try:
+                page_records = _extract_records(response.json())
+            except ValueError as exc:
+                raise AllevaSyncExternalError(
+                    f'Alleva GET {path} responded, but the response was not JSON. Confirm this endpoint path and API version {api_version}.',
+                    stage='endpoint_response',
+                    category='endpoint_non_json_response',
+                    endpoint=path,
+                    status_code=response.status_code,
+                ) from exc
             records.extend(page_records)
             if len(page_records) < page_size or len(records) >= limit:
                 break
@@ -190,7 +303,7 @@ def _mark_status(db: Session, settings_row: AppSetting, *, status: str, message:
     settings_row.alleva_treatment_plan_sync_last_at = now
     settings_row.alleva_treatment_plan_sync_last_status = status
     settings_row.alleva_treatment_plan_sync_last_message = message[:1000]
-    if status == 'ok':
+    if status in {'ok', 'warn'}:
         settings_row.alleva_treatment_plan_sync_last_success_at = now
     elif status in {'fail', 'blocked'}:
         settings_row.alleva_treatment_plan_sync_last_failure_at = now
@@ -376,18 +489,18 @@ def run_alleva_treatment_plan_sync(
     startup: bool = False,
 ) -> dict[str, Any]:
     if not settings_row.alleva_treatment_plan_sync_enabled:
-        message = 'Alleva treatment-plan REST sync is disabled.'
+        message = 'Alleva treatment-plan sync is off in App Settings. Turn on Enable Alleva REST treatment-plan sync, save settings, then run again.'
         _mark_status(db, settings_row, status='skipped', message=message)
         return {'status': 'skipped', 'message': message}
     if startup and not settings_row.alleva_treatment_plan_sync_on_startup:
-        message = 'Alleva treatment-plan REST sync on startup is disabled.'
+        message = 'Alleva treatment-plan sync on app startup is off in App Settings.'
         _mark_status(db, settings_row, status='skipped', message=message)
         return {'status': 'skipped', 'message': message}
 
     missing = _missing_sync_configuration(settings_row, startup=startup)
     if missing:
         status = 'blocked'
-        message = f'Alleva treatment-plan REST sync {status}; missing {", ".join(missing)}.'
+        message = f'Alleva treatment-plan sync is blocked until these App Settings are saved or confirmed: {", ".join(missing)}.'
         _mark_status(db, settings_row, status=status, message=message)
         log_event(
             db,
@@ -413,7 +526,7 @@ def run_alleva_treatment_plan_sync(
         token_auth_style=settings_row.api_token_auth_style,
     )
     if not bearer_token:
-        message = token_result.get('message') or 'Alleva token request failed.'
+        message = f"Alleva authentication failed before sync could read endpoints: {token_result.get('message') or 'token request did not return an access token.'}"
         _mark_status(db, settings_row, status='fail', message=message)
         log_event(
             db,
@@ -427,7 +540,7 @@ def run_alleva_treatment_plan_sync(
             severity='error',
             message=message,
         )
-        return {'status': 'fail', 'message': message, 'token_result': token_result}
+        return {'status': 'fail', 'message': message, 'failure_stage': 'token_request', 'category': 'token_request_failed', 'token_result': token_result}
 
     try:
         limit = max(1, min(settings_row.alleva_treatment_plan_sync_limit or 250, 5000))
@@ -472,24 +585,76 @@ def run_alleva_treatment_plan_sync(
                 },
                 message='Alleva REST treatment-plan sync analyzed one active client with R3 compliance rules.',
             )
+        warning_parts: list[str] = []
+        if not clients and not treatment_plans and not treatment_reviews:
+            warning_parts.append('Alleva returned no client, treatment-plan, or treatment-review records for the configured query.')
+        elif summary['active_client_count'] == 0:
+            warning_parts.append('Alleva returned records, but no active clients could be identified from the mapped status/discharge fields.')
+        if summary['unmapped_treatment_plan_count']:
+            warning_parts.append(f'{summary["unmapped_treatment_plan_count"]} treatment plan record(s) could not be matched to an active client.')
+        if summary['unmapped_treatment_review_count']:
+            warning_parts.append(f'{summary["unmapped_treatment_review_count"]} treatment review record(s) could not be matched to an active client.')
+        status = 'warn' if warning_parts else 'ok'
         message = (
-            f'Alleva treatment-plan REST sync completed; {summary["upserted_client_count"]} active client(s) loaded, '
+            f'Alleva treatment-plan sync completed{" with warnings" if warning_parts else ""}; '
+            f'{summary["upserted_client_count"]} active client(s) loaded, '
             f'{summary["treatment_plan_count"]} treatment plan record(s), {summary["treatment_review_count"]} review record(s).'
         )
-        _mark_status(db, settings_row, status='ok', message=message)
+        if warning_parts:
+            message = f'{message} {" ".join(warning_parts)}'
+        _mark_status(db, settings_row, status=status, message=message)
         log_event(
             db,
-            action='alleva.treatment_plan_sync.completed',
+            action='alleva.treatment_plan_sync.completed' if status == 'ok' else 'alleva.treatment_plan_sync.completed_with_warnings',
             actor=actor,
             event_category='integration',
             target_entity='alleva_treatment_plan_sync',
             target_entity_type='integration_sync',
-            details={key: value for key, value in summary.items() if key != 'client_ids'} | {'startup': startup},
+            details={key: value for key, value in summary.items() if key != 'client_ids'} | {'startup': startup, 'warnings': warning_parts},
+            outcome_status='success',
+            severity='info' if status == 'ok' else 'warning',
             message=message,
         )
-        return {'status': 'ok', 'message': message, **{key: value for key, value in summary.items() if key != 'client_ids'}}
+        return {'status': status, 'message': message, 'warnings': warning_parts, **{key: value for key, value in summary.items() if key != 'client_ids'}}
+    except AllevaSyncExternalError as exc:
+        logger.warning(
+            'Alleva treatment-plan sync external failure stage=%s category=%s endpoint=%s status_code=%s',
+            exc.stage,
+            exc.category,
+            exc.endpoint,
+            exc.status_code,
+            exc_info=True,
+        )
+        db.rollback()
+        _mark_status(db, settings_row, status=exc.status, message=exc.public_message)
+        log_event(
+            db,
+            action='alleva.treatment_plan_sync.failed',
+            actor=actor,
+            event_category='integration',
+            target_entity='alleva_treatment_plan_sync',
+            target_entity_type='integration_sync',
+            details={
+                'startup': startup,
+                'failure_stage': exc.stage,
+                'category': exc.category,
+                'endpoint': exc.endpoint,
+                'status_code': exc.status_code,
+            },
+            outcome_status='failure',
+            severity='error',
+            message=exc.public_message,
+        )
+        return {
+            'status': exc.status,
+            'message': exc.public_message,
+            'failure_stage': exc.stage,
+            'category': exc.category,
+            'endpoint': exc.endpoint,
+            'status_code': exc.status_code,
+        }
     except Exception as exc:
-        message = f'Alleva treatment-plan REST sync failed: {exc.__class__.__name__}.'
+        message = 'Alleva treatment-plan sync could not finish because the app hit an unexpected local error. No records were imported from this run; support can review the local logs for technical details.'
         logger.warning('Alleva treatment-plan REST sync failed', exc_info=True)
         db.rollback()
         _mark_status(db, settings_row, status='fail', message=message)

@@ -29,8 +29,9 @@ The API configuration page lets an admin:
 7. Test connectivity from inside the running app.
 8. Pick an operation found in the loaded API definition and test that specific API call.
 9. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
-10. Run Alleva quick-pull buttons for active treatment plans, overdue active treatment plans, inactive treatment plans, and active patients with patient ID/admission date using editable prefilled POST fields.
-11. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, quick-pull computed reasons, and redacted JSON report payloads.
+10. Run the Alleva `ALL Patient Records` pull after authentication/connectivity is understood.
+11. Copy tab-separated `ALL Patient Records` output into Excel when needed.
+12. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, patient-record pull status, and redacted JSON report payloads.
 
 The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys, client secrets, or bearer tokens in browser payloads.
 
@@ -54,24 +55,39 @@ Alleva has confirmed it does not currently support FHIR. Active Alleva integrati
 
 For Alleva OAuth client credentials, pasting the R3/Alleva-provided client ID and client secret is normal. The secret is write-only after save: browser responses return only configured flags, not the stored secret. If R3 has multiple candidate endpoints or environments, save them as endpoint profiles, then activate the one that should become the active connection.
 
-When the active connection has a saved client ID, token URL, and encrypted client secret, the standalone harness defaults to OAuth client-credentials mode so definition pulls, operation tests, and Alleva quick pulls reuse the saved ID/secret without showing the secret in the browser.
+When the active connection has a saved client ID, token URL, and encrypted client secret, the standalone harness defaults to OAuth client-credentials mode so definition pulls, operation tests, and the `ALL Patient Records` pull reuse the saved ID/secret without showing the secret in the browser.
 
-## Alleva quick pulls
+## Alleva ALL Patient Records pull
 
-The standalone harness includes four quick-pull buttons backed by the public Alleva v1 Swagger operations `GET /treatment-plans` and `GET /clients`. Each button fills an editable JSON POST payload before the run. The default payload includes:
+The standalone harness is organized as a step-by-step workflow: use the current admin session, load/save active API settings, test authentication/connectivity, then run `ALL Patient Records`. The user-facing quick-pull area keeps one action only.
+
+`ALL Patient Records` uses the public Alleva v1 Swagger operation `GET /clients`. On June 20, 2026, the public Swagger JSON still listed `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews` with these parameters: `Limit`, `Cursor`, optional `StartDate`/`EndDate`, `fields`, `api-version`, and `X-Version`.
+
+The default `ALL Patient Records` payload includes:
 
 - `auth_mode: client_credentials`
 - active App settings base URL, token URL, token auth style, client ID, and saved encrypted client secret usage
+- `GET /clients`
 - `Limit`, `Cursor`, `api-version`, `X-Version`, optional `StartDate`/`EndDate`, and selected `fields`
 - `max_pages` for bounded cursor pagination
 
-The backend computes active/inactive/overdue reasons locally from returned fields such as `isActive`, `endDate`, client status, discharge date, and admission date. It does not write raw quick-pull rows to audit details or report files; audit records store only the report type, operation, auth mode, counts, and outcome.
+The backend returns a bounded operational table with patient/client ID, source ID, client name if returned by Alleva, admission date, status, client flag, discharge date, level of care, facility, primary clinician, and first contact date. It also returns TSV text intended for Excel copy/paste. These rows can contain PHI when Alleva returns names, so operators should only copy/share them through approved R3 workflows. The app does not write raw quick-pull rows to audit details or report files; audit records store only the report type, operation, auth mode, counts, and outcome.
 
 ## Alleva REST treatment-plan sync
 
 Version `1.4.4` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+
+Manual sync status messages distinguish common failure stages for non-technical users:
+
+- authentication/token request failed before endpoint calls
+- token request succeeded but endpoint authorization/permission failed
+- endpoint path, query parameter, or API version mapping failed
+- network timeout or reachability failed
+- endpoints returned no records
+- sync completed with warnings
+- sync completed successfully
 
 Startup sync is disabled by default. Before enabling it, admins must confirm and document:
 
@@ -151,7 +167,7 @@ The API configuration workflow uses the app's existing forensic audit service. I
 - whether a client-credentials token request succeeded, without recording the token or secret
 - definition-pull attempts and outcomes
 - specific API operation test attempts and non-secret outcomes
-- Alleva quick-pull report type, operation, counts, and outcome without raw returned rows
+- Alleva patient-record pull report type, operation, counts, and outcome without raw returned rows
 - probe count and selected definition URL when found
 - generated report metadata without API keys, bearer tokens, passwords, or external response secrets
 

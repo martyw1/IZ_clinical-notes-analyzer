@@ -20,6 +20,8 @@ Status: Open
 
 Current implementation state: Version 1.4.4 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping. App settings now presents one active Alleva/API connection; saved endpoint profiles are presets that must be activated into the active connection before they affect readiness checks, periodic checks, API harness tests, or approved REST sync.
 
+Current diagnostic behavior: manual sync now reports the specific failing stage instead of surfacing generic exception text. If client credentials obtain a token but Alleva returns `401 Unauthorized` or `403 Forbidden` for `/clients`, `/treatment-plans`, or `/treatment-reviews`, the App Settings status identifies this as endpoint authorization/permission failure and asks R3/Alleva to confirm tenant access, token audience/scope, endpoint permission, and API version.
+
 Required before live startup sync:
 
 - Confirm which Alleva tenant/environment and credentials R3 may use.
@@ -65,6 +67,7 @@ Current evidence:
 - `https://api.allevasoft.com/swagger/index.html`: HTTP 200.
 - `https://api.allevasoft.com/swagger/v1/swagger.json`: HTTP 200, 942906 bytes.
 - `https://api.allevasoft.com/swagger/v2/swagger.json`: HTTP 200.
+- On 2026-06-20, the public v1 Swagger JSON listed `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews` with `Limit`, `Cursor`, optional `StartDate`/`EndDate`, `fields`, `api-version`, and `X-Version`.
 - `https://api.allevasoft.com/advanced-form-elements`: HTTP 401 without credentials; protected REST operation path.
 - `https://authorization.allevasoft.com/connect/token`: HTTP 400 for the provided client ID/secret using form-encoded `grant_type=client_credentials`.
 - HTTP Basic client-auth with `grant_type=client_credentials` was also attempted and returned HTTP 400.

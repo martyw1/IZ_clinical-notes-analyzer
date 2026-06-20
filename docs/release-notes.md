@@ -17,6 +17,8 @@ Summary:
 - Promotes the current app version metadata and documentation references to `1.4.4` on `main`.
 - Keeps the Version 1 local Windows desktop runtime, FastAPI desktop service, built React/Vite frontend assets, SQLite local data, encrypted uploaded-file storage, encrypted saved API-secret storage, role-based access control, deterministic Treatment Plan Tracking rules, Workflow profiles, in-app Help, readiness checks, and forensic audit logging.
 - Preserves the gated Alleva REST treatment-plan sync readiness boundary and manual-upload binder deletion usability behavior.
+- Replaces generic manual Alleva treatment-plan sync failure text with stage-specific user messages for token, endpoint permission, endpoint mapping/version, timeout, empty-result, warning, and success states.
+- Simplifies the API Testing Harness into a step-by-step flow and keeps one Alleva quick action: `ALL Patient Records`, backed by `GET /clients` with Excel-ready TSV output.
 
 ## 1.4.2 - Manual upload button usability
 

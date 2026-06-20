@@ -127,6 +127,7 @@ class MockedHttpxClient:
                     {
                         'id': 201,
                         'clientId': 'PAT-ACTIVE-001',
+                        'name': {'clientFullName': 'Synthetic Active Client'},
                         'status': 'Active',
                         'isClient': True,
                         'admissionDateTime': '2026-02-03T09:00:00',
@@ -136,6 +137,7 @@ class MockedHttpxClient:
                     {
                         'id': 202,
                         'clientId': 'PAT-DISCHARGED-001',
+                        'name': {'clientFullName': 'Synthetic Discharged Client'},
                         'status': 'Discharged',
                         'isClient': True,
                         'admissionDateTime': '2025-02-03T09:00:00',
@@ -702,6 +704,17 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
             'max_pages': 2,
             'operation_parameters': {'Limit': 500, 'Cursor': 0, 'api-version': '1.0', 'X-Version': '1.0'},
         }
+        all_patients = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'all_patient_records'})
+        assert all_patients.status_code == 200
+        all_payload = all_patients.json()
+        assert all_payload['status'] == 'ok'
+        assert all_payload['source_operation'] == 'GET /clients'
+        assert all_payload['returned_count'] == 2
+        assert all_payload['columns'][:4] == ['patient_id', 'source_id', 'client_name', 'admission_date']
+        assert all_payload['rows'][0]['client_name'] == 'Synthetic Active Client'
+        assert all_payload['tsv'].splitlines()[0].startswith('patient_id\tsource_id\tclient_name\tadmission_date')
+        assert 'PAT-ACTIVE-001\t201\tSynthetic Active Client\t2026-02-03' in all_payload['tsv']
+
         active = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_treatment_plans'})
         assert active.status_code == 200
         assert active.json()['returned_count'] == 2

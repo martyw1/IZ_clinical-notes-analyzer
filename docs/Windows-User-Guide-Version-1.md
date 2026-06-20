@@ -57,6 +57,8 @@ Version 1 includes a direct API readiness harness and mock source discovery. Liv
 
 Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings is the source of truth for the one active Alleva/API connection; the harness loads and tests that same connection.
 
+Use the harness in order: load or save the active settings, test authentication/connectivity, then run `ALL Patient Records` if the connection test result is understood. `ALL Patient Records` calls Alleva `GET /clients` with the visible `Limit`, `Cursor`, `fields`, `api-version`, and `X-Version` settings and returns tab-separated rows that can be pasted into Excel. The output can contain PHI when Alleva returns names, so use approved R3 handling when copying or sharing it.
+
 For Alleva OAuth setup, it is normal to paste the client ID and client secret supplied by R3/Alleva. The client secret is encrypted locally and is never shown again after save. The browser only shows whether a secret is configured. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete.
 
 Alleva confirmed it does not currently support FHIR. Stored API endpoint profiles are optional presets. Activating a preset copies its values into the active App settings connection used by readiness/API tests, periodic checks, and approved REST treatment-plan sync.
