@@ -1,7 +1,7 @@
 # AGENTS.md - IZ Clinical Notes Analyzer
 
 ## Repo purpose
-Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `1.4.2` / build `2026.06.18.2`. Normal Windows desktop use must not require Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
+Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `1.4.4` / build `2026.06.20.1`. Normal Windows desktop use must not require Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
 
 ## R3 project architecture
 - Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, EMR/FHIR readiness boundary, gated Alleva REST treatment-plan sync readiness, workflow profiles, and version/readiness endpoints.
@@ -24,14 +24,14 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - Backend: `python -m venv backend/.venv && backend/.venv/bin/python -m pip install -r backend/requirements.txt && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests -q`
 - Frontend: `cd frontend && npm install && npm run test -- --run && npm run build`
 - Windows launcher: inspect or run `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts\startup-windows-local.ps1`, `scripts\test-api-configuration-local.ps1`, `scripts\test-alleva-api-connectivity.ps1`, and `scripts\test-local-app-stack.ps1` on Windows PowerShell.
-- Before commits: check `git status --short --branch` and verify generated runtime data, secrets, uploads, logs, and databases are not staged.
+- Before commits: check `git status --short --branch` and verify generated runtime data, local configuration files, uploads, logs, and databases are not staged.
 
 ## Security / PHI rules
-- Do not commit PHI, real patient notes, `.env`, SQLite databases, uploaded notes, logs, API keys, bearer tokens, encryption keys, or passwords.
+- Do not commit PHI, real patient notes, local runtime configuration, SQLite databases, uploaded notes, generated logs, access material, encryption material, or vendor connection material.
 - Tests, fixtures, docs, screenshots, and examples must use synthetic data only.
-- Do not log uploaded note text, PHI-like names/content, API keys, bearer tokens, encryption keys, passwords, local encryption secrets, or original uploaded filenames.
+- Do not log uploaded note text, PHI-like names/content, local runtime values, original uploaded filenames, or vendor connection material.
 - Keep uploads encrypted at rest with the existing local encryption envelope.
-- Saved API credentials must be encrypted at rest and never returned to the browser. Browser responses should expose only boolean configured flags.
+- Saved API configuration must be encrypted at rest and browser responses should expose only configured-state flags.
 - Keep direct API probes and OpenAPI discovery limited to configuration/testing/future-readiness unless official production import approval exists.
 - Do not fake Alleva live patient import. Live patient import remains disabled until official tenant credentials, endpoint mapping, scopes, pagination, rate limits, attachment behavior, vendor documentation, and compliance approval exist.
 - Do not add Docker or PostgreSQL as Windows desktop requirements.
@@ -43,7 +43,7 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 
 ## Direct API and Alleva boundary
 - The API configuration page, OpenAPI discovery, and operation-test endpoints are a direct API harness for readiness and tenant/vendor testing.
-- Saved API keys/secrets must use encrypted storage and should never appear in audit details, browser payloads, console output, docs, tests, or screenshots.
+- Saved API configuration must use encrypted storage and should not appear in audit details, browser payloads, console output, docs, tests, or screenshots.
 - Local sample OpenAPI/operation endpoints may use synthetic patient IDs only.
 - Alleva/FHIR import plans are planning artifacts until the live import gate above is satisfied.
 - The Alleva REST treatment-plan sync path is present but gated off by default and must remain blocked until R3/Alleva approves live sync and endpoint mapping.
