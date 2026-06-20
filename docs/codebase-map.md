@@ -1,14 +1,14 @@
-# Codebase Map - Current Version 1.4.2
+# Codebase Map - Current Version 1.4.4
 
-Date: 2026-06-17
+Date: 2026-06-20
 
 Branch: `main`
 
-Version: `1.4.2` / build `2026.06.18.2`
+Version: `1.4.4` / build `2026.06.20.1`
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.2 app shape.
+This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Version 1.4.4 app shape.
 
 ## Current architecture
 
@@ -23,7 +23,7 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | `backend/app/main.py` | FastAPI app factory, startup readiness/schema/admin bootstrap, security headers, health/readiness/version, and primary API routers. |
 | `backend/app/desktop_main.py` | Desktop runtime wrapper; serves local pages and `frontend/dist` when built. |
 | `backend/app/api/routes.py` | Main authenticated API: settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, checklist, UI events, and audit logs. |
-| `backend/app/api/auth_user_routes.py` | Authentication, profile/password updates, and role-scoped user-management APIs. |
+| `backend/app/api/auth_user_routes.py` | Authentication, profile/reset updates, and role-scoped user-management APIs. |
 | `backend/app/api/timeliness_routes.py` | Treatment Plan Timeliness dashboard/detail/client/override APIs. |
 | `backend/app/api/workflow_routes.py` | Workflow profile CRUD, draft versioning, publish/archive, and unused-draft deletion APIs. |
 | `backend/app/api/api_config_routes.py` | Direct API harness for API configuration, local sample OpenAPI, OpenAPI/Swagger discovery, and selected operation testing. |
@@ -38,8 +38,8 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Models | `backend/app/models/models.py` | Users, app settings, EMR endpoint profiles, charts, patient note sets/documents, workflow definitions/versions, audit logs, timeliness clients, LOC history, treatment-plan records, and manual overrides. |
 | Schemas | `backend/app/schemas/schemas.py` | Pydantic contracts for auth/users/settings/readiness/EMR/chart/note-set/audit/timeliness/workflow APIs. |
 | Config | `backend/app/core/config.py` | SQLite-first defaults; relative DB/upload/log/report paths resolve into OS-local app data. |
-| Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, password hashing/policy, role checks, and password-reset gate. |
-| Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File validation, patient ID detection, encrypted file writes, path traversal prevention, encrypted text helper. |
+| Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, role checks, and reset gate. |
+| Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File validation, patient ID detection, encrypted file writes, path traversal prevention, and protected text helper. |
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
 | Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, upload/API-style re-evaluation, fallback generated names, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
@@ -76,7 +76,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.2 local desktop startup. |
+| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Version 1.4.4 local desktop startup. |
 | `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
 | `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
 | `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
@@ -92,14 +92,6 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | Standalone connectivity reports | `api-connectivity-reports` under local app data. |
 | User env | `IZ_CNA_ENV_FILE` if set, otherwise `<local app data>/.env`. |
 | Rules config | Repo `config/rules/alleva_treatment_plan_completeness_rules.yaml` if present, otherwise local app data path. |
-
-Platform defaults:
-
-| Platform | Local app data root |
-| --- | --- |
-| Windows | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` |
-| macOS | `~/Library/Application Support/IZ Clinical Notes Analyzer` |
-| Linux | `~/.local/share/iz-clinical-notes-analyzer` |
 
 The active non-technical deployment target is Windows.
 
@@ -119,7 +111,7 @@ The active non-technical deployment target is Windows.
 
 1. Admin opens App settings or standalone `/api-configuration` page.
 2. API configuration reads/writes `AppSetting` fields through `/api/api-configuration`.
-3. Saved API key and client-secret material is encrypted.
+3. Saved API configuration is protected at rest.
 4. `/api/api-configuration/sample-openapi.json` and local operation targets support synthetic smoke tests.
 5. `/api/api-configuration/pull-definitions` probes Swagger/OpenAPI URLs and summarizes operations.
 6. `/api/api-configuration/test-operation` executes a selected OpenAPI operation with supplied or saved auth values.
@@ -131,8 +123,6 @@ The active non-technical deployment target is Windows.
 2. Rules config is loaded and validated.
 3. The timeliness service models initial/master signature rules, ongoing review recurrences, unvalidated LOC-change review, status priority, source conflicts, missing data, fallback generated names, and manual override audit records.
 4. Workflow profile CRUD/versioning exists as admin/manager-managed definitions with draft/published/archived versions, transition rules, default Treatment Plan Timeliness seeding, validation, and draft-only delete limits.
-
-S2/S7 status: the dedicated timeliness service now models initial/master signature rules, local current-date clock behavior, ongoing PHP 30-day and non-PHP 60-day review recurrences, unvalidated configurable 7-day LOC-change `Needs Review`, status priority, source conflicts, missing data, source-evidence locations, manual override audit records, and per-analysis workflow version audit context. S5/S7 status: generic workflow profile CRUD/versioning exists as admin-managed definitions with draft/published/archived versions, JSON definition snapshots, transition rules, role-gated APIs, forensic audit events, default Treatment Plan Timeliness seeding, payload validation, draft-only delete limits, and in-place draft editing.
 
 ## Test commands
 
@@ -160,13 +150,6 @@ Windows source-checkout validation:
 .\scripts\test-api-configuration-local.ps1
 ```
 
-Generic smoke against a running local desktop app:
-
-```powershell
-$env:BASE_URL = "http://localhost:8000"
-bash .\scripts\smoke.sh
-```
-
 ## CI
 
 Current CI should cover:
@@ -180,17 +163,33 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Version 1.4.2 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
+`scripts/build-windows-installer.ps1` creates a Version 1.4.4 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Browser/full-stack smoke is source-checkout validated only | Version 1.4.2 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
-| Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.4.4 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant details for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
-| Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, saved-key encryption, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and credential-safe operator handling. |
-| Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, secrets, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
+| Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, protected saved configuration, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and safe operator handling. |
+| Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, protected values, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
 | Signed installer is not complete | Release folder builder exists, but no signed MSI/MSIX with repair/modify support exists. | Non-technical rollout still needs final target-machine packaged validation. |
 | Root diagnostic script can expose sensitive values | `Test-AllevaApi.ps1` is intentionally detailed by default. | Use only on approved private diagnostic machines; use redaction mode for shareable logs and still review output. |
 | Legacy Docker files were removed from the active tree | Deprecated startup scripts remain, but the old Docker/nginx archive and compose overlay were removed after S1 cleanup evidence. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements or restore the old stack without an explicit R3/server decision. |
+
+## Version Metadata
+
+The current app version is:
+
+```text
+1.4.4
+```
+
+Version metadata is stored in `VERSION`, `VERSION.json`, and `frontend/package.json`. The backend exposes it at:
+
+```text
+GET /api/version
+```
+
+The UI footer displays the backend-provided version, environment, and short git commit when available.
