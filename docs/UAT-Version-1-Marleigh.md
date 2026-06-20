@@ -4,7 +4,7 @@ Use synthetic data only for this script.
 
 Current patch version: `1.4.2` / build `2026.06.18.2`.
 
-Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds treatment-plan date-clock behavior, workflow-step exports, source-evidence page/API traceability, draft workflow editing, clearer Alleva OpenAPI/FHIR setup guidance, and separates gated Alleva REST treatment-plan sync from optional FHIR readiness.
+Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds treatment-plan date-clock behavior, workflow-step exports, source-evidence page/API traceability, draft workflow editing, clearer Alleva OpenAPI/FHIR setup guidance, separates gated Alleva REST treatment-plan sync from optional FHIR readiness, and fixes manual-upload binder delete-button usability.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
