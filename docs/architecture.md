@@ -1,14 +1,14 @@
 # Architecture Overview
 
-Date: 2026-06-18
+Date: 2026-06-20
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2`.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1`.
 
 ## Current architecture
 
-IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, encrypted saved API secrets, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
+IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, protected API configuration storage, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
 
-The active Version 1.4.2 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
+The active Version 1.4.4 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
 
 The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
 
@@ -27,16 +27,16 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 - Startup/preflight creates local AppData folders and a local `.env` when missing.
 - Backend startup runs dependency/readiness checks before the app is considered ready.
 - Uploaded clinical files are encrypted before they are written to disk and decrypted only for authorized downloads or local analysis.
-- Saved API keys and client secrets are encrypted and are not returned to the browser.
+- Saved API configuration values are protected and are not returned to the browser.
 - Relative upload, log, database, and API-report paths resolve through `Settings.local_app_data_dir`.
-- Managed users with `must_reset_password=true` can only read their own profile and reset/change their password until the reset is complete.
+- Managed users with a required reset can only read their own profile and complete the reset flow until that requirement is complete.
 
 ## Forensic audit logging
 
 - Every HTTP request is assigned a request ID and correlation ID and is logged on completion, including status code, route, latency, source IP, forwarded IP chain, and user-agent.
 - Authenticated actions bind actor identity into the request context so committed database changes can be tied back to the requesting user.
 - Committed inserts, updates, and deletes for tracked domain models are captured with before-state, after-state, and field-level diff payloads.
-- Explicit domain events are emitted for sensitive reads and workflow actions such as login, password reset, chart transitions, audit log access, UI button events, blocked workflow clicks, API harness activity, and safe review-source checks.
+- Explicit domain events are emitted for sensitive reads and workflow actions such as login, reset flows, chart transitions, audit log access, UI button events, blocked workflow clicks, API harness activity, and safe review-source checks.
 - Patient note-set uploads and downloads emit explicit file activity events, and each stored file carries a persisted SHA-256 hash plus byte count for forensic validation.
 - Audit records are tamper-evident through hash chaining and also carry CEF-style payloads plus FHIR AuditEvent-style JSON for downstream compliance integrations.
 - If the audit log cannot be written to the database, records are spooled to the local app-data log directory so evidence is not silently lost.
@@ -63,12 +63,12 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 ## EMR/API integration boundary
 
 - The current production-style path remains local file upload from an EMR export.
-- Admin App settings capture a vendor label, FHIR base URL, OpenAPI URL, OAuth/FHIR client metadata, token URL, scopes, timeout, token auth style, and encrypted direct-API credential state.
-- Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with encrypted client secrets and an active/default profile used by readiness checks.
+- Admin App settings capture a vendor label, FHIR base URL, OpenAPI URL, OAuth/FHIR client metadata, token URL, scopes, timeout, token auth style, and protected direct-API configuration state.
+- Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with protected client configuration and an active/default profile used by readiness checks.
 - The backend exposes a FHIR/OAuth discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
-- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details. Alleva Swagger/OpenAPI URLs are not treated as FHIR base URLs.
+- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting sensitive values from browser payloads, reports, and audit details. Alleva Swagger/OpenAPI URLs are not treated as FHIR base URLs.
 - The gated Alleva REST treatment-plan sync path uses the Alleva REST API base URL/OpenAPI mapping, not the FHIR base URL, to normalize approved active-client, treatment-plan, and treatment-review payloads into the local R3 timeliness engine.
-- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
+- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant details, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
 
 ## Database connectivity model
 
@@ -77,7 +77,7 @@ Configuration is explicit and deterministic:
 - `DATABASE_BACKEND=sqlite` is the normal Windows local-desktop setting.
 - `DATABASE_URL` defaults to a SQLite file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` for the local desktop path.
 - Relative SQLite, upload, log, and report paths are resolved through the configured local app-data directory.
-- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.2 Windows product path does not require a PostgreSQL container.
+- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Version 1.4.4 Windows product path does not require a PostgreSQL container.
 
 ## Health model
 
