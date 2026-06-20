@@ -1,10 +1,22 @@
 # Release Notes
 
-Current app version: `1.4.2` / build `2026.06.18.2`.
+Current app version: `1.4.4` / build `2026.06.20.1`.
 
 Current release channel: `local-desktop`.
 
-Current release date in version metadata: `2026-06-18`.
+Current release date in version metadata: `2026-06-20`.
+
+## 1.4.4 - Current documentation and metadata alignment
+
+Build: `2026.06.20.1`
+
+Version metadata name: `Version 1.4.4 current documentation and metadata alignment`
+
+Summary:
+
+- Promotes the current app version metadata and documentation references to `1.4.4` on `main`.
+- Keeps the Version 1 local Windows desktop runtime, FastAPI desktop service, built React/Vite frontend assets, SQLite local data, encrypted uploaded-file storage, encrypted saved API-secret storage, role-based access control, deterministic Treatment Plan Tracking rules, Workflow profiles, in-app Help, readiness checks, and forensic audit logging.
+- Preserves the gated Alleva REST treatment-plan sync readiness boundary and manual-upload binder deletion usability behavior.
 
 ## 1.4.2 - Manual upload button usability
 
@@ -72,4 +84,4 @@ Current version values must stay aligned in:
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
 
-Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.2`.
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.4`.
