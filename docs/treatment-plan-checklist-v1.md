@@ -63,7 +63,7 @@ Treatment-plan PRD statuses are available for Version 1.2.0 workflow steps:
 
 ## Source Modes
 
-API mode is a readiness and connectivity harness until official Alleva tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval exist. Live patient import remains disabled.
+API mode is a readiness and connectivity harness until official Alleva tenant details, endpoint mapping, scopes, pagination/rate limits, attachment behavior, vendor documentation, and compliance approval exist. Live patient import remains disabled.
 
 Manual upload mode is a point-in-time snapshot of the files selected by the operator. It does not imply automatic weekly monitoring for large chart batches; use the documented monthly compliance-check fallback when API refresh is not available.
 
@@ -75,7 +75,7 @@ Published workflow history is preserved. Only unused draft-only profiles that we
 
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.4.2 ships a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.4.4 ships a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
 
 Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
 
