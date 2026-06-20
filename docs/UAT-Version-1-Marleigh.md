@@ -2,9 +2,9 @@
 
 Use synthetic data only for this script.
 
-Current patch version: `1.4.2` / build `2026.06.18.2`.
+Current patch version: `1.4.4` / build `2026.06.20.1`.
 
-Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds treatment-plan date-clock behavior, workflow-step exports, source-evidence page/API traceability, draft workflow editing, clearer Alleva OpenAPI/FHIR setup guidance, separates gated Alleva REST treatment-plan sync from optional FHIR readiness, and fixes manual-upload binder delete-button usability.
+Version 1.4.4 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds treatment-plan date-clock behavior, workflow-step exports, source-evidence page/API traceability, draft workflow editing, fixes manual-upload binder delete-button usability, repairs legacy local audit-log startup errors, and removes active FHIR/SMART-on-FHIR setup from Alleva workflows. Alleva setup is REST/OpenAPI/HL7-readiness only.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -15,11 +15,11 @@ Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version me
 7. Confirm the LOC-change blocker says the timing window is unvalidated.
 8. Open Chart audit.
 9. Confirm the dashboard shows checklist version `v1.2.0`.
-10. Confirm `/api/version` reports app version `1.4.2` after this patch is installed.
-11. Confirm the app footer also shows version `1.4.2`.
+10. Confirm `/api/version` reports app version `1.4.4` after this patch is installed.
+11. Confirm the app footer also shows version `1.4.4`.
 12. Confirm the Review source section shows EMR/API access and Manual upload.
 13. Open Treatment plans.
-14. Confirm the updated evidence queue banner is visible and the footer shows `v1.4.2`.
+14. Confirm the updated evidence queue banner is visible and the footer shows `v1.4.4`.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
 17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison.
@@ -38,7 +38,7 @@ Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version me
 30. Export the review report as CSV or JSON and confirm workflow-step statuses are included.
 31. Open Help and confirm role permissions, screen/button guidance, workflow, API/EMR, and LLM notes are understandable.
 32. Open App settings as admin.
-33. Review API settings, FHIR/OAuth discovery controls, stored EMR endpoint profiles, Alleva OpenAPI URL guidance, and optional LLM settings.
+33. Review API settings and confirm the screen explains one active Alleva/API connection, encrypted client-secret handling, optional endpoint-profile presets, Alleva REST/OpenAPI URL guidance, and optional LLM settings.
 34. Open the API connectivity harness from App settings and confirm it uses the existing admin session without a second in-page login.
 35. Open Workflow profiles and confirm the profile screen includes `Seed draft from 42-step checklist`.
 36. Seed a draft, review the generated snapshot and transition rules, and confirm it can be edited before publish; save a draft edit in place.
@@ -48,8 +48,8 @@ Version 1.4.2 keeps the Windows startup reliability fixes, aligns app version me
 40. Sign in as an office manager and confirm User management can manage counselor accounts, Workflow profiles is available, and App settings/Forensic logs are not available.
 41. Sign in as a counselor and confirm User management, Workflow profiles, App settings, Forensic logs, manager approvals, and treatment-plan overrides are not available.
 42. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
-43. Confirm the Version 1.4.2 local recovery utility exists at `scripts\update-local-admin.ps1`.
-44. In App settings, confirm Alleva REST treatment-plan sync has its own base URL/OpenAPI/startup controls and can remain off without requiring a FHIR base URL.
+43. Confirm the Version 1.4.4 local recovery utility exists at `scripts\update-local-admin.ps1`.
+44. In App settings, confirm Alleva REST treatment-plan sync has its own base URL/OpenAPI/startup controls and remains gated by approval plus endpoint mapping validation.
 45. Close the browser and app window.
 46. Relaunch and confirm prior review status is still present.
 47. Use the uninstall shortcut only after confirming no local data needs to be preserved.

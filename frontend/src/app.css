@@ -421,6 +421,25 @@ label {
   color: #62736b;
 }
 
+.compact-status-frame {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(24, 84, 59, 0.14);
+  border-radius: 10px;
+  background: rgba(248, 249, 244, 0.92);
+}
+
+.compact-status-frame pre {
+  margin: 0;
+  max-height: 7.5rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #32443d;
+  font: 0.86rem/1.45 "Segoe UI", Arial, sans-serif;
+}
+
 .empty-state-block {
   min-height: 420px;
   display: grid;

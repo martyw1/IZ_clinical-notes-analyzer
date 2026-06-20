@@ -1,8 +1,8 @@
 # API Configuration and Connectivity Test
 
-Date: 2026-06-18
+Date: 2026-06-19
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` local Windows desktop runtime.
 
 ## Where to open it
 
@@ -14,6 +14,8 @@ http://localhost:8000/api-configuration
 
 Admins can also open the API harness from App settings. When opened from the app, the harness reuses the current signed-in admin session and does not require a second in-page admin login.
 
+App settings is the source of truth for the one active Alleva/API connection. The API harness loads and saves that same active connection. Saved API endpoint profiles in App settings are optional presets; activating a profile copies its values into the active connection.
+
 ## What the page does
 
 The API configuration page lets an admin:
@@ -21,12 +23,14 @@ The API configuration page lets an admin:
 1. Enter or update the API vendor/base URL.
 2. Enter an API key for a one-time test or save it for later use.
 3. Enter OAuth2 client-credentials values for a one-time test or save the client ID/token URL plus encrypted client secret.
-4. Select the OAuth token auth style that matches the provider: body credentials, Basic auth, URL-encoded Basic auth, try-both, or try-all supported styles.
-5. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
-6. Test connectivity from inside the running app.
-7. Pick an operation found in the loaded API definition and test that specific API call.
-8. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
-9. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, and redacted JSON report payloads.
+4. Save the OpenAPI/Swagger JSON URL used for readiness checks and operation tests.
+5. Select the OAuth token auth style that matches the provider: body credentials, Basic auth, URL-encoded Basic auth, try-both, or try-all supported styles.
+6. Pull OpenAPI/Swagger definitions from a Swagger UI page or direct JSON URL.
+7. Test connectivity from inside the running app.
+8. Pick an operation found in the loaded API definition and test that specific API call.
+9. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
+10. Run Alleva quick-pull buttons for active treatment plans, overdue active treatment plans, inactive treatment plans, and active patients with patient ID/admission date using editable prefilled POST fields.
+11. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, quick-pull computed reasons, and redacted JSON report payloads.
 
 The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys, client secrets, or bearer tokens in browser payloads.
 
@@ -46,13 +50,28 @@ The browser result includes status code, content type, timing when available, pa
 
 Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
 
-For FHIR tests, the base URL is the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor, such as a tenant endpoint ending in `/fhir/R4`. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields, not the FHIR base URL field. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path and is not a root FHIR endpoint.
+Alleva has confirmed it does not currently support FHIR. Active Alleva integration in this app is REST/OpenAPI/HL7-readiness only. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path.
+
+For Alleva OAuth client credentials, pasting the R3/Alleva-provided client ID and client secret is normal. The secret is write-only after save: browser responses return only configured flags, not the stored secret. If R3 has multiple candidate endpoints or environments, save them as endpoint profiles, then activate the one that should become the active connection.
+
+When the active connection has a saved client ID, token URL, and encrypted client secret, the standalone harness defaults to OAuth client-credentials mode so definition pulls, operation tests, and Alleva quick pulls reuse the saved ID/secret without showing the secret in the browser.
+
+## Alleva quick pulls
+
+The standalone harness includes four quick-pull buttons backed by the public Alleva v1 Swagger operations `GET /treatment-plans` and `GET /clients`. Each button fills an editable JSON POST payload before the run. The default payload includes:
+
+- `auth_mode: client_credentials`
+- active App settings base URL, token URL, token auth style, client ID, and saved encrypted client secret usage
+- `Limit`, `Cursor`, `api-version`, `X-Version`, optional `StartDate`/`EndDate`, and selected `fields`
+- `max_pages` for bounded cursor pagination
+
+The backend computes active/inactive/overdue reasons locally from returned fields such as `isActive`, `endDate`, client status, discharge date, and admission date. It does not write raw quick-pull rows to audit details or report files; audit records store only the report type, operation, auth mode, counts, and outcome.
 
 ## Alleva REST treatment-plan sync
 
-Version `1.4.2` adds a separate Alleva REST treatment-plan sync configuration. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Version `1.4.4` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
-This sync path does not require a FHIR root. It is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
 Startup sync is disabled by default. Before enabling it, admins must confirm and document:
 
@@ -68,7 +87,8 @@ If any required setting is missing, App settings lists the exact missing field a
 
 Admins can turn on periodic safe Alleva/API checks from `App settings` after saving:
 
-- API or FHIR base URL
+- REST API base URL
+- OpenAPI URL
 - token URL
 - client ID
 - encrypted client secret
@@ -79,13 +99,13 @@ The settings form validates these fields before save. If one or more required va
 
 The background checker authenticates with the saved client ID/secret, applies the selected token auth style, and runs the same bounded OpenAPI/readiness probe used by the harness. App settings shows the last check time, status, message, last success/failure, and next scheduled check through the Review Source Discovery payload.
 
-Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, scopes, pagination/rate limits, attachment handling, documentation, and compliance approval.
+Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, pagination/rate limits, attachment handling, documentation, and compliance approval.
 
-## EMR endpoint profiles
+## API endpoint profiles
 
-Admins can save multiple endpoint profiles for Alleva and future EMR/FHIR integrations from App settings. Each profile stores vendor label, adapter key, FHIR base URL, optional OpenAPI URL, token URL, token auth style, client ID, encrypted client secret, scopes, timeout, active/default flags, and notes.
+Admins can save multiple endpoint profiles for Alleva REST/OpenAPI testing from App settings. Each profile stores vendor label, adapter key, REST API base URL, OpenAPI URL, token URL, token auth style, client ID, encrypted client secret, timeout, active/default flags, and notes.
 
-Browser responses return only configured flags for secrets. Activating a profile copies it into the current App settings EMR/API configuration used by discovery, import-plan, and readiness tests.
+Browser responses return only configured flags for secrets. Activating a profile copies it into the active App settings API configuration used by readiness checks, operation tests, periodic checks, and approved REST treatment-plan sync. Profiles that are merely saved do not affect the app until activated.
 
 ## Secret handling inside the app
 
@@ -114,6 +134,7 @@ PATCH /api/api-configuration
 POST  /api/api-configuration/pull-definitions
 POST  /api/api-configuration/test
 POST  /api/api-configuration/test-operation
+POST  /api/api-configuration/alleva-quick-pull
 GET   /api/api-configuration/sample-openapi.json
 POST  /api/alleva/treatment-plan-sync/run
 ```
@@ -130,6 +151,7 @@ The API configuration workflow uses the app's existing forensic audit service. I
 - whether a client-credentials token request succeeded, without recording the token or secret
 - definition-pull attempts and outcomes
 - specific API operation test attempts and non-secret outcomes
+- Alleva quick-pull report type, operation, counts, and outcome without raw returned rows
 - probe count and selected definition URL when found
 - generated report metadata without API keys, bearer tokens, passwords, or external response secrets
 
@@ -137,7 +159,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.2 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Version 1.4.4 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 
@@ -167,7 +189,7 @@ The app supports configuration and connectivity testing without pretending to im
 - **client-credentials token blocked** when the token endpoint returns an error such as HTTP 400
 - **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import
 
-Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, scopes, tenant, and auth style. Do not fake live import without official tenant credentials and endpoint mapping.
+Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, tenant, auth style, and endpoint mapping. Do not fake live import without official tenant credentials and endpoint mapping.
 
 ## Local report files
 

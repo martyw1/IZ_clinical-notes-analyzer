@@ -5,6 +5,42 @@
 ### Changed
 - No unreleased changes.
 
+## 1.4.4 - 2026-06-19
+
+### Fixed
+- Repaired legacy SQLite audit-log schemas that still had a retired `fhir_audit_event` column marked required, preventing startup and button-click audit events from spamming `NOT NULL constraint failed` tracebacks.
+- Fixed the standalone API connectivity harness save action so the OpenAPI URL is saved with the active API configuration.
+- Hardened forensic audit actor handling after database commits so endpoint-profile saves and unhandled-error logging do not raise detached-user tracebacks.
+- Fixed App Settings save/reload reliability so saved API client secrets remain configured across later saves that do not retype the secret.
+- Fixed the Chart Audit `Run daily check` path so it always runs a manual readiness check against the active saved App Settings connection and reports the result back to the dashboard.
+
+### Changed
+- Clarified App settings, the Help tab, and the standalone API harness around one active Alleva/API connection plus optional saved endpoint presets.
+- Documented that pasting the R3/Alleva client ID and client secret is normal for OAuth client-credentials setup, while saved secrets remain encrypted and write-only.
+- Added Alleva quick-pull API harness buttons for active treatment plans, overdue active treatment plans with computed reasons, inactive treatment plans with computed reasons, and active patients with patient ID/admission date.
+- Defaulted the standalone API harness to OAuth client-credentials mode when a saved client ID and encrypted secret are configured.
+- Kept manual API check and manual treatment-plan sync buttons clickable so the app reports skipped/blocked/failure status instead of leaving admins with inactive-looking controls.
+- Promoted version metadata to `1.4.4` / build `2026.06.19.2`.
+
+### Verified
+- Backend pytest passed with `100 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+- Windows local stack smoke and API configuration smoke passed.
+- Normal AppData startup and authenticated UI button-event audit check passed with no legacy audit persistence error patterns.
+
+## 1.4.3 - 2026-06-19
+
+### Changed
+- Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan routes, read scopes, UI fields, defaults, validation requirements, and tests from Alleva workflows.
+- Reframed Alleva setup as REST/OpenAPI/HL7-readiness only, using the Alleva API base URL, OpenAPI URL, token URL, API client ID, encrypted API client secret, token auth style, and validated endpoint mapping.
+- Updated endpoint profiles, settings payloads, audit payloads, upload/source-evidence examples, operator docs, readiness docs, and version metadata for the REST/OpenAPI boundary.
+
+### Verified
+- Backend pytest passed with `95 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+
 ## 1.4.2 - 2026-06-18
 
 ### Fixed

@@ -75,12 +75,8 @@ def _api_source_details(document: PatientNoteDocument) -> list[str]:
     details = []
     if document.source_document_id.strip():
         details.append(f'Alleva document ID {document.source_document_id.strip()}')
-    if document.source_document_reference_id.strip():
-        details.append(f'DocumentReference {document.source_document_reference_id.strip()}')
     if document.source_attachment_url.strip():
         details.append(f'attachment {document.source_attachment_url.strip()}')
-    if document.source_provenance_id.strip():
-        details.append(f'Provenance {document.source_provenance_id.strip()}')
     return details
 
 

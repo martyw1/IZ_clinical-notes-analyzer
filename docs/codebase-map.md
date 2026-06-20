@@ -22,8 +22,8 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | --- | --- |
 | `backend/app/main.py` | FastAPI app factory, startup readiness/schema/admin bootstrap, security headers, health/readiness/version, and primary API routers. |
 | `backend/app/desktop_main.py` | Desktop runtime wrapper; serves local pages and `frontend/dist` when built. |
-| `backend/app/api/routes.py` | Main authenticated API: settings, readiness, EMR profile/discovery/import-plan, chart audit, patient-note uploads/downloads, checklist, UI events, and audit logs. |
-| `backend/app/api/auth_user_routes.py` | Authentication, profile/reset updates, and role-scoped user-management APIs. |
+| `backend/app/api/routes.py` | Main authenticated API: settings, readiness, API profile/profiles, chart audit, patient-note uploads/downloads, checklist, UI events, and audit logs. |
+| `backend/app/api/auth_user_routes.py` | Authentication, profile/password updates, and role-scoped user-management APIs. |
 | `backend/app/api/timeliness_routes.py` | Treatment Plan Timeliness dashboard/detail/client/override APIs. |
 | `backend/app/api/workflow_routes.py` | Workflow profile CRUD, draft versioning, publish/archive, and unused-draft deletion APIs. |
 | `backend/app/api/api_config_routes.py` | Direct API harness for API configuration, local sample OpenAPI, OpenAPI/Swagger discovery, and selected operation testing. |
@@ -43,8 +43,8 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
 | Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, upload/API-style re-evaluation, fallback generated names, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
-| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py`, `backend/app/services/emr_fhir.py` | OpenAPI/Swagger discovery, operation testing, OAuth/FHIR readiness, EMR endpoint profiles, gated Alleva REST treatment-plan sync into the R3 timeliness engine, and FHIR import planning. Ungated live import is disabled. |
-| Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF/FHIR-style payloads, fallback JSONL log. |
+| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py` | OpenAPI/Swagger discovery, operation testing, REST/OpenAPI/HL7 readiness, API endpoint profiles, and gated Alleva REST treatment-plan sync into the R3 timeliness engine. Ungated live import is disabled. |
+| Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF-style payloads, fallback JSONL log. |
 | Runtime/version | `backend/app/services/runtime_checks.py`, `backend/app/services/version.py` | Readiness checks and `/api/version` payload from version files plus git values. |
 
 ## Frontend entrypoints
@@ -115,7 +115,7 @@ The active non-technical deployment target is Windows.
 4. `/api/api-configuration/sample-openapi.json` and local operation targets support synthetic smoke tests.
 5. `/api/api-configuration/pull-definitions` probes Swagger/OpenAPI URLs and summarizes operations.
 6. `/api/api-configuration/test-operation` executes a selected OpenAPI operation with supplied or saved auth values.
-7. EMR/FHIR routes expose profile, endpoint profiles, FHIR/OAuth discovery, and import-plan generation. They do not import live patient data.
+7. API profile routes expose readiness profile data and stored endpoint profiles. Active FHIR/SMART discovery and import-plan routes have been removed.
 
 ### Rules and workflow flow
 
@@ -169,8 +169,8 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Browser/full-stack smoke is source-checkout validated only | Version 1.4.4 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
-| Live Alleva import is disabled | API harness and EMR profiles support readiness/testing only, with no approved endpoint mapping or tenant details for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
+| Browser/full-stack smoke is source-checkout validated only | Version 1.4.4 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, 42-step checklist workflow coverage, date-clock/workflow-export behavior, gated Alleva REST sync readiness, API settings consolidation, legacy audit-schema repair, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Live Alleva import is disabled | API harness and API profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, protected saved configuration, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, protected values, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

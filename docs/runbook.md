@@ -15,7 +15,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` lo
 ## Forensic log handling
 
 - Primary forensic logs are stored in the `audit_logs` table.
-- Each record includes request metadata, actor identity, source IP, event category, CEF payload, FHIR AuditEvent JSON, and a tamper-evident hash chain.
+- Each record includes request metadata, actor identity, source IP, event category, CEF payload, and a tamper-evident hash chain.
 - If database persistence fails during logging, the app writes JSONL fallback records under the local app-data log directory.
 - Admin access to forensic logs is available through `GET /api/audit/logs` and the `Forensic logs` screen.
 - Preserve UTC timestamps during exports, use the app-provided local timestamp for operator review, and correlate events using `request_id` and `correlation_id`.
@@ -44,18 +44,20 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` lo
 
 - The admin API harness is available at `/api-configuration` in the Windows desktop runtime.
 - When opened from App settings, the harness uses the current admin session; it should not prompt for a second admin login inside the harness.
+- App settings holds the single active Alleva/API connection. The harness loads and tests that active connection; saved endpoint profiles are optional presets that must be activated before they affect readiness checks or sync.
+- Pasting the R3/Alleva client ID and client secret is expected for OAuth client-credentials setup. Stored secrets are encrypted locally and are never returned to the browser after save.
 - The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
 - Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
-- Periodic API readiness checks can be enabled in App settings after saving API/FHIR base URL, token URL, client ID, protected client configuration, token auth style, and interval.
-- FHIR base URL means the root FHIR R4 endpoint supplied by Alleva or a future EMR vendor. Alleva Swagger/OpenAPI URLs belong in the OpenAPI/API harness fields, and `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path, not a FHIR base URL.
-- Stored EMR endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning protected values to the browser.
+- Periodic API readiness checks can be enabled in App settings after saving REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and interval.
+- Alleva has confirmed it does not currently support FHIR. Active integration is Alleva REST/OpenAPI/HL7-readiness only.
+- Stored API endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
 - Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
 
 ## Alleva REST treatment-plan sync
 
-- `Test-AllevaApi.ps1` works without a FHIR root because it uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
-- App startup sync uses the same REST concept, not FHIR discovery. It is disabled by default.
-- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, protected client configuration, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
+- `Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
+- App startup sync uses the same REST concept. It is disabled by default.
+- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
 - Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
 - If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.

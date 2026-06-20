@@ -37,13 +37,11 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'llm_use_for_evaluation_gap_analysis': 'BOOLEAN NOT NULL DEFAULT TRUE',
         'llm_analysis_instructions': "TEXT NOT NULL DEFAULT ''",
         'emr_api_enabled': 'BOOLEAN NOT NULL DEFAULT FALSE',
-        'emr_vendor_name': "VARCHAR(120) NOT NULL DEFAULT 'Alleva / FHIR'",
-        'emr_fhir_base_url': "VARCHAR(255) NOT NULL DEFAULT ''",
-        'emr_smart_client_id': "VARCHAR(255) NOT NULL DEFAULT ''",
-        'emr_smart_client_secret': "VARCHAR(1024) NOT NULL DEFAULT ''",
-        'emr_smart_token_url': "VARCHAR(500) NOT NULL DEFAULT 'https://authorization.allevasoft.com/connect/token'",
-        'emr_smart_token_auth_style': "VARCHAR(40) NOT NULL DEFAULT 'body'",
-        'emr_smart_scopes': "VARCHAR(500) NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs'",
+        'emr_vendor_name': "VARCHAR(120) NOT NULL DEFAULT 'Alleva REST API'",
+        'api_client_id': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'api_client_secret': "VARCHAR(1024) NOT NULL DEFAULT ''",
+        'api_oauth_token_url': "VARCHAR(500) NOT NULL DEFAULT 'https://authorization.allevasoft.com/connect/token'",
+        'api_token_auth_style': "VARCHAR(40) NOT NULL DEFAULT 'body'",
         'emr_api_timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
         'emr_periodic_check_enabled': 'BOOLEAN NOT NULL DEFAULT FALSE',
         'emr_periodic_check_interval_minutes': 'INTEGER NOT NULL DEFAULT 1440',
@@ -124,18 +122,36 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'published_at': 'TIMESTAMP WITH TIME ZONE',
         'archived_at': 'TIMESTAMP WITH TIME ZONE',
     },
+    'emr_endpoint_profiles': {
+        'profile_key': "VARCHAR(80) NOT NULL DEFAULT ''",
+        'display_name': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'vendor_name': "VARCHAR(120) NOT NULL DEFAULT 'Alleva'",
+        'adapter_key': "VARCHAR(120) NOT NULL DEFAULT 'alleva-rest-api'",
+        'api_base_url': "VARCHAR(500) NOT NULL DEFAULT 'https://api.allevasoft.com'",
+        'openapi_url': "VARCHAR(500) NOT NULL DEFAULT ''",
+        'token_url': "VARCHAR(500) NOT NULL DEFAULT ''",
+        'token_auth_style': "VARCHAR(40) NOT NULL DEFAULT 'body'",
+        'client_id': "VARCHAR(255) NOT NULL DEFAULT ''",
+        'client_secret': "VARCHAR(1024) NOT NULL DEFAULT ''",
+        'timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
+        'is_active': 'BOOLEAN NOT NULL DEFAULT TRUE',
+        'is_default': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'notes': "TEXT NOT NULL DEFAULT ''",
+        'created_by_id': 'INTEGER',
+        'updated_by_id': 'INTEGER',
+        'created_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
+        'updated_at': 'TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()',
+    },
     'patient_note_sets': {
         'source_export_id': "VARCHAR(120) NOT NULL DEFAULT ''",
         'source_patient_resource_id': "VARCHAR(120) NOT NULL DEFAULT ''",
     },
     'patient_note_documents': {
         'source_document_id': "VARCHAR(120) NOT NULL DEFAULT ''",
-        'source_document_reference_id': "VARCHAR(120) NOT NULL DEFAULT ''",
         'source_attachment_url': "VARCHAR(500) NOT NULL DEFAULT ''",
         'source_author': "VARCHAR(255) NOT NULL DEFAULT ''",
         'source_custodian': "VARCHAR(255) NOT NULL DEFAULT ''",
         'source_security_label': "VARCHAR(255) NOT NULL DEFAULT ''",
-        'source_provenance_id': "VARCHAR(120) NOT NULL DEFAULT ''",
     },
     'audit_logs': {
         'event_id': "VARCHAR(64) NOT NULL DEFAULT ''",
@@ -167,7 +183,6 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'cef_severity': 'INTEGER NOT NULL DEFAULT 5',
         'cef_extension': "TEXT NOT NULL DEFAULT ''",
         'cef_payload': "TEXT NOT NULL DEFAULT ''",
-        'fhir_audit_event': "TEXT NOT NULL DEFAULT ''",
         'outcome_status': "VARCHAR(20) NOT NULL DEFAULT 'success'",
         'severity': "VARCHAR(20) NOT NULL DEFAULT 'info'",
         'prev_hash': 'VARCHAR(128)',
@@ -206,13 +221,11 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'llm_use_for_evaluation_gap_analysis': 'BOOLEAN NOT NULL DEFAULT 1',
     'llm_analysis_instructions': "TEXT NOT NULL DEFAULT ''",
     'emr_api_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
-    'emr_vendor_name': "TEXT NOT NULL DEFAULT 'Alleva / FHIR'",
-    'emr_fhir_base_url': "TEXT NOT NULL DEFAULT ''",
-    'emr_smart_client_id': "TEXT NOT NULL DEFAULT ''",
-    'emr_smart_client_secret': "TEXT NOT NULL DEFAULT ''",
-    'emr_smart_token_url': "TEXT NOT NULL DEFAULT 'https://authorization.allevasoft.com/connect/token'",
-    'emr_smart_token_auth_style': "TEXT NOT NULL DEFAULT 'body'",
-    'emr_smart_scopes': "TEXT NOT NULL DEFAULT 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs'",
+    'emr_vendor_name': "TEXT NOT NULL DEFAULT 'Alleva REST API'",
+    'api_client_id': "TEXT NOT NULL DEFAULT ''",
+    'api_client_secret': "TEXT NOT NULL DEFAULT ''",
+    'api_oauth_token_url': "TEXT NOT NULL DEFAULT 'https://authorization.allevasoft.com/connect/token'",
+    'api_token_auth_style': "TEXT NOT NULL DEFAULT 'body'",
     'emr_api_timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
     'emr_periodic_check_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
     'emr_periodic_check_interval_minutes': 'INTEGER NOT NULL DEFAULT 1440',
@@ -273,15 +286,21 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'archived_by_id': 'INTEGER',
     'published_at': 'TEXT',
     'archived_at': 'TEXT',
+    'api_base_url': "TEXT NOT NULL DEFAULT 'https://api.allevasoft.com'",
+    'openapi_url': "TEXT NOT NULL DEFAULT ''",
+    'token_url': "TEXT NOT NULL DEFAULT ''",
+    'token_auth_style': "TEXT NOT NULL DEFAULT 'body'",
+    'client_id': "TEXT NOT NULL DEFAULT ''",
+    'client_secret': "TEXT NOT NULL DEFAULT ''",
+    'timeout_seconds': 'INTEGER NOT NULL DEFAULT 10',
+    'is_default': 'BOOLEAN NOT NULL DEFAULT 0',
     'source_export_id': "TEXT NOT NULL DEFAULT ''",
     'source_patient_resource_id': "TEXT NOT NULL DEFAULT ''",
     'source_document_id': "TEXT NOT NULL DEFAULT ''",
-    'source_document_reference_id': "TEXT NOT NULL DEFAULT ''",
     'source_attachment_url': "TEXT NOT NULL DEFAULT ''",
     'source_author': "TEXT NOT NULL DEFAULT ''",
     'source_custodian': "TEXT NOT NULL DEFAULT ''",
     'source_security_label': "TEXT NOT NULL DEFAULT ''",
-    'source_provenance_id': "TEXT NOT NULL DEFAULT ''",
     'event_id': "TEXT NOT NULL DEFAULT ''",
     'actor_type': "TEXT NOT NULL DEFAULT 'human'",
     'forwarded_for': 'TEXT',
@@ -311,7 +330,6 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'cef_severity': 'INTEGER NOT NULL DEFAULT 5',
     'cef_extension': "TEXT NOT NULL DEFAULT ''",
     'cef_payload': "TEXT NOT NULL DEFAULT ''",
-    'fhir_audit_event': "TEXT NOT NULL DEFAULT ''",
     'outcome_status': "TEXT NOT NULL DEFAULT 'success'",
     'severity': "TEXT NOT NULL DEFAULT 'info'",
     'prev_hash': 'TEXT',
@@ -321,11 +339,111 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'source_section': "TEXT NOT NULL DEFAULT ''",
 }
 
+SQLITE_RETIRED_AUDIT_LOG_COLUMNS = {'fhir_audit_event'}
+
+SQLITE_AUDIT_LOG_CANONICAL_COLUMNS: tuple[tuple[str, str, str | None], ...] = (
+    ('id', 'INTEGER PRIMARY KEY', None),
+    ('event_id', "TEXT UNIQUE NOT NULL DEFAULT ''", "''"),
+    ('timestamp_utc', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP', 'CURRENT_TIMESTAMP'),
+    ('actor_id', 'INTEGER', None),
+    ('actor_username', 'TEXT', None),
+    ('actor_role', 'TEXT', None),
+    ('actor_type', "TEXT NOT NULL DEFAULT 'human'", "'human'"),
+    ('source_ip', 'TEXT', None),
+    ('forwarded_for', 'TEXT', None),
+    ('source_host', 'TEXT', None),
+    ('source_port', 'INTEGER', None),
+    ('user_agent', 'TEXT', None),
+    ('request_id', "TEXT NOT NULL DEFAULT 'no-request-id'", "'no-request-id'"),
+    ('correlation_id', "TEXT NOT NULL DEFAULT 'no-correlation-id'", "'no-correlation-id'"),
+    ('session_id', 'TEXT', None),
+    ('http_method', 'TEXT', None),
+    ('request_path', 'TEXT', None),
+    ('route_template', 'TEXT', None),
+    ('query_string', 'TEXT', None),
+    ('http_status_code', 'INTEGER', None),
+    ('event_category', "TEXT NOT NULL DEFAULT 'application'", "'application'"),
+    ('action', "TEXT NOT NULL DEFAULT 'application.event'", "'application.event'"),
+    ('target_entity', 'TEXT', None),
+    ('target_entity_type', 'TEXT', None),
+    ('target_entity_id', 'TEXT', None),
+    ('patient_id', 'TEXT', None),
+    ('message', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('details', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('before_state', 'TEXT', None),
+    ('after_state', 'TEXT', None),
+    ('diff_state', 'TEXT', None),
+    ('cef_version', 'INTEGER NOT NULL DEFAULT 0', '0'),
+    ('cef_device_vendor', "TEXT NOT NULL DEFAULT 'OpenAI'", "'OpenAI'"),
+    ('cef_device_product', "TEXT NOT NULL DEFAULT 'IZ Clinical Notes Analyzer'", "'IZ Clinical Notes Analyzer'"),
+    ('cef_device_version', "TEXT NOT NULL DEFAULT '1'", "'1'"),
+    ('cef_signature_id', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('cef_name', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('cef_severity', 'INTEGER NOT NULL DEFAULT 5', '5'),
+    ('cef_extension', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('cef_payload', "TEXT NOT NULL DEFAULT ''", "''"),
+    ('outcome_status', "TEXT NOT NULL DEFAULT 'success'", "'success'"),
+    ('severity', "TEXT NOT NULL DEFAULT 'info'", "'info'"),
+    ('prev_hash', 'TEXT', None),
+    ('hash', "TEXT NOT NULL DEFAULT ''", "''"),
+)
+
 
 def _column_ddl(column_name: str, postgres_ddl: str, dialect_name: str) -> str:
     if dialect_name == 'sqlite':
         return SQLITE_COLUMN_DEFS.get(column_name, postgres_ddl)
     return postgres_ddl
+
+
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return f'"{identifier.replace(chr(34), chr(34) * 2)}"'
+
+
+def _sqlite_table_info(connection, table_name: str) -> list[dict[str, object]]:
+    rows = connection.execute(text(f'PRAGMA table_info({_quote_sqlite_identifier(table_name)})')).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _repair_sqlite_audit_log_retired_required_columns(connection) -> list[str]:
+    table_info = _sqlite_table_info(connection, 'audit_logs')
+    blocking_columns = [
+        str(column['name'])
+        for column in table_info
+        if str(column['name']) in SQLITE_RETIRED_AUDIT_LOG_COLUMNS and int(column.get('notnull') or 0) and column.get('dflt_value') is None
+    ]
+    if not blocking_columns:
+        return []
+
+    existing_columns = {str(column['name']) for column in table_info}
+    temp_table = 'audit_logs_schema_compat'
+    column_defs = ', '.join(f'{_quote_sqlite_identifier(name)} {ddl}' for name, ddl, _default_sql in SQLITE_AUDIT_LOG_CANONICAL_COLUMNS)
+    insert_columns: list[str] = []
+    select_expressions: list[str] = []
+    for name, _ddl, default_sql in SQLITE_AUDIT_LOG_CANONICAL_COLUMNS:
+        quoted_name = _quote_sqlite_identifier(name)
+        insert_columns.append(quoted_name)
+        if name not in existing_columns:
+            select_expressions.append(default_sql or 'NULL')
+        elif default_sql is None:
+            select_expressions.append(quoted_name)
+        else:
+            select_expressions.append(f'COALESCE({quoted_name}, {default_sql})')
+
+    logger.warning(
+        'Detected legacy audit_logs retired required column(s): %s. Rebuilding audit_logs without retired FHIR columns.',
+        ', '.join(blocking_columns),
+    )
+    connection.execute(text(f'DROP TABLE IF EXISTS {_quote_sqlite_identifier(temp_table)}'))
+    connection.execute(text(f'CREATE TABLE {_quote_sqlite_identifier(temp_table)} ({column_defs})'))
+    connection.execute(
+        text(
+            f'INSERT INTO {_quote_sqlite_identifier(temp_table)} ({", ".join(insert_columns)}) '
+            f'SELECT {", ".join(select_expressions)} FROM audit_logs ORDER BY id'
+        )
+    )
+    connection.execute(text('DROP TABLE audit_logs'))
+    connection.execute(text(f'ALTER TABLE {_quote_sqlite_identifier(temp_table)} RENAME TO audit_logs'))
+    return blocking_columns
 
 
 def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
@@ -348,8 +466,13 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
                 connection.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}'))
                 added_columns.append({'table': table_name, 'column': column_name})
 
+        if inspector.has_table('audit_logs') and dialect_name == 'sqlite':
+            removed_columns = _repair_sqlite_audit_log_retired_required_columns(connection)
+            if removed_columns:
+                added_columns.append({'table': 'audit_logs', 'column': f'retired columns removed: {", ".join(removed_columns)}'})
+
         if inspector.has_table('app_settings') and dialect_name == 'postgresql':
-            connection.execute(text('ALTER TABLE app_settings ALTER COLUMN emr_smart_client_secret TYPE VARCHAR(1024)'))
+            connection.execute(text('ALTER TABLE app_settings ALTER COLUMN api_client_secret TYPE VARCHAR(1024)'))
 
         if inspector.has_table('charts'):
             if dialect_name == 'postgresql':
@@ -362,13 +485,19 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
         if inspector.has_table('audit_logs'):
             if dialect_name == 'postgresql':
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_logs(event_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_request_id ON audit_logs(request_id)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs(hash)'))
             elif dialect_name == 'sqlite':
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_logs(event_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_request_id ON audit_logs(request_id)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_correlation_id ON audit_logs(correlation_id)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id)'))
+                connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs(hash)'))
 
     return added_columns

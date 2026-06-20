@@ -45,12 +45,9 @@ from app.schemas.schemas import (
     ChartSummaryOut,
     ChartUpdate,
     EmrConnectionProfileOut,
-    EmrDiscoveryInput,
-    EmrDiscoveryOut,
     EmrEndpointProfileCreate,
     EmrEndpointProfileOut,
     EmrEndpointProfileUpdate,
-    EmrImportPlanOut,
     PatientIdDetectionOut,
     PatientNoteDocumentUploadInput,
     PatientNoteSetDetailOut,
@@ -65,7 +62,6 @@ from app.services.audit import log_event
 from app.services.alleva_treatment_plan_sync import run_alleva_treatment_plan_sync
 from app.services.api_monitor import run_periodic_api_check
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
-from app.services.emr_fhir import build_document_reference_import_plan, discover_smart_configuration, emr_connection_profile, normalize_fhir_base_url
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import (
     display_name_for_patient_name_status,
@@ -92,7 +88,55 @@ router.include_router(timeliness_router)
 router.include_router(workflow_router)
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
 REVIEW_ROLES = (Role.admin, Role.manager)
-REQUIRED_EMR_READ_SCOPES = {'patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'}
+DEFAULT_ALLEVA_API_BASE_URL = 'https://api.allevasoft.com'
+DEFAULT_ALLEVA_OPENAPI_URL = 'https://api.allevasoft.com/swagger/v1/swagger.json'
+DEFAULT_ALLEVA_TOKEN_URL = 'https://authorization.allevasoft.com/connect/token'
+ALLEVA_REST_ADAPTER_KEY = 'alleva-rest-api'
+ALLEVA_SUPPORTED_EXPORT_FORMATS = ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP']
+ALLEVA_API_STANDARDS = ['Alleva REST API', 'OpenAPI operation discovery', 'HL7/API readiness']
+ALLEVA_REQUIRED_VENDOR_INPUTS = [
+    'R3/Alleva live-sync approval',
+    'Alleva REST API base URL and OpenAPI URL',
+    'OAuth token URL, API client ID, and encrypted API client secret',
+    'Validated active-client, treatment-plan, treatment-review, pagination, status, and date/signature endpoint mapping',
+]
+ALLEVA_DOCUMENT_MANAGER_SECTIONS = [
+    {
+        'key': 'custom_forms',
+        'label': 'Custom Forms',
+        'source_description': 'Client-specific forms that can be filled, signed, completed, canceled, and viewed in Alleva Document Manager.',
+    },
+    {
+        'key': 'uploaded_documents',
+        'label': 'Uploaded Documents',
+        'source_description': 'Client-specific documents uploaded into Alleva that are not native Alleva forms.',
+    },
+    {
+        'key': 'portal_documents',
+        'label': 'Portal Documents',
+        'source_description': 'Forms completed through the Alleva Client/Family Portal and stored in the client chart.',
+    },
+    {
+        'key': 'labs',
+        'label': 'Labs',
+        'source_description': 'Lab orders, requisitions, and results when the client environment has a lab integration.',
+    },
+    {
+        'key': 'medications',
+        'label': 'Medications',
+        'source_description': 'Medication-management or ePrescribe documents when exported or exposed by the client environment.',
+    },
+    {
+        'key': 'notes',
+        'label': 'Notes',
+        'source_description': 'Progress notes, clinical notes, and session documentation exported from the chart.',
+    },
+    {
+        'key': 'other',
+        'label': 'Other',
+        'source_description': 'Other Alleva chart material approved by the client for review import.',
+    },
+]
 
 
 def _utc_now() -> datetime:
@@ -100,35 +144,32 @@ def _utc_now() -> datetime:
 
 
 def _validate_emr_enablement(settings_row: AppSetting) -> None:
-    """Reject live EMR enablement until the minimum Alleva/FHIR contract exists."""
     if not settings_row.emr_api_enabled:
         return
     missing_fields = []
-    if not settings_row.emr_fhir_base_url.strip():
-        missing_fields.append('FHIR base URL')
-    else:
-        settings_row.emr_fhir_base_url = normalize_fhir_base_url(settings_row.emr_fhir_base_url)
-    if not settings_row.emr_smart_client_id.strip():
-        missing_fields.append('OAuth/FHIR client ID')
-    scopes = {scope for scope in settings_row.emr_smart_scopes.split() if scope}
-    missing_scopes = sorted(REQUIRED_EMR_READ_SCOPES - scopes)
-    if missing_fields or missing_scopes:
-        field_message = f'Missing required EMR API field(s): {", ".join(missing_fields)}.' if missing_fields else ''
-        scope_message = f'Missing required read scope(s): {", ".join(missing_scopes)}.' if missing_scopes else ''
-        raise HTTPException(status_code=400, detail=' '.join(part for part in [field_message, scope_message] if part))
+    if not settings_row.alleva_api_base_url.strip():
+        missing_fields.append('Alleva REST API base URL')
+    if not settings_row.api_oauth_token_url.strip():
+        missing_fields.append('OAuth token URL')
+    if not settings_row.api_client_id.strip():
+        missing_fields.append('API client ID')
+    if not settings_row.api_client_secret:
+        missing_fields.append('API client secret')
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f'Missing required API setting(s): {", ".join(missing_fields)}')
 
 def _validate_periodic_api_check(settings_row: AppSetting) -> None:
     if not settings_row.emr_periodic_check_enabled:
         return
     missing_fields = []
-    if not settings_row.emr_fhir_base_url.strip():
-        missing_fields.append('FHIR/API base URL')
-    if not settings_row.emr_smart_token_url.strip():
+    if not settings_row.alleva_api_base_url.strip():
+        missing_fields.append('REST API base URL')
+    if not settings_row.api_oauth_token_url.strip():
         missing_fields.append('OAuth token URL')
-    if not settings_row.emr_smart_client_id.strip():
-        missing_fields.append('OAuth/FHIR client ID')
-    if not settings_row.emr_smart_client_secret:
-        missing_fields.append('OAuth/FHIR client secret')
+    if not settings_row.api_client_id.strip():
+        missing_fields.append('API client ID')
+    if not settings_row.api_client_secret:
+        missing_fields.append('API client secret')
     if missing_fields:
         raise HTTPException(status_code=400, detail=f'Missing required periodic API check field(s): {", ".join(missing_fields)}')
 
@@ -139,11 +180,11 @@ def _validate_alleva_treatment_plan_sync(settings_row: AppSetting) -> None:
     missing_fields = []
     if not settings_row.alleva_api_base_url.strip():
         missing_fields.append('Alleva REST API base URL')
-    if not settings_row.emr_smart_token_url.strip():
+    if not settings_row.api_oauth_token_url.strip():
         missing_fields.append('Alleva OAuth token URL')
-    if not settings_row.emr_smart_client_id.strip():
+    if not settings_row.api_client_id.strip():
         missing_fields.append('Alleva API client ID')
-    if not settings_row.emr_smart_client_secret:
+    if not settings_row.api_client_secret:
         missing_fields.append('Alleva API client secret')
     if not settings_row.alleva_treatment_plan_sync_approved:
         missing_fields.append('R3/Alleva live treatment-plan sync approval')
@@ -298,12 +339,10 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
                 'document_date': document.document_date,
                 'description': document.description,
                 'source_document_id': document.source_document_id,
-                'source_document_reference_id': document.source_document_reference_id,
                 'source_attachment_url': document.source_attachment_url,
                 'source_author': document.source_author,
                 'source_custodian': document.source_custodian,
                 'source_security_label': document.source_security_label,
-                'source_provenance_id': document.source_provenance_id,
                 'created_at': document.created_at,
             }
             for document in documents
@@ -340,12 +379,10 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'llm_analysis_instructions': settings_row.llm_analysis_instructions,
         'emr_api_enabled': settings_row.emr_api_enabled,
         'emr_vendor_name': settings_row.emr_vendor_name,
-        'emr_fhir_base_url': settings_row.emr_fhir_base_url,
-        'emr_smart_client_id': settings_row.emr_smart_client_id,
-        'emr_smart_client_secret_configured': bool(settings_row.emr_smart_client_secret),
-        'emr_smart_token_url': settings_row.emr_smart_token_url,
-        'emr_smart_token_auth_style': settings_row.emr_smart_token_auth_style,
-        'emr_smart_scopes': settings_row.emr_smart_scopes,
+        'api_client_id': settings_row.api_client_id,
+        'api_client_secret_configured': bool(settings_row.api_client_secret),
+        'api_oauth_token_url': settings_row.api_oauth_token_url,
+        'api_token_auth_style': settings_row.api_token_auth_style,
         'emr_api_timeout_seconds': settings_row.emr_api_timeout_seconds,
         'emr_periodic_check_enabled': settings_row.emr_periodic_check_enabled,
         'emr_periodic_check_interval_minutes': settings_row.emr_periodic_check_interval_minutes,
@@ -381,14 +418,13 @@ def _emr_profile_payload(profile: EmrEndpointProfile) -> dict[str, object]:
         'display_name': profile.display_name,
         'vendor_name': profile.vendor_name,
         'adapter_key': profile.adapter_key,
-        'fhir_base_url': profile.fhir_base_url,
+        'api_base_url': profile.api_base_url,
         'openapi_url': profile.openapi_url,
         'token_url': profile.token_url,
         'token_auth_style': profile.token_auth_style,
         'client_id': profile.client_id,
         'client_id_configured': bool(profile.client_id.strip()),
         'client_secret_configured': bool(profile.client_secret),
-        'scopes': profile.scopes,
         'timeout_seconds': profile.timeout_seconds,
         'is_active': profile.is_active,
         'is_default': profile.is_default,
@@ -415,6 +451,25 @@ def _find_emr_endpoint_profile(profile_id: int, db: Session) -> EmrEndpointProfi
     return profile
 
 
+def _api_connection_profile(settings_row: AppSetting) -> dict[str, object]:
+    api_base_url = settings_row.alleva_api_base_url.strip()
+    return {
+        'adapter_key': ALLEVA_REST_ADAPTER_KEY,
+        'enabled': settings_row.emr_api_enabled,
+        'vendor_name': settings_row.emr_vendor_name,
+        'live_import_status': 'readiness_only_pending_approval_and_endpoint_mapping',
+        'api_base_url': api_base_url,
+        'openapi_url': settings_row.alleva_openapi_url.strip(),
+        'oauth_token_url_configured': bool(settings_row.api_oauth_token_url.strip()),
+        'client_id_configured': bool(settings_row.api_client_id.strip()),
+        'client_secret_configured': bool(settings_row.api_client_secret.strip()),
+        'standards': ALLEVA_API_STANDARDS,
+        'supported_export_formats': ALLEVA_SUPPORTED_EXPORT_FORMATS,
+        'document_manager_sections': ALLEVA_DOCUMENT_MANAGER_SECTIONS,
+        'required_vendor_inputs': ALLEVA_REQUIRED_VENDOR_INPUTS,
+    }
+
+
 def _ensure_default_emr_endpoint_profile(db: Session, settings_row: AppSetting, user: User | None = None) -> None:
     existing = db.execute(select(EmrEndpointProfile.id).limit(1)).scalar_one_or_none()
     if existing is not None:
@@ -422,20 +477,19 @@ def _ensure_default_emr_endpoint_profile(db: Session, settings_row: AppSetting, 
     now = _utc_now()
     profile = EmrEndpointProfile(
         profile_key='alleva-default',
-        display_name='Alleva default FHIR/OAuth profile',
-        vendor_name=settings_row.emr_vendor_name or 'Alleva',
-        adapter_key='alleva-fhir-document-manager',
-        fhir_base_url=settings_row.emr_fhir_base_url,
-        openapi_url='',
-        token_url=settings_row.emr_smart_token_url,
-        token_auth_style=settings_row.emr_smart_token_auth_style,
-        client_id=settings_row.emr_smart_client_id,
-        client_secret=settings_row.emr_smart_client_secret,
-        scopes=settings_row.emr_smart_scopes,
+        display_name='Alleva default REST API profile',
+        vendor_name=settings_row.emr_vendor_name or 'Alleva REST API',
+        adapter_key=ALLEVA_REST_ADAPTER_KEY,
+        api_base_url=settings_row.alleva_api_base_url or DEFAULT_ALLEVA_API_BASE_URL,
+        openapi_url=settings_row.alleva_openapi_url or DEFAULT_ALLEVA_OPENAPI_URL,
+        token_url=settings_row.api_oauth_token_url,
+        token_auth_style=settings_row.api_token_auth_style,
+        client_id=settings_row.api_client_id,
+        client_secret=settings_row.api_client_secret,
         timeout_seconds=settings_row.emr_api_timeout_seconds,
         is_active=True,
         is_default=True,
-        notes='Seeded from current app settings. Live patient import remains disabled until vendor and compliance approval.',
+        notes='Seeded from current app settings. Live sync remains disabled until R3/Alleva approval and endpoint mapping validation.',
         created_by_id=user.id if user else None,
         updated_by_id=user.id if user else None,
         created_at=now,
@@ -545,7 +599,6 @@ def _audit_log_payload(log: AuditLog, timezone_name: str) -> dict[str, object]:
         'diff_state': log.diff_state,
         'cef_extension': log.cef_extension,
         'cef_payload': log.cef_payload,
-        'fhir_audit_event': log.fhir_audit_event,
         'outcome_status': log.outcome_status,
         'severity': log.severity,
         'prev_hash': log.prev_hash,
@@ -636,12 +689,10 @@ def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[Patient
                     'description': metadata.description.strip(),
                     'document_date': metadata.document_date.strip(),
                     'source_document_id': metadata.source_document_id.strip(),
-                    'source_document_reference_id': metadata.source_document_reference_id.strip(),
                     'source_attachment_url': metadata.source_attachment_url.strip(),
                     'source_author': metadata.source_author.strip(),
                     'source_custodian': metadata.source_custodian.strip(),
                     'source_security_label': metadata.source_security_label.strip(),
-                    'source_provenance_id': metadata.source_provenance_id.strip(),
                 }
             )
         )
@@ -757,22 +808,18 @@ def update_app_settings(
         settings_row.emr_api_enabled = payload.emr_api_enabled
     if payload.emr_vendor_name is not None:
         settings_row.emr_vendor_name = payload.emr_vendor_name.strip() or settings_row.emr_vendor_name
-    if payload.emr_fhir_base_url is not None:
-        settings_row.emr_fhir_base_url = payload.emr_fhir_base_url.strip()
-    if payload.emr_smart_client_id is not None:
-        settings_row.emr_smart_client_id = payload.emr_smart_client_id.strip()
-    if payload.emr_smart_client_secret is not None:
-        candidate_secret = payload.emr_smart_client_secret.strip()
+    if payload.api_client_id is not None:
+        settings_row.api_client_id = payload.api_client_id.strip()
+    if payload.api_client_secret is not None:
+        candidate_secret = payload.api_client_secret.strip()
         if candidate_secret:
-            settings_row.emr_smart_client_secret = encrypt_text_secret(candidate_secret)
-    if payload.clear_emr_smart_client_secret:
-        settings_row.emr_smart_client_secret = ''
-    if payload.emr_smart_token_url is not None:
-        settings_row.emr_smart_token_url = payload.emr_smart_token_url.strip()
-    if payload.emr_smart_token_auth_style is not None:
-        settings_row.emr_smart_token_auth_style = payload.emr_smart_token_auth_style
-    if payload.emr_smart_scopes is not None:
-        settings_row.emr_smart_scopes = ' '.join(payload.emr_smart_scopes.split())
+            settings_row.api_client_secret = encrypt_text_secret(candidate_secret)
+    if payload.clear_api_client_secret:
+        settings_row.api_client_secret = ''
+    if payload.api_oauth_token_url is not None:
+        settings_row.api_oauth_token_url = payload.api_oauth_token_url.strip()
+    if payload.api_token_auth_style is not None:
+        settings_row.api_token_auth_style = payload.api_token_auth_style
     if payload.emr_api_timeout_seconds is not None:
         settings_row.emr_api_timeout_seconds = payload.emr_api_timeout_seconds
     if payload.emr_periodic_check_enabled is not None:
@@ -875,7 +922,7 @@ def get_system_readiness(request: Request, user: User = Depends(require_roles(Ro
 @router.get('/emr/profile', response_model=EmrConnectionProfileOut)
 def get_emr_profile(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
     settings_row = get_or_create_app_settings(db)
-    profile = emr_connection_profile(settings_row)
+    profile = _api_connection_profile(settings_row)
     log_event(
         db,
         request,
@@ -884,7 +931,7 @@ def get_emr_profile(request: Request, user: User = Depends(require_roles(Role.ad
         event_category='configuration',
         target_entity='emr_connection_profile',
         target_entity_type='emr_connection',
-        details={key: value for key, value in profile.items() if key != 'scopes'},
+        details=profile,
         message='EMR connection profile viewed.',
     )
     return profile
@@ -927,15 +974,14 @@ def create_emr_endpoint_profile(
     profile = EmrEndpointProfile(
         profile_key=profile_key,
         display_name=payload.display_name.strip(),
-        vendor_name=payload.vendor_name.strip() or 'Alleva',
-        adapter_key=payload.adapter_key.strip() or 'alleva-fhir-document-manager',
-        fhir_base_url=normalize_fhir_base_url(payload.fhir_base_url) if payload.fhir_base_url.strip() else '',
-        openapi_url=payload.openapi_url.strip(),
-        token_url=payload.token_url.strip(),
+        vendor_name=payload.vendor_name.strip() or 'Alleva REST API',
+        adapter_key=payload.adapter_key.strip() or ALLEVA_REST_ADAPTER_KEY,
+        api_base_url=payload.api_base_url.strip() or DEFAULT_ALLEVA_API_BASE_URL,
+        openapi_url=payload.openapi_url.strip() or DEFAULT_ALLEVA_OPENAPI_URL,
+        token_url=payload.token_url.strip() or DEFAULT_ALLEVA_TOKEN_URL,
         token_auth_style=payload.token_auth_style,
         client_id=payload.client_id.strip(),
         client_secret=encrypt_text_secret(payload.client_secret.strip()) if payload.client_secret and payload.client_secret.strip() else '',
-        scopes=' '.join(payload.scopes.split()),
         timeout_seconds=payload.timeout_seconds,
         is_active=payload.is_active,
         is_default=payload.is_default,
@@ -982,12 +1028,12 @@ def update_emr_endpoint_profile(
         profile.vendor_name = payload.vendor_name.strip() or profile.vendor_name
     if payload.adapter_key is not None:
         profile.adapter_key = payload.adapter_key.strip() or profile.adapter_key
-    if payload.fhir_base_url is not None:
-        profile.fhir_base_url = normalize_fhir_base_url(payload.fhir_base_url) if payload.fhir_base_url.strip() else ''
+    if payload.api_base_url is not None:
+        profile.api_base_url = payload.api_base_url.strip() or DEFAULT_ALLEVA_API_BASE_URL
     if payload.openapi_url is not None:
-        profile.openapi_url = payload.openapi_url.strip()
+        profile.openapi_url = payload.openapi_url.strip() or DEFAULT_ALLEVA_OPENAPI_URL
     if payload.token_url is not None:
-        profile.token_url = payload.token_url.strip()
+        profile.token_url = payload.token_url.strip() or DEFAULT_ALLEVA_TOKEN_URL
     if payload.token_auth_style is not None:
         profile.token_auth_style = payload.token_auth_style
     if payload.client_id is not None:
@@ -996,8 +1042,6 @@ def update_emr_endpoint_profile(
         profile.client_secret = ''
     elif payload.client_secret and payload.client_secret.strip():
         profile.client_secret = encrypt_text_secret(payload.client_secret.strip())
-    if payload.scopes is not None:
-        profile.scopes = ' '.join(payload.scopes.split())
     if payload.timeout_seconds is not None:
         profile.timeout_seconds = payload.timeout_seconds
     if payload.is_active is not None:
@@ -1043,13 +1087,13 @@ def activate_emr_endpoint_profile(
     settings_row = get_or_create_app_settings(db)
     before = _settings_snapshot(settings_row)
     settings_row.emr_vendor_name = profile.vendor_name
-    settings_row.emr_fhir_base_url = profile.fhir_base_url
-    settings_row.emr_smart_client_id = profile.client_id
+    settings_row.alleva_api_base_url = profile.api_base_url
+    settings_row.alleva_openapi_url = profile.openapi_url
+    settings_row.api_client_id = profile.client_id
     if profile.client_secret:
-        settings_row.emr_smart_client_secret = profile.client_secret
-    settings_row.emr_smart_token_url = profile.token_url
-    settings_row.emr_smart_token_auth_style = profile.token_auth_style
-    settings_row.emr_smart_scopes = profile.scopes
+        settings_row.api_client_secret = profile.client_secret
+    settings_row.api_oauth_token_url = profile.token_url
+    settings_row.api_token_auth_style = profile.token_auth_style
     settings_row.emr_api_timeout_seconds = profile.timeout_seconds
     profile.is_default = True
     profile.updated_by_id = user.id
@@ -1102,61 +1146,6 @@ def delete_emr_endpoint_profile(profile_id: int, request: Request, user: User = 
     return {'status': 'deleted', 'profile_key': profile_key}
 
 
-@router.post('/emr/discover', response_model=EmrDiscoveryOut)
-def discover_emr_smart_configuration(
-    payload: EmrDiscoveryInput,
-    request: Request,
-    user: User = Depends(require_roles(Role.admin)),
-    db: Session = Depends(get_db),
-):
-    settings_row = get_or_create_app_settings(db)
-    fhir_base_url = (payload.fhir_base_url or settings_row.emr_fhir_base_url).strip()
-    discovery = discover_smart_configuration(fhir_base_url, timeout_seconds=settings_row.emr_api_timeout_seconds)
-    log_event(
-        db,
-        request,
-        'emr.smart.discovery',
-        actor=user,
-        event_category='configuration',
-        target_entity='emr_smart_configuration',
-        target_entity_type='emr_connection',
-        details={
-            'fhir_base_url': discovery['fhir_base_url'],
-            'authorization_endpoint_configured': discovery['authorization_endpoint_configured'],
-            'token_endpoint_configured': discovery['token_endpoint_configured'],
-            'capabilities_count': len(discovery['capabilities']),
-        },
-        message='FHIR/OAuth discovery completed.',
-    )
-    return discovery
-
-
-@router.get('/emr/import-plan', response_model=EmrImportPlanOut)
-def get_emr_import_plan(
-    request: Request,
-    patient_id: str = Query(..., min_length=1),
-    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
-    db: Session = Depends(get_db),
-):
-    settings_row = get_or_create_app_settings(db)
-    if not settings_row.emr_fhir_base_url.strip():
-        raise HTTPException(status_code=400, detail='Configure the EMR FHIR base URL before building an import plan')
-    plan = build_document_reference_import_plan(patient_id, settings_row.emr_fhir_base_url)
-    log_event(
-        db,
-        request,
-        'emr.import_plan.read',
-        actor=user,
-        event_category='configuration',
-        target_entity='emr_import_plan',
-        target_entity_type='emr_connection',
-        patient_id=patient_id.strip(),
-        details={'fhir_base_url': plan['fhir_base_url'], 'planned_request_count': len(plan['planned_requests'])},
-        message='EMR DocumentReference import plan viewed.',
-    )
-    return plan
-
-
 @router.get('/review-source-discovery', response_model=ReviewSourceDiscoveryOut)
 def get_review_source_discovery(
     request: Request,
@@ -1196,11 +1185,19 @@ def run_review_source_daily_check(
     settings_row = get_or_create_app_settings(db)
     note_set_stmt = _note_set_stmt().where(PatientNoteSet.status == NoteSetStatus.active)
     note_sets = list(db.execute(note_set_stmt.order_by(PatientNoteSet.created_at.desc(), PatientNoteSet.id.desc())).scalars().unique().all())
-    api_check_result = run_periodic_api_check(db, settings_row) if settings_row.emr_periodic_check_enabled else None
+    api_check_result = run_periodic_api_check(db, settings_row)
     db.refresh(settings_row)
     payload = review_source_discovery_payload(db, settings_row, note_sets)
     if api_check_result is not None:
-        payload['last_check_mode'] = 'periodic_api_readiness_check'
+        payload['last_check_mode'] = 'manual_api_readiness_check'
+        payload['plain_english_status'] = (
+            f"Manual API readiness check used the active App settings connection and returned "
+            f"{api_check_result.get('status', 'unknown')}: {api_check_result.get('message', 'No message returned.')}"
+        )
+        if api_check_result.get('status') == 'ok':
+            payload['api_mode_label'] = 'Manual readiness check succeeded'
+        elif api_check_result.get('status') in {'fail', 'skipped'}:
+            payload['api_mode_label'] = 'Manual readiness check needs attention'
     log_event(
         db,
         request,
@@ -1217,7 +1214,7 @@ def run_review_source_daily_check(
             'api_mode': payload['api_mode'],
             'api_check_status': api_check_result.get('status') if isinstance(api_check_result, dict) else '',
         },
-        message='Daily review-source check run in safe readiness/mock mode.',
+        message='Manual API readiness/review-source check run in safe readiness/mock mode.',
     )
     return payload
 
@@ -1706,12 +1703,10 @@ async def upload_patient_note_set(
                 document_date=metadata.document_date,
                 description=metadata.description,
                 source_document_id=metadata.source_document_id,
-                source_document_reference_id=metadata.source_document_reference_id,
                 source_attachment_url=metadata.source_attachment_url,
                 source_author=metadata.source_author,
                 source_custodian=metadata.source_custodian,
                 source_security_label=metadata.source_security_label,
-                source_provenance_id=metadata.source_provenance_id,
             )
             db.add(document)
             created_documents.append(document)

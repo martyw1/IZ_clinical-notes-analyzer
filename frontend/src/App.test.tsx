@@ -187,13 +187,11 @@ function appSettingsPayload() {
     llm_use_for_evaluation_gap_analysis: true,
     llm_analysis_instructions: '',
     emr_api_enabled: false,
-    emr_vendor_name: 'Alleva / FHIR',
-    emr_fhir_base_url: '',
-    emr_smart_client_id: '',
-    emr_smart_client_secret_configured: false,
-    emr_smart_token_url: 'https://authorization.allevasoft.com/connect/token',
-    emr_smart_token_auth_style: 'body',
-    emr_smart_scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
+    emr_vendor_name: 'Alleva REST API',
+    api_client_id: '',
+    api_client_secret_configured: false,
+    api_oauth_token_url: 'https://authorization.allevasoft.com/connect/token',
+    api_token_auth_style: 'body',
     emr_api_timeout_seconds: 10,
     emr_periodic_check_enabled: false,
     emr_periodic_check_interval_minutes: 1440,
@@ -224,24 +222,23 @@ function appSettingsPayload() {
 
 function emrProfilePayload() {
   return {
-    vendor_name: 'Alleva / FHIR',
-    adapter_key: 'alleva-smart-fhir-document-manager',
-    live_import_status: 'disabled',
+    vendor_name: 'Alleva REST API',
+    adapter_key: 'alleva-rest-api',
+    live_import_status: 'readiness_only_pending_approval_and_endpoint_mapping',
     enabled: false,
-    fhir_base_url: '',
-    smart_discovery_url: null,
+    api_base_url: 'https://api.allevasoft.com',
+    openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
+    oauth_token_url_configured: true,
     client_id_configured: false,
     client_secret_configured: false,
-    scopes: ['openid', 'fhirUser', 'launch/patient', 'patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs', 'patient/Provenance.rs'],
-    supported_resources: ['Patient', 'DocumentReference', 'Binary', 'Provenance'],
-    standards: ['HL7 FHIR R4 DocumentReference', 'HL7 FHIR R4 Binary', 'HL7 FHIR R4 Provenance', 'SMART App Launch OAuth2'],
+    standards: ['Alleva REST API', 'OpenAPI operation discovery', 'HL7/API readiness'],
     supported_export_formats: ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP'],
     document_manager_sections: [
       { key: 'custom_forms', label: 'Custom Forms', expected_content: ['Admission packets', 'signed client forms'] },
       { key: 'uploaded_documents', label: 'Uploaded Documents', expected_content: ['External PDFs', 'Word documents'] },
       { key: 'portal_documents', label: 'Portal Documents', expected_content: ['Client-uploaded portal documents'] },
     ],
-    required_vendor_inputs: ['Alleva tenant FHIR base URL', 'OAuth/FHIR client ID', 'OAuth/FHIR client secret'],
+    required_vendor_inputs: ['R3/Alleva live-sync approval', 'OAuth token URL', 'API client ID', 'API client secret'],
   }
 }
 
@@ -251,16 +248,15 @@ function emrEndpointProfilesPayload() {
       id: 91,
       profile_key: 'alleva-default',
       display_name: 'Alleva Default',
-      vendor_name: 'Alleva / FHIR',
-      adapter_key: 'alleva-smart-fhir-document-manager',
-      fhir_base_url: 'https://alleva.example.com/fhir/R4',
-      openapi_url: '',
+      vendor_name: 'Alleva REST API',
+      adapter_key: 'alleva-rest-api',
+      api_base_url: 'https://api.allevasoft.com',
+      openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
       token_url: 'https://authorization.allevasoft.com/connect/token',
       token_auth_style: 'body',
       client_id: 'synthetic-client',
       client_id_configured: true,
       client_secret_configured: true,
-      scopes: 'openid fhirUser patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
       timeout_seconds: 10,
       is_active: true,
       is_default: true,
@@ -1195,6 +1191,7 @@ describe('App turnkey workflow', () => {
   it('shows profile management, admin user management, and forensic logs', async () => {
     window.history.replaceState(null, '', '/?view=dashboard')
     let directory = [userPayload('admin'), userPayload('manager')]
+    let savedSettings = appSettingsPayload()
 
     installFetchMock({
       'POST /api/auth/login': { access_token: 'token-d', must_reset_password: false },
@@ -1204,71 +1201,42 @@ describe('App turnkey workflow', () => {
       'GET /api/charts/8': chartDetail(),
       'GET /api/patient-note-sets/5': noteSetDetail(),
       'GET /api/users': () => ({ body: directory }),
-      'GET /api/settings': appSettingsPayload(),
+      'GET /api/settings': () => ({ body: savedSettings }),
       'GET /api/emr/profile': emrProfilePayload(),
       'GET /api/system/readiness': readinessPayload(),
       'GET /api/workflow-definitions': workflowDefinitionsPayload(),
       'PATCH /api/settings': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
-        return {
-          body: {
-            ...appSettingsPayload(),
-            organization_name: body.organization_name,
-            llm_enabled: body.llm_enabled,
-            llm_provider_name: body.llm_provider_name,
-            llm_base_url: body.llm_base_url,
-            llm_model: body.llm_model,
-            llm_api_key_configured: true,
-            emr_api_enabled: body.emr_api_enabled,
-            emr_vendor_name: body.emr_vendor_name,
-            emr_fhir_base_url: body.emr_fhir_base_url,
-            emr_smart_client_id: body.emr_smart_client_id,
-            emr_smart_client_secret_configured: Boolean(body.emr_smart_client_secret),
-            emr_smart_token_url: body.emr_smart_token_url,
-            emr_smart_token_auth_style: body.emr_smart_token_auth_style,
-            emr_smart_scopes: body.emr_smart_scopes,
-            emr_api_timeout_seconds: body.emr_api_timeout_seconds,
-            emr_periodic_check_enabled: body.emr_periodic_check_enabled,
-            emr_periodic_check_interval_minutes: body.emr_periodic_check_interval_minutes,
-            alleva_api_base_url: body.alleva_api_base_url,
-            alleva_openapi_url: body.alleva_openapi_url,
-            alleva_api_version: body.alleva_api_version,
-            alleva_treatment_plan_sync_enabled: body.alleva_treatment_plan_sync_enabled,
-            alleva_treatment_plan_sync_on_startup: body.alleva_treatment_plan_sync_on_startup,
-            alleva_treatment_plan_sync_approved: body.alleva_treatment_plan_sync_approved,
-            alleva_treatment_plan_endpoint_mapping_validated: body.alleva_treatment_plan_endpoint_mapping_validated,
-            alleva_treatment_plan_sync_limit: body.alleva_treatment_plan_sync_limit,
-            treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
-            treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
-          },
+        savedSettings = {
+          ...savedSettings,
+          organization_name: body.organization_name,
+          llm_enabled: body.llm_enabled,
+          llm_provider_name: body.llm_provider_name,
+          llm_base_url: body.llm_base_url,
+          llm_model: body.llm_model,
+          llm_api_key_configured: Boolean(body.llm_api_key) || savedSettings.llm_api_key_configured,
+          emr_api_enabled: body.emr_api_enabled,
+          emr_vendor_name: body.emr_vendor_name,
+          api_client_id: body.api_client_id,
+          api_client_secret_configured:
+            Boolean(body.api_client_secret) || (savedSettings.api_client_secret_configured && !body.clear_api_client_secret),
+          api_oauth_token_url: body.api_oauth_token_url,
+          api_token_auth_style: body.api_token_auth_style,
+          emr_api_timeout_seconds: body.emr_api_timeout_seconds,
+          emr_periodic_check_enabled: body.emr_periodic_check_enabled,
+          emr_periodic_check_interval_minutes: body.emr_periodic_check_interval_minutes,
+          alleva_api_base_url: body.alleva_api_base_url,
+          alleva_openapi_url: body.alleva_openapi_url,
+          alleva_api_version: body.alleva_api_version,
+          alleva_treatment_plan_sync_enabled: body.alleva_treatment_plan_sync_enabled,
+          alleva_treatment_plan_sync_on_startup: body.alleva_treatment_plan_sync_on_startup,
+          alleva_treatment_plan_sync_approved: body.alleva_treatment_plan_sync_approved,
+          alleva_treatment_plan_endpoint_mapping_validated: body.alleva_treatment_plan_endpoint_mapping_validated,
+          alleva_treatment_plan_sync_limit: body.alleva_treatment_plan_sync_limit,
+          treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
+          treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
         }
-      },
-      'POST /api/emr/discover': {
-        status: 'ok',
-        metadata_url: 'https://alleva.example.com/fhir/.well-known/smart-configuration',
-        authorization_endpoint_configured: true,
-        token_endpoint_configured: true,
-        document_reference_supported: true,
-        binary_supported: true,
-      },
-      'GET /api/emr/import-plan': {
-        patient_id: 'PAT-001',
-        vendor_name: 'Alleva / FHIR',
-        live_import_enabled: false,
-        planned_requests: [
-          {
-            step: 1,
-            method: 'GET',
-            url: 'DocumentReference?patient=PAT-001&status=current&_sort=-date',
-            purpose: 'Find Alleva Document Manager records for the patient.',
-          },
-        ],
-        local_export_guidance: ['Export Custom Forms, Uploaded Documents, and Portal Documents from Alleva Document Manager.'],
-        required_scopes: ['patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'],
-        alleva_notes: ['Map Alleva Document Manager sections into import buckets.'],
-        supported_export_formats: ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP'],
-        document_manager_sections: emrProfilePayload().document_manager_sections,
-        attachment_handling: 'Fetch Binary URLs with the same SMART bearer token.',
+        return { body: savedSettings }
       },
       'POST /api/users': (_path: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body || '{}'))
@@ -1330,22 +1298,25 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'App settings' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Application settings' })).toBeInTheDocument())
-    expect(screen.getByRole('heading', { name: 'Alleva import profile' })).toBeInTheDocument()
-    expect(screen.getByText('alleva-smart-fhir-document-manager')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Active Alleva/API connection' })).toBeInTheDocument()
+    expect(screen.getByText(/source of truth for readiness checks/i)).toBeInTheDocument()
+    expect(screen.getByText(/pasting the client ID and client secret here is expected/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Alleva REST/OpenAPI readiness' })).toBeInTheDocument()
+    expect(screen.getByText('alleva-rest-api')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use for active API settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /discovery/i })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Workflow profiles' })).toBeInTheDocument()
     expect(screen.getByText('treatment_plan_followup')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Seed draft from 42-step checklist' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Organization name'), { target: { value: 'R3 Recovery Services QA' } })
     fireEvent.click(screen.getByLabelText('Enable LLM-assisted analysis'))
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
-    fireEvent.change(screen.getAllByLabelText(/FHIR base URL/)[0], { target: { value: 'https://alleva.example.com/fhir' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Check FHIR/OAuth discovery' }))
-    await waitFor(() => expect(screen.getByText(/Discovery: ok/i)).toBeInTheDocument())
-    fireEvent.change(screen.getByLabelText('Import plan patient ID'), { target: { value: 'PAT-001' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Build import plan' }))
-    await waitFor(() => expect(screen.getByText(/DocumentReference\?patient=PAT-001/i)).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('API client ID'), { target: { value: 'rest-client' } })
+    fireEvent.change(screen.getByLabelText('API client secret'), { target: { value: 'rest-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-    await waitFor(() => expect(screen.getByText('Application settings have been updated.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Application settings have been saved and verified.')).toBeInTheDocument())
+    expect(savedSettings.api_client_id).toBe('rest-client')
+    expect(savedSettings.api_client_secret_configured).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())

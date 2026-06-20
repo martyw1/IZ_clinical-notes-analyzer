@@ -112,12 +112,10 @@ type PatientNoteDocument = {
   document_date: string
   description: string
   source_document_id: string
-  source_document_reference_id: string
   source_attachment_url: string
   source_author: string
   source_custodian: string
   source_security_label: string
-  source_provenance_id: string
   created_at: string
 }
 
@@ -306,12 +304,10 @@ type AppSettings = {
   llm_analysis_instructions: string
   emr_api_enabled: boolean
   emr_vendor_name: string
-  emr_fhir_base_url: string
-  emr_smart_client_id: string
-  emr_smart_client_secret_configured: boolean
-  emr_smart_token_url: string
-  emr_smart_token_auth_style: string
-  emr_smart_scopes: string
+  api_client_id: string
+  api_client_secret_configured: boolean
+  api_oauth_token_url: string
+  api_token_auth_style: string
   emr_api_timeout_seconds: number
   emr_periodic_check_enabled: boolean
   emr_periodic_check_interval_minutes: number
@@ -361,13 +357,11 @@ type AppSettingsForm = {
   llm_analysis_instructions: string
   emr_api_enabled: boolean
   emr_vendor_name: string
-  emr_fhir_base_url: string
-  emr_smart_client_id: string
-  emr_smart_client_secret: string
-  clear_emr_smart_client_secret: boolean
-  emr_smart_token_url: string
-  emr_smart_token_auth_style: string
-  emr_smart_scopes: string
+  api_client_id: string
+  api_client_secret: string
+  clear_api_client_secret: boolean
+  api_oauth_token_url: string
+  api_token_auth_style: string
   emr_api_timeout_seconds: number
   emr_periodic_check_enabled: boolean
   emr_periodic_check_interval_minutes: number
@@ -458,12 +452,10 @@ type UploadEntry = {
   document_date: string
   description: string
   source_document_id: string
-  source_document_reference_id: string
   source_attachment_url: string
   source_author: string
   source_custodian: string
   source_security_label: string
-  source_provenance_id: string
 }
 
 type TransitionAction = {
@@ -474,7 +466,8 @@ type TransitionAction = {
 }
 
 type ApiError = {
-  detail?: string | { msg?: string }
+  detail?: string | { msg?: string } | { msg?: string }[]
+  raw?: string
 }
 
 type UploadFormState = {
@@ -581,14 +574,13 @@ type EmrEndpointProfile = {
   display_name: string
   vendor_name: string
   adapter_key: string
-  fhir_base_url: string
+  api_base_url: string
   openapi_url: string
   token_url: string
   token_auth_style: string
   client_id: string
   client_id_configured: boolean
   client_secret_configured: boolean
-  scopes: string
   timeout_seconds: number
   is_active: boolean
   is_default: boolean
@@ -604,31 +596,14 @@ type EmrEndpointProfileForm = {
   display_name: string
   vendor_name: string
   adapter_key: string
-  fhir_base_url: string
+  api_base_url: string
   openapi_url: string
   token_url: string
   token_auth_style: string
   client_id: string
   client_secret: string
-  scopes: string
   timeout_seconds: number
   notes: string
-}
-
-type EmrDiscovery = {
-  status: string
-  smart_configuration_url: string
-  authorization_endpoint_configured: boolean
-  token_endpoint_configured: boolean
-  capabilities: string[]
-  message: string
-}
-
-type EmrImportPlan = {
-  patient_id: string
-  planned_requests: { step: string; purpose: string; method: string; url: string }[]
-  alleva_notes: string[]
-  attachment_handling: string
 }
 
 type TreatmentPlanChecklistAcronym = {
@@ -884,11 +859,12 @@ const HELP_SECTIONS = [
     title: 'App Settings, API/EMR, And LLM',
     items: [
       'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
-      'FHIR base URL means the root FHIR R4 endpoint supplied by the EMR vendor, for example an Alleva tenant FHIR endpoint ending in /fhir/R4. Alleva Swagger UI and swagger.json URLs are OpenAPI documentation URLs, not FHIR base URLs.',
-      'Alleva REST treatment-plan sync uses the Alleva REST API base URL and OpenAPI documentation URL, not the FHIR base URL. R3 runs compliance checks locally after the app imports mapped treatment-plan data.',
-      'OAuth/API client ID, secret, token URL, and scopes are stored for readiness testing and approved REST sync; secrets are encrypted and never returned to the browser.',
-      'Periodic API checks require the FHIR/API base URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
-      'Stored EMR endpoint profiles let admins save future EMR/FHIR endpoint options and activate the one used by current readiness/API tests.',
+      'Alleva currently identifies HL7 as the standards-based integration path; active app integration is Alleva REST/OpenAPI/HL7 readiness.',
+      'There is one active Alleva/API connection in App settings. The API test harness loads these same active values.',
+      'Pasting the client ID and client secret supplied by Alleva/R3 is the normal OAuth client-credentials setup. The saved secret is encrypted and never returned to the browser.',
+      'Alleva REST treatment-plan sync uses the active REST API base URL and OpenAPI documentation URL. R3 runs compliance checks locally after the app imports approved mapped treatment-plan data.',
+      'Periodic API checks require the REST API base URL, OpenAPI URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
+      'Saved API endpoint profiles are presets. Activating one copies its values into the active App settings connection used by readiness/API tests.',
       'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
     ],
   },
@@ -898,7 +874,6 @@ const HELP_SECTIONS = [
       'Admission date is the treatment episode start date and is used when no later valid treatment-plan review/update date exists.',
       'Last valid review/update date comes from a treatment-plan review or LOC-update record with usable source evidence and a staff/therapist signature date.',
       'Current LOC must map to configured LOC aliases. PHP maps to a 30-day update clock; other configured treatment levels map to 60 days unless the rules config is changed.',
-      'FHIR base URL is only the root FHIR endpoint. Use the OpenAPI URL field or API harness for https://api.allevasoft.com/swagger/index.html and https://api.allevasoft.com/swagger/v1/swagger.json.',
       'Alleva REST API base URL is the source for startup treatment-plan sync. Leave startup sync off until R3 and Alleva approve live sync and validate active-client, treatment-plan, treatment-review, pagination, and field mapping.',
       'OpenAPI URL is the Swagger/OpenAPI JSON definition used by the API test harness to discover operations and required fields.',
       'Client secret and API keys are write-only fields. A configured flag means a secret is stored; the secret itself is never returned to the browser.',
@@ -929,9 +904,14 @@ function readErrorMessage(status: number, payload: ApiError | null) {
   const detailText =
     typeof detail === 'string' && detail.trim()
       ? detail.trim()
+      : Array.isArray(detail)
+        ? detail
+            .map((item) => (typeof item?.msg === 'string' ? item.msg.trim() : ''))
+            .filter(Boolean)
+            .join('; ')
       : detail && typeof detail === 'object' && typeof detail.msg === 'string'
         ? detail.msg.trim()
-        : ''
+        : payload?.raw?.trim() || ''
 
   if (status === 401) return 'Your session has expired. Sign in again to continue.'
   if (status === 403) return detailText || 'Your account does not have access to that action.'
@@ -1019,13 +999,11 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     llm_analysis_instructions: settings.llm_analysis_instructions,
     emr_api_enabled: settings.emr_api_enabled,
     emr_vendor_name: settings.emr_vendor_name,
-    emr_fhir_base_url: settings.emr_fhir_base_url,
-    emr_smart_client_id: settings.emr_smart_client_id,
-    emr_smart_client_secret: '',
-    clear_emr_smart_client_secret: false,
-    emr_smart_token_url: settings.emr_smart_token_url || 'https://authorization.allevasoft.com/connect/token',
-    emr_smart_token_auth_style: settings.emr_smart_token_auth_style || 'body',
-    emr_smart_scopes: settings.emr_smart_scopes,
+    api_client_id: settings.api_client_id,
+    api_client_secret: '',
+    clear_api_client_secret: false,
+    api_oauth_token_url: settings.api_oauth_token_url || 'https://authorization.allevasoft.com/connect/token',
+    api_token_auth_style: settings.api_token_auth_style || 'body',
     emr_api_timeout_seconds: settings.emr_api_timeout_seconds,
     emr_periodic_check_enabled: settings.emr_periodic_check_enabled,
     emr_periodic_check_interval_minutes: settings.emr_periodic_check_interval_minutes || 1440,
@@ -1047,17 +1025,16 @@ function createEmrEndpointProfileForm(): EmrEndpointProfileForm {
   return {
     profile_key: 'alleva-rest-api',
     display_name: 'Alleva REST API documentation profile',
-    vendor_name: 'Alleva Rest Api',
-    adapter_key: 'alleva-fhir-document-manager',
-    fhir_base_url: '',
+    vendor_name: 'Alleva REST API',
+    adapter_key: 'alleva-rest-api',
+    api_base_url: 'https://api.allevasoft.com',
     openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
     token_url: 'https://authorization.allevasoft.com/connect/token',
     token_auth_style: 'body',
     client_id: '',
     client_secret: '',
-    scopes: 'openid fhirUser launch/patient patient/Patient.rs patient/DocumentReference.rs patient/Binary.rs patient/Provenance.rs',
     timeout_seconds: 10,
-    notes: 'Swagger/OpenAPI docs are available at https://api.allevasoft.com/swagger/index.html and /swagger/v1/swagger.json. R3/Alleva still needs to provide the separate tenant root FHIR R4 endpoint before FHIR discovery or live import can be enabled.',
+    notes: 'Saved preset only. Activate this profile to copy its values into the active App settings API connection. REST sync remains gated by R3/Alleva approval and endpoint mapping validation.',
   }
 }
 
@@ -1178,12 +1155,10 @@ function buildUploadEntry(file: File): UploadEntry {
     document_date: '',
     description: '',
     source_document_id: '',
-    source_document_reference_id: '',
     source_attachment_url: '',
     source_author: '',
     source_custodian: '',
     source_security_label: '',
-    source_provenance_id: '',
   }
 }
 
@@ -1413,7 +1388,11 @@ function buildTrend(points: (string | null | undefined)[], lookbackDays = 7): Tr
 async function readJson(response: Response) {
   const text = await response.text()
   if (!text) return null
-  return JSON.parse(text)
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { detail: response.ok ? '' : response.statusText, raw: text }
+  }
 }
 
 export function App() {
@@ -1424,6 +1403,7 @@ export function App() {
   const [status, setStatus] = useState('Sign in to upload notes, review findings, and manage approvals.')
   const [error, setError] = useState('')
   const [isBusy, setIsBusy] = useState(false)
+  const [settingsActivityLog, setSettingsActivityLog] = useState<string[]>([])
   const [mustResetPassword, setMustResetPassword] = useState(false)
   const [activeView, setActiveView] = useState<AppView>(viewFromUrl)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
@@ -1486,9 +1466,6 @@ export function App() {
   const [emrEndpointProfiles, setEmrEndpointProfiles] = useState<EmrEndpointProfile[]>([])
   const [selectedEmrEndpointProfileId, setSelectedEmrEndpointProfileId] = useState<number | null>(null)
   const [emrEndpointProfileForm, setEmrEndpointProfileForm] = useState<EmrEndpointProfileForm>(createEmrEndpointProfileForm())
-  const [emrDiscovery, setEmrDiscovery] = useState<EmrDiscovery | null>(null)
-  const [emrPlanPatientId, setEmrPlanPatientId] = useState('')
-  const [emrImportPlan, setEmrImportPlan] = useState<EmrImportPlan | null>(null)
   const [treatmentPlanChecklist, setTreatmentPlanChecklist] = useState<TreatmentPlanChecklist | null>(null)
   const [reviewSourceDiscovery, setReviewSourceDiscovery] = useState<ReviewSourceDiscovery | null>(null)
   const [workflowDefinitions, setWorkflowDefinitions] = useState<WorkflowDefinition[]>([])
@@ -1698,6 +1675,11 @@ export function App() {
   const linkedNoteSet =
     selectedChart?.source_note_set_id != null ? noteSets.find((noteSet) => noteSet.id === selectedChart.source_note_set_id) || null : null
 
+  function appendSettingsActivity(message: string) {
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setSettingsActivityLog((current) => [`${timestamp} ${message}`, ...current].slice(0, 8))
+  }
+
   async function apiRequest<T>(path: string, init?: RequestInit, includeAuth = true): Promise<T> {
     const headers = new Headers(init?.headers)
     if (includeAuth && token) headers.set('Authorization', `Bearer ${token}`)
@@ -1828,8 +1810,6 @@ export function App() {
     setEmrEndpointProfiles([])
     setSelectedEmrEndpointProfileId(null)
     setEmrEndpointProfileForm(createEmrEndpointProfileForm())
-    setEmrDiscovery(null)
-    setEmrImportPlan(null)
     setTreatmentPlanChecklist(null)
     setReviewSourceDiscovery(null)
     syncWorkflowDefinitions([])
@@ -1937,17 +1917,21 @@ export function App() {
     setIsBusy(true)
     setError('')
     setStatus('Running the safe daily review-source check...')
+    appendSettingsActivity('Started manual API readiness check.')
     try {
       const payload = await apiRequest<ReviewSourceDiscovery>('/review-source-discovery/run-daily-check', { method: 'POST' })
       setReviewSourceDiscovery(payload)
-      if (activeView === 'settings' && user?.role === 'admin') {
+      if (user?.role === 'admin') {
         const latestSettings = await apiRequest<AppSettings>('/settings')
         setAppSettings(latestSettings)
         setSettingsForm(createSettingsForm(latestSettings))
       }
       setStatus(`Daily review-source check completed in ${payload.last_check_mode || payload.refresh_mode}.`)
+      appendSettingsActivity(`API check completed: ${payload.last_check_mode || payload.refresh_mode}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to run daily review-source check')
+      const message = caught instanceof Error ? caught.message : 'Failed to run daily review-source check'
+      appendSettingsActivity(`API check failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -1957,14 +1941,18 @@ export function App() {
     setIsBusy(true)
     setError('')
     setStatus('Running Alleva REST treatment-plan sync...')
+    appendSettingsActivity('Started manual Alleva treatment-plan sync.')
     try {
       const payload = await apiRequest<AllevaTreatmentPlanSyncResponse>('/alleva/treatment-plan-sync/run', { method: 'POST' })
       setAppSettings(payload.settings)
       setSettingsForm(createSettingsForm(payload.settings))
       await loadTimelinessDashboard()
       setStatus(payload.sync_result.message)
+      appendSettingsActivity(`Treatment-plan sync ${payload.sync_result.status}: ${payload.sync_result.message}`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync')
+      const message = caught instanceof Error ? caught.message : 'Failed to run Alleva treatment-plan sync'
+      appendSettingsActivity(`Treatment-plan sync failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -2129,8 +2117,6 @@ export function App() {
         setEmrProfile(null)
         setEmrEndpointProfiles([])
         setSelectedEmrEndpointProfileId(null)
-        setEmrDiscovery(null)
-        setEmrImportPlan(null)
         syncWorkflowDefinitions(definitions, selectedWorkflowDefinitionId)
       } else {
         setUsers([])
@@ -2142,8 +2128,6 @@ export function App() {
         setEmrProfile(null)
         setEmrEndpointProfiles([])
         setSelectedEmrEndpointProfileId(null)
-        setEmrDiscovery(null)
-        setEmrImportPlan(null)
         syncWorkflowDefinitions([])
         setDeleteUserConfirmation('')
       }
@@ -2453,12 +2437,10 @@ export function App() {
             document_date: entry.document_date,
             description: entry.description,
             source_document_id: entry.source_document_id,
-            source_document_reference_id: entry.source_document_reference_id,
             source_attachment_url: entry.source_attachment_url,
             source_author: entry.source_author,
             source_custodian: entry.source_custodian,
             source_security_label: entry.source_security_label,
-            source_provenance_id: entry.source_provenance_id,
           })),
         ),
       )
@@ -3019,8 +3001,8 @@ export function App() {
   async function handleSettingsSave(event: FormEvent) {
     event.preventDefault()
     if (!settingsForm) return
-    const hasStoredEmrSecret = Boolean(appSettings?.emr_smart_client_secret_configured && !settingsForm.clear_emr_smart_client_secret)
-    const hasEmrSecret = Boolean(settingsForm.emr_smart_client_secret.trim() || hasStoredEmrSecret)
+    const hasStoredApiSecret = Boolean(appSettings?.api_client_secret_configured && !settingsForm.clear_api_client_secret)
+    const hasApiSecret = Boolean(settingsForm.api_client_secret.trim() || hasStoredApiSecret)
     const hasStoredLlmKey = Boolean(appSettings?.llm_api_key_configured && !settingsForm.clear_llm_api_key)
     const hasLlmKey = Boolean(settingsForm.llm_api_key.trim() || hasStoredLlmKey)
     if (settingsForm.llm_enabled && (!settingsForm.llm_base_url.trim() || !settingsForm.llm_model.trim() || !hasLlmKey)) {
@@ -3028,23 +3010,25 @@ export function App() {
       return
     }
     if (settingsForm.emr_api_enabled) {
-      const scopes = new Set(settingsForm.emr_smart_scopes.split(/\s+/).filter(Boolean))
-      const missingScopes = ['patient/Patient.rs', 'patient/DocumentReference.rs', 'patient/Binary.rs'].filter((scope) => !scopes.has(scope))
       const missingFields = [
-        !settingsForm.emr_fhir_base_url.trim() ? 'FHIR base URL' : '',
-        !settingsForm.emr_smart_client_id.trim() ? 'OAuth/FHIR client ID' : '',
+        !settingsForm.alleva_api_base_url.trim() ? 'Alleva REST API base URL' : '',
+        !settingsForm.alleva_openapi_url.trim() ? 'Alleva OpenAPI URL' : '',
+        !settingsForm.api_oauth_token_url.trim() ? 'OAuth token URL' : '',
+        !settingsForm.api_client_id.trim() ? 'API client ID' : '',
+        !hasApiSecret ? 'API client secret' : '',
       ].filter(Boolean)
-      if (missingFields.length || missingScopes.length) {
-        setError(`Missing EMR API setting(s): ${[...missingFields, ...missingScopes.map((scope) => `scope ${scope}`)].join(', ')}.`)
+      if (missingFields.length) {
+        setError(`Missing API setting(s): ${missingFields.join(', ')}.`)
         return
       }
     }
     if (settingsForm.emr_periodic_check_enabled) {
       const missingFields = [
-        !settingsForm.emr_fhir_base_url.trim() ? 'FHIR/API base URL' : '',
-        !settingsForm.emr_smart_token_url.trim() ? 'OAuth token URL' : '',
-        !settingsForm.emr_smart_client_id.trim() ? 'OAuth/FHIR client ID' : '',
-        !hasEmrSecret ? 'OAuth/FHIR client secret' : '',
+        !settingsForm.alleva_api_base_url.trim() ? 'REST API base URL' : '',
+        !settingsForm.alleva_openapi_url.trim() ? 'OpenAPI URL' : '',
+        !settingsForm.api_oauth_token_url.trim() ? 'OAuth token URL' : '',
+        !settingsForm.api_client_id.trim() ? 'API client ID' : '',
+        !hasApiSecret ? 'API client secret' : '',
       ].filter(Boolean)
       if (missingFields.length) {
         setError(`Missing periodic API check setting(s): ${missingFields.join(', ')}.`)
@@ -3054,9 +3038,9 @@ export function App() {
     if (settingsForm.alleva_treatment_plan_sync_enabled || settingsForm.alleva_treatment_plan_sync_on_startup) {
       const missingFields = [
         !settingsForm.alleva_api_base_url.trim() ? 'Alleva REST API base URL' : '',
-        !settingsForm.emr_smart_token_url.trim() ? 'Alleva OAuth token URL' : '',
-        !settingsForm.emr_smart_client_id.trim() ? 'Alleva API client ID' : '',
-        !hasEmrSecret ? 'Alleva API client secret' : '',
+        !settingsForm.api_oauth_token_url.trim() ? 'Alleva OAuth token URL' : '',
+        !settingsForm.api_client_id.trim() ? 'Alleva API client ID' : '',
+        !hasApiSecret ? 'Alleva API client secret' : '',
         !settingsForm.alleva_treatment_plan_sync_approved ? 'R3/Alleva live treatment-plan sync approval' : '',
         !settingsForm.alleva_treatment_plan_endpoint_mapping_validated ? 'validated Alleva treatment-plan endpoint mapping' : '',
       ].filter(Boolean)
@@ -3071,18 +3055,27 @@ export function App() {
     }
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Saving App settings.')
     try {
       const payload = await apiRequest<AppSettings>('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settingsForm),
       })
-      setAppSettings(payload)
-      setSettingsForm(createSettingsForm(payload))
+      const verifiedSettings = await apiRequest<AppSettings>('/settings')
+      setAppSettings(verifiedSettings)
+      setSettingsForm(createSettingsForm(verifiedSettings))
       setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
-      setStatus('Application settings have been updated.')
+      setStatus('Application settings have been saved and verified.')
+      appendSettingsActivity(
+        `App settings saved and verified. API client ${verifiedSettings.api_client_id ? 'stored' : 'missing'}, secret ${
+          verifiedSettings.api_client_secret_configured ? 'configured' : 'missing'
+        }.`,
+      )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to update application settings')
+      const message = caught instanceof Error ? caught.message : 'Failed to update application settings'
+      appendSettingsActivity(`App settings save failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3092,6 +3085,7 @@ export function App() {
     event?.preventDefault()
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Saving endpoint profile preset.')
     try {
       const created = await apiRequest<EmrEndpointProfile>('/emr/profiles', {
         method: 'POST',
@@ -3101,8 +3095,11 @@ export function App() {
       setEmrEndpointProfileForm(createEmrEndpointProfileForm())
       await loadEmrEndpointProfiles(created.id)
       setStatus(`Stored EMR endpoint profile ${created.display_name}.`)
+      appendSettingsActivity(`Endpoint profile saved: ${created.display_name}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to create EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to create EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile save failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3111,15 +3108,19 @@ export function App() {
   async function activateEmrEndpointProfile(profileId: number) {
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Activating endpoint profile preset.')
     try {
       const updatedSettings = await apiRequest<AppSettings>(`/emr/profiles/${profileId}/activate`, { method: 'POST' })
       setAppSettings(updatedSettings)
       setSettingsForm(createSettingsForm(updatedSettings))
       await loadEmrEndpointProfiles(profileId)
       setEmrProfile(await apiRequest<EmrProfile>('/emr/profile'))
-      setStatus('EMR endpoint profile activated for API readiness testing.')
+      setStatus('Endpoint profile copied into the active App settings API connection.')
+      appendSettingsActivity('Endpoint profile copied into active API settings.')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to activate EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to activate EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile activation failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3128,12 +3129,16 @@ export function App() {
   async function deleteEmrEndpointProfile(profileId: number) {
     setIsBusy(true)
     setError('')
+    appendSettingsActivity('Deleting endpoint profile preset.')
     try {
       const deleted = await apiRequest<{ status: string; profile_key: string }>(`/emr/profiles/${profileId}`, { method: 'DELETE' })
       await loadEmrEndpointProfiles(null)
       setStatus(`Deleted EMR endpoint profile ${deleted.profile_key}.`)
+      appendSettingsActivity(`Endpoint profile deleted: ${deleted.profile_key}.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to delete EMR endpoint profile')
+      const message = caught instanceof Error ? caught.message : 'Failed to delete EMR endpoint profile'
+      appendSettingsActivity(`Endpoint profile delete failed: ${message}`)
+      setError(message)
     } finally {
       setIsBusy(false)
     }
@@ -3310,48 +3315,6 @@ export function App() {
       setStatus(`Treatment plan override recorded for patient ${selectedTimelinessClient.patient_id}.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to save timeliness override')
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function handleEmrDiscovery() {
-    const fhirBaseUrl = settingsForm?.emr_fhir_base_url.trim() || ''
-    if (!fhirBaseUrl) {
-      setError('Enter the Alleva FHIR base URL before running discovery.')
-      return
-    }
-    setIsBusy(true)
-    setError('')
-    try {
-      const payload = await apiRequest<EmrDiscovery>('/emr/discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fhir_base_url: fhirBaseUrl }),
-      })
-      setEmrDiscovery(payload)
-      setStatus('EMR discovery completed.')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'EMR discovery failed')
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function handleEmrImportPlan() {
-    const patientId = emrPlanPatientId.trim()
-    if (!patientId) {
-      setError('Enter a patient ID or MRN before building an EMR import plan.')
-      return
-    }
-    setIsBusy(true)
-    setError('')
-    try {
-      const payload = await apiRequest<EmrImportPlan>(`/emr/import-plan?patient_id=${encodeURIComponent(patientId)}`)
-      setEmrImportPlan(payload)
-      setStatus('EMR import plan is ready.')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to build EMR import plan')
     } finally {
       setIsBusy(false)
     }
@@ -5708,7 +5671,7 @@ export function App() {
                 <div className='panel-heading'>
                   <div>
                     <h2>Application settings</h2>
-                    <p>Configure external access intelligence and the LLM used for gap-filling analysis.</p>
+                    <p>Configure local settings, the single active Alleva/API connection, optional saved endpoint presets, and disabled-by-default LLM support.</p>
                   </div>
                   <button type='button' className='ghost-button' onClick={() => void loadSettings()} disabled={isBusy}>
                     Refresh
@@ -6015,46 +5978,47 @@ export function App() {
                         }
                       />
                     </label>
+                    <section className='panel-subsection full-width'>
+                      <h3>Active Alleva/API connection</h3>
+                      <p className='muted-text field-note'>
+                        These fields are the source of truth for readiness checks, the API connectivity harness, and approved Alleva REST treatment-plan sync.
+                        Paste the client ID and client secret supplied by Alleva/R3 when using OAuth client credentials. The saved secret is encrypted locally,
+                        write-only after save, and never returned to the browser.
+                      </p>
+                      <div className='compact-status-frame' aria-live='polite'>
+                        <strong>Connection activity</strong>
+                        <pre>{settingsActivityLog.length ? settingsActivityLog.join('\n') : 'No App settings/API action has run in this browser session.'}</pre>
+                      </div>
+                    </section>
                     <label className='checkbox-row full-width'>
                       <input
                         type='checkbox'
                         checked={settingsForm.emr_api_enabled}
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_api_enabled: event.target.checked } : current))}
                       />
-                      Enable EMR API connector
+                      Enable HL7/API readiness checks
                     </label>
                     <label>
-                      EMR vendor label
+                      Integration vendor label
                       <input
                         value={settingsForm.emr_vendor_name}
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_vendor_name: event.target.value } : current))}
                       />
                     </label>
-                    <label>
-                      FHIR base URL (root FHIR R4 endpoint)
-                      <input
-                        value={settingsForm.emr_fhir_base_url}
-                        placeholder='https://your-alleva-tenant.example.com/fhir/R4'
-                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_fhir_base_url: event.target.value } : current))}
-                      />
-                    </label>
-                    <p className='muted-text field-note'>
-                      This must be the vendor-supplied root FHIR R4 endpoint used for Patient, DocumentReference, Binary, and Provenance requests. Alleva Swagger URLs such as https://api.allevasoft.com/swagger/index.html or /swagger/v1/swagger.json belong in the OpenAPI URL field or API harness, not here.
-                    </p>
                     <label className='full-width'>
-                      OAuth token URL (SMART/FHIR when used by the vendor)
+                      OAuth token URL
                       <input
-                        value={settingsForm.emr_smart_token_url}
+                        value={settingsForm.api_oauth_token_url}
                         placeholder='https://authorization.allevasoft.com/connect/token'
-                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_token_url: event.target.value } : current))}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, api_oauth_token_url: event.target.value } : current))}
                       />
                     </label>
                     <label>
                       Token auth style
                       <select
-                        value={settingsForm.emr_smart_token_auth_style}
+                        value={settingsForm.api_token_auth_style}
                         onChange={(event) =>
-                          setSettingsForm((current) => (current ? { ...current, emr_smart_token_auth_style: event.target.value } : current))
+                          setSettingsForm((current) => (current ? { ...current, api_token_auth_style: event.target.value } : current))
                         }
                       >
                         <option value='body'>Body credentials</option>
@@ -6065,26 +6029,26 @@ export function App() {
                       </select>
                     </label>
                     <label>
-                      OAuth/FHIR client ID
+                      API client ID
                       <input
-                        value={settingsForm.emr_smart_client_id}
-                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_client_id: event.target.value } : current))}
+                        value={settingsForm.api_client_id}
+                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, api_client_id: event.target.value } : current))}
                       />
                     </label>
                     <label>
-                      OAuth/FHIR client secret
+                      API client secret
                       <input
                         type='password'
                         autoComplete='off'
-                        value={settingsForm.emr_smart_client_secret}
-                        placeholder={appSettings?.emr_smart_client_secret_configured ? 'Configured. Enter a new secret to replace it.' : 'Optional until EMR registration'}
+                        value={settingsForm.api_client_secret}
+                        placeholder={appSettings?.api_client_secret_configured ? 'Configured. Enter a new secret to replace it.' : 'Required for approved REST sync and authenticated API checks'}
                         onChange={(event) =>
                           setSettingsForm((current) =>
                             current
                               ? {
                                   ...current,
-                                  emr_smart_client_secret: event.target.value,
-                                  clear_emr_smart_client_secret: false,
+                                  api_client_secret: event.target.value,
+                                  clear_api_client_secret: false,
                                 }
                               : current,
                           )
@@ -6094,20 +6058,17 @@ export function App() {
                     <label className='checkbox-row'>
                       <input
                         type='checkbox'
-                        checked={settingsForm.clear_emr_smart_client_secret}
+                        checked={settingsForm.clear_api_client_secret}
                         onChange={(event) =>
-                          setSettingsForm((current) => (current ? { ...current, clear_emr_smart_client_secret: event.target.checked } : current))
+                          setSettingsForm((current) => (current ? { ...current, clear_api_client_secret: event.target.checked } : current))
                         }
                       />
-                      Clear stored OAuth/FHIR client secret
+                      Clear stored API client secret
                     </label>
-                    <label className='full-width'>
-                      OAuth/FHIR scopes
-                      <input
-                        value={settingsForm.emr_smart_scopes}
-                        onChange={(event) => setSettingsForm((current) => (current ? { ...current, emr_smart_scopes: event.target.value } : current))}
-                      />
-                    </label>
+                    <p className='muted-text field-note full-width'>
+                      For Alleva OAuth, pasting the client ID and client secret here is expected. To avoid duplicate entry, save reusable alternatives under
+                      API endpoint presets below, then activate a preset to copy it into these active fields.
+                    </p>
                     <label>
                       EMR timeout (seconds)
                       <input
@@ -6130,6 +6091,9 @@ export function App() {
                       />
                       Periodically run safe Alleva API checks
                     </label>
+                    <p className='muted-text field-note full-width'>
+                      This checkbox only turns on the background schedule. The manual Run API check now button below stays available for one-time configuration tests.
+                    </p>
                     <label>
                       Check interval (minutes)
                       <input
@@ -6147,7 +6111,7 @@ export function App() {
                     <section className='panel-subsection full-width'>
                       <h3>Alleva REST treatment-plan sync</h3>
                       <p className='muted-text field-note'>
-                        This path uses Alleva REST endpoints such as /clients, /treatment-plans, and /treatment-reviews. It does not need a FHIR base URL. R3 compliance checks run inside this app after the mapped data is imported.
+                        This path uses Alleva REST endpoints such as /clients, /treatment-plans, and /treatment-reviews. R3 compliance checks run inside this app after the mapped data is imported.
                       </p>
                       <div className='form-grid'>
                         <label>
@@ -6236,12 +6200,16 @@ export function App() {
                           Active-client, treatment-plan, review, pagination, and status fields are validated
                         </label>
                       </div>
+                      <p className='muted-text field-note'>
+                        The sync, startup, approval, and mapping checkboxes are separate safety gates. The manual button below will still run and report skipped or
+                        blocked until the saved connection, approval, and mapped Alleva fields are ready.
+                      </p>
                       <div className='form-actions'>
                         <button
                           type='button'
                           className='ghost-button'
                           onClick={() => void runAllevaTreatmentPlanSyncNow()}
-                          disabled={isBusy || !appSettings?.alleva_treatment_plan_sync_enabled}
+                          disabled={isBusy}
                         >
                           Run treatment-plan sync now
                         </button>
@@ -6251,7 +6219,11 @@ export function App() {
                       ) : null}
                     </section>
                     <section className='panel-subsection full-width'>
-                      <h3>Alleva import profile</h3>
+                      <h3>Alleva REST/OpenAPI readiness</h3>
+                      <p className='muted-text field-note'>
+                        This readiness panel uses the active connection saved above. Use the API connectivity harness for one-time tests or OpenAPI operation
+                        checks; use endpoint presets only when you need to save alternate Alleva or future vendor connection values.
+                      </p>
                       <div className='fact-list'>
                         <div>
                           <dt>Adapter</dt>
@@ -6271,14 +6243,11 @@ export function App() {
                         </div>
                       </div>
                       <div className='form-actions'>
-                        <button type='button' className='ghost-button' onClick={handleEmrDiscovery} disabled={isBusy}>
-                          Check FHIR/OAuth discovery
-                        </button>
                         <button
                           type='button'
                           className='ghost-button'
                           onClick={() => void runDailyReviewSourceCheck()}
-                          disabled={isBusy || !(settingsForm?.emr_periodic_check_enabled || appSettings?.emr_periodic_check_enabled)}
+                          disabled={isBusy}
                         >
                           Run API check now
                         </button>
@@ -6287,36 +6256,12 @@ export function App() {
                         </button>
                       </div>
                       {appSettings?.emr_last_check_message ? <p className='muted-text'>Last API check: {appSettings.emr_last_check_message}</p> : null}
-                      {emrDiscovery ? (
-                        <p className='muted-text'>
-                          Discovery: {emrDiscovery.status}; auth endpoint {emrDiscovery.authorization_endpoint_configured ? 'found' : 'missing'}, token endpoint{' '}
-                          {emrDiscovery.token_endpoint_configured ? 'found' : 'missing'}.
-                        </p>
-                      ) : null}
-                      <div className='filter-row'>
-                        <label>
-                          Import plan patient ID
-                          <input value={emrPlanPatientId} onChange={(event) => setEmrPlanPatientId(event.target.value)} />
-                        </label>
-                        <button type='button' className='ghost-button' onClick={handleEmrImportPlan} disabled={isBusy}>
-                          Build import plan
-                        </button>
-                      </div>
-                      {emrImportPlan ? (
-                        <ol className='compact-list'>
-                          {emrImportPlan.planned_requests.map((request) => (
-                            <li key={request.step}>
-                              <strong>{request.method}</strong> {request.url}
-                            </li>
-                          ))}
-                        </ol>
-                      ) : null}
                     </section>
                     <section className='panel-subsection full-width'>
                       <div className='panel-heading'>
                         <div>
-                          <h3>Stored EMR endpoint profiles</h3>
-                          <p>Save Alleva now and future EMR/FHIR endpoints without exposing stored secrets back to the browser.</p>
+                          <h3>Stored API endpoint profiles</h3>
+                          <p>Save optional presets. Activating a preset copies it into the active connection above without exposing stored secrets back to the browser.</p>
                         </div>
                         <button type='button' className='ghost-button' onClick={() => void loadEmrEndpointProfiles(selectedEmrEndpointProfileId)} disabled={isBusy}>
                           Refresh profiles
@@ -6359,8 +6304,12 @@ export function App() {
                             <>
                               <div className='fact-list'>
                                 <div>
-                                  <dt>FHIR base URL</dt>
-                                  <dd>{selectedEmrEndpointProfile.fhir_base_url || 'Not set'}</dd>
+                                  <dt>REST API base URL</dt>
+                                  <dd>{selectedEmrEndpointProfile.api_base_url || 'Not set'}</dd>
+                                </div>
+                                <div>
+                                  <dt>OpenAPI URL</dt>
+                                  <dd>{selectedEmrEndpointProfile.openapi_url || 'Not set'}</dd>
                                 </div>
                                 <div>
                                   <dt>Token URL</dt>
@@ -6370,10 +6319,6 @@ export function App() {
                                   <dt>Client ID</dt>
                                   <dd>{selectedEmrEndpointProfile.client_id_configured ? selectedEmrEndpointProfile.client_id : 'Not set'}</dd>
                                 </div>
-                                <div>
-                                  <dt>Scopes</dt>
-                                  <dd>{selectedEmrEndpointProfile.scopes || 'Not set'}</dd>
-                                </div>
                               </div>
                               <div className='form-actions'>
                                 <button
@@ -6382,7 +6327,7 @@ export function App() {
                                   onClick={() => void activateEmrEndpointProfile(selectedEmrEndpointProfile.id)}
                                   disabled={isBusy || selectedEmrEndpointProfile.is_default}
                                 >
-                                  Use for API tests
+                                  Use for active API settings
                                 </button>
                                 <button
                                   type='button'
@@ -6433,11 +6378,11 @@ export function App() {
                             />
                           </label>
                           <label className='full-width'>
-                            FHIR base URL
+                            REST API base URL
                             <input
-                              placeholder='https://your-alleva-tenant.example.com/fhir/R4'
-                              value={emrEndpointProfileForm.fhir_base_url}
-                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, fhir_base_url: event.target.value }))}
+                              placeholder='https://api.allevasoft.com'
+                              value={emrEndpointProfileForm.api_base_url}
+                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, api_base_url: event.target.value }))}
                             />
                           </label>
                           <label className='full-width'>
@@ -6491,13 +6436,6 @@ export function App() {
                               max={60}
                               value={emrEndpointProfileForm.timeout_seconds}
                               onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, timeout_seconds: Number(event.target.value || 10) }))}
-                            />
-                          </label>
-                          <label className='full-width'>
-                            OAuth/FHIR scopes
-                            <input
-                              value={emrEndpointProfileForm.scopes}
-                              onChange={(event) => setEmrEndpointProfileForm((current) => ({ ...current, scopes: event.target.value }))}
                             />
                           </label>
                           <label className='full-width'>

@@ -84,6 +84,65 @@ class MockedHttpxClient:
             return httpx.Response(201, json={'created': True, 'payload': {'accepted': True}})
         if url == 'https://api.example.test/huge':
             return httpx.Response(200, json={'items': [{'row': index, 'text': 'x' * 2000} for index in range(200)]})
+        if url.startswith('https://api.example.test/treatment-plans?'):
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        'id': 101,
+                        'client': {'clientId': 'PAT-ACTIVE-001'},
+                        'description': 'Current synthetic plan',
+                        'startDate': '2026-01-01T00:00:00',
+                        'endDate': '2099-12-31T00:00:00',
+                        'isActive': True,
+                        'isComplete': True,
+                        'lastModified': '2026-01-02T00:00:00',
+                    },
+                    {
+                        'id': 102,
+                        'client': {'clientId': 'PAT-OVERDUE-001'},
+                        'description': 'Overdue synthetic plan',
+                        'startDate': '1999-01-01T00:00:00',
+                        'endDate': '2000-01-01T00:00:00',
+                        'isActive': True,
+                        'isComplete': True,
+                    },
+                    {
+                        'id': 103,
+                        'client': {'clientId': 'PAT-INACTIVE-001'},
+                        'description': 'Inactive synthetic plan',
+                        'startDate': '2026-01-01T00:00:00',
+                        'endDate': '2099-12-31T00:00:00',
+                        'isActive': False,
+                        'isComplete': True,
+                    },
+                ],
+            )
+        if url.startswith('https://api.example.test/clients?'):
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        'id': 201,
+                        'clientId': 'PAT-ACTIVE-001',
+                        'status': 'Active',
+                        'isClient': True,
+                        'admissionDateTime': '2026-02-03T09:00:00',
+                        'facilityName': 'Synthetic Facility',
+                        'levelOfCare': 'IOP',
+                    },
+                    {
+                        'id': 202,
+                        'clientId': 'PAT-DISCHARGED-001',
+                        'status': 'Discharged',
+                        'isClient': True,
+                        'admissionDateTime': '2025-02-03T09:00:00',
+                        'dischargeDateTime': '2025-03-03T09:00:00',
+                    },
+                ],
+            )
         return httpx.Response(404, text='not found')
 
 
@@ -195,7 +254,7 @@ def test_client_credentials_token_request_returns_redacted_public_result(monkeyp
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
     )
 
@@ -214,7 +273,7 @@ def test_client_credentials_token_request_supports_basic_auth_style(monkeypatch)
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
         token_auth_style='basic',
     )
@@ -232,7 +291,7 @@ def test_pull_api_definitions_can_use_client_credentials_bearer_token(monkeypatc
         token_url='https://authorization.example.test/connect/token',
         client_id='mock-client',
         client_secret='mock-secret',
-        scope='patient/Patient.rs',
+        scope='connectivity.read',
         timeout_seconds=5,
     )
     result = pull_api_definitions(
@@ -382,6 +441,7 @@ def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
             json={
                 'vendor_name': 'Alleva API',
                 'api_base_url': 'https://api.example.test',
+                'openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
                 'api_key': 'super-secret-api-key',
                 'api_enabled': True,
             },
@@ -394,6 +454,7 @@ def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
         config = client.get('/api/api-configuration', headers=headers)
         assert config.status_code == 200
         assert config.json()['api_key_configured'] is True
+        assert config.json()['openapi_url'] == 'https://api.example.test/swagger/v1/swagger.json'
         assert 'super-secret-api-key' not in config.text
 
         sample = client.get('/api/api-configuration/sample-openapi.json')
@@ -404,7 +465,7 @@ def test_api_configuration_boundary_states_are_non_secret(app_with_sqlite):
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting)).scalar_one()
-        assert text_secret_is_encrypted(settings_row.emr_smart_client_secret)
+        assert text_secret_is_encrypted(settings_row.api_client_secret)
     finally:
         db.close()
 
@@ -539,6 +600,141 @@ def test_api_configuration_routes_support_saved_client_credentials_without_expos
         db.close()
 
 
+def test_app_settings_save_reload_preserves_oauth_secret_and_harness_uses_oauth(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.models.models import AppSetting
+    from app.services.secure_storage import decrypt_text_secret
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+
+        saved = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_api_base_url': 'https://api.example.test',
+                'alleva_openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_token_auth_style': 'body',
+                'api_client_id': 'persisted-client',
+                'api_client_secret': 'persisted-secret',
+                'emr_periodic_check_enabled': True,
+                'emr_periodic_check_interval_minutes': 60,
+            },
+        )
+        assert saved.status_code == 200
+        assert saved.json()['api_client_secret_configured'] is True
+
+        reloaded = client.get('/api/settings', headers=headers)
+        assert reloaded.status_code == 200
+        assert reloaded.json()['api_client_id'] == 'persisted-client'
+        assert reloaded.json()['api_client_secret_configured'] is True
+
+        second_save_without_secret = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'organization_name': 'R3 Recovery Services',
+                'api_client_id': 'persisted-client',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'emr_periodic_check_enabled': True,
+                'emr_periodic_check_interval_minutes': 120,
+            },
+        )
+        assert second_save_without_secret.status_code == 200
+        assert second_save_without_secret.json()['api_client_secret_configured'] is True
+        assert second_save_without_secret.json()['emr_periodic_check_interval_minutes'] == 120
+
+        harness_config = client.get('/api/api-configuration', headers=headers)
+        assert harness_config.status_code == 200
+        assert harness_config.json()['client_id'] == 'persisted-client'
+        assert harness_config.json()['client_secret_configured'] is True
+        assert harness_config.json()['recommended_auth_mode'] == 'client_credentials'
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting)).scalar_one()
+        assert decrypt_text_secret(settings_row.api_client_secret) == 'persisted-secret'
+        assert settings_row.emr_periodic_check_interval_minutes == 120
+    finally:
+        db.close()
+
+
+def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_rows(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+    monkeypatch.setattr('app.api.api_config_routes.httpx.Client', MockedHttpxClient)
+    app, session_local = app_with_sqlite
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.models.models import AuditLog
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+        saved = client.patch(
+            '/api/api-configuration',
+            headers=headers,
+            json={
+                'vendor_name': 'Mock Alleva API',
+                'api_base_url': 'https://api.example.test',
+                'client_id': 'saved-client',
+                'client_secret': 'saved-secret',
+                'token_url': 'https://authorization.example.test/connect/token',
+                'token_auth_style': 'body',
+            },
+        )
+        assert saved.status_code == 200
+
+        base_body = {
+            'swagger_ui_url': 'https://api.example.test/swagger/index.html',
+            'api_base_url': 'https://api.example.test',
+            'openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+            'auth_mode': 'client_credentials',
+            'use_saved_client_credentials': True,
+            'timeout_seconds': 5,
+            'max_pages': 2,
+            'operation_parameters': {'Limit': 500, 'Cursor': 0, 'api-version': '1.0', 'X-Version': '1.0'},
+        }
+        active = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_treatment_plans'})
+        assert active.status_code == 200
+        assert active.json()['returned_count'] == 2
+        assert {row['patient_id'] for row in active.json()['rows']} == {'PAT-ACTIVE-001', 'PAT-OVERDUE-001'}
+
+        overdue = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'overdue_treatment_plans'})
+        assert overdue.status_code == 200
+        assert overdue.json()['returned_count'] == 1
+        assert overdue.json()['rows'][0]['patient_id'] == 'PAT-OVERDUE-001'
+        assert 'before' in overdue.json()['rows'][0]['why']
+
+        inactive = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'inactive_treatment_plans'})
+        assert inactive.status_code == 200
+        assert inactive.json()['returned_count'] == 1
+        assert inactive.json()['rows'][0]['patient_id'] == 'PAT-INACTIVE-001'
+
+        patients = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_patients'})
+        assert patients.status_code == 200
+        assert patients.json()['returned_count'] == 1
+        assert patients.json()['rows'][0]['patient_id'] == 'PAT-ACTIVE-001'
+        assert patients.json()['rows'][0]['first_admitted'] == '2026-02-03'
+
+    db = session_local()
+    try:
+        logs = db.execute(select(AuditLog).where(AuditLog.action == 'api_configuration.alleva_quick_pull')).scalars().all()
+        serialized = ' '.join(f'{log.message} {log.details}' for log in logs)
+        assert 'PAT-ACTIVE-001' not in serialized
+        assert 'PAT-OVERDUE-001' not in serialized
+        assert 'saved-secret' not in serialized
+    finally:
+        db.close()
+
+
 def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite, monkeypatch):
     monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
     app, session_local = app_with_sqlite
@@ -555,11 +751,12 @@ def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite
             '/api/settings',
             headers=headers,
             json={
-                'emr_fhir_base_url': 'https://api.example.test',
-                'emr_smart_client_id': 'saved-client',
-                'emr_smart_client_secret': 'saved-secret',
-                'emr_smart_token_url': 'https://authorization.example.test/connect/token',
-                'emr_smart_token_auth_style': 'all',
+                'alleva_api_base_url': 'https://api.example.test',
+                'alleva_openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'api_client_id': 'saved-client',
+                'api_client_secret': 'saved-secret',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_token_auth_style': 'all',
                 'emr_periodic_check_enabled': True,
                 'emr_periodic_check_interval_minutes': 60,
             },
@@ -571,9 +768,56 @@ def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite
         checked = client.post('/api/review-source-discovery/run-daily-check', headers=headers)
         assert checked.status_code == 200
         payload = checked.json()
-        assert payload['last_check_mode'] == 'periodic_api_readiness_check'
+        assert payload['last_check_mode'] == 'manual_api_readiness_check'
         assert payload['daily_monitoring_enabled'] is True
         assert payload['last_successful_check_at']
+        assert 'saved-secret' not in checked.text
+        assert 'mock-access-token' not in checked.text
+
+    db = session_local()
+    try:
+        settings_row = db.execute(select(AppSetting)).scalar_one()
+        assert settings_row.emr_last_check_status == 'ok'
+        assert settings_row.emr_last_successful_check_at is not None
+    finally:
+        db.close()
+
+
+def test_review_source_daily_check_uses_saved_settings_when_scheduler_is_off(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', MockedHttpxClient)
+    app, session_local = app_with_sqlite
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.models.models import AppSetting
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+        saved = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_api_base_url': 'https://api.example.test',
+                'alleva_openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'api_client_id': 'saved-client',
+                'api_client_secret': 'saved-secret',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_token_auth_style': 'all',
+                'emr_periodic_check_enabled': False,
+            },
+        )
+        assert saved.status_code == 200
+        assert saved.json()['emr_periodic_check_enabled'] is False
+
+        checked = client.post('/api/review-source-discovery/run-daily-check', headers=headers)
+        assert checked.status_code == 200
+        payload = checked.json()
+        assert payload['last_check_mode'] == 'manual_api_readiness_check'
+        assert payload['daily_monitoring_enabled'] is False
+        assert payload['api_mode_label'] == 'Manual readiness check succeeded'
+        assert 'active App settings connection' in payload['plain_english_status']
         assert 'saved-secret' not in checked.text
         assert 'mock-access-token' not in checked.text
 

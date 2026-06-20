@@ -39,7 +39,12 @@ def _status_counts(items: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def _api_mode(app_settings: AppSetting) -> str:
-    configured = bool(app_settings.emr_fhir_base_url.strip() or app_settings.emr_smart_client_id.strip() or app_settings.emr_smart_client_secret)
+    configured = bool(
+        app_settings.alleva_api_base_url.strip()
+        and app_settings.api_oauth_token_url.strip()
+        and app_settings.api_client_id.strip()
+        and app_settings.api_client_secret
+    )
     if app_settings.emr_periodic_check_enabled and configured:
         return 'periodic_readiness_check'
     if app_settings.emr_api_enabled and configured:
@@ -186,7 +191,7 @@ def discovery_payload(db: Session, app_settings: AppSetting, note_sets: list[Pat
         'next_refresh_at': next_check.isoformat(),
         'live_import_enabled': False,
         'live_import_status': 'disabled_until_vendor_credentials_mapping_and_compliance_approval',
-        'api_configured': bool(app_settings.emr_fhir_base_url and app_settings.emr_smart_client_id and app_settings.emr_smart_client_secret),
+        'api_configured': bool(app_settings.alleva_api_base_url and app_settings.api_client_id and app_settings.api_client_secret),
         'api_mode': api_mode,
         'api_mode_label': _api_mode_label(api_mode),
         'daily_monitoring_enabled': app_settings.emr_periodic_check_enabled,

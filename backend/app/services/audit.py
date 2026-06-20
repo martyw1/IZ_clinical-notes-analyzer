@@ -52,7 +52,7 @@ TRACKED_MODELS = (
 )
 SENSITIVE_FIELDS: dict[str, set[str]] = {
     'User': {'password_hash'},
-    'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'emr_smart_client_secret'},
+    'AppSetting': {'llm_api_key', 'access_reputation_api_key', 'api_client_secret'},
     'Chart': {'notes', 'other_details', 'system_summary', 'manager_comment'},
     'AuditItemResponse': {'notes', 'evidence_location'},
     'PatientNoteSet': {'upload_notes'},
@@ -62,7 +62,6 @@ SENSITIVE_FIELDS: dict[str, set[str]] = {
         'storage_path',
         'description',
         'source_document_id',
-        'source_document_reference_id',
         'source_attachment_url',
         'source_author',
         'source_custodian',
@@ -139,10 +138,16 @@ def _extract_request_context(request: Request | None = None) -> AuditContext:
 
     route = request.scope.get('route')
     route_template = getattr(route, 'path', None)
+    existing = _audit_context_var.get()
+    request_actor_context = getattr(request.state, 'audit_actor_context', None)
+    actor_context = request_actor_context if isinstance(request_actor_context, AuditContext) else existing
     return AuditContext(
         request_id=request_id,
         correlation_id=correlation_id,
-        actor_type='human',
+        actor_id=actor_context.actor_id if actor_context else None,
+        actor_username=actor_context.actor_username if actor_context else None,
+        actor_role=actor_context.actor_role if actor_context else None,
+        actor_type=actor_context.actor_type if actor_context else 'human',
         source_ip=source_ip,
         forwarded_for=forwarded_for,
         source_host=request.headers.get('host'),
@@ -169,6 +174,7 @@ def bind_request_context(request: Request) -> Token:
     request.state.request_id = context.request_id
     request.state.correlation_id = context.correlation_id
     request.state.audit_actor = None
+    request.state.audit_actor_context = None
     return _audit_context_var.set(context)
 
 
@@ -217,18 +223,44 @@ def reset_audit_context(token: Token) -> None:
     _audit_context_var.reset(token)
 
 
-def set_actor_context(user: User, request: Request | None = None) -> None:
-    current = _extract_request_context(request)
-    updated = replace(
-        current,
-        actor_id=user.id,
-        actor_username=user.username,
-        actor_role=user.role.value,
+def _role_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        return str(value.value)
+    return str(value)
+
+
+def _actor_context_from_user(user: User, base: AuditContext) -> AuditContext:
+    actor_id = base.actor_id
+    actor_username = base.actor_username
+    actor_role = base.actor_role
+    try:
+        state = inspect(user)
+        if state.identity and state.identity[0] is not None:
+            actor_id = int(state.identity[0])
+        values = getattr(state, 'dict', {}) or {}
+        actor_username = str(values.get('username') or actor_username or '')
+        actor_role = _role_value(values.get('role')) or actor_role
+    except Exception:
+        # Detached or otherwise unusual ORM objects should never break audit logging.
+        pass
+    return replace(
+        base,
+        actor_id=actor_id,
+        actor_username=actor_username or None,
+        actor_role=actor_role,
         actor_type='human',
     )
+
+
+def set_actor_context(user: User, request: Request | None = None) -> None:
+    current = _extract_request_context(request)
+    updated = _actor_context_from_user(user, current)
     _audit_context_var.set(updated)
     if request is not None:
-        request.state.audit_actor = user
+        request.state.audit_actor = None
+        request.state.audit_actor_context = updated
         request.state.request_id = updated.request_id
         request.state.correlation_id = updated.correlation_id
 
@@ -340,66 +372,6 @@ def _cef_extension(record: dict[str, Any]) -> str:
     return ' '.join(f'{key}={_escape_cef(value)}' for key, value in parts.items() if value not in (None, ''))
 
 
-def _fhir_action(action: str) -> str:
-    if action.endswith('create') or action.endswith('insert.commit'):
-        return 'C'
-    if action.endswith('update') or action.endswith('update.commit'):
-        return 'U'
-    if action.endswith('delete') or action.endswith('delete.commit'):
-        return 'D'
-    if action.endswith('read') or action.endswith('list') or action.startswith('http.request'):
-        return 'R'
-    if action.endswith('login') or action.endswith('transition') or action.startswith('system.'):
-        return 'E'
-    return 'E'
-
-
-def _fhir_outcome(outcome_status: str) -> str:
-    return {
-        'success': '0',
-        'failure': '4',
-        'rolled_back': '8',
-    }.get(outcome_status, '12')
-
-
-def _build_fhir_audit_event(record: dict[str, Any]) -> dict[str, Any]:
-    entity: list[dict[str, Any]] = []
-    if record.get('target_entity'):
-        entity.append(
-            {
-                'name': record['target_entity'],
-                'detail': [
-                    {'type': 'beforeState', 'valueString': record['before_state'] or ''},
-                    {'type': 'afterState', 'valueString': record['after_state'] or ''},
-                    {'type': 'diffState', 'valueString': record['diff_state'] or ''},
-                ],
-            }
-        )
-    if record.get('patient_id'):
-        entity.append({'name': f"patient:{record['patient_id']}"})
-
-    return {
-        'resourceType': 'AuditEvent',
-        'id': record['event_id'],
-        'type': {'code': record['event_category'], 'display': record['action']},
-        'action': _fhir_action(record['action']),
-        'recorded': _serialize_scalar(record['timestamp_utc']),
-        'outcome': _fhir_outcome(record['outcome_status']),
-        'outcomeDesc': record['message'],
-        'agent': [
-            {
-                'requestor': record.get('actor_type') == 'human',
-                'type': {'text': record.get('actor_type') or 'system'},
-                'who': {'display': record.get('actor_username') or 'system'},
-                'role': [{'text': record.get('actor_role') or 'system'}],
-                'network': {'address': record.get('source_ip') or '', 'type': '2'},
-            }
-        ],
-        'source': {'observer': {'display': settings.app_name}},
-        'entity': entity,
-    }
-
-
 def _build_record(
     *,
     action: str,
@@ -462,7 +434,6 @@ def _build_record(
         'cef_severity': _cef_severity(severity),
         'cef_extension': '',
         'cef_payload': '',
-        'fhir_audit_event': '',
     }
     record['cef_extension'] = _cef_extension(record)
     record['cef_payload'] = (
@@ -471,7 +442,6 @@ def _build_record(
         f"{_escape_cef(record['cef_signature_id'])}|{_escape_cef(record['cef_name'])}|"
         f"{record['cef_severity']}|{record['cef_extension']}"
     )
-    record['fhir_audit_event'] = _canonical_json(_build_fhir_audit_event(record))
     return record
 
 
@@ -541,7 +511,7 @@ def log_event(
         set_actor_context(actor, request)
     context = _extract_request_context(request) if request is not None else current_audit_context()
     if actor is not None:
-        context = replace(context, actor_id=actor.id, actor_username=actor.username, actor_role=actor.role.value, actor_type='human')
+        context = _actor_context_from_user(actor, context)
     _persist_records(
         [
             _build_record(
@@ -566,10 +536,8 @@ def log_event(
 
 
 def log_request_completed(request: Request, *, status_code: int, duration_ms: float, severity: str = 'info') -> None:
-    actor = getattr(request.state, 'audit_actor', None)
     log_event(
         request=request,
-        actor=actor,
         action='http.request.completed',
         event_category='http_request',
         outcome_status='success' if status_code < 400 else 'failure',
@@ -584,10 +552,8 @@ def log_request_completed(request: Request, *, status_code: int, duration_ms: fl
 
 
 def log_unhandled_exception(request: Request, exc: Exception, *, duration_ms: float) -> None:
-    actor = getattr(request.state, 'audit_actor', None)
     log_event(
         request=request,
-        actor=actor,
         action='http.request.exception',
         event_category='http_request',
         outcome_status='failure',
@@ -743,6 +709,5 @@ def register_session_audit_events(session_factory: sessionmaker) -> None:
                 f"{_escape_cef(updated['cef_signature_id'])}|{_escape_cef(updated['cef_name'])}|"
                 f"{updated['cef_severity']}|{updated['cef_extension']}"
             )
-            updated['fhir_audit_event'] = _canonical_json(_build_fhir_audit_event(updated))
             rolled_back.append(updated)
         _persist_records(rolled_back)

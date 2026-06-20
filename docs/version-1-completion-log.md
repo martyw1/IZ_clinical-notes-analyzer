@@ -1,5 +1,33 @@
 # Version 1 Completion Log
 
+## 2026-06-19 1.4.4 API Settings Consolidation and Startup Audit Repair
+
+- Updated version metadata to `1.4.4` / build `2026.06.19.2`.
+- Repaired legacy SQLite audit-log schemas that still had the retired `audit_logs.fhir_audit_event` column marked as required, which caused startup and button-click traceback spam after FHIR audit payload removal.
+- Clarified App settings, Help, and the standalone API harness around one active Alleva/API connection plus optional saved endpoint presets.
+- Documented that pasting the R3/Alleva client ID and client secret is the expected OAuth client-credentials setup; saved secrets stay encrypted locally and are never returned to the browser.
+- Fixed the API harness save action so the OpenAPI URL is saved with the active API configuration.
+- Added Alleva quick-pull harness buttons for active treatment plans, overdue active treatment plans with computed reasons, inactive treatment plans with computed reasons, and active patients with patient ID/admission date.
+- Kept manual Run API Check Now and Run treatment-plan sync now clickable so they report skipped, blocked, failed, or successful statuses instead of appearing inactive.
+- Hardened audit actor handling after database commits so endpoint-profile saves and error logging do not raise detached-user tracebacks.
+- Verified App Settings saves by re-reading persisted settings, preserved encrypted API client secrets across later saves that leave the secret field blank, and defaulted the standalone harness to OAuth when saved client credentials exist.
+- Updated the Chart Audit Run daily check response so it states the active App Settings connection/check result it used.
+
+Validation completed:
+- Backend tests passed with `100 passed, 2 skipped`.
+- Frontend Vitest passed with `16 passed`.
+- Frontend production build passed.
+- Windows local stack smoke and API configuration smoke passed with synthetic/local sample data.
+- Normal AppData startup and authenticated UI button-event audit check passed with no legacy audit persistence error patterns.
+
+## 2026-06-19 1.4.3 Alleva REST/OpenAPI Readiness Cleanup
+
+- Updated version metadata to `1.4.3` / build `2026.06.19.1`.
+- Removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan routes, read scopes, UI fields, defaults, validation requirements, tests, and synthetic example payloads from Alleva workflows.
+- Reframed Alleva setup as REST/OpenAPI/HL7-readiness only while preserving encrypted API credential storage, OpenAPI operation testing, and gated REST treatment-plan sync approval controls.
+- Updated README, Windows/UAT docs, API/readiness docs, runbook, architecture/codebase docs, blocker notes, changelog, and completion logs for the new boundary.
+- Verification passed backend pytest (`95 passed, 2 skipped`), frontend Vitest (`16 passed`), and frontend production build.
+
 ## 2026-06-18 1.4.2 Manual Upload Button Usability
 
 - Updated version metadata to `1.4.2` / build `2026.06.18.2`.

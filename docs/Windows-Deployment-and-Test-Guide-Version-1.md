@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current patch version: `1.4.2` / build `2026.06.18.2`.
+Current patch version: `1.4.4` / build `2026.06.20.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Version 1.4.2 is the Alleva REST treatment-plan sync readiness patch. It keeps the Version 1 startup reliability, stale-build safeguards, 42-step workflow coverage, redacted PDF handling, treatment-plan date-clock behavior, workflow-step exports, and API harness hardening while separating Alleva REST sync from optional FHIR readiness.
+Version 1.4.4 is the API settings consolidation and startup audit repair patch. It keeps the Version 1 startup reliability, stale-build safeguards, 42-step workflow coverage, redacted PDF handling, treatment-plan date-clock behavior, workflow-step exports, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
 
 ## Prerequisites for Source Build
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Version 1.4.2 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Version 1.4.4 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.2`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.2.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Version 1.4.2 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Version 1.4.4 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 

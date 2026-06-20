@@ -69,12 +69,10 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-15",
     "description": "Admission intake packet and baseline consent forms.",
     "source_document_id": "cf-100245-0001",
-    "source_document_reference_id": "DocumentReference/cf-100245-0001",
-    "source_attachment_url": "Binary/cf-100245-0001-pdf",
+    "source_attachment_url": "https://api.allevasoft.com/documents/cf-100245-0001/download",
     "source_author": "M. Johnson, MS, LPC",
     "source_custodian": "R3 Recovery Services",
-    "source_security_label": "clinical",
-    "source_provenance_id": "Provenance/cf-100245-0001"
+    "source_security_label": "clinical"
   },
   {
     "client_file_name": "ALV-100245_Safety-Plan_2026-04-15.pdf",
@@ -87,12 +85,10 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-15",
     "description": "Client safety plan completed at admission.",
     "source_document_id": "cf-100245-0002",
-    "source_document_reference_id": "DocumentReference/cf-100245-0002",
-    "source_attachment_url": "Binary/cf-100245-0002-pdf",
+    "source_attachment_url": "https://api.allevasoft.com/documents/cf-100245-0002/download",
     "source_author": "M. Johnson, MS, LPC",
     "source_custodian": "R3 Recovery Services",
-    "source_security_label": "clinical",
-    "source_provenance_id": "Provenance/cf-100245-0002"
+    "source_security_label": "clinical"
   },
   {
     "client_file_name": "ALV-100245_Progress-Note_2026-04-22.txt",
@@ -105,12 +101,10 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-22",
     "description": "Individual session progress note.",
     "source_document_id": "note-100245-0422",
-    "source_document_reference_id": "DocumentReference/note-100245-0422",
-    "source_attachment_url": "Binary/note-100245-0422-txt",
+    "source_attachment_url": "https://api.allevasoft.com/documents/note-100245-0422/download",
     "source_author": "M. Johnson, MS, LPC",
     "source_custodian": "R3 Recovery Services",
-    "source_security_label": "clinical",
-    "source_provenance_id": "Provenance/note-100245-0422"
+    "source_security_label": "clinical"
   },
   {
     "client_file_name": "ALV-100245_UDS-Lab_2026-04-21.pdf",
@@ -123,12 +117,10 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-21",
     "description": "Urine drug screen lab result.",
     "source_document_id": "lab-100245-0421",
-    "source_document_reference_id": "DocumentReference/lab-100245-0421",
-    "source_attachment_url": "Binary/lab-100245-0421-pdf",
+    "source_attachment_url": "https://api.allevasoft.com/documents/lab-100245-0421/download",
     "source_author": "External Laboratory",
     "source_custodian": "R3 Recovery Services",
-    "source_security_label": "clinical",
-    "source_provenance_id": "Provenance/lab-100245-0421"
+    "source_security_label": "clinical"
   }
 ]
 ```
@@ -172,12 +164,12 @@ Some exports may arrive as tabular data. The app should preserve the source row 
 
 ```csv
 patient_id,client_name,document_date,bucket,document_type,title,status,client_signed,staff_signed,author,source_document_id,source_attachment_url
-ALV-100245,Jordan Sample,2026-04-22,notes,individual_progress_note,Individual Progress Note - 2026-04-22,completed,false,true,"M. Johnson, MS, LPC",note-100245-0422,Binary/note-100245-0422-txt
+ALV-100245,Jordan Sample,2026-04-22,notes,individual_progress_note,Individual Progress Note - 2026-04-22,completed,false,true,"M. Johnson, MS, LPC",note-100245-0422,https://api.allevasoft.com/documents/note-100245-0422/download
 ```
 
-## Example API-import planning output
+## Example REST API readiness planning output
 
-Until the live API contract is confirmed, API lookup should produce a clear plan rather than pretending to import data.
+Until the live API contract is confirmed, API lookup should produce a clear REST/OpenAPI plan rather than pretending to import data.
 
 ```json
 {
@@ -186,22 +178,22 @@ Until the live API contract is confirmed, API lookup should produce a clear plan
   "patient_name": null,
   "planned_requests": [
     {
-      "step": "resolve_patient",
-      "purpose": "Find the patient record for the supplied ID or name.",
+      "step": "resolve_client",
+      "purpose": "Find the client record for the supplied ID or name.",
       "method": "GET",
-      "url": "/Patient?identifier=ALV-100245"
+      "url": "/clients?identifier=ALV-100245"
     },
     {
-      "step": "list_document_references",
+      "step": "list_documents",
       "purpose": "List clinical notes, custom forms, uploaded documents, portal documents, labs, and medication documents.",
       "method": "GET",
-      "url": "/DocumentReference?patient=Patient/ALV-100245"
+      "url": "/clients/ALV-100245/documents"
     },
     {
       "step": "download_attachments",
       "purpose": "Download PDF, TXT, CSV, image, or other supported attachment payloads.",
       "method": "GET",
-      "url": "/Binary/{attachment-id}"
+      "url": "/documents/{document-id}/download"
     },
     {
       "step": "create_note_set",

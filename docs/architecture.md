@@ -38,7 +38,7 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 - Committed inserts, updates, and deletes for tracked domain models are captured with before-state, after-state, and field-level diff payloads.
 - Explicit domain events are emitted for sensitive reads and workflow actions such as login, reset flows, chart transitions, audit log access, UI button events, blocked workflow clicks, API harness activity, and safe review-source checks.
 - Patient note-set uploads and downloads emit explicit file activity events, and each stored file carries a persisted SHA-256 hash plus byte count for forensic validation.
-- Audit records are tamper-evident through hash chaining and also carry CEF-style payloads plus FHIR AuditEvent-style JSON for downstream compliance integrations.
+- Audit records are tamper-evident through hash chaining and carry CEF-style payloads for downstream compliance integrations.
 - If the audit log cannot be written to the database, records are spooled to the local app-data log directory so evidence is not silently lost.
 - Audit snapshots redact uploaded filenames, storage paths, document labels, descriptions, and source attachment/author metadata.
 
@@ -63,12 +63,13 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 ## EMR/API integration boundary
 
 - The current production-style path remains local file upload from an EMR export.
-- Admin App settings capture a vendor label, FHIR base URL, OpenAPI URL, OAuth/FHIR client metadata, token URL, scopes, timeout, token auth style, and protected direct-API configuration state.
-- Stored EMR endpoint profiles capture multiple Alleva/future EMR endpoint options with protected client configuration and an active/default profile used by readiness checks.
-- The backend exposes a FHIR/OAuth discovery check and a FHIR R4 import plan around `Patient`, `DocumentReference`, `Binary`, and optional `Provenance`.
-- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting sensitive values from browser payloads, reports, and audit details. Alleva Swagger/OpenAPI URLs are not treated as FHIR base URLs.
-- The gated Alleva REST treatment-plan sync path uses the Alleva REST API base URL/OpenAPI mapping, not the FHIR base URL, to normalize approved active-client, treatment-plan, and treatment-review payloads into the local R3 timeliness engine.
-- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant details, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
+- Alleva has confirmed it does not currently support FHIR. Active integration is Alleva REST/OpenAPI/HL7-readiness only.
+- Admin App settings capture the one active Alleva/API connection: vendor label, REST API base URL, OpenAPI URL, OAuth token URL, API client ID, encrypted API client secret, token auth style, timeout, and encrypted direct-API credential state.
+- Stored API endpoint profiles capture optional Alleva REST/OpenAPI endpoint presets with encrypted client secrets. Activating a profile copies it into the active App settings connection used by readiness checks.
+- The backend no longer exposes active FHIR/SMART discovery or FHIR import-plan routes.
+- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details.
+- The gated Alleva REST treatment-plan sync path uses the Alleva REST API base URL/OpenAPI mapping to normalize approved active-client, treatment-plan, and treatment-review payloads into the local R3 timeliness engine.
+- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
 
 ## Database connectivity model
 
