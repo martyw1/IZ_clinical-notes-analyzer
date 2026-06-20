@@ -1,6 +1,8 @@
 # Open Blockers
 
-Date: 2026-06-17
+Date: 2026-06-20
+
+Applies to: IZ Clinical Notes Analyzer Version `1.4.2` / build `2026.06.18.2`.
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -8,7 +10,7 @@ Status: unvalidated.
 
 The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/App settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
 
-Current implementation state: the setting exists in the database and admin App settings UI. Version 1.4.2 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, and LOC-change due date side by side. The 42-step checklist also includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
+Current implementation state: Version 1.4.2 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, and LOC-change due date side by side. The 42-step checklist also includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
 
 ## Alleva REST treatment-plan sync approval and mapping
 
@@ -42,7 +44,7 @@ Status: in progress for Version 1.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
-Current implementation state: Version 1.4.2 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, and AppData preflight reports. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
+Current implementation state: Version 1.4.2 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, AppData preflight reports, and manual-upload delete-button usability fixes. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
