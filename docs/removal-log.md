@@ -1,8 +1,10 @@
 # Removal Log
 
-Date: 2026-06-04
-Branch: `refactor/codex-v0.5.0`
-Station: S1 cleanup and legacy removal
+Initial date: 2026-06-04
+
+Latest update: 2026-06-20
+
+Scope: historical S1 cleanup records plus later main-branch legacy Docker/PostgreSQL removal records.
 
 ## Policy
 
@@ -22,10 +24,13 @@ Cleanup is intentionally conservative. Files are removed only when they are gene
 
 | Path | Reason retained |
 |---|---|
-| `scripts/startup-windows.ps1` | Potential legacy/server-mode Windows launcher, but not proven obsolete. |
+| `scripts/startup-windows.ps1` | Potential legacy/server-mode Windows launcher, but not proven obsolete. Not the current Version 1.4.2 local-desktop launch path. |
+| `scripts/startup-macos.sh` | Deprecated legacy launcher retained for history. Not a current R3 Windows desktop path. |
+| `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy launcher retained for history. Not a current R3 Windows desktop path. |
+| `scripts/lib/dedicated-postgres.sh` | Legacy helper retained only for deprecated Docker/PostgreSQL startup references. |
 | `docs/prd-ver0.0-old-original.rtf` | Historical PRD archive. |
 | `docs/chart-review-workflow-codex-build-prompt.md` | Historical chart-audit build prompt and implementation context. |
-| `docs/windows-startup-known-issue-20260514.md` | Potentially stale, but Windows behavior has not been revalidated on the target laptop. |
+| `docs/windows-startup-known-issue-20260514.md` | Historical startup issue note; now marked resolved and superseded by current Version 1.4.2 guidance. |
 | `Product Requirements Document.docx` | Untracked root artifact, likely duplicate/reference material; ignored to avoid accidental commit, but not deleted. |
 | `walkthroughs/` | Untracked walkthrough exports/screenshots/transcripts; ignored because they may contain sensitive or non-synthetic content, but not deleted. |
 
@@ -33,17 +38,21 @@ Cleanup is intentionally conservative. Files are removed only when they are gene
 
 Updated `.gitignore` to keep runtime SQLite files, logs, temporary files, coverage output, pytest/mypy caches, local root PRD duplicates, and walkthrough exports out of commits.
 
+## Current Legacy Boundary
+
+As of Version `1.4.2`, Docker, PostgreSQL, nginx, and old Compose artifacts are not ordinary R3 Windows desktop requirements. Do not restore the old Docker/server stack to active paths unless R3 explicitly reintroduces that deployment model and updates README, Windows docs, CI, tests, release instructions, and validation evidence together.
+
 ## Follow-Up Checks
 
 - Re-run `git status --short --ignored` before staging to verify runtime/secret artifacts are not included.
 - Re-run reference checks before deleting any retained legacy doc/script.
 - Review any local credential files and remove them from the source checkout when confirmed generated/local-only.
 
-## Validation
+## Historical Validation
 
 | Check | Result |
 |---|---|
 | `git diff --check` | Passed. |
 | Backend tests | Passed: `54 passed` using Python 3.11 from `/tmp/iz-cna-backend-venv-311`. |
 | Frontend build | Passed after repairing missing local optional native packages in ignored `node_modules`. |
-| Frontend tests | Blocked locally: Vitest worker pool timed out before importing tests under both Node 24 and Node 25. |
+| Frontend tests | Blocked locally at the time of this historical cleanup note: Vitest worker pool timed out before importing tests under both Node 24 and Node 25. Later current docs track the supported frontend Vitest/build workflow for Version 1.4.2. |

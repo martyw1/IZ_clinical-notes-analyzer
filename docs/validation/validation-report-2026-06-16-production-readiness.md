@@ -1,14 +1,22 @@
 # Validation Report - Production Readiness Pass
 
 Date: 2026-06-16
+
+Current documentation status: historical validation report. This report validated Version `1.3.0` / build `2026.06.16.1`. The current app version is `1.4.2` / build `2026.06.18.2`; use `docs/release-notes.md`, `VERSION`, and `VERSION.json` for current release status.
+
 Version under test: `1.3.0` / build `2026.06.16.1`
+
 Data used: synthetic test fixtures only.
 
 ## Summary
 
-Result: automated validation, Windows local smoke scripts, and browser role/harness walkthrough passed. A final target-machine packaged-install pass is still recommended before broad non-technical rollout.
+Result: automated validation, Windows local smoke scripts, and browser role/harness walkthrough passed for the version under test. A final target-machine packaged-install pass is still recommended before broad non-technical rollout.
 
 This pass focused on turnkey production use: clearer UI wording/status colors, adaptive layout, in-app help, role enforcement, user-management CRUD, workflow-profile management, settings/API/LLM access boundaries, treatment-plan update/re-evaluation behavior, EMR endpoint profiles, and morning-log issue review.
+
+## 1.4.2 supersession note
+
+Later Version `1.4.2` keeps the validated Version `1.3.0` local-desktop behavior and adds the manual-upload binder deletion usability patch plus the gated Alleva REST treatment-plan sync readiness boundary documented in `docs/release-notes.md` and `docs/open-blockers.md`.
 
 ## Fixes Made
 
@@ -32,9 +40,9 @@ This pass focused on turnkey production use: clearer UI wording/status colors, a
 Reviewed the pasted morning console text and local startup/app logs from 2026-06-16.
 
 - Startup/preflight completed successfully.
-- One `PATCH /api/settings` returned `400`; settings validation now keeps required LLM/API fields explicit and no optional endpoint-profile draft field blocks App settings save.
-- Repeated `401` events appeared after the browser session expired/stale token was reused across `/api/ui-events`, `/api/settings`, `/api/emr/profile`, `/api/workflow-definitions`, `/api/audit/logs`, `/api/timeliness/dashboard`, and `/api/treatment-plan-checklist`.
-- Frontend API calls now clear the same-browser session token and return to sign-in on 401.
+- One App settings update returned validation status; settings validation now keeps required LLM/API fields explicit and no optional endpoint-profile draft field blocks App settings save.
+- Repeated expired-session events appeared after the browser session expired/stale token was reused across UI event, settings, EMR profile, workflow, audit log, timeliness, and checklist routes.
+- Frontend API calls now clear the same-browser session token and return to sign-in on expired-session responses.
 
 ## Role and Permission Coverage
 

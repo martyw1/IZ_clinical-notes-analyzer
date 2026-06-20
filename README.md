@@ -68,7 +68,7 @@ flowchart TB
     end
 
     subgraph LocalData["Local app data outside the repo<br/>%LOCALAPPDATA%/IZ Clinical Notes Analyzer"]
-        Env[".env<br/>local secrets and bootstrap admin value"]
+        Env[".env<br/>local settings and generated access values"]
         SQLite["SQLite database<br/>clinical-notes-analyzer.sqlite3"]
         EncryptedUploads["Encrypted uploads<br/>clinical source files"]
         Logs["Startup logs and fallback audit logs"]
@@ -83,7 +83,7 @@ flowchart TB
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
         Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.2"]
-        Legacy["Deprecated Docker/PostgreSQL artifacts<br/>depriceated/ and legacy startup stubs"]
+        Legacy["Legacy Docker/PostgreSQL notes<br/>docs/removal-log.md and legacy startup stubs"]
     end
 
     Staff --> Launcher --> Preflight --> Desktop
@@ -135,7 +135,7 @@ flowchart TB
     click RuleYaml "config/rules/alleva_treatment_plan_completeness_rules.yaml" "Open deterministic rules"
     click VersionFiles "VERSION.json" "Open version metadata"
     click Builder "scripts/build-windows-installer.ps1" "Open release builder"
-    click Legacy "depriceated/DEPRECATED-MANIFEST.md" "Open deprecated manifest"
+    click Legacy "docs/removal-log.md" "Open removal log"
 ```
 
 Diagram boundaries:
@@ -144,10 +144,11 @@ Diagram boundaries:
 - Runtime data lives under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, not inside the source checkout.
 - Alleva/FHIR/API paths are readiness and operation-test paths only; live patient import remains disabled.
 - Optional LLM configuration exists but is disabled by default and is not the primary review path.
-- Docker/PostgreSQL artifacts are legacy references, not ordinary Windows desktop requirements.
+- Docker/PostgreSQL artifacts are not ordinary Windows desktop requirements.
 
 ## Primary Docs
 
+- `docs\release-notes.md`
 - `docs\Windows-User-Guide-Version-1.md`
 - `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
 - `docs\UAT-Version-1-Marleigh.md`
@@ -158,6 +159,9 @@ Diagram boundaries:
 - `docs\architecture.md`
 - `docs\runbook.md`
 - `docs\codebase-map.md`
+- `docs\admin-access-reset.md`
+
+Historical validation reports keep the original version they validated. Use `docs\release-notes.md`, `VERSION`, and `VERSION.json` for the current release number.
 
 ## Plain-English Workflow
 
@@ -210,14 +214,12 @@ The per-user install path is `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer
 
 Use this path for development, validation, or support work. It is not the preferred non-technical production path.
 
-### Requirements
+Requirements:
 
 - Windows 10 or Windows 11.
 - Python 3.11 or newer.
 - Internet access the first time Python packages are installed.
 - Node.js LTS only when the browser UI must be rebuilt because `frontend\dist` is missing or stale.
-
-### Launch
 
 Use a normal local folder such as:
 
@@ -246,23 +248,6 @@ The app should open automatically. If it does not, browse to:
 ```text
 http://localhost:8000
 ```
-
-## First Admin Sign-In
-
-On first launch, the startup window prints first sign-in credentials similar to:
-
-```text
-Username: admin
-Password: <generated-password>
-```
-
-Save that value securely. The generated local configuration lives here:
-
-```text
-%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
-```
-
-That file contains secrets and encryption keys. Treat it like a password vault item. If no admin can sign in later, use `docs\admin-access-reset.md`.
 
 ## Useful Local Pages
 
@@ -319,7 +304,7 @@ Important local files and folders:
 
 | Path | Purpose |
 | --- | --- |
-| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env` | Local configuration, generated secrets, bootstrap admin password, encryption key |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env` | Local configuration and generated local access material |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\clinical-notes-analyzer.sqlite3` | Local SQLite application database |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads` | Encrypted uploaded clinical files |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
@@ -347,28 +332,13 @@ For FHIR tests, the FHIR base URL means the root FHIR R4 endpoint supplied by Al
 
 Periodic API readiness checks are readiness checks only. They authenticate and test configuration; they do not import live patient charts or treatment plans.
 
-### Standalone Alleva Scripts
-
-Two standalone scripts exist and have different safety profiles:
-
-| Script | Purpose | Secret behavior |
-| --- | --- | --- |
-| `scripts\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted reports; still review output before sharing. |
-| `Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, and detailed request/response capture. | Sensitive by default: it prints/saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
-
-Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API output out of Git, tickets, screenshots, chat, and email unless an approved secure workflow says otherwise. Do not use real PHI in API tests.
-
-Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations; they are not FHIR R4 base URLs. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials. The App settings `FHIR base URL` field should stay blank until Alleva/R3 supplies a tenant root FHIR R4 endpoint, such as an endpoint ending in `/fhir/R4`.
-
-Version `1.4.2` separates the Alleva REST sync settings from the FHIR readiness fields. The REST sync path uses the Alleva API base URL (`https://api.allevasoft.com`), OpenAPI URL, token URL, client ID, encrypted client secret, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run.
+Version `1.4.2` separates the Alleva REST sync settings from the FHIR readiness fields. The REST sync path uses the Alleva API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run.
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.4.2` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, and recent audit history.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Version `1.4.2` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
-
-The selected-client detail view compares source-document `Next Review Due`, date-clock due date, date-clock anchor, and LOC-change due date side by side, with evidence preview and task-list export/copy actions for manual Asana-style tracking. Every timeliness analysis result is written to the forensic audit trail with the workflow definition key/version/checklist context used for the assessment.
 
 If an uploaded or API-style pulled plan has no patient name, the app creates a safe fallback display name:
 
@@ -382,14 +352,6 @@ Deterministic rules live in:
 ```text
 config\rules\alleva_treatment_plan_completeness_rules.yaml
 ```
-
-Rules-file guardrails:
-
-- keep PHI out of YAML rules files
-- keep vendor credentials out of YAML rules files
-- treat YAML rules as deterministic business logic, not LLM prompts
-- keep LOC aliases configurable in rules/config files
-- keep the LOC-change update window configurable until `docs\open-blockers.md` is resolved
 
 ## Workflow Profiles
 
@@ -443,6 +405,8 @@ Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as 
 | File | Purpose |
 | --- | --- |
 | `VERSION` and `VERSION.json` | Version metadata shown by `/api/version` and the UI footer |
+| `frontend\package.json` | Frontend package version metadata |
+| `docs\release-notes.md` | Current release notes and version history |
 | `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
 | `scripts\startup-windows-local.ps1` | Main Windows local startup script |
 | `scripts\preflight-windows.ps1` | Windows runtime/readiness preflight |
