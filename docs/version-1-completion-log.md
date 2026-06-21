@@ -1,5 +1,12 @@
 # Version 1 Completion Log
 
+## 2026-06-21 1.4.4-beta.1 Beta Treatment-Plan Checklist Detail Visibility
+
+- Converted current app/version metadata to `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.
+- Added selected-client 42-step checklist evaluation details to Treatment Plans detail payloads, UI, and selected treatment-plan CSV/JSON exports.
+- Kept Treatment Plan Checklist content version separate at `1.2.0`.
+- Preserved the gated Alleva REST treatment-plan sync behavior and documentation boundaries.
+
 ## 2026-06-20 1.4.4 API Harness and Alleva Sync Status Hardening
 
 - Replaced generic manual Alleva treatment-plan sync user-facing failure text with stage-specific status messages for token request, endpoint authorization/permission, endpoint mapping/API version, timeout/reachability, empty results, warning completion, and success.

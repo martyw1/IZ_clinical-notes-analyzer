@@ -2,7 +2,7 @@
 
 Date: 2026-06-20
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` / build `2026.06.21.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -34,7 +34,7 @@ Applies to: IZ Clinical Notes Analyzer Version `1.4.4` / build `2026.06.20.1` lo
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Version 1.4.4 status colors for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Beta 1.4.4-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.

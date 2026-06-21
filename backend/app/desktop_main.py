@@ -33,6 +33,7 @@ def _app_version() -> str:
 
 def _desktop_chrome() -> str:
     version = _app_version()
+    version_label = f'Beta v{version}' if 'beta' in version.lower() else f'v{version}'
     return f"""
     <style id="iz-cna-desktop-chrome-style">
       .iz-cna-desktop-shortcuts {{
@@ -78,7 +79,7 @@ def _desktop_chrome() -> str:
       <a href="/?view=uploads">Manual Upload</a>
       <a class="secondary" href="/clinical-notes-intake" target="_blank" rel="noopener noreferrer">Intake Guide</a>
       <a class="secondary" href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
-      <span class="iz-cna-desktop-version">v{version}</span>
+      <span class="iz-cna-desktop-version">{version_label}</span>
     </div>
     """
 

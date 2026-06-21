@@ -4,13 +4,15 @@ Source of truth: `config/checklists/treatment-plan-v1.json`
 
 Checklist ID: `treatment-plan-v1`
 
-Version: `1.2.0`
+Checklist content version: `1.2.0`
 
-Last updated: `2026-06-20`
+Current app version using this checklist: `1.4.4-beta.1`
+
+Documentation last reviewed: `2026-06-21`
 
 ## Purpose
 
-This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, CSV/JSON workflow-step exports, and the default workflow profile seed.
+This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `1.4.4-beta.1` is tracked separately in `VERSION` and `VERSION.json`.
 
 It is deliberately deterministic. Missing or conflicting admission dates, LOC evidence, treatment-plan dates, signatures, or source documents must produce `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` instead of guessed compliance.
 
@@ -75,7 +77,7 @@ Published workflow history is preserved. Only unused draft-only profiles that we
 
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Version 1.4.4 ships a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Beta 1.4.4-beta.1 keeps a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
 
 Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
 
@@ -86,6 +88,12 @@ The timeliness date clock uses the laptop/facility-local current date every time
 Configured PHP levels use 30 calendar days. Other configured treatment levels use 60 calendar days. LOC changes use the separate configurable LOC-change window described above.
 
 Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API evidence should include source identifiers supplied by approved REST/OpenAPI payloads, such as source document ID, attachment URL, endpoint name, or response field path.
+
+## Selected-Client Detail Evaluation
+
+The Treatment Plans detail pane now shows a `42-Step Checklist Evaluation` for the selected treatment-plan client/item. Each row is generated from `config/checklists/treatment-plan-v1.json` plus the selected client's deterministic timeliness evidence. Rows include step number, key, title, status/result, severity, source evidence, finding message, evidence fields used, required metadata, required documents, checks, finding examples, remediation suggestions, reviewer actions, manual override rules, audit event, and export fields.
+
+Items that cannot be deterministically evaluated yet are marked honestly as `Needs Review`, `Missing Data`, `Unable to Evaluate`, or `Not Applicable`; missing evidence is not treated as compliant.
 
 ## Checklist Steps
 
@@ -139,8 +147,16 @@ Every step in `config/checklists/treatment-plan-v1.json` must include:
 - `step`
 - `key`
 - `title`
-- `description`
 - `source_modes`
+- `objective`
+- `required_metadata`
+- `required_documents`
+- `checks`
+- `finding_examples`
+- `remediation_suggestions`
+- `evidence_fields`
+- `automation_level`
+- `severity_default`
 - `status_options`
 - `reviewer_actions`
 - `manual_override`

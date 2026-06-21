@@ -21,6 +21,7 @@ from app.models.models import (
 )
 from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
 from app.services.rules_engine import load_rules_config
+from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.timezone import localize_datetime
 
 STATUS_PRIORITY = [
@@ -93,6 +94,29 @@ class TimelinessEvaluation:
     evidence_comparison: EvidenceComparison
     evidence_completeness_percent: int
     missing_evidence_fields: list[str]
+
+
+@dataclass(frozen=True)
+class TimelinessChecklistResult:
+    step: int
+    key: str
+    title: str
+    status: str
+    result: str
+    severity: str
+    source_evidence: str
+    finding_message: str
+    evidence_fields_used: list[str]
+    required_metadata: list[str]
+    required_documents: list[str]
+    checks: list[str]
+    finding_examples: list[str]
+    remediation_suggestions: list[str]
+    reviewer_actions: list[str]
+    manual_override_allowed: bool
+    override_reason_required: bool
+    audit_event: str
+    export_fields: list[str]
 
 
 def _utc_now() -> datetime:
@@ -519,6 +543,401 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     )
 
 
+def _combined_evidence(*values: str | None) -> str:
+    parts = [value.strip() for value in values if value and value.strip()]
+    return '; '.join(dict.fromkeys(parts))
+
+
+def _rule_result_by_id(rule_results: list[RuleResult], rule_id: str) -> RuleResult | None:
+    return next((result for result in rule_results if result.rule_id == rule_id), None)
+
+
+def _rule_result_by_prefix(rule_results: list[RuleResult], prefix: str) -> RuleResult | None:
+    return next((result for result in rule_results if result.rule_id.startswith(prefix)), None)
+
+
+def _plan_evidence(plan: TreatmentPlanRecord | None) -> str:
+    if plan is None:
+        return ''
+    return _combined_evidence(plan.source_evidence, plan.source_section, plan.source_document_id)
+
+
+def _plans_evidence(plans: list[TreatmentPlanRecord]) -> str:
+    return _combined_evidence(*[_plan_evidence(plan) for plan in plans])
+
+
+def _status_for_presence(is_present: bool, *, missing_status: str = TimelinessStatus.missing_data.value) -> str:
+    return 'Confirmed' if is_present else missing_status
+
+
+def _status_for_rule(result: RuleResult | None, *, missing_status: str = TimelinessStatus.needs_review.value) -> str:
+    return result.status if result is not None else missing_status
+
+
+def _checklist_result(
+    step: dict[str, Any],
+    *,
+    status: str,
+    finding_message: str,
+    source_evidence: str = '',
+    evidence_fields_used: list[str] | None = None,
+    severity: str | None = None,
+) -> TimelinessChecklistResult:
+    return TimelinessChecklistResult(
+        step=int(step['step']),
+        key=str(step['key']),
+        title=str(step['title']),
+        status=status,
+        result=status,
+        severity=severity or str(step.get('severity_default') or 'info'),
+        source_evidence=source_evidence,
+        finding_message=finding_message,
+        evidence_fields_used=evidence_fields_used or [],
+        required_metadata=[str(item) for item in step.get('required_metadata', [])],
+        required_documents=[str(item) for item in step.get('required_documents', [])],
+        checks=[str(item) for item in step.get('checks', [])],
+        finding_examples=[str(item) for item in step.get('finding_examples', [])],
+        remediation_suggestions=[str(item) for item in step.get('remediation_suggestions', [])],
+        reviewer_actions=[str(item) for item in step.get('reviewer_actions', [])],
+        manual_override_allowed=bool(step.get('manual_override')),
+        override_reason_required=bool(step.get('override_reason_required')),
+        audit_event=str(step.get('audit_event') or ''),
+        export_fields=[str(item) for item in step.get('export_fields', [])],
+    )
+
+
+def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: list[Any]) -> list[TimelinessChecklistResult]:
+    client = evaluation.client
+    plans = list(client.treatment_plans)
+    loc_history = sorted(client.level_of_care_history, key=lambda item: _date(item.effective_date) or date.min)
+    rule_results = evaluation.rule_results
+    admission = _date(client.admission_date)
+    mapped_loc, interval_days = map_level_of_care(client.current_level_of_care)
+    active_loc = _active_level_of_care(loc_history)
+    initial = _latest_plan(plans, TreatmentPlanKind.initial)
+    master = _latest_plan(plans, TreatmentPlanKind.master)
+    latest_review = _latest_review_plan(plans)
+    loc_update = _latest_plan(plans, TreatmentPlanKind.loc_update)
+    loc_change_present = len(loc_history) > 1
+    source_evidence = _combined_evidence(client.source_evidence, evaluation.evidence_comparison.source_evidence)
+    plans_source_evidence = _plans_evidence(plans)
+    checklist = load_treatment_plan_checklist()
+    steps_by_key = {step['key']: step for step in checklist['steps']}
+
+    initial_rule = _rule_result_by_prefix(rule_results, 'TP-INITIAL')
+    master_rule = _rule_result_by_prefix(rule_results, 'TP-MASTER')
+    review_rule = _rule_result_by_prefix(rule_results, 'TP-REVIEW-')
+    loc_change_rule = _rule_result_by_prefix(rule_results, 'TP-LOC-CHANGE')
+    conflict_rule = _rule_result_by_id(rule_results, 'TP-DUE-DATE-CONFLICT') or _rule_result_by_id(rule_results, 'TP-CONFLICTING-EVIDENCE')
+
+    def step(key: str, status: str, finding: str, evidence: str = '', fields: list[str] | None = None) -> TimelinessChecklistResult:
+        return _checklist_result(
+            steps_by_key[key],
+            status=status,
+            finding_message=finding,
+            source_evidence=evidence or source_evidence,
+            evidence_fields_used=fields or [],
+        )
+
+    results = [
+        step(
+            'confirm_correct_client_chart',
+            _status_for_presence(bool(client.patient_id), missing_status=TimelinessStatus.missing_data.value),
+            f'Selected treatment-plan client is keyed by patient ID {client.patient_id}.' if client.patient_id else 'No patient ID is available for this selected treatment-plan client.',
+            client.source_evidence,
+            ['patient_id', 'source_evidence'],
+        ),
+        step(
+            'classify_new_or_update_review',
+            'Confirmed' if client.source_note_set_id or client.last_imported_at else TimelinessStatus.needs_review.value,
+            'The selected item has import/upload history for point-in-time review.' if client.source_note_set_id or client.last_imported_at else 'No import/upload timestamp is available; reviewer should confirm whether this is a new baseline or update.',
+            client.source_evidence,
+            ['source_note_set_id', 'last_imported_at'],
+        ),
+        step(
+            'confirm_client_active',
+            'Confirmed' if client.is_active else 'Not Applicable',
+            'Client is in the active treatment-plan queue.' if client.is_active else 'Client is not marked active, so routine active-client tracking may not apply.',
+            client.source_evidence,
+            ['active_status'],
+        ),
+        step(
+            'confirm_admission_date',
+            _status_for_presence(admission is not None, missing_status=TimelinessStatus.missing_data.value),
+            f'Admission date is {client.admission_date}.' if admission else 'Admission date is missing or unreadable.',
+            client.source_evidence,
+            ['admission_date'],
+        ),
+        step(
+            'confirm_current_loc',
+            _status_for_presence(bool(client.current_level_of_care.strip()), missing_status=TimelinessStatus.missing_data.value),
+            f'Current LOC is {client.current_level_of_care}.' if client.current_level_of_care.strip() else 'Current LOC is missing.',
+            _combined_evidence(client.source_evidence, active_loc.source_evidence if active_loc else ''),
+            ['current_level_of_care'],
+        ),
+        step(
+            'confirm_loc_rule_mapping',
+            'Confirmed' if mapped_loc and interval_days is not None else (TimelinessStatus.missing_data.value if not client.current_level_of_care.strip() else TimelinessStatus.unable_to_evaluate.value),
+            f'LOC {client.current_level_of_care} maps to {mapped_loc} with a {interval_days}-calendar-day review clock.' if mapped_loc and interval_days is not None else 'LOC is missing or does not map to a configured treatment-plan cadence.',
+            _combined_evidence(client.source_evidence, active_loc.source_evidence if active_loc else ''),
+            ['current_level_of_care', 'mapped_level_of_care', 'rules_version'],
+        ),
+        step(
+            'capture_loc_history',
+            'Confirmed' if loc_history and all(_date(item.effective_date) for item in loc_history) else (TimelinessStatus.missing_data.value if not loc_history else TimelinessStatus.needs_review.value),
+            f'{len(loc_history)} LOC history row(s) are available.' if loc_history else 'No LOC history rows are available for the selected client.',
+            _combined_evidence(*[item.source_evidence for item in loc_history]),
+            ['loc_history', 'effective_date', 'discharge_date'],
+        ),
+        step(
+            'classify_source_documents',
+            'Confirmed' if plans else TimelinessStatus.missing_data.value,
+            f'{len(plans)} treatment-plan evidence record(s) are classified for this selected client.' if plans else 'No treatment-plan source documents are loaded.',
+            plans_source_evidence,
+            ['document_type', 'source_document_id', 'source_section'],
+        ),
+        step(
+            'confirm_document_dates',
+            'Confirmed' if plans and all(_date(plan.document_date) or _date(plan.staff_signature_date) for plan in plans) else (TimelinessStatus.missing_data.value if not plans else TimelinessStatus.needs_review.value),
+            'Loaded treatment-plan evidence has document or staff signature dates.' if plans and all(_date(plan.document_date) or _date(plan.staff_signature_date) for plan in plans) else 'One or more treatment-plan evidence records is missing a usable date.',
+            plans_source_evidence,
+            ['document_date', 'source_evidence'],
+        ),
+        step(
+            'confirm_document_completion_status',
+            'Confirmed' if plans and all(plan.is_valid and not plan.conflict_note.strip() for plan in plans) else (TimelinessStatus.missing_data.value if not plans else TimelinessStatus.needs_review.value),
+            'Loaded treatment-plan records are marked valid with no conflict notes.' if plans and all(plan.is_valid and not plan.conflict_note.strip() for plan in plans) else 'At least one treatment-plan record is missing, invalid, incomplete, or flagged for conflict review.',
+            plans_source_evidence,
+            ['completion_status', 'source_evidence'],
+        ),
+        step(
+            'confirm_staff_signature_status',
+            'Confirmed' if plans and any(_date(plan.staff_signature_date) for plan in plans) else TimelinessStatus.missing_data.value,
+            'At least one staff/therapist signature date is available.' if plans and any(_date(plan.staff_signature_date) for plan in plans) else 'No staff/therapist signature date is available.',
+            plans_source_evidence,
+            ['staff_signature_date'],
+        ),
+        step(
+            'confirm_client_signature_status',
+            'Confirmed' if plans and any(_date(plan.client_signature_date) for plan in plans) else TimelinessStatus.needs_review.value,
+            'At least one client signature date is available.' if plans and any(_date(plan.client_signature_date) for plan in plans) else 'Client signature evidence is absent or optional for the loaded review evidence; reviewer should confirm applicability.',
+            plans_source_evidence,
+            ['client_signature_date'],
+        ),
+        step(
+            'check_conflicting_evidence',
+            conflict_rule.status if conflict_rule else 'Confirmed',
+            conflict_rule.evidence_summary if conflict_rule else 'No conflicting evidence rule is currently blocking this selected client.',
+            _combined_evidence(plans_source_evidence, evaluation.evidence_comparison.conflict_explanation),
+            ['conflict_note', 'rule_used'],
+        ),
+        step(
+            'initial_plan_exists',
+            _status_for_presence(initial is not None, missing_status=TimelinessStatus.missing_data.value),
+            'Initial Treatment Plan evidence is loaded.' if initial else 'Initial Treatment Plan evidence is missing.',
+            _plan_evidence(initial),
+            ['document_type', 'source_document_id'],
+        ),
+        step(
+            'initial_plan_dated_correctly',
+            _status_for_rule(initial_rule) if initial else TimelinessStatus.missing_data.value,
+            initial_rule.evidence_summary if initial_rule else 'Initial Treatment Plan date cannot be verified because initial-plan evidence is missing.',
+            _plan_evidence(initial),
+            ['admission_date', 'document_date', 'staff_signature_date'],
+        ),
+        step(
+            'initial_plan_required_signatures',
+            _status_for_presence(_plan_has_required_signatures(initial), missing_status=TimelinessStatus.needs_review.value if initial else TimelinessStatus.missing_data.value),
+            'Initial Treatment Plan has required staff and client signature dates.' if _plan_has_required_signatures(initial) else 'Initial Treatment Plan signatures are missing, incomplete, or require reviewer confirmation.',
+            _plan_evidence(initial),
+            ['staff_signature_date', 'client_signature_date'],
+        ),
+        step(
+            'master_plan_exists',
+            _status_for_presence(master is not None, missing_status=TimelinessStatus.missing_data.value),
+            'Master Treatment Plan evidence is loaded.' if master else 'Master Treatment Plan evidence is missing.',
+            _plan_evidence(master),
+            ['document_type', 'source_document_id'],
+        ),
+        step(
+            'master_plan_within_30_days',
+            _status_for_rule(master_rule) if master or admission else TimelinessStatus.missing_data.value,
+            master_rule.evidence_summary if master_rule else 'Master Treatment Plan 30-day timing cannot be verified from available evidence.',
+            _plan_evidence(master),
+            ['admission_date', 'document_date', 'staff_signature_date'],
+        ),
+        step(
+            'master_plan_required_signatures',
+            _status_for_presence(_plan_has_required_signatures(master), missing_status=TimelinessStatus.needs_review.value if master else TimelinessStatus.missing_data.value),
+            'Master Treatment Plan has required staff and client signature dates.' if _plan_has_required_signatures(master) else 'Master Treatment Plan signatures are missing, incomplete, or require reviewer confirmation.',
+            _plan_evidence(master),
+            ['staff_signature_date', 'client_signature_date'],
+        ),
+        step(
+            'latest_valid_review_identified',
+            'Confirmed' if latest_review and evaluation.last_valid_review_date else TimelinessStatus.missing_data.value,
+            f'Latest valid review/update date is {evaluation.last_valid_review_date}.' if latest_review and evaluation.last_valid_review_date else 'No latest valid treatment-plan review/update date is available.',
+            _plan_evidence(latest_review),
+            ['latest_valid_review_date', 'staff_signature_date'],
+        ),
+        step(
+            'calculate_next_review_due_date',
+            _status_for_rule(review_rule, missing_status=TimelinessStatus.missing_data.value),
+            review_rule.evidence_summary if review_rule else 'Next review due date could not be calculated from admission/review and LOC evidence.',
+            _combined_evidence(_plan_evidence(latest_review), evaluation.evidence_comparison.conflict_explanation),
+            ['date_clock_anchor_date', 'interval_days', 'next_due_date'],
+        ),
+        step(
+            'apply_php_timing_rule',
+            _status_for_rule(review_rule) if mapped_loc == 'php' else 'Not Applicable',
+            review_rule.evidence_summary if mapped_loc == 'php' and review_rule else 'PHP timing does not apply to the selected current LOC.' if mapped_loc != 'php' else 'PHP timing could not be evaluated.',
+            source_evidence,
+            ['current_level_of_care', 'interval_days'],
+        ),
+        step(
+            'apply_iop_op_timing_rule',
+            _status_for_rule(review_rule) if mapped_loc and mapped_loc != 'php' else 'Not Applicable',
+            review_rule.evidence_summary if mapped_loc and mapped_loc != 'php' and review_rule else 'IOP/OP timing does not apply to the selected current LOC.' if mapped_loc == 'php' else 'IOP/OP timing could not be evaluated.',
+            source_evidence,
+            ['current_level_of_care', 'interval_days'],
+        ),
+        step(
+            'mark_current_inside_window',
+            'Confirmed' if evaluation.status == TimelinessStatus.compliant.value else 'Not Applicable',
+            'Selected treatment plan is inside the allowed window.' if evaluation.status == TimelinessStatus.compliant.value else f'Selected treatment plan final status is {evaluation.status}, not current/compliant.',
+            evaluation.evidence_summary,
+            ['overall_status', 'next_due_date'],
+        ),
+        step(
+            'mark_due_soon',
+            evaluation.status if evaluation.status in {TimelinessStatus.due_soon.value, TimelinessStatus.urgent.value} else 'Not Applicable',
+            f'Selected treatment plan is {evaluation.status.lower()} with next due date {evaluation.next_due_date}.' if evaluation.status in {TimelinessStatus.due_soon.value, TimelinessStatus.urgent.value} else 'Due-soon/urgent status does not apply to this selected treatment plan.',
+            evaluation.evidence_summary,
+            ['overall_status', 'days_until_due', 'next_due_date'],
+        ),
+        step(
+            'mark_overdue',
+            evaluation.status if evaluation.status == TimelinessStatus.overdue.value else 'Not Applicable',
+            f'Selected treatment plan is overdue by {abs(evaluation.days_until_due or 0)} day(s).' if evaluation.status == TimelinessStatus.overdue.value else 'Overdue status does not apply to this selected treatment plan.',
+            evaluation.evidence_summary,
+            ['overall_status', 'days_until_due', 'next_due_date'],
+        ),
+        step(
+            'check_php_individual_session_evidence',
+            TimelinessStatus.needs_review.value if mapped_loc == 'php' else 'Not Applicable',
+            'PHP individual-session evidence is not deterministically evaluated yet; reviewer should confirm if required.' if mapped_loc == 'php' else 'PHP individual-session evidence does not apply to the selected current LOC.',
+            source_evidence,
+            ['current_level_of_care'],
+        ),
+        step(
+            'check_iop_op_individual_session_evidence',
+            TimelinessStatus.needs_review.value if mapped_loc and mapped_loc != 'php' else 'Not Applicable',
+            'IOP/OP individual-session evidence is not deterministically evaluated yet; reviewer should confirm if required.' if mapped_loc and mapped_loc != 'php' else 'IOP/OP individual-session evidence does not apply to the selected current LOC.',
+            source_evidence,
+            ['current_level_of_care'],
+        ),
+        step(
+            'identify_loc_change',
+            'Confirmed' if loc_change_present else 'Not Applicable',
+            f'LOC history includes {len(loc_history)} rows, so an LOC change is present.' if loc_change_present else 'No LOC change is present in the loaded history.',
+            _combined_evidence(*[item.source_evidence for item in loc_history]),
+            ['previous_level_of_care', 'current_level_of_care', 'loc_effective_date'],
+        ),
+        step(
+            'loc_change_update_document',
+            _status_for_presence(loc_update is not None, missing_status=TimelinessStatus.missing_data.value) if loc_change_present else 'Not Applicable',
+            'LOC-change update evidence is loaded.' if loc_update else 'LOC changed but no LOC-change update document is loaded.' if loc_change_present else 'No LOC change is present, so an LOC-change update document is not required.',
+            _plan_evidence(loc_update),
+            ['loc_change_document', 'loc_effective_date', 'source_evidence'],
+        ),
+        step(
+            'loc_change_deadline_unresolved',
+            loc_change_rule.status if loc_change_rule else ('Not Applicable' if not loc_change_present else 'Confirmed'),
+            loc_change_rule.evidence_summary if loc_change_rule else 'No LOC-change deadline blocker applies to this selected client.' if not loc_change_present else 'LOC-change window is marked validated for this selected client calculation.',
+            _combined_evidence(_plan_evidence(loc_update), evaluation.evidence_comparison.conflict_explanation),
+            ['loc_change_window_days', 'loc_change_rule_validated', 'clock_start_source'],
+        ),
+        step(
+            'flag_missing_data_not_compliance',
+            TimelinessStatus.missing_data.value if evaluation.missing_evidence_fields else 'Confirmed',
+            f'Missing evidence fields: {", ".join(evaluation.missing_evidence_fields)}.' if evaluation.missing_evidence_fields else 'No missing evidence fields passed silently in this deterministic calculation.',
+            evaluation.evidence_summary,
+            ['missing_evidence_fields', 'rule_used'],
+        ),
+        step(
+            'allow_manual_reviewer_confirmation',
+            TimelinessStatus.needs_review.value if evaluation.status in {TimelinessStatus.needs_review.value, TimelinessStatus.missing_data.value, TimelinessStatus.conflicting.value, TimelinessStatus.unable_to_evaluate.value} else 'Confirmed',
+            'Manual reviewer confirmation is available for admin/manager review; counselors remain read-only for override decisions.' if evaluation.status in {TimelinessStatus.needs_review.value, TimelinessStatus.missing_data.value, TimelinessStatus.conflicting.value, TimelinessStatus.unable_to_evaluate.value} else 'No blocking manual confirmation is required by the current deterministic result.',
+            evaluation.evidence_summary,
+            ['reviewer', 'review_action', 'comment'],
+        ),
+        step(
+            'require_manual_override_reason',
+            'Confirmed' if client.overrides else 'Not Applicable',
+            f'{len(client.overrides)} override(s) are recorded with required reasons.' if client.overrides else 'No manual override is recorded for this selected client.',
+            _combined_evidence(*[override.affected_rule for override in client.overrides]),
+            ['override_reason', 'affected_rule', 'created_by'],
+        ),
+        step(
+            'produce_final_checklist_result',
+            evaluation.status,
+            f'Final selected-client result is {evaluation.status}; rule used: {evaluation.rule_used}.',
+            evaluation.evidence_summary,
+            ['overall_status', 'severity_counts', 'evidence_summary'],
+        ),
+        step(
+            'update_status_worklist_after_review',
+            'Confirmed',
+            f'Worklist status for this selected client is {evaluation.status}.',
+            evaluation.evidence_summary,
+            ['worklist_status', 'last_status_change_at'],
+        ),
+        step(
+            'route_chart_for_manager_review',
+            TimelinessStatus.needs_review.value if evaluation.status in {TimelinessStatus.overdue.value, TimelinessStatus.urgent.value, TimelinessStatus.due_soon.value, TimelinessStatus.needs_review.value, TimelinessStatus.missing_data.value, TimelinessStatus.conflicting.value, TimelinessStatus.unable_to_evaluate.value} else 'Confirmed',
+            'Manager/admin review path remains available for this selected-client result.' if evaluation.status != TimelinessStatus.compliant.value else 'Selected client is currently compliant; manager routing is available if final approval is needed.',
+            evaluation.evidence_summary,
+            ['manager_review_state', 'reviewer_role'],
+        ),
+        step(
+            'return_chart_with_correction_comments',
+            TimelinessStatus.needs_review.value if evaluation.status in {TimelinessStatus.overdue.value, TimelinessStatus.needs_review.value, TimelinessStatus.missing_data.value, TimelinessStatus.conflicting.value, TimelinessStatus.unable_to_evaluate.value} else 'Not Applicable',
+            'If returned, manager comments must specify the missing, conflicting, or late evidence.' if evaluation.status != TimelinessStatus.compliant.value else 'No return-for-correction condition is currently indicated by this deterministic result.',
+            evaluation.evidence_summary,
+            ['correction_comment', 'returned_by', 'returned_at'],
+        ),
+        step(
+            'approve_after_issues_resolved_or_accepted',
+            'Confirmed' if evaluation.status in {TimelinessStatus.compliant.value, TimelinessStatus.approved.value} else TimelinessStatus.needs_review.value,
+            'Selected client can proceed toward approval because deterministic timing is compliant or already approved.' if evaluation.status in {TimelinessStatus.compliant.value, TimelinessStatus.approved.value} else 'Approval should wait until blocking checklist findings are resolved or manually accepted with reason.',
+            evaluation.evidence_summary,
+            ['approval_state', 'accepted_issue_count', 'approved_by'],
+        ),
+        step(
+            'preserve_review_history',
+            'Confirmed' if audit_history else TimelinessStatus.needs_review.value,
+            f'{len(audit_history)} audit event(s) are available in the selected-client detail payload.' if audit_history else 'No audit history is loaded for this selected client detail.',
+            _combined_evidence(*[getattr(log, 'action', '') for log in audit_history[:5]]),
+            ['audit_event_id', 'audit_action', 'timestamp'],
+        ),
+        step(
+            'continue_periodic_api_monitoring',
+            'Confirmed' if client.last_imported_at and 'Alleva REST' in client.source_evidence else TimelinessStatus.needs_review.value,
+            'Selected client has Alleva REST import evidence; ongoing API monitoring remains subject to approval and settings.' if client.last_imported_at and 'Alleva REST' in client.source_evidence else 'Selected client is not proven to come from approved live API monitoring; use manual/upload workflow or approved API settings as applicable.',
+            client.source_evidence,
+            ['last_refresh_at', 'next_refresh_at', 'changed_item_count', 'error_count'],
+        ),
+        step(
+            'use_synthetic_or_approved_non_phi_data',
+            'Confirmed' if 'synthetic' in source_evidence.lower() or client.patient_id.upper().startswith(('PAT-', 'SYNTH-')) else TimelinessStatus.needs_review.value,
+            'Selected-client evidence appears to be synthetic/non-production validation data.' if 'synthetic' in source_evidence.lower() or client.patient_id.upper().startswith(('PAT-', 'SYNTH-')) else 'Reviewer must confirm this selected-client evidence is approved for the current environment and not unsafe validation data.',
+            source_evidence,
+            ['validation_data_kind', 'artifact_path', 'redaction_status'],
+        ),
+    ]
+    return sorted(results, key=lambda item: item.step)
+
+
 def _client_options():
     return (
         selectinload(TreatmentPlanClient.level_of_care_history),
@@ -708,12 +1127,17 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
 
 def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -> dict[str, Any]:
     client = evaluation.client
+    checklist = load_treatment_plan_checklist()
+    checklist_results = build_checklist_results(evaluation, audit_history)
     return {
         **summary_payload(evaluation),
         'is_active': client.is_active,
         'source_evidence': client.source_evidence,
+        'checklist_id': checklist['checklist_id'],
+        'checklist_version': checklist['version'],
         'evidence_comparison': evaluation.evidence_comparison.__dict__,
         'rule_results': [result.__dict__ for result in evaluation.rule_results],
+        'checklist_results': [result.__dict__ for result in checklist_results],
         'level_of_care_history': [
             {
                 'id': item.id,

@@ -559,6 +559,31 @@ label {
   color: #5f7067;
 }
 
+.checklist-result-card summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.checklist-result-card summary small {
+  display: block;
+  color: #5f7067;
+  margin-top: 0.35rem;
+}
+
+.checklist-result-card[open] summary {
+  border-bottom: 1px solid rgba(24, 33, 30, 0.08);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.checklist-evaluation-panel .panel-heading {
+  align-items: flex-start;
+}
+
 .criteria-grid {
   display: grid;
   gap: 1rem;

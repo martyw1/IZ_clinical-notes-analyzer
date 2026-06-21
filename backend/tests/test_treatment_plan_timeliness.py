@@ -119,6 +119,19 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert detail_payload['evidence_comparison']['loc_anchor_due_date'] == '2026-04-06'
         assert detail_payload['evidence_comparison']['loc_change_due_date'] == '2026-04-06'
         assert detail_payload['evidence_comparison']['loc_change_window_days'] == 7
+        assert detail_payload['checklist_id'] == 'treatment-plan-v1'
+        assert detail_payload['checklist_version'] == '1.2.0'
+        assert len(detail_payload['checklist_results']) == 42
+        checklist_by_key = {item['key']: item for item in detail_payload['checklist_results']}
+        assert checklist_by_key['confirm_correct_client_chart']['status'] == 'Confirmed'
+        assert checklist_by_key['confirm_admission_date']['status'] == 'Confirmed'
+        assert checklist_by_key['confirm_loc_rule_mapping']['status'] == 'Confirmed'
+        assert checklist_by_key['calculate_next_review_due_date']['status'] == 'Urgent'
+        assert checklist_by_key['loc_change_deadline_unresolved']['status'] == 'Needs Review'
+        assert checklist_by_key['flag_missing_data_not_compliance']['status'] == 'Missing Data'
+        assert checklist_by_key['loc_change_deadline_unresolved']['finding_examples']
+        assert checklist_by_key['loc_change_deadline_unresolved']['remediation_suggestions']
+        assert checklist_by_key['loc_change_deadline_unresolved']['manual_override_allowed'] is True
 
 
 def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
@@ -319,6 +332,9 @@ def test_counselor_override_attempt_is_blocked_and_logged(app_with_sqlite):
             db.close()
 
         counselor_headers = _login_headers(client, 'counselor-denied', 'counselor-pass-1234')
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}", headers=counselor_headers)
+        assert detail.status_code == 200
+        assert len(detail.json()['checklist_results']) == 42
         denied = client.post(
             f"/api/timeliness/clients/{created.json()['id']}/overrides",
             headers=counselor_headers,

@@ -21,6 +21,8 @@ def test_treatment_plan_v1_checklist_is_canonical_and_complete():
     assert checklist['steps'][0]['key'] == 'confirm_correct_client_chart'
     assert checklist['steps'][-1]['key'] == 'use_synthetic_or_approved_non_phi_data'
     assert checklist['loc_change_blocker']['status'] == 'unvalidated'
+    assert 'Version 1.4.0 ships' not in checklist['loc_change_blocker']['message']
+    assert 'current beta app' in checklist['loc_change_blocker']['message']
     assert all(step['manual_override'] is True for step in checklist['steps'])
     assert all(step['override_reason_required'] is True for step in checklist['steps'])
     assert all(step['audit_event'].startswith('treatment_plan.checklist.') for step in checklist['steps'])

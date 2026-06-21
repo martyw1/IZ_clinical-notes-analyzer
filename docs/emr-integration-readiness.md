@@ -2,7 +2,7 @@
 
 Date: 2026-06-19
 
-Applies to: IZ Clinical Notes Analyzer Version `1.4.4` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` local Windows desktop runtime.
 
 ## Current vendor boundary
 

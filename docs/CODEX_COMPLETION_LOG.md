@@ -1,5 +1,10 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-21 v1.4.4-beta.1 beta treatment-plan checklist detail visibility
+- Converted current app/version metadata to `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.
+- Added selected-client 42-step checklist evaluation results to Treatment Plans detail payloads, UI, and selected treatment-plan CSV/JSON exports while keeping checklist content version `1.2.0`.
+- Preserved the gated Alleva REST treatment-plan sync boundary, including required `/clients` and `/treatment-plans` behavior and optional `/treatment-reviews` warning behavior.
+
 ## 2026-06-20 v1.4.4 Alleva treatment-plan sync follow-up
 - Kept `/clients` and `/treatment-plans` as required Alleva REST sync endpoints while treating `/treatment-reviews` failures as warning-only optional endpoint failures.
 - Moved enabled startup Alleva sync into a non-blocking background startup task and removed traceback logging for expected external sync failures.

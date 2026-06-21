@@ -31,6 +31,8 @@ type VersionInfo = {
   build: string
   release_channel: string
   release_date: string
+  stability: string
+  is_prerelease: boolean
   version_name: string
   environment: string
   git_commit: string
@@ -220,6 +222,28 @@ type TimelinessRuleResult = {
   evidence_summary: string
 }
 
+type TimelinessChecklistResult = {
+  step: number
+  key: string
+  title: string
+  status: string
+  result: string
+  severity: string
+  source_evidence: string
+  finding_message: string
+  evidence_fields_used: string[]
+  required_metadata: string[]
+  required_documents: string[]
+  checks: string[]
+  finding_examples: string[]
+  remediation_suggestions: string[]
+  reviewer_actions: string[]
+  manual_override_allowed: boolean
+  override_reason_required: boolean
+  audit_event: string
+  export_fields: string[]
+}
+
 type TimelinessLevelOfCare = {
   id: number
   level_of_care: string
@@ -279,8 +303,11 @@ type TimelinessEvidenceComparison = {
 type TimelinessClientDetail = TimelinessClientSummary & {
   is_active: boolean
   source_evidence: string
+  checklist_id: string
+  checklist_version: string
   evidence_comparison: TimelinessEvidenceComparison
   rule_results: TimelinessRuleResult[]
+  checklist_results: TimelinessChecklistResult[]
   level_of_care_history: TimelinessLevelOfCare[]
   treatment_plans: TimelinessTreatmentPlan[]
   overrides: TimelinessOverride[]
@@ -1264,6 +1291,10 @@ function timelinessFilterCount(dashboard: TimelinessDashboard | null, filter: Ti
   return dashboard.items.filter((item) => item.status === filter).length
 }
 
+function versionPrefix(versionInfo: VersionInfo | null) {
+  return versionInfo?.is_prerelease || versionInfo?.stability === 'beta' || versionInfo?.version.includes('beta') ? 'Beta v' : 'v'
+}
+
 function planKindLabel(kind: string) {
   if (kind === 'initial') return 'Initial'
   if (kind === 'master') return 'Master'
@@ -1561,9 +1592,9 @@ export function App() {
   )
 
   const versionLabel = versionInfo
-    ? `v${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
+    ? `${versionPrefix(versionInfo)}${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
-  const timelinessBuildLabel = versionInfo?.version ? `v${versionInfo.version}` : 'current build'
+  const timelinessBuildLabel = versionInfo?.version ? `${versionPrefix(versionInfo)}${versionInfo.version}` : 'current build'
   const localClockLabel = localNow.toLocaleString(undefined, {
     weekday: 'short',
     year: 'numeric',
@@ -2561,6 +2592,23 @@ export function App() {
 
   function workflowStepsForExport(chart: ChartDetail | null, client: TimelinessClientDetail | null) {
     const workflow = activeTreatmentPlanWorkflow()
+    if (client?.checklist_results?.length) {
+      return client.checklist_results.map((result) => ({
+        row_type: 'checklist_result',
+        workflow_key: workflow?.workflow_key || 'treatment_plan_timeliness',
+        workflow_version: workflow?.current_version?.version || null,
+        checklist_version: client.checklist_version || treatmentPlanChecklist?.version || workflow?.current_version?.definition_snapshot?.checklist_version || '',
+        step: result.step,
+        key: result.key,
+        label: result.title,
+        status: result.status,
+        source_evidence: result.source_evidence,
+        finding_message: result.finding_message,
+        severity: result.severity,
+        reviewer_action: result.reviewer_actions.join('; '),
+        override_reason: '',
+      }))
+    }
     const rawSteps = workflow?.current_version?.definition_snapshot?.steps
     const checklistSteps = Array.isArray(rawSteps) && rawSteps.length ? rawSteps : treatmentPlanChecklist?.steps || []
     const chartResponses = new Map((chart?.checklist_items || []).map((item) => [item.item_key, item]))
@@ -2624,7 +2672,7 @@ export function App() {
       return
     }
     const safePatientId = selectedChart.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.2.0'
+    const checklistVersion = treatmentPlanChecklist?.version || 'Not loaded'
     const linkedTimelinessClient =
       selectedTimelinessClient?.patient_id === selectedChart.patient_id ? selectedTimelinessClient : null
     const workflowSteps = workflowStepsForExport(selectedChart, linkedTimelinessClient)
@@ -2667,7 +2715,7 @@ export function App() {
       return
     }
     const safePatientId = selectedTimelinessClient.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
-    const checklistVersion = treatmentPlanChecklist?.version || '1.2.0'
+    const checklistVersion = selectedTimelinessClient.checklist_version || treatmentPlanChecklist?.version || 'Not loaded'
     const workflowSteps = workflowStepsForExport(null, selectedTimelinessClient)
     if (format === 'json') {
       downloadTextFile(
@@ -2680,6 +2728,7 @@ export function App() {
             generated_at: new Date().toISOString(),
             local_clock_at_export: localNow.toISOString(),
             client: selectedTimelinessClient,
+            checklist_results: selectedTimelinessClient.checklist_results,
             workflow_steps: workflowSteps,
           },
           null,
@@ -3597,7 +3646,7 @@ export function App() {
                   </article>
                   <article className='mini-card'>
                     <span>Checklist</span>
-                    <strong>v{treatmentPlanChecklist?.version || '1.2.0'}</strong>
+                    <strong>{treatmentPlanChecklist?.version ? `v${treatmentPlanChecklist.version}` : 'Not loaded'}</strong>
                   </article>
                 </div>
 
@@ -4122,6 +4171,81 @@ export function App() {
 	                      </div>
 	                    </section>
 
+	                    <section className='panel-subsection checklist-evaluation-panel' aria-label='42-Step Checklist Evaluation'>
+	                      <div className='panel-heading'>
+	                        <div>
+	                          <h3>42-Step Checklist Evaluation</h3>
+	                          <p>
+	                            Selected-client checklist result using app {versionInfo?.version ? `${versionPrefix(versionInfo)}${versionInfo.version}` : 'version unavailable'} and checklist content v{selectedTimelinessClient.checklist_version || 'Not loaded'}.
+	                          </p>
+	                        </div>
+	                        <span className='pill pill--neutral'>{selectedTimelinessClient.checklist_results.length} steps</span>
+	                      </div>
+	                      {selectedTimelinessClient.checklist_results.length ? (
+	                        <div className='finding-list checklist-result-list'>
+	                          {selectedTimelinessClient.checklist_results.map((result) => (
+	                            <details key={result.key} className='finding-card checklist-result-card'>
+	                              <summary>
+	                                <span>
+	                                  <strong>
+	                                    Step {result.step}. {result.title}
+	                                  </strong>
+	                                  <small>{result.finding_message}</small>
+	                                </span>
+	                                <span className={`pill pill--${timelinessTone(result.status)}`}>{result.status}</span>
+	                              </summary>
+	                              <dl>
+	                                <div>
+	                                  <dt>Source evidence</dt>
+	                                  <dd>{result.source_evidence || 'Not recorded'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Evidence fields used</dt>
+	                                  <dd>{result.evidence_fields_used.length ? result.evidence_fields_used.join(', ') : 'None recorded'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Required metadata</dt>
+	                                  <dd>{result.required_metadata.length ? result.required_metadata.join(', ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Required documents</dt>
+	                                  <dd>{result.required_documents.length ? result.required_documents.join(', ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Checks</dt>
+	                                  <dd>{result.checks.length ? result.checks.join('; ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Finding examples</dt>
+	                                  <dd>{result.finding_examples.length ? result.finding_examples.join('; ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Remediation suggestions</dt>
+	                                  <dd>{result.remediation_suggestions.length ? result.remediation_suggestions.join('; ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Reviewer actions</dt>
+	                                  <dd>{result.reviewer_actions.length ? result.reviewer_actions.join(', ') : 'None'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Override and audit</dt>
+	                                  <dd>
+	                                    {result.manual_override_allowed ? 'Manual override allowed' : 'Manual override not allowed'}; {result.override_reason_required ? 'reason required' : 'reason not required'}; audit event {result.audit_event || 'not recorded'}
+	                                  </dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Export fields</dt>
+	                                  <dd>{result.export_fields.length ? result.export_fields.join(', ') : 'None'}</dd>
+	                                </div>
+	                              </dl>
+	                            </details>
+	                          ))}
+	                        </div>
+	                      ) : (
+	                        <p className='empty-state'>No selected-client checklist evaluation is loaded.</p>
+	                      )}
+	                    </section>
+
 	                    <section className='panel-subsection'>
 	                      <h3>Level-of-care history</h3>
 	                      {selectedTimelinessClient.level_of_care_history.length ? (
@@ -4304,7 +4428,7 @@ export function App() {
                   <h2>{treatmentPlanChecklist?.display_name || 'Treatment Plan Checklist Version 1'}</h2>
                   <p>
                     {treatmentPlanChecklist
-                      ? `Version ${treatmentPlanChecklist.version} from ${treatmentPlanChecklist.source_of_truth}`
+                      ? `App ${versionInfo?.version ? `${versionPrefix(versionInfo)}${versionInfo.version}` : 'version unavailable'}; checklist content v${treatmentPlanChecklist.version} from ${treatmentPlanChecklist.source_of_truth}`
                       : 'Loading canonical checklist...'}
                   </p>
                 </div>
@@ -4391,6 +4515,10 @@ export function App() {
                               <dd>{step.status_options.join(', ')}</dd>
                             </div>
                             <div>
+                              <dt>Evidence fields</dt>
+                              <dd>{step.evidence_fields.length ? step.evidence_fields.join(', ') : 'None'}</dd>
+                            </div>
+                            <div>
                               <dt>Reviewer actions</dt>
                               <dd>{step.reviewer_actions.join(', ')}</dd>
                             </div>
@@ -4410,6 +4538,16 @@ export function App() {
                               <li key={check}>{check}</li>
                             ))}
                           </ul>
+                          <dl>
+                            <div>
+                              <dt>Finding examples</dt>
+                              <dd>{step.finding_examples.length ? step.finding_examples.join('; ') : 'None'}</dd>
+                            </div>
+                            <div>
+                              <dt>Remediation suggestions</dt>
+                              <dd>{step.remediation_suggestions.length ? step.remediation_suggestions.join('; ') : 'None'}</dd>
+                            </div>
+                          </dl>
                         </article>
                       ))}
                     </div>

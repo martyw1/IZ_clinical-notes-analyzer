@@ -49,7 +49,7 @@
   "loc_change_blocker": {
     "status": "unvalidated",
     "owner": "R3/Marleigh",
-    "message": "The treatment-plan update window after a level-of-care change is not confirmed. Version 1.4.0 ships a manager-editable 7-calendar-day preset, keeps the setting configurable, and marks LOC-change results as Needs Review until R3 confirms exact days, calendar/business basis, and clock-start date."
+    "message": "The treatment-plan update window after a level-of-care change is not confirmed. The current beta app keeps a manager-editable 7-calendar-day preset, keeps the setting configurable, and marks LOC-change results as Needs Review until R3 confirms exact days, calendar/business basis, and clock-start date."
   },
   "steps": [
     {

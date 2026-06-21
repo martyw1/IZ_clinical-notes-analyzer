@@ -12,6 +12,15 @@ function jsonResponse(status: number, body: unknown) {
   } as Response
 }
 
+function blobText(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(blob)
+  })
+}
+
 function installFetchMock(routes: Record<string, unknown | RouteHandler>) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const rawUrl = typeof input === 'string' ? input : input.toString()
@@ -449,6 +458,123 @@ function treatmentPlanChecklistPayload() {
   }
 }
 
+function versionPayload() {
+  return {
+    app_name: 'IZ Clinical Notes Analyzer',
+    version: '1.4.4-beta.1',
+    build: '2026.06.21.1',
+    release_channel: 'beta-local-desktop',
+    release_date: '2026-06-21',
+    stability: 'beta',
+    is_prerelease: true,
+    version_name: 'Beta 1.4.4-beta.1 treatment-plan checklist detail visibility',
+    environment: 'test',
+    git_commit: 'abcdef123456',
+    git_branch: 'main',
+    git_dirty: false,
+  }
+}
+
+function timelinessChecklistResultsPayload() {
+  const representativeSteps: Record<number, { key: string; title: string; status: string; finding_message: string; evidence_fields_used: string[] }> = {
+    1: {
+      key: 'confirm_correct_client_chart',
+      title: 'Confirm this is the correct client chart',
+      status: 'Confirmed',
+      finding_message: 'Selected treatment-plan client is keyed by patient ID PAT-TP-001.',
+      evidence_fields_used: ['patient_id', 'source_evidence'],
+    },
+    4: {
+      key: 'confirm_admission_date',
+      title: 'Confirm the admission date',
+      status: 'Confirmed',
+      finding_message: 'Admission date is 2026-02-26.',
+      evidence_fields_used: ['admission_date'],
+    },
+    6: {
+      key: 'confirm_loc_rule_mapping',
+      title: 'Confirm the LOC maps to a Version 1 rule category',
+      status: 'Confirmed',
+      finding_message: 'LOC IOP-5 maps to configured 60-calendar-day review clock.',
+      evidence_fields_used: ['current_level_of_care', 'mapped_level_of_care'],
+    },
+    14: {
+      key: 'initial_plan_exists',
+      title: 'Check that the Initial Treatment Plan exists',
+      status: 'Missing Data',
+      finding_message: 'Initial Treatment Plan evidence is missing.',
+      evidence_fields_used: ['document_type', 'source_document_id'],
+    },
+    17: {
+      key: 'master_plan_exists',
+      title: 'Check that the Master Treatment Plan exists',
+      status: 'Missing Data',
+      finding_message: 'Master Treatment Plan evidence is missing.',
+      evidence_fields_used: ['document_type', 'source_document_id'],
+    },
+    21: {
+      key: 'calculate_next_review_due_date',
+      title: 'Calculate the next Treatment Plan Review due date',
+      status: 'Due Soon',
+      finding_message: 'Date clock due date is 2026-06-01.',
+      evidence_fields_used: ['date_clock_anchor_date', 'interval_days', 'next_due_date'],
+    },
+    31: {
+      key: 'loc_change_deadline_unresolved',
+      title: 'Hold the LOC-change deadline as unresolved until R3 confirms it',
+      status: 'Needs Review',
+      finding_message: 'LOC-change window remains unvalidated by R3/Marleigh.',
+      evidence_fields_used: ['loc_change_window_days', 'loc_change_rule_validated'],
+    },
+    32: {
+      key: 'flag_missing_data_not_compliance',
+      title: 'Flag missing data instead of assuming compliance',
+      status: 'Missing Data',
+      finding_message: 'Missing evidence fields: Source-document Next Review Due.',
+      evidence_fields_used: ['missing_evidence_fields', 'rule_used'],
+    },
+    34: {
+      key: 'require_manual_override_reason',
+      title: 'Require a reason for manual overrides',
+      status: 'Not Applicable',
+      finding_message: 'No manual override is recorded for this selected client.',
+      evidence_fields_used: ['override_reason', 'affected_rule'],
+    },
+    35: {
+      key: 'produce_final_checklist_result',
+      title: 'Produce a final checklist result for the chart',
+      status: 'Due Soon',
+      finding_message: 'Final selected-client result is Due Soon.',
+      evidence_fields_used: ['overall_status', 'evidence_summary'],
+    },
+  }
+  return Array.from({ length: 42 }, (_unused, index) => {
+    const stepNumber = index + 1
+    const representative = representativeSteps[stepNumber]
+    return {
+      step: stepNumber,
+      key: representative?.key || `step_${stepNumber}`,
+      title: representative?.title || `Checklist step ${stepNumber}`,
+      status: representative?.status || 'Needs Review',
+      result: representative?.status || 'Needs Review',
+      severity: stepNumber === 31 ? 'critical' : 'high',
+      source_evidence: 'Synthetic Treatment Plan Review; Synthetic LOC update',
+      finding_message: representative?.finding_message || 'Reviewer should confirm this checklist item for the selected client.',
+      evidence_fields_used: representative?.evidence_fields_used || ['source_evidence'],
+      required_metadata: ['patient_id'],
+      required_documents: ['treatment_plan_documents'],
+      checks: ['Synthetic deterministic check.'],
+      finding_examples: ['Synthetic finding.'],
+      remediation_suggestions: ['Synthetic remediation.'],
+      reviewer_actions: ['Confirm', 'Override', 'Return for Correction'],
+      manual_override_allowed: true,
+      override_reason_required: true,
+      audit_event: `treatment_plan.checklist.step_${String(stepNumber).padStart(2, '0')}.reviewed`,
+      export_fields: ['status', 'source_evidence', 'finding_message', 'severity', 'reviewer_action', 'override_reason'],
+    }
+  })
+}
+
 function timelinessDashboardPayload() {
   return {
     total_active_clients: 1,
@@ -494,6 +620,8 @@ function timelinessDetailPayload() {
     ...timelinessDashboardPayload().items[0],
     is_active: true,
     source_evidence: 'Synthetic spreadsheet row',
+    checklist_id: 'treatment-plan-v1',
+    checklist_version: '1.2.0',
     evidence_comparison: {
       document_next_due_date: null,
       signature_anchor_due_date: '2026-06-01',
@@ -529,6 +657,7 @@ function timelinessDetailPayload() {
         evidence_summary: 'LOC-change update preset is 7 calendar days, but settings still mark the rule unvalidated; manual review is required.',
       },
     ],
+    checklist_results: timelinessChecklistResultsPayload(),
     level_of_care_history: [
       {
         id: 31,
@@ -677,6 +806,7 @@ describe('App turnkey workflow', () => {
   it('renders the summary dashboard and admin tools for administrators', async () => {
     window.history.replaceState(null, '', '/?view=dashboard')
     installFetchMock({
+      'GET /api/version': versionPayload(),
       'POST /api/auth/login': { access_token: 'token-a', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
       'GET /api/charts': [chartSummary()],
@@ -694,6 +824,7 @@ describe('App turnkey workflow', () => {
     signIn()
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Beta v1\.4\.4-beta\.1/)).toBeInTheDocument())
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
@@ -950,6 +1081,7 @@ describe('App turnkey workflow', () => {
     const revokeObjectUrl = vi.mocked(URL.revokeObjectURL)
 
     installFetchMock({
+      'GET /api/version': versionPayload(),
       'POST /api/auth/login': { access_token: 'token-export', must_reset_password: false },
       'GET /api/users/me': userPayload('admin'),
       'GET /api/charts': [chartSummary()],
@@ -977,6 +1109,9 @@ describe('App turnkey workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Treatment plans' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: '42-Step Checklist Evaluation' })).toBeInTheDocument())
+    expect(screen.getByText('Step 1. Confirm this is the correct client chart')).toBeInTheDocument()
+    expect(screen.getByText('Step 31. Hold the LOC-change deadline as unresolved until R3 confirms it')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Export task list' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
@@ -984,6 +1119,9 @@ describe('App turnkey workflow', () => {
     expect(createObjectUrl).toHaveBeenCalledTimes(5)
     expect(anchorClick).toHaveBeenCalledTimes(5)
     expect(revokeObjectUrl).toHaveBeenCalledTimes(5)
+    const exportedTexts = await Promise.all(createObjectUrl.mock.calls.map((call) => blobText(call[0] as Blob)))
+    expect(exportedTexts.some((text) => text.includes('checklist_result') && text.includes('loc_change_deadline_unresolved'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('"checklist_results"') && text.includes('produce_final_checklist_result'))).toBe(true)
   })
 
   it('runs the Alleva treatment-plan sync from the review queue and opens treatment plans', async () => {

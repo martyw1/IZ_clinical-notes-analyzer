@@ -3,7 +3,12 @@
 ## Unreleased
 
 ### Changed
-- No unreleased changes.
+- Converted current app metadata to beta `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.
+- Added selected-client 42-step Treatment Plans checklist evaluation details and included those results in selected treatment-plan CSV/JSON exports.
+- Kept Treatment Plan Checklist content version separate at `1.2.0`.
+
+### Verified
+- Pending final validation for this beta station.
 
 ## 1.4.4 - 2026-06-19
 

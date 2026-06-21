@@ -706,6 +706,28 @@ class TimelinessRuleResultOut(BaseModel):
     evidence_summary: str
 
 
+class TimelinessChecklistResultOut(BaseModel):
+    step: int
+    key: str
+    title: str
+    status: str
+    result: str
+    severity: str
+    source_evidence: str
+    finding_message: str
+    evidence_fields_used: list[str]
+    required_metadata: list[str]
+    required_documents: list[str]
+    checks: list[str]
+    finding_examples: list[str]
+    remediation_suggestions: list[str]
+    reviewer_actions: list[str]
+    manual_override_allowed: bool
+    override_reason_required: bool
+    audit_event: str
+    export_fields: list[str]
+
+
 class TimelinessEvidenceComparisonOut(BaseModel):
     document_next_due_date: str | None = None
     signature_anchor_due_date: str | None = None
@@ -766,8 +788,11 @@ class TimelinessDashboardOut(BaseModel):
 class TimelinessClientDetailOut(TimelinessClientSummaryOut):
     is_active: bool
     source_evidence: str
+    checklist_id: str
+    checklist_version: str
     evidence_comparison: TimelinessEvidenceComparisonOut
     rule_results: list[TimelinessRuleResultOut]
+    checklist_results: list[TimelinessChecklistResultOut]
     level_of_care_history: list[TimelinessLevelOfCareOut]
     treatment_plans: list[TimelinessTreatmentPlanOut]
     overrides: list[TimelinessOverrideOut]

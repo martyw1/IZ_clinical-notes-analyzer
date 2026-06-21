@@ -1,12 +1,28 @@
 # Release Notes
 
-Current app version: `1.4.4` / build `2026.06.20.1`.
+Current app version: `1.4.4-beta.1` / build `2026.06.21.1`.
 
-Current release channel: `local-desktop`.
+Current release channel: `beta-local-desktop`.
 
-Current release date in version metadata: `2026-06-20`.
+Current release date in version metadata: `2026-06-21`.
 
-## 1.4.4 - Current documentation and metadata alignment
+## 1.4.4-beta.1 - Beta treatment-plan checklist detail visibility
+
+Build: `2026.06.21.1`
+
+Version metadata name: `Beta 1.4.4-beta.1 treatment-plan checklist detail visibility`
+
+Summary:
+
+- Converts the current local Windows desktop app metadata to beta: app version `1.4.4-beta.1`, channel `beta-local-desktop`, stability `beta`, and prerelease metadata enabled.
+- Keeps Treatment Plan Checklist content version separate at `1.2.0`; the checklist JSON content version did not change.
+- Adds selected-client `42-Step Checklist Evaluation` results to the Treatment Plans detail payload and UI so a manager can inspect every canonical checklist step for the selected treatment-plan client/item.
+- Adds checklist results to selected treatment-plan CSV/JSON exports.
+- Keeps the global Checklist tab as the canonical rule reference and exposes finding examples, remediation suggestions, and evidence fields.
+- Preserves the gated Alleva REST treatment-plan sync path, including required `/clients` and `/treatment-plans` behavior and optional `/treatment-reviews` warning behavior.
+- Keeps LOC-change timing visibly unvalidated until R3/Marleigh confirms the exact rule.
+
+## 1.4.4 - Documentation and metadata alignment
 
 Build: `2026.06.20.1`
 
@@ -60,7 +76,7 @@ Summary:
 - The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The app ships a manager-editable 7-calendar-day preset, but this must stay configurable and visibly unresolved until confirmed.
 - Manual upload remains an upload-time snapshot. Use the monthly compliance-check fallback when API refresh is unavailable.
 - Optional LLM setup exists but is disabled by default and is not the primary review path.
-- Docker, PostgreSQL, and nginx are not ordinary Windows desktop requirements for the current R3 local-desktop path.
+- Docker, PostgreSQL, and nginx are not ordinary Windows desktop requirements for the current R3 beta-local-desktop path.
 - The package is still not a signed MSI/MSIX with repair/modify support; the release-folder builder is the current packaging path.
 
 ## Version metadata files
@@ -70,9 +86,11 @@ Current version values must stay aligned in:
 - `VERSION`
 - `VERSION.json`
 - `frontend/package.json`
+- `frontend/package-lock.json`
 - README and primary docs
 - `/api/version`
 - UI footer
+- release metadata
 
 ## Primary current docs
 
@@ -88,4 +106,4 @@ Current version values must stay aligned in:
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
 
-Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.4`.
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.4-beta.1`.

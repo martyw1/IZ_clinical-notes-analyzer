@@ -1,7 +1,7 @@
 # Treatment Plan Timeliness UI/UX Update
 
 Date: 2026-06-17
-Current app patch: `1.4.4` / build `2026.06.20.1`
+Current app beta: `1.4.4-beta.1` / build `2026.06.21.1`
 
 ## Source Artifacts
 
@@ -22,7 +22,8 @@ Primary inputs:
 
 The `Treatment plans` tab is now an evidence-first work queue instead of a passive dashboard. It keeps the existing upload-first chart-review app structure, but presents treatment-plan timeliness as a compact operational workflow:
 
-- visible updated evidence queue and footer version `1.4.4` so operators can confirm the refreshed UI is being served
+- visible updated evidence queue and footer version `Beta v1.4.4-beta.1` so operators can confirm the refreshed UI is being served
+- selected-client `42-Step Checklist Evaluation` rows in Treatment Plans so managers can see each checklist step's status, evidence, finding, metadata, checks, examples, remediation, reviewer actions, override rules, audit event, and export fields
 - video-reference color alignment using dark teal navigation, coral primary actions, restrained gray work surfaces, green compliant states, purple review states, and teal focus/evidence accents
 - queue metrics for active clients, task rows, overdue, urgent, needs review, and missing data
 - quick filters for `Overdue`, `Urgent`, `Due Soon`, `Needs Review`, `Missing Data`, and `Compliant`
@@ -49,7 +50,7 @@ The dashboard source cards now distinguish API readiness from manual upload: API
 
 ## Windows Build Visibility
 
-The desktop runtime serves `frontend\dist` when present. Version `1.4.4` keeps the Windows preflight stale-build guard so source-checkout launches rebuild the frontend when npm is available and the React source is newer than `frontend\dist`; otherwise preflight warns that the served browser UI may be stale.
+The desktop runtime serves `frontend\dist` when present. Beta `1.4.4-beta.1` keeps the Windows preflight stale-build guard so source-checkout launches rebuild the frontend when npm is available and the React source is newer than `frontend\dist`; otherwise preflight warns that the served browser UI may be stale.
 
 ## LOC-Change Ambiguity
 
@@ -59,7 +60,7 @@ The original video showed a practical ambiguity:
 - staff signature plus 60 days: `2026-06-01`
 - older LOC-effective plus 60-day comparison: `2026-05-29`
 
-Version 1.4.4 uses the latest valid treatment-plan review/update date, or admission date when no later valid update exists, as the recurring date-clock anchor. PHP uses 30 calendar days and other configured treatment levels use 60 calendar days. LOC changes use a separate manager-editable 7-calendar-day preset, but that setting remains visibly unvalidated and affected records stay `Needs Review` until R3/Marleigh confirms the final rule.
+Beta 1.4.4-beta.1 uses the latest valid treatment-plan review/update date, or admission date when no later valid update exists, as the recurring date-clock anchor. PHP uses 30 calendar days and other configured treatment levels use 60 calendar days. LOC changes use a separate manager-editable 7-calendar-day preset, but that setting remains visibly unvalidated and affected records stay `Needs Review` until R3/Marleigh confirms the final rule.
 
 ## Alleva REST Sync UI
 

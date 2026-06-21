@@ -1,10 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.4.4",
-  "build": "2026.06.20.1",
-  "release_channel": "local-desktop",
-  "release_date": "2026-06-20",
+  "version": "1.4.4-beta.1",
+  "build": "2026.06.21.1",
+  "release_channel": "beta-local-desktop",
+  "release_date": "2026-06-21",
   "git_branch": "main",
-  "version_name": "Version 1.4.4 API settings consolidation and metadata alignment",
-  "description": "Promotes the current local-desktop app version metadata and documentation references to 1.4.4, repairs legacy local audit-log schemas that still contain retired FHIR required columns, clarifies the single active Alleva/API connection in App settings and the API harness, preserves encrypted client-secret handling, and keeps the existing Version 1 local Windows desktop boundaries."
+  "stability": "beta",
+  "is_prerelease": true,
+  "version_name": "Beta 1.4.4-beta.1 treatment-plan checklist detail visibility",
+  "description": "Marks the local Windows desktop app as beta, keeps the Alleva REST/API pull boundary intact, distinguishes app version 1.4.4-beta.1 from Treatment Plan Checklist content version 1.2.0, and exposes selected-client 42-step checklist evaluation details for treatment-plan review."
 }
