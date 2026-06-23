@@ -433,18 +433,26 @@ def _plan_record_from_treatment_plan(raw: dict[str, Any]) -> TreatmentPlanRecord
 
 def _plan_record_from_treatment_review(raw: dict[str, Any]) -> TreatmentPlanRecord:
     source_id = _first_text(raw, 'id', 'treatmentPlanReviewId', 'href')
+    document_date = _date_text(raw.get('createdDated') or raw.get('createdDate') or raw.get('generatedDate') or raw.get('documentDate'))
+    staff_signature_date = _date_text(
+        raw.get('creatorSignatureDate')
+        or raw.get('ceratorSignatureDate')
+        or raw.get('staffSignatureDate')
+        or raw.get('therapistSignatureDate')
+        or raw.get('reviewerSignatureDate')
+    )
     return TreatmentPlanRecord(
         plan_kind=TreatmentPlanKind.review,
-        document_date=_date_text(raw.get('createdDated') or raw.get('generatedDate')),
-        staff_signature_date=_date_text(raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate')),
+        document_date=document_date,
+        staff_signature_date=staff_signature_date,
         client_signature_date=_date_text(raw.get('clientSignatureDate')),
-        reviewer_signature_date=_date_text(raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate')),
-        displayed_next_due_date=_date_text(raw.get('nextReviewDue')),
+        reviewer_signature_date=_date_text(raw.get('reviewerSignatureDate') or raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate')),
+        displayed_next_due_date=_date_text(raw.get('nextReviewDue') or raw.get('nextReviewDueDate') or raw.get('displayedNextReviewDueDate')),
         source_evidence=f'{ALLEVA_REST_SOURCE} /treatment-reviews record {source_id}',
         source_section=f'{ALLEVA_REST_SOURCE} treatment-reviews',
         source_document_id=source_id,
-        is_valid=bool(_date_text(raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate'))),
-        conflict_note='' if _date_text(raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate')) else 'Alleva REST treatment review is missing creator signature date.',
+        is_valid=bool(staff_signature_date),
+        conflict_note='' if staff_signature_date else 'Alleva REST treatment review is missing creator/staff/reviewer signature date.',
     )
 
 

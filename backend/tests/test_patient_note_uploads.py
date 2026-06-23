@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.core.config import REPO_ROOT
 from app.core.security import hash_password
-from app.models.models import AuditLog, Chart, PatientNoteDocument, PatientNoteSet, Role, TreatmentPlanClient, User
+from app.models.models import AppSetting, AuditLog, Chart, PatientNoteDocument, PatientNoteSet, Role, TreatmentPlanClient, User
 
 BOOTSTRAP_ADMIN_PASSWORD = 'r3!@analyzer#123'
 
@@ -171,6 +171,110 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
             assert 'Intake packet completed' not in serialized
             assert 'Primary clinician assigned' not in serialized
             assert 'intake-packet.pdf' not in serialized
+    finally:
+        db.close()
+
+
+def test_initial_upload_duplicate_is_blocked_without_partial_records(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _upload_payload('PAT-DUP-100', upload_mode='initial', file_name='initial.txt', label='Initial Binder')
+        first = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+        assert first.status_code == 200
+
+        duplicate_data, duplicate_files = _upload_payload('PAT-DUP-100', upload_mode='initial', file_name='duplicate.txt', label='Duplicate Binder')
+        duplicate = client.post('/api/patient-note-sets', headers=headers, data=duplicate_data, files=duplicate_files)
+        assert duplicate.status_code == 409
+        assert 'use update mode' in duplicate.json()['detail']
+
+    db = session_local()
+    try:
+        note_sets = db.execute(select(PatientNoteSet).where(PatientNoteSet.patient_id == 'PAT-DUP-100')).scalars().all()
+        charts = db.execute(select(Chart).where(Chart.patient_id == 'PAT-DUP-100')).scalars().all()
+        assert len(note_sets) == 1
+        assert len(charts) == 1
+    finally:
+        db.close()
+
+
+def test_upload_processing_failure_returns_safe_error_and_rolls_back(app_with_sqlite, monkeypatch):
+    import app.api.routes as routes_module
+
+    app, session_local = app_with_sqlite
+
+    async def fail_store_upload_file(*_args, **_kwargs):
+        raise RuntimeError('synthetic storage failure with unsafe internal detail')
+
+    monkeypatch.setattr(routes_module, 'store_upload_file', fail_store_upload_file)
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _upload_payload('PAT-FAIL-500', upload_mode='initial', file_name='failure.txt', label='Failure Test')
+        failed = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+        assert failed.status_code == 500
+        assert failed.json()['detail'] == (
+            'Upload failed while processing selected files. No partial binder was saved; try again or split large files into a smaller upload.'
+        )
+
+    db = session_local()
+    try:
+        assert db.execute(select(PatientNoteSet).where(PatientNoteSet.patient_id == 'PAT-FAIL-500')).scalar_one_or_none() is None
+        assert db.execute(select(Chart).where(Chart.patient_id == 'PAT-FAIL-500')).scalar_one_or_none() is None
+        assert db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-FAIL-500')).scalar_one_or_none() is None
+        failure_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_note_set.upload.failed')).scalar_one()
+        assert 'synthetic storage failure' not in failure_log.details
+        assert 'failure.txt' not in failure_log.details
+    finally:
+        db.close()
+
+
+def test_clear_all_patient_data_preserves_settings_users_and_audit_history(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        data, files = _upload_payload('PAT-CLEAR-100', upload_mode='initial', file_name='clear-me.txt', label='Clear Me')
+        uploaded = client.post('/api/patient-note-sets', headers=headers, data=data, files=files)
+        assert uploaded.status_code == 200
+
+        db = session_local()
+        try:
+            document = db.execute(select(PatientNoteDocument).where(PatientNoteDocument.note_set_id == uploaded.json()['id'])).scalar_one()
+            import app.services.patient_notes as patient_notes_module
+
+            stored_path = patient_notes_module.settings.upload_dir_path / document.storage_path
+            assert stored_path.exists()
+        finally:
+            db.close()
+
+        blocked = client.request('DELETE', '/api/patient-data', headers=headers, json={'confirmation_phrase': 'clear'})
+        assert blocked.status_code == 400
+        assert client.get('/api/patient-note-sets', headers=headers).json()
+
+        cleared = client.request('DELETE', '/api/patient-data', headers=headers, json={'confirmation_phrase': 'CLEAR ALL PATIENT DATA'})
+        assert cleared.status_code == 200
+        payload = cleared.json()
+        assert payload['status'] == 'cleared'
+        assert payload['deleted_counts']['patient_note_sets'] == 1
+        assert payload['deleted_counts']['charts'] == 1
+        assert payload['deleted_counts']['treatment_plan_clients'] == 1
+        assert not stored_path.exists()
+
+    db = session_local()
+    try:
+        assert db.execute(select(PatientNoteSet)).scalar_one_or_none() is None
+        assert db.execute(select(PatientNoteDocument)).scalar_one_or_none() is None
+        assert db.execute(select(Chart)).scalar_one_or_none() is None
+        assert db.execute(select(TreatmentPlanClient)).scalar_one_or_none() is None
+        assert db.execute(select(User).where(User.username == 'admin')).scalar_one_or_none() is not None
+        assert db.execute(select(AppSetting)).scalar_one_or_none() is not None
+        clear_log = db.execute(select(AuditLog).where(AuditLog.action == 'patient_data.clear_all.completed')).scalar_one()
+        serialized = f'{clear_log.message} {clear_log.details}'
+        assert 'clear-me.txt' not in serialized
+        assert 'Clear Me' not in serialized
+        assert 'Imported from Alleva Document Manager' not in serialized
     finally:
         db.close()
 

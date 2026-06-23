@@ -1,10 +1,29 @@
 # Release Notes
 
-Current app version: `1.4.4-beta.1` / build `2026.06.21.1`.
+Current app version: `1.4.5-beta.1` / build `2026.06.23.1`.
 
 Current release channel: `beta-local-desktop`.
 
-Current release date in version metadata: `2026-06-21`.
+Current release date in version metadata: `2026-06-23`.
+
+## 1.4.5-beta.1 - R3 beta-client readiness
+
+Build: `2026.06.23.1`
+
+Version metadata name: `Beta 1.4.5-beta.1 R3 beta-client readiness`
+
+Summary:
+
+- Renames the primary dashboard tab to `Status Dashboard`, moves `Treatment plans` immediately after it, and adds bundled R3 Recovery Services header-logo support via `/api/branding/header-logo` with an overrideable filesystem setting.
+- Removes the desktop floating oval shortcuts and the obsolete intake-guide page. Manual upload remains in normal navigation; API testing remains available through App Settings and `/api-configuration`.
+- Adds admin-only `Clear All Patient Data` actions in Status Dashboard Quick Actions and App Settings. The action requires the exact phrase `CLEAR ALL PATIENT DATA`, clears local patient/chart/treatment-plan/manual-upload/review rows and encrypted upload files, and preserves settings, API credentials, user accounts, audit logs, docs, and rules.
+- Moves manual `Retrieve Active Treatment Plans` to the Status Dashboard EMR/API card and keeps startup sync off by default behind the existing approval and endpoint-mapping gates.
+- Adds saved manager status/comment notes for each selected-client Treatment Plan checklist criterion plus a selected-client counselor action CSV export.
+- Fixes due-date classification so due today is `Urgent`, 1 day out is `Urgent`, 2-7 days out is `Due Soon`, 8+ days out is `Compliant`, and only dates before the evaluation date are `Overdue`.
+- Hardens manual upload errors so unexpected 500s return non-PHI JSON detail, roll back partial rows, and clean up encrypted files written before failure.
+- Keeps Review Queue as the generated/manual chart-review workbench and Treatment Plans as the timeliness/due-date work queue.
+- Documents that Alleva mapping exports were not present in the repo during this readiness pass; conservative REST review-date/signature/due-date aliases were added without opening live import.
+- Validation evidence is recorded in `docs/validation/validation-report-2026-06-23-beta-client-readiness.md`.
 
 ## 1.4.4-beta.1 - Beta treatment-plan checklist detail visibility
 
@@ -106,4 +125,4 @@ Current version values must stay aligned in:
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
 
-Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.4-beta.1`.
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.5-beta.1`.

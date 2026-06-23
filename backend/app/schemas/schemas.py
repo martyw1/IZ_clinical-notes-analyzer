@@ -726,6 +726,16 @@ class TimelinessChecklistResultOut(BaseModel):
     override_reason_required: bool
     audit_event: str
     export_fields: list[str]
+    manager_status: str = 'Not Reviewed'
+    manager_comment: str = ''
+    manager_updated_by_id: int | None = None
+    manager_updated_at: datetime | None = None
+
+
+class TimelinessCriterionReviewInput(BaseModel):
+    criterion_key: str
+    status: str = 'Not Reviewed'
+    comment: str = ''
 
 
 class TimelinessEvidenceComparisonOut(BaseModel):
@@ -797,3 +807,14 @@ class TimelinessClientDetailOut(TimelinessClientSummaryOut):
     treatment_plans: list[TimelinessTreatmentPlanOut]
     overrides: list[TimelinessOverrideOut]
     audit_history: list[AuditLogOut]
+
+
+class ClearPatientDataInput(BaseModel):
+    confirmation_phrase: str
+
+
+class ClearPatientDataOut(BaseModel):
+    status: str
+    message: str
+    deleted_counts: dict[str, int]
+    storage_result: dict[str, object]

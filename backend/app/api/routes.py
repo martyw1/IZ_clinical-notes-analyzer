@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
@@ -30,6 +30,8 @@ from app.models.models import (
     PatientNoteSet,
     Role,
     TreatmentPlanClient,
+    TreatmentPlanCriterionReview,
+    TreatmentPlanOverride,
     TreatmentPlanRecord,
     User,
     WorkflowState,
@@ -44,6 +46,8 @@ from app.schemas.schemas import (
     ChartDetailOut,
     ChartSummaryOut,
     ChartUpdate,
+    ClearPatientDataInput,
+    ClearPatientDataOut,
     EmrConnectionProfileOut,
     EmrEndpointProfileCreate,
     EmrEndpointProfileOut,
@@ -67,6 +71,7 @@ from app.services.patient_notes import (
     display_name_for_patient_name_status,
     detect_patient_id_from_uploads,
     extract_upload_metadata_from_uploads,
+    remove_patient_note_storage_tree,
     remove_stored_paths,
     resolve_storage_path,
     sanitize_filename,
@@ -94,6 +99,7 @@ DEFAULT_ALLEVA_TOKEN_URL = 'https://authorization.allevasoft.com/connect/token'
 ALLEVA_REST_ADAPTER_KEY = 'alleva-rest-api'
 ALLEVA_SUPPORTED_EXPORT_FORMATS = ['PDF', 'DOCX', 'TXT', 'CSV', 'RTF', 'JPG', 'PNG', 'ZIP']
 ALLEVA_API_STANDARDS = ['Alleva REST API', 'OpenAPI operation discovery', 'HL7/API readiness']
+CLEAR_PATIENT_DATA_CONFIRMATION = 'CLEAR ALL PATIENT DATA'
 ALLEVA_REQUIRED_VENDOR_INPUTS = [
     'R3/Alleva live-sync approval',
     'Alleva REST API base URL and OpenAPI URL',
@@ -206,6 +212,10 @@ def _allowed_transition(role: Role, current: WorkflowState, target: WorkflowStat
         },
     }
     return target in allowed.get(role, {}).get(current, [])
+
+
+def _table_count(db: Session, model) -> int:
+    return int(db.scalar(select(func.count()).select_from(model)) or 0)
 
 
 def _chart_stmt():
@@ -716,6 +726,116 @@ def _validate_upload_batch(files: list[UploadFile]) -> None:
     if total_size > settings.max_upload_total_bytes:
         limit_mb = settings.max_upload_total_bytes // (1024 * 1024)
         raise HTTPException(status_code=413, detail=f'Upload exceeds the {limit_mb}MB total binder limit')
+
+
+@router.get('/branding/header-logo')
+def get_header_logo():
+    logo_file = settings.header_logo_file
+    if logo_file is None:
+        return Response(status_code=204)
+    return FileResponse(logo_file, media_type='image/png', headers={'cache-control': 'no-store'})
+
+
+@router.delete('/patient-data', response_model=ClearPatientDataOut)
+def clear_all_patient_data(
+    payload: ClearPatientDataInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    if payload.confirmation_phrase.strip() != CLEAR_PATIENT_DATA_CONFIRMATION:
+        log_event(
+            db,
+            request,
+            'patient_data.clear_all.denied',
+            actor=user,
+            event_category='data_management',
+            target_entity='patient_data',
+            target_entity_type='patient_data_reset',
+            details={'reason': 'confirmation_phrase_mismatch'},
+            outcome_status='failure',
+            severity='warning',
+            http_status_code=400,
+            message='Clear all patient data was blocked because the confirmation phrase did not match.',
+        )
+        raise HTTPException(status_code=400, detail=f'Type {CLEAR_PATIENT_DATA_CONFIRMATION} to clear patient data.')
+
+    deleted_counts = {
+        'workflow_transitions': _table_count(db, WorkflowTransition),
+        'audit_item_responses': _table_count(db, AuditItemResponse),
+        'charts': _table_count(db, Chart),
+        'patient_note_documents': _table_count(db, PatientNoteDocument),
+        'patient_note_sets': _table_count(db, PatientNoteSet),
+        'treatment_plan_criterion_reviews': _table_count(db, TreatmentPlanCriterionReview),
+        'treatment_plan_overrides': _table_count(db, TreatmentPlanOverride),
+        'treatment_plan_records': _table_count(db, TreatmentPlanRecord),
+        'level_of_care_history': _table_count(db, LevelOfCareHistory),
+        'treatment_plan_clients': _table_count(db, TreatmentPlanClient),
+    }
+    try:
+        db.execute(delete(WorkflowTransition))
+        db.execute(delete(AuditItemResponse))
+        db.execute(delete(Chart))
+        db.execute(delete(TreatmentPlanCriterionReview))
+        db.execute(delete(TreatmentPlanOverride))
+        db.execute(delete(TreatmentPlanRecord))
+        db.execute(delete(LevelOfCareHistory))
+        db.execute(delete(TreatmentPlanClient))
+        db.execute(delete(PatientNoteDocument))
+        db.execute(delete(PatientNoteSet))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        log_event(
+            db,
+            request,
+            'patient_data.clear_all.failed',
+            actor=user,
+            event_category='data_management',
+            target_entity='patient_data',
+            target_entity_type='patient_data_reset',
+            details={'deleted_counts_before_attempt': deleted_counts, 'reason': exc.__class__.__name__},
+            outcome_status='failure',
+            severity='error',
+            http_status_code=500,
+            message='Clear all patient data failed before database deletion completed.',
+        )
+        raise HTTPException(
+            status_code=500,
+            detail='Patient data could not be cleared. Configuration, credentials, users, and audit logs were not removed.',
+        ) from exc
+
+    storage_result = remove_patient_note_storage_tree()
+    storage_failed_count = int(storage_result.get('failed_path_count') or 0)
+    status = 'partial' if storage_failed_count else 'cleared'
+    message = (
+        'Patient database rows were cleared, but encrypted upload storage could not be fully removed. Review local logs and try again.'
+        if storage_failed_count
+        else 'All local patient, chart, treatment-plan, manual-upload, and review data were cleared. Settings, API credentials, users, and audit logs were preserved.'
+    )
+    log_event(
+        db,
+        request,
+        'patient_data.clear_all.completed',
+        actor=user,
+        event_category='data_management',
+        target_entity='patient_data',
+        target_entity_type='patient_data_reset',
+        details={
+            'deleted_counts': deleted_counts,
+            'storage_removed_file_count': int(storage_result.get('removed_file_count') or 0),
+            'storage_failed_path_count': storage_failed_count,
+        },
+        outcome_status='success' if status == 'cleared' else 'failure',
+        severity='info' if status == 'cleared' else 'warning',
+        message='Clear all patient data completed.',
+    )
+    return {
+        'status': status,
+        'message': message,
+        'deleted_counts': deleted_counts,
+        'storage_result': storage_result,
+    }
 
 
 @router.get('/settings', response_model=AppSettingsOut)
@@ -1780,7 +1900,10 @@ async def upload_patient_note_set(
         )
         if isinstance(exc, HTTPException):
             raise
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail='Upload failed while processing selected files. No partial binder was saved; try again or split large files into a smaller upload.',
+        ) from exc
 
     note_set = _find_note_set(note_set.id, user, db)
     review_chart_id = _latest_review_chart_id(note_set)

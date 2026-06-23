@@ -1,12 +1,12 @@
 # AGENTS.md - IZ Clinical Notes Analyzer
 
 ## Repo purpose
-Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel. Normal Windows desktop use must not require Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
+Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `1.4.5-beta.1` / build `2026.06.23.1` on the `beta-local-desktop` channel. Normal Windows desktop use must not require Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
 
 ## R3 project architecture
 - Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, REST/OpenAPI/HL7 readiness boundary, gated Alleva REST treatment-plan sync readiness, workflow profiles, and version/readiness endpoints.
 - Frontend: `frontend/src/` React/Vite single-page UI for login, dashboard, Treatment plans, Checklist, Manual upload, Review queue, Help, user management, Workflow profiles, App settings, Forensic logs, API/EMR status, optional LLM setup, and version footer.
-- Desktop runtime: `backend/app/desktop_main.py` mounts the built React app plus desktop-only rules/API/intake pages for one-service localhost use.
+- Desktop runtime: `backend/app/desktop_main.py` mounts the built React app plus desktop-only rules/API pages for one-service localhost use.
 - Data: default SQLite, uploads, logs, reports, and user `.env` live in OS-local app data, not the repo. Relative runtime paths must resolve through `Settings.local_app_data_dir`.
 - Rules: deterministic YAML rules in `config/rules/` and the canonical 42-step checklist in `config/checklists/treatment-plan-v1.json` remain the primary workflow engine. Optional LLM behavior must stay disabled by default and must never be required for compliance or timeliness decisions.
 - Windows scripts: `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` and `scripts/startup-windows-local.ps1` are the ordinary Windows checkout launch path; PowerShell test scripts cover local stack and API configuration smoke flows.

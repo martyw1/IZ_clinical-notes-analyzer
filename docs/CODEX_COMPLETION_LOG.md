@@ -1,5 +1,14 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-23 v1.4.5-beta.1 R3 beta-client readiness
+- Updated app/version metadata to `1.4.5-beta.1` / build `2026.06.23.1` on the `beta-local-desktop` channel.
+- Renamed `Chart audit` to `Status Dashboard`, moved `Treatment plans` immediately after it, added bundled R3 logo support, and removed the desktop floating shortcuts/intake-guide page.
+- Added admin-only `Clear All Patient Data` controls with typed confirmation, preserving settings, credentials, users, docs/rules, and audit logs while clearing patient/chart/upload/timeliness/review data.
+- Moved gated manual Alleva `Retrieve Active Treatment Plans` to the Status Dashboard EMR/API card and kept startup sync off by default.
+- Added saved manager status/comments per selected Treatment Plan checklist criterion and a selected-client counselor action CSV export.
+- Corrected timeliness boundary handling so due today is not overdue, hardened manual upload 500s, and added backend tests for clear-data, upload rollback, criterion notes, inactive clients, and 30/60/7-day windows.
+- Verification passed full backend pytest (`114 passed, 2 skipped`), frontend Vitest (`17 passed`), frontend production build, Windows local stack smoke on port `8767`, and browser validation against a disposable local app with synthetic data only.
+
 ## 2026-06-21 v1.4.4-beta.1 beta treatment-plan checklist detail visibility
 - Converted current app/version metadata to `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.
 - Added selected-client 42-step checklist evaluation results to Treatment Plans detail payloads, UI, and selected treatment-plan CSV/JSON exports while keeping checklist content version `1.2.0`.

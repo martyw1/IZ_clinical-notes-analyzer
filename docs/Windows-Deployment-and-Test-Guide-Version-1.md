@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current beta version: `1.4.4-beta.1` / build `2026.06.21.1`.
+Current beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Beta 1.4.4-beta.1 keeps the Version 1 startup reliability, stale-build safeguards, global and selected-client 42-step workflow coverage, redacted PDF handling, treatment-plan date-clock behavior, workflow/checklist exports, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
+Beta 1.4.5-beta.1 keeps the Version 1 startup reliability, stale-build safeguards, global and selected-client 42-step workflow coverage, selected-client manager notes/action export, redacted PDF handling, treatment-plan date-clock behavior, workflow/checklist exports, admin-only clear-patient-data controls, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
 
 ## Prerequisites for Source Build
 
@@ -43,7 +43,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Beta 1.4.4-beta.1 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Beta 1.4.5-beta.1 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -98,8 +98,8 @@ scripts\build-windows-installer.ps1
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4-beta.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1.zip`
 
 The release folder contains:
 
@@ -109,7 +109,7 @@ The release folder contains:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Beta 1.4.4-beta.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+Note: the Beta 1.4.5-beta.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 

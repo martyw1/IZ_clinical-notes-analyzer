@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.4.4-beta.1",
-  "build": "2026.06.21.1",
+  "version": "1.4.5-beta.1",
+  "build": "2026.06.23.1",
   "release_channel": "beta-local-desktop",
-  "release_date": "2026-06-21",
+  "release_date": "2026-06-23",
   "git_branch": "main",
   "stability": "beta",
   "is_prerelease": true,
-  "version_name": "Beta 1.4.4-beta.1 treatment-plan checklist detail visibility",
-  "description": "Marks the local Windows desktop app as beta, keeps the Alleva REST/API pull boundary intact, distinguishes app version 1.4.4-beta.1 from Treatment Plan Checklist content version 1.2.0, and exposes selected-client 42-step checklist evaluation details for treatment-plan review."
+  "version_name": "Beta 1.4.5-beta.1 R3 beta-client readiness",
+  "description": "Prepares the local Windows desktop beta for R3 client review with Status Dashboard branding, bundled R3 logo support, admin-only patient-data reset, Treatment Plan criterion manager notes/actions, gated manual Alleva treatment-plan retrieval, safer manual-upload failures, corrected due-date windows, and preserved Alleva live-sync approval gates."
 }

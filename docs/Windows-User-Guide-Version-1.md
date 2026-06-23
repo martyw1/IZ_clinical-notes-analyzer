@@ -2,13 +2,13 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current beta version: `1.4.4-beta.1` / build `2026.06.21.1`.
+Current beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
 
-Beta 1.4.4-beta.1 keeps the Version 1 Windows startup reliability fixes, repairs legacy local audit-log startup errors, adds selected-client 42-step Treatment Plans checklist evaluation, and removes active FHIR/SMART-on-FHIR configuration from Alleva workflows. Alleva integration is REST/OpenAPI/HL7-readiness only, with exact App settings validation messages, one active Alleva/API connection, optional saved endpoint presets, and gated Alleva REST treatment-plan sync controls.
+Beta 1.4.5-beta.1 keeps the Version 1 Windows startup reliability fixes, repairs legacy local audit-log startup errors, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, adds Status Dashboard R3 branding, and removes active FHIR/SMART-on-FHIR configuration from Alleva workflows. Alleva integration is REST/OpenAPI/HL7-readiness only, with exact App settings validation messages, one active Alleva/API connection, optional saved endpoint presets, and gated Alleva REST treatment-plan sync controls.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.4-beta.1`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
 4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Beta 1.4.4-beta.1 local recovery path is:
+The Beta 1.4.5-beta.1 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -40,15 +40,15 @@ Run the utility from the repo root, save the generated value securely, restart t
 
 ## Main Screens
 
-- Chart audit: summary, source selection, current queue, and checklist version.
-- Review queue: detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
-- Treatment plans: the default landing screen for admins and office managers, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, source-mode cards, and CSV/JSON export with workflow-step statuses.
+- Status Dashboard: R3-branded summary, source selection, current queue, checklist version, EMR/API readiness, manual upload entry point, `Retrieve Active Treatment Plans`, and admin-only `Clear All Patient Data`.
+- Treatment plans: the default landing screen for admins and office managers, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, saved manager status/comment notes for each 42-step criterion, counselor action export, and CSV/JSON export with workflow-step statuses.
+- Review queue: generated/manual uploaded-binder chart review workbench with detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
 - Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
 - Manual upload: upload exported clinical note or treatment plan files, inspect uploaded binder details, download stored documents when authorized, and delete an uploaded binder when it should be removed from the local app.
 - Help: role permissions, screen/button guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
 - User management: admins can manage admins, managers, and counselors; office managers can manage counselor accounts only; counselors manage only their own account.
 - Workflow profiles: admin/manager workflow logic screen, including `Seed draft from 42-step checklist`, draft creation, in-place draft editing, publish, archive, and unused-draft delete.
-- App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, one active Alleva/API connection, optional API endpoint presets, Alleva REST/OpenAPI settings, and LOC-change settings.
+- App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, one active Alleva/API connection, optional API endpoint presets, Alleva REST/OpenAPI settings, LOC-change settings, and `Clear All Patient Data`.
 - Forensic logs: admin-only audit trail.
 
 ## API Mode
@@ -59,7 +59,7 @@ Admins can open the API connectivity test harness from App settings or directly 
 
 Use the harness in order: load or save the active settings, test authentication/connectivity, then run `ALL Patient Records` if the connection test result is understood. `ALL Patient Records` calls Alleva `GET /clients` with the visible `Limit`, `Cursor`, `fields`, `api-version`, and `X-Version` settings and returns tab-separated rows that can be pasted into Excel. The output can contain PHI when Alleva returns names, so use approved R3 handling when copying or sharing it.
 
-For Alleva OAuth setup, it is normal to paste the client ID and client secret supplied by R3/Alleva. The client secret is encrypted locally and is never shown again after save. The browser only shows whether a secret is configured. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete.
+For Alleva OAuth setup, it is normal to paste the client ID and client secret supplied by R3/Alleva. The client secret is encrypted locally and is never shown again after save. The browser only shows whether a secret is configured. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete. Startup treatment-plan sync is off by default for beta; use manual retrieval only after R3/Alleva approval and mapping validation.
 
 Alleva confirmed it does not currently support FHIR. Stored API endpoint profiles are optional presets. Activating a preset copies its values into the active App settings connection used by readiness/API tests, periodic checks, and approved REST treatment-plan sync.
 
@@ -70,6 +70,10 @@ When API monitoring is unavailable, manual upload is treated as an upload-time s
 Supported file types are shown in the upload screen. Use synthetic data for testing. Production use with PHI requires R3-approved controls and secure local handling.
 
 To delete a binder that was uploaded and analyzed, open `Manual upload`, select the binder, type the patient ID exactly in the delete confirmation field, and click `Delete uploaded binder`. If you click before the confirmation matches, the app shows exact guidance instead of leaving the button unavailable. This removes the local uploaded binder, its linked automated review, linked upload-derived timeliness records, and encrypted stored files from the computer. Forensic audit logs remain.
+
+## Clear All Patient Data
+
+Admins can clear local patient/chart/treatment-plan/manual-upload/review data from Status Dashboard Quick Actions or App Settings. The confirmation requires typing `CLEAR ALL PATIENT DATA`. This preserves user accounts, app settings, saved API credentials, forensic audit logs, rules, and documentation. Use this before handing a beta laptop between synthetic test rounds, not as an uninstall replacement.
 
 ## Troubleshooting
 

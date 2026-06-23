@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from collections import Counter
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -8,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
 from app.db.session import get_db
-from app.models.models import AuditLog, Role, TreatmentPlanClient, User
+from app.models.models import AuditLog, Role, TreatmentPlanClient, TreatmentPlanCriterionReview, User
 from app.schemas.schemas import (
     TimelinessClientDetailOut,
+    TimelinessCriterionReviewInput,
     TimelinessClientUpsert,
     TimelinessDashboardOut,
     TimelinessOverrideInput,
@@ -28,11 +30,13 @@ from app.services.timeliness import (
     summary_payload as timeliness_summary_payload,
     upsert_client as upsert_timeliness_client,
 )
+from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.workflow_definitions import current_treatment_plan_workflow_context
 
 
 router = APIRouter(prefix='/timeliness')
 NOTE_SET_ROLES = (Role.admin, Role.counselor, Role.manager)
+MANAGER_CRITERION_REVIEW_STATUSES = {'Not Reviewed', 'OK', 'Needs Review', 'Needs Update', 'Not Applicable'}
 
 
 def _parse_evaluation_date(value: str | None):
@@ -251,3 +255,79 @@ def create_timeliness_override(
         message=f'Treatment Plan Timeliness override {override.id} created.',
     )
     return override
+
+
+@router.put('/clients/{client_id}/criterion-reviews', response_model=TimelinessClientDetailOut)
+def update_timeliness_criterion_reviews(
+    client_id: int,
+    payload: list[TimelinessCriterionReviewInput],
+    request: Request,
+    user: User = Depends(require_roles(Role.admin, Role.manager)),
+    db: Session = Depends(get_db),
+):
+    client = get_timeliness_client(db, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
+    if not payload:
+        raise HTTPException(status_code=400, detail='At least one criterion review is required')
+
+    checklist = load_treatment_plan_checklist()
+    valid_keys = {str(step['key']) for step in checklist['steps']}
+    existing_by_key = {review.criterion_key: review for review in client.criterion_reviews}
+    changed_count = 0
+    now = datetime.now(timezone.utc)
+    status_counts: Counter[str] = Counter()
+    for item in payload:
+        criterion_key = item.criterion_key.strip()
+        status = item.status.strip() or 'Not Reviewed'
+        comment = item.comment.strip()
+        if criterion_key not in valid_keys:
+            raise HTTPException(status_code=400, detail=f'Unknown treatment-plan criterion key: {criterion_key}')
+        if status not in MANAGER_CRITERION_REVIEW_STATUSES:
+            raise HTTPException(status_code=400, detail=f'Unknown criterion review status: {status}')
+        review = existing_by_key.get(criterion_key)
+        if review is None:
+            review = TreatmentPlanCriterionReview(client_id=client.id, criterion_key=criterion_key)
+            db.add(review)
+            existing_by_key[criterion_key] = review
+        if review.status != status or review.comment != comment:
+            changed_count += 1
+        review.status = status
+        review.comment = comment
+        review.updated_by_id = user.id
+        review.updated_at = now
+        status_counts[status] += 1
+
+    db.commit()
+    log_event(
+        db,
+        request,
+        'timeliness.criterion_reviews.updated',
+        actor=user,
+        event_category='workflow',
+        target_entity=f'treatment_plan_client:{client.id}',
+        target_entity_type='treatment_plan_criterion_reviews',
+        target_entity_id=str(client.id),
+        patient_id=client.patient_id,
+        details={
+            'criterion_count': len(payload),
+            'changed_count': changed_count,
+            'statuses': dict(status_counts),
+        },
+        message=f'Treatment Plan criterion reviews updated for {client.patient_id}.',
+    )
+
+    client = get_timeliness_client(db, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
+    app_settings = get_or_create_app_settings(db)
+    evaluation = evaluate_client(client, app_settings, evaluation_date=_parse_evaluation_date(request.query_params.get('evaluation_date')))
+    audit_history = list(
+        db.execute(
+            select(AuditLog)
+            .where(AuditLog.patient_id == client.patient_id)
+            .order_by(AuditLog.timestamp_utc.desc(), AuditLog.id.desc())
+            .limit(25)
+        ).scalars()
+    )
+    return timeliness_detail_payload(evaluation, audit_history)

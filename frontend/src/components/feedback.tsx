@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export type AppDialogState = {
   title: string
   message: string
@@ -8,6 +10,9 @@ export type ConfirmDialogState = {
   message: string
   confirmLabel: string
   cancelLabel: string
+  confirmationPhrase?: string
+  confirmationLabel?: string
+  confirmationPlaceholder?: string
   onConfirm: () => void
 }
 
@@ -85,16 +90,31 @@ type ConfirmDialogModalProps = {
 }
 
 export function ConfirmDialogModal({ dialog, onCancel }: ConfirmDialogModalProps) {
+  const [typedPhrase, setTypedPhrase] = useState('')
+  const requiresPhrase = Boolean(dialog.confirmationPhrase)
+  const canConfirm = !requiresPhrase || typedPhrase.trim() === dialog.confirmationPhrase
+
   return (
     <div className='modal-backdrop' role='presentation'>
       <section className='app-dialog' role='alertdialog' aria-modal='true' aria-labelledby='confirm-dialog-title' aria-describedby='confirm-dialog-message'>
         <h2 id='confirm-dialog-title'>{dialog.title}</h2>
         <p id='confirm-dialog-message'>{dialog.message}</p>
+        {requiresPhrase ? (
+          <label className='form-field confirmation-field'>
+            <span>{dialog.confirmationLabel || `Type ${dialog.confirmationPhrase} to continue`}</span>
+            <input
+              value={typedPhrase}
+              onChange={(event) => setTypedPhrase(event.target.value)}
+              placeholder={dialog.confirmationPlaceholder || dialog.confirmationPhrase}
+              autoFocus
+            />
+          </label>
+        ) : null}
         <div className='form-actions'>
           <button type='button' className='ghost-button' onClick={onCancel}>
             {dialog.cancelLabel}
           </button>
-          <button type='button' onClick={dialog.onConfirm}>
+          <button type='button' onClick={dialog.onConfirm} disabled={!canConfirm}>
             {dialog.confirmLabel}
           </button>
         </div>

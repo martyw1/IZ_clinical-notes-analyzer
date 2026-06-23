@@ -4,7 +4,7 @@ from __future__ import annotations
 
 This module keeps the existing FastAPI app intact while adding desktop-specific
 behavior: the YAML rules API, the API configuration/test UI, the clinical notes
-intake UI, and static React UI serving when frontend/dist is present. Windows
+and static React UI serving when frontend/dist is present. Windows
 launch scripts use this module so the local app can run as a single localhost
 service.
 """
@@ -16,7 +16,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse, HTMLResponse
 
 from app.api.api_config_ui_routes import router as api_config_ui_router
-from app.api.clinical_notes_ui_routes import router as clinical_notes_ui_router
 from app.api.rules_routes import router as rules_router
 from app.core.config import REPO_ROOT
 from app.main import create_app
@@ -32,56 +31,7 @@ def _app_version() -> str:
 
 
 def _desktop_chrome() -> str:
-    version = _app_version()
-    version_label = f'Beta v{version}' if 'beta' in version.lower() else f'v{version}'
-    return f"""
-    <style id="iz-cna-desktop-chrome-style">
-      .iz-cna-desktop-shortcuts {{
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 999999;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        font-family: Segoe UI, Arial, sans-serif;
-      }}
-      .iz-cna-desktop-shortcuts a,
-      .iz-cna-desktop-version {{
-        border: 1px solid rgba(15, 23, 42, 0.18);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.94);
-        color: #0f172a;
-        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
-        font-size: 12px;
-        font-weight: 700;
-        line-height: 1;
-        padding: 9px 12px;
-        text-decoration: none;
-        backdrop-filter: blur(6px);
-      }}
-      .iz-cna-desktop-shortcuts a {{
-        background: #065f46;
-        border-color: #065f46;
-        color: #ffffff;
-      }}
-      .iz-cna-desktop-shortcuts a.secondary {{
-        background: #ffffff;
-        border-color: rgba(15, 23, 42, 0.18);
-        color: #0f172a;
-      }}
-      .iz-cna-desktop-shortcuts a:hover {{ background: #047857; color: #ffffff; }}
-      @media print {{ .iz-cna-desktop-shortcuts {{ display: none; }} }}
-    </style>
-    <div class="iz-cna-desktop-shortcuts" aria-label="Application shortcuts and version">
-      <a href="/?view=uploads">Manual Upload</a>
-      <a class="secondary" href="/clinical-notes-intake" target="_blank" rel="noopener noreferrer">Intake Guide</a>
-      <a class="secondary" href="/api-configuration" target="_blank" rel="noopener noreferrer">API Connectivity</a>
-      <span class="iz-cna-desktop-version">{version_label}</span>
-    </div>
-    """
+    return ''
 
 
 def _html_with_desktop_chrome(index_file: Path) -> HTMLResponse:
@@ -129,7 +79,6 @@ def _frontend_missing_page() -> HTMLResponse:
           <ul>
             <li><a href="/api/health">API health</a></li>
             <li><a href="/api/readiness">Runtime readiness</a></li>
-            <li><a href="/clinical-notes-intake">Clinical notes intake</a></li>
             <li><a href="/api-configuration">API configuration and connectivity test</a></li>
             <li><a href="/docs">API documentation</a></li>
           </ul>
@@ -174,5 +123,4 @@ def _mount_frontend(api: FastAPI) -> None:
 app = create_app()
 app.include_router(rules_router)
 app.include_router(api_config_ui_router)
-app.include_router(clinical_notes_ui_router)
 _mount_frontend(app)

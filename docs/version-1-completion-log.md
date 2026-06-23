@@ -1,5 +1,14 @@
 # Version 1 Completion Log
 
+## 2026-06-23 1.4.5-beta.1 R3 Beta-Client Readiness
+
+- Updated app/version metadata to `1.4.5-beta.1` / build `2026.06.23.1`.
+- Added Status Dashboard branding, R3 logo support, Treatment Plans tab ordering, and removed obsolete desktop floating shortcut/intake-guide functionality.
+- Added admin-only clear-patient-data workflow with exact phrase confirmation and non-PHI audit details.
+- Added saved manager notes/statuses to Treatment Plan checklist criteria and selected-client counselor action export.
+- Fixed timeliness due-date boundaries and added regression tests for due today, 1/7/8 days before due, 1 day after due, exact 30/60-day intervals, missing/inactive data behavior, and manual upload rollback.
+- Kept Alleva live sync gated and startup sync off by default; manual retrieval now lives on the Status Dashboard EMR/API card.
+
 ## 2026-06-21 1.4.4-beta.1 Beta Treatment-Plan Checklist Detail Visibility
 
 - Converted current app/version metadata to `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.

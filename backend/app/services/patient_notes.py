@@ -4,6 +4,7 @@ import hashlib
 import html
 import io
 import re
+import shutil
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -82,6 +83,25 @@ def uploads_root() -> Path:
     root = settings.upload_dir_path.resolve()
     ensure_private_directory(root)
     return root
+
+
+def remove_patient_note_storage_tree() -> dict[str, object]:
+    """Remove encrypted patient-note upload storage without touching other app data."""
+    root = uploads_root()
+    patient_notes_dir = (root / 'patient-notes').resolve()
+    try:
+        patient_notes_dir.relative_to(root)
+    except ValueError:
+        return {'removed_file_count': 0, 'failed_path_count': 1, 'failed_paths': ['patient-notes']}
+    if not patient_notes_dir.exists():
+        return {'removed_file_count': 0, 'failed_path_count': 0, 'failed_paths': []}
+
+    removed_file_count = sum(1 for path in patient_notes_dir.rglob('*') if path.is_file())
+    try:
+        shutil.rmtree(patient_notes_dir)
+    except OSError:
+        return {'removed_file_count': 0, 'failed_path_count': 1, 'failed_paths': ['patient-notes']}
+    return {'removed_file_count': removed_file_count, 'failed_path_count': 0, 'failed_paths': []}
 
 
 def _safe_component(value: str, *, fallback: str) -> str:

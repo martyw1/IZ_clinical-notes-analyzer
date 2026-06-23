@@ -422,6 +422,7 @@ class TreatmentPlanClient(Base):
     level_of_care_history: Mapped[list['LevelOfCareHistory']] = relationship(cascade='all, delete-orphan', back_populates='client')
     treatment_plans: Mapped[list['TreatmentPlanRecord']] = relationship(cascade='all, delete-orphan', back_populates='client')
     overrides: Mapped[list['TreatmentPlanOverride']] = relationship(cascade='all, delete-orphan', back_populates='client')
+    criterion_reviews: Mapped[list['TreatmentPlanCriterionReview']] = relationship(cascade='all, delete-orphan', back_populates='client')
 
 
 class LevelOfCareHistory(Base):
@@ -477,3 +478,19 @@ class TreatmentPlanOverride(Base):
 
     client: Mapped[TreatmentPlanClient] = relationship(back_populates='overrides')
     created_by: Mapped[User] = relationship()
+
+
+class TreatmentPlanCriterionReview(Base):
+    __tablename__ = 'treatment_plan_criterion_reviews'
+    __table_args__ = (UniqueConstraint('client_id', 'criterion_key', name='uq_treatment_plan_criterion_reviews_client_key'),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey('treatment_plan_clients.id'), index=True)
+    criterion_key: Mapped[str] = mapped_column(String(120), index=True)
+    status: Mapped[str] = mapped_column(String(40), default='Not Reviewed')
+    comment: Mapped[str] = mapped_column(Text, default='')
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    client: Mapped[TreatmentPlanClient] = relationship(back_populates='criterion_reviews')
+    updated_by: Mapped[User] = relationship()

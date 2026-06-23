@@ -2,11 +2,12 @@ import json
 import re
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.security import hash_password
-from app.models.models import AppSetting, AuditLog, Role, TreatmentPlanClient, User
+from app.models.models import AppSetting, AuditLog, Role, TreatmentPlanClient, TreatmentPlanCriterionReview, User
 from app.services.alleva_treatment_plan_sync import sync_alleva_rest_payloads
 from app.services.timeliness import evaluate_client
 from app.services.secure_storage import text_secret_is_encrypted
@@ -82,6 +83,57 @@ def _client_payload(
     }
 
 
+def _single_loc_client_payload(
+    patient_id: str,
+    *,
+    loc: str = 'PHP',
+    review_date: str = '2026-05-01',
+    is_active: bool = True,
+):
+    return {
+        'patient_id': patient_id,
+        'permitted_name': 'Synthetic Client',
+        'is_active': is_active,
+        'current_level_of_care': loc,
+        'counselor_name': 'Counselor A',
+        'admission_date': '2026-04-01',
+        'source_evidence': 'Synthetic spreadsheet row',
+        'level_of_care_history': [
+            {
+                'level_of_care': loc,
+                'facility': 'Synthetic Facility',
+                'effective_date': '2026-04-01',
+                'discharge_date': '' if is_active else '2026-05-15',
+                'source_evidence': 'Synthetic current LOC row',
+            }
+        ],
+        'treatment_plans': [
+            {
+                'plan_kind': 'initial',
+                'document_date': '2026-04-01',
+                'staff_signature_date': '2026-04-01',
+                'client_signature_date': '2026-04-01',
+                'source_evidence': 'Initial Treatment Plan synthetic record',
+            },
+            {
+                'plan_kind': 'master',
+                'document_date': '2026-04-15',
+                'staff_signature_date': '2026-04-15',
+                'client_signature_date': '2026-04-15',
+                'source_evidence': 'Master Treatment Plan synthetic record',
+            },
+            {
+                'plan_kind': 'review',
+                'document_date': review_date,
+                'staff_signature_date': review_date,
+                'client_signature_date': '',
+                'source_evidence': 'Treatment Plan Review synthetic record',
+                'source_section': 'Treatment Plan Reviews',
+            },
+        ],
+    }
+
+
 def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlite):
     app, _ = app_with_sqlite
 
@@ -126,7 +178,7 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert checklist_by_key['confirm_correct_client_chart']['status'] == 'Confirmed'
         assert checklist_by_key['confirm_admission_date']['status'] == 'Confirmed'
         assert checklist_by_key['confirm_loc_rule_mapping']['status'] == 'Confirmed'
-        assert checklist_by_key['calculate_next_review_due_date']['status'] == 'Urgent'
+        assert checklist_by_key['calculate_next_review_due_date']['status'] == 'Due Soon'
         assert checklist_by_key['loc_change_deadline_unresolved']['status'] == 'Needs Review'
         assert checklist_by_key['flag_missing_data_not_compliance']['status'] == 'Missing Data'
         assert checklist_by_key['loc_change_deadline_unresolved']['finding_examples']
@@ -159,6 +211,122 @@ def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
         assert payload['evidence_comparison']['loc_change_window_days'] == 7
         assert 'LOC-change due date is 2026-04-06' in payload['evidence_comparison']['conflict_explanation']
         assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
+
+
+@pytest.mark.parametrize(
+    ('evaluation_date', 'expected_status', 'expected_days_until_due'),
+    [
+        ('2026-05-31', 'Urgent', 0),
+        ('2026-05-30', 'Urgent', 1),
+        ('2026-05-24', 'Due Soon', 7),
+        ('2026-05-23', 'Compliant', 8),
+        ('2026-06-01', 'Overdue', -1),
+    ],
+)
+def test_timeliness_due_date_boundary_windows(app_with_sqlite, evaluation_date, expected_status, expected_days_until_due):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post('/api/timeliness/clients', headers=headers, json=_single_loc_client_payload(patient_id=f'PAT-BOUNDARY-{evaluation_date}'))
+        assert created.status_code == 200
+
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}?evaluation_date={evaluation_date}", headers=headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload['next_due_date'] == '2026-05-31'
+        assert payload['days_until_due'] == expected_days_until_due
+        assert payload['status'] == expected_status
+
+
+@pytest.mark.parametrize(
+    ('loc', 'evaluation_date', 'expected_due_date'),
+    [
+        ('PHP', '2026-05-31', '2026-05-31'),
+        ('IOP 5', '2026-06-30', '2026-06-30'),
+    ],
+)
+def test_timeliness_exact_30_and_60_day_boundaries_are_not_overdue(app_with_sqlite, loc, evaluation_date, expected_due_date):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/timeliness/clients',
+            headers=headers,
+            json=_single_loc_client_payload(patient_id=f'PAT-{loc.replace(" ", "-")}-BOUNDARY', loc=loc),
+        )
+        assert created.status_code == 200
+
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}?evaluation_date={evaluation_date}", headers=headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload['next_due_date'] == expected_due_date
+        assert payload['days_until_due'] == 0
+        assert payload['status'] == 'Urgent'
+
+
+def test_inactive_clients_are_excluded_from_active_timeliness_dashboard(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post('/api/timeliness/clients', headers=headers, json=_single_loc_client_payload(patient_id='PAT-INACTIVE-TP', is_active=False))
+        assert created.status_code == 200
+
+        dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-31', headers=headers)
+        assert dashboard.status_code == 200
+        payload = dashboard.json()
+        assert payload['total_active_clients'] == 0
+        assert payload['items'] == []
+
+
+def test_timeliness_criterion_reviews_persist_and_are_audited_without_comments(app_with_sqlite):
+    app, session_local = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post('/api/timeliness/clients', headers=headers, json=_single_loc_client_payload(patient_id='PAT-CRITERIA-100'))
+        assert created.status_code == 200
+        client_id = created.json()['id']
+
+        updated = client.put(
+            f'/api/timeliness/clients/{client_id}/criterion-reviews?evaluation_date=2026-05-31',
+            headers=headers,
+            json=[
+                {
+                    'criterion_key': 'calculate_next_review_due_date',
+                    'status': 'Needs Update',
+                    'comment': 'Synthetic counselor should update the next review due date.',
+                },
+                {
+                    'criterion_key': 'confirm_client_signature_status',
+                    'status': 'Needs Review',
+                    'comment': 'Synthetic manager should confirm whether client signature is applicable.',
+                },
+            ],
+        )
+        assert updated.status_code == 200
+        checklist_by_key = {item['key']: item for item in updated.json()['checklist_results']}
+        assert checklist_by_key['calculate_next_review_due_date']['manager_status'] == 'Needs Update'
+        assert checklist_by_key['calculate_next_review_due_date']['manager_comment'] == 'Synthetic counselor should update the next review due date.'
+        assert checklist_by_key['confirm_client_signature_status']['manager_status'] == 'Needs Review'
+
+        reloaded = client.get(f'/api/timeliness/clients/{client_id}?evaluation_date=2026-05-31', headers=headers)
+        assert reloaded.status_code == 200
+        reloaded_by_key = {item['key']: item for item in reloaded.json()['checklist_results']}
+        assert reloaded_by_key['calculate_next_review_due_date']['manager_status'] == 'Needs Update'
+        assert reloaded_by_key['calculate_next_review_due_date']['manager_comment']
+
+    db = session_local()
+    try:
+        assert db.execute(select(TreatmentPlanCriterionReview).where(TreatmentPlanCriterionReview.criterion_key == 'calculate_next_review_due_date')).scalar_one()
+        audit = db.execute(select(AuditLog).where(AuditLog.action == 'timeliness.criterion_reviews.updated')).scalar_one()
+        assert audit.patient_id == 'PAT-CRITERIA-100'
+        assert 'Synthetic counselor should update' not in audit.details
+        assert 'criterion_count' in audit.details
+    finally:
+        db.close()
 
 
 def test_api_style_treatment_plan_repull_updates_record_and_reevaluates(app_with_sqlite):
@@ -247,10 +415,10 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
                 {
                     'id': 701,
                     'clientName': 'Synthetic Client',
-                    'createdDated': '2026-03-20T12:00:00Z',
-                    'creatorSignatureDate': '2026-03-20',
+                    'createdDate': '2026-03-20T12:00:00Z',
+                    'staffSignatureDate': '2026-03-20',
                     'clientSignatureDate': '2026-03-20',
-                    'nextReviewDue': '2026-04-19',
+                    'nextReviewDueDate': '2026-04-19',
                 }
             ],
         )
@@ -419,7 +587,7 @@ def test_patient_note_upload_syncs_treatment_plan_metadata(app_with_sqlite):
         )
         assert uploaded.status_code == 200
 
-        dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-04-22', headers=headers)
+        dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-04-25', headers=headers)
         assert dashboard.status_code == 200
         item = dashboard.json()['items'][0]
         assert item['patient_id'] == 'PAT-UPLOAD-TP'
@@ -456,6 +624,7 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
         assert payload['access_reputation_api_key_configured'] is True
         assert payload['treatment_plan_loc_change_window_days'] == 3
         assert payload['treatment_plan_loc_change_window_validated'] is False
+        assert payload['alleva_treatment_plan_sync_on_startup'] is False
 
     db = session_local()
     try:

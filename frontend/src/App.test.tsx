@@ -461,13 +461,13 @@ function treatmentPlanChecklistPayload() {
 function versionPayload() {
   return {
     app_name: 'IZ Clinical Notes Analyzer',
-    version: '1.4.4-beta.1',
-    build: '2026.06.21.1',
+    version: '1.4.5-beta.1',
+    build: '2026.06.23.1',
     release_channel: 'beta-local-desktop',
-    release_date: '2026-06-21',
+    release_date: '2026-06-23',
     stability: 'beta',
     is_prerelease: true,
-    version_name: 'Beta 1.4.4-beta.1 treatment-plan checklist detail visibility',
+    version_name: 'Beta 1.4.5-beta.1 R3 beta-client readiness',
     environment: 'test',
     git_commit: 'abcdef123456',
     git_branch: 'main',
@@ -824,7 +824,11 @@ describe('App turnkey workflow', () => {
     signIn()
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
-    await waitFor(() => expect(screen.getByText(/Beta v1\.4\.4-beta\.1/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Beta v1\.4\.5-beta\.1/)).toBeInTheDocument())
+    const primaryNavLabels = within(screen.getByRole('navigation'))
+      .getAllByRole('button')
+      .map((button) => button.textContent)
+    expect(primaryNavLabels.slice(0, 3)).toEqual(['Status Dashboard', 'Treatment plans', 'Review queue'])
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
@@ -1161,10 +1165,10 @@ describe('App turnkey workflow', () => {
     render(<App />)
     signIn()
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pull active treatment plans' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Pull active treatment plans' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Status Dashboard' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Status Dashboard' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retrieve Active Treatment Plans' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Retrieve Active Treatment Plans' }))
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
     expect(screen.getByText(/1 active client\(s\) loaded/)).toBeInTheDocument()
@@ -1595,6 +1599,6 @@ describe('App turnkey workflow', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Chart audit' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Status Dashboard' })).toBeInTheDocument())
   })
 })

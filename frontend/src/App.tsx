@@ -242,6 +242,10 @@ type TimelinessChecklistResult = {
   override_reason_required: boolean
   audit_event: string
   export_fields: string[]
+  manager_status: string
+  manager_comment: string
+  manager_updated_by_id: number | null
+  manager_updated_at: string | null
 }
 
 type TimelinessLevelOfCare = {
@@ -312,6 +316,13 @@ type TimelinessClientDetail = TimelinessClientSummary & {
   treatment_plans: TimelinessTreatmentPlan[]
   overrides: TimelinessOverride[]
   audit_history: AuditLogRecord[]
+}
+
+type ClearPatientDataResponse = {
+  status: 'cleared' | 'partial'
+  message: string
+  deleted_counts: Record<string, number>
+  storage_result: Record<string, unknown>
 }
 
 type AppSettings = {
@@ -772,9 +783,11 @@ const TIMELINESS_TASK_STATUSES = new Set<TimelinessStatus>([
   'Conflicting Evidence',
   'Unable to Evaluate',
 ])
+const CLEAR_PATIENT_DATA_CONFIRMATION = 'CLEAR ALL PATIENT DATA'
+const MANAGER_CRITERION_STATUSES = ['Not Reviewed', 'OK', 'Needs Review', 'Needs Update', 'Not Applicable']
 
 const VIEW_LABELS: Record<AppView, string> = {
-  dashboard: 'Chart audit',
+  dashboard: 'Status Dashboard',
   reviews: 'Review queue',
   uploads: 'Manual upload',
   timeliness: 'Treatment plans',
@@ -787,7 +800,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   help: 'Help',
 }
 
-const APP_VIEWS: AppView[] = ['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
+const APP_VIEWS: AppView[] = ['dashboard', 'timeliness', 'reviews', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
 
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
@@ -829,11 +842,13 @@ const ROLE_CAPABILITIES = [
 
 const HELP_SECTIONS = [
   {
-    title: 'Dashboard',
+    title: 'Status Dashboard',
     items: [
       'Refresh reloads the current workspace and clears stale queue data.',
       'EMR/API access shows readiness-only status until vendor mapping and compliance approval are complete.',
       'Run safe API readiness check performs a connection/readiness check only; it does not import live Alleva patient charts.',
+      'Retrieve Active Treatment Plans runs the gated manual Alleva treatment-plan sync only when admin settings, R3/Alleva approval, and mapping validation are complete.',
+      'Clear All Patient Data is admin-only, requires an exact typed phrase, and preserves settings, API credentials, users, and forensic logs.',
       'Upload binder starts a manual upload or update workflow; Open review queue opens generated chart-review work.',
     ],
   },
@@ -846,6 +861,7 @@ const HELP_SECTIONS = [
       'Status filters narrow the queue by Overdue, Urgent, Due Soon, Returned, Needs Review, Missing Data, Conflicting Evidence, Unable to Evaluate, Compliant, or Approved.',
       'View evidence opens the exact date fields used for the selected due-date comparison.',
       'Copy task list and Export task list create non-secret work lists for follow-up tracking. Export CSV/JSON includes rule results and the current 42-step workflow step statuses.',
+      'Admins and office managers can save manager status/comments on each of the 42 checklist criteria and export a selected-client counselor action list.',
       'Manual override is available only to admins and office managers and requires a reason.',
     ],
   },
@@ -862,8 +878,8 @@ const HELP_SECTIONS = [
   {
     title: 'Review Queue',
     items: [
-      'Open automated review loads the selected chart and criterion workbench.',
-      'Admins can pull approved Alleva REST active treatment-plan data from the Review Queue using the saved App Settings API connection.',
+      'Open automated review loads the selected uploaded-binder chart and criterion workbench.',
+      'Review Queue remains the manual/generated chart-review workbench; Treatment Plans remains the active due-date and timeliness work queue.',
       'Mark OK, Mark not OK, Not applicable, and Save criterion review changes are available to admins and office managers.',
       'Export CSV and Export JSON keep the existing checklist-domain status rows and also include the current 42-step workflow statuses.',
       'Approve and Return to counselor are manager/admin decisions; returns require a correction note.',
@@ -891,11 +907,12 @@ const HELP_SECTIONS = [
   {
     title: 'App Settings, API/EMR, And LLM',
     items: [
-      'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, and EMR/API configuration.',
+      'App settings are admin-only and include organization, timezone, LOC-change blocker, access intelligence, optional LLM, EMR/API configuration, and the Clear All Patient Data control.',
       'Alleva currently identifies HL7 as the standards-based integration path; active app integration is Alleva REST/OpenAPI/HL7 readiness.',
       'There is one active Alleva/API connection in App settings. The API test harness loads these same active values.',
       'Pasting the client ID and client secret supplied by Alleva/R3 is the normal OAuth client-credentials setup. The saved secret is encrypted and never returned to the browser.',
       'Alleva REST treatment-plan sync uses the active REST API base URL and OpenAPI documentation URL. R3 runs compliance checks locally after the app imports approved mapped treatment-plan data.',
+      'Run sync every time the app starts remains off by default for beta client builds; use manual retrieval until R3/Alleva approval and mapping are confirmed.',
       'Periodic API checks require the REST API base URL, OpenAPI URL, OAuth token URL, client ID, and a stored client secret. Save errors list the exact missing fields.',
       'Saved API endpoint profiles are presets. Activating one copies its values into the active App settings connection used by readiness/API tests.',
       'LLM support is disabled by default; when enabled it uses an OpenAI-compatible base URL, API key, model, and optional analysis instructions.',
@@ -950,7 +967,7 @@ function readErrorMessage(status: number, payload: ApiError | null) {
   if (status === 403) return detailText || 'Your account does not have access to that action.'
   if (status === 413) return 'The selected upload is too large. Remove files or split the binder into a smaller upload.'
   if (status === 422) return detailText || 'Some required information is missing or needs a different format.'
-  if (status >= 500) return 'The local app could not finish that request. Try again, then restart the app if it keeps happening.'
+  if (status >= 500) return detailText || 'The local app could not finish that request. Try again, then restart the app if it keeps happening.'
   if (detailText) return detailText
   return 'The request could not be completed.'
 }
@@ -1265,6 +1282,51 @@ function buildTimelinessTaskList(items: TimelinessClientSummary[]) {
   return [header.map(csvCell).join(','), ...rows].join('\n')
 }
 
+function buildSelectedTimelinessCounselorActions(client: TimelinessClientDetail) {
+  const actionableCriteria = client.checklist_results.filter((result) => {
+    const managerActionable = result.manager_status === 'Needs Review' || result.manager_status === 'Needs Update'
+    const resultActionable = TIMELINESS_TASK_STATUSES.has(result.status as TimelinessStatus)
+    return managerActionable || resultActionable || result.manager_comment.trim()
+  })
+  const header = [
+    'patient_id',
+    'client_label',
+    'current_loc',
+    'primary_clinician',
+    'next_due_date',
+    'overall_status',
+    'criterion_step',
+    'criterion_key',
+    'criterion_title',
+    'criterion_status',
+    'manager_status',
+    'manager_comment',
+    'recommended_action',
+    'source_evidence',
+  ]
+  const rows = actionableCriteria.map((result) =>
+    [
+      client.patient_id,
+      client.permitted_name || client.patient_id,
+      client.current_level_of_care || 'Missing',
+      client.counselor_name || 'Unassigned',
+      client.next_due_date || 'Not calculated',
+      client.status,
+      result.step,
+      result.key,
+      result.title,
+      result.status,
+      result.manager_status || 'Not Reviewed',
+      result.manager_comment || '',
+      result.reviewer_actions.length ? result.reviewer_actions.join('; ') : result.remediation_suggestions.join('; '),
+      result.source_evidence || client.evidence_summary,
+    ]
+      .map(csvCell)
+      .join(','),
+  )
+  return [header.map(csvCell).join(','), ...rows].join('\n')
+}
+
 function workflowTone(state: string) {
   if (state === 'Approved by Office Manager') return 'success'
   if (state === 'Returned to Counselor') return 'danger'
@@ -1283,6 +1345,14 @@ function timelinessTone(status: string) {
   if (status === 'Conflicting Evidence') return 'conflicting'
   if (status === 'Unable to Evaluate') return 'unable'
   return 'neutral'
+}
+
+function managerCriterionTone(status: string) {
+  if (status === 'OK') return 'success'
+  if (status === 'Needs Update') return 'urgent'
+  if (status === 'Needs Review') return 'needs-review'
+  if (status === 'Not Applicable') return 'neutral'
+  return 'muted'
 }
 
 function timelinessFilterCount(dashboard: TimelinessDashboard | null, filter: TimelinessFilter) {
@@ -1466,6 +1536,7 @@ export function App() {
   const [timelinessStatusFilter, setTimelinessStatusFilter] = useState<TimelinessFilter>('All')
   const [timelinessSearch, setTimelinessSearch] = useState('')
   const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
+  const [timelinessCriterionDirty, setTimelinessCriterionDirty] = useState(false)
   const [evidencePreview, setEvidencePreview] = useState<EvidencePreview | null>(null)
   const [appDialog, setAppDialog] = useState<AppDialogState | null>(null)
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
@@ -1834,6 +1905,7 @@ export function App() {
     setTimelinessStatusFilter('All')
     setTimelinessSearch('')
     setTimelinessOverrideForm(createTimelinessOverrideForm())
+    setTimelinessCriterionDirty(false)
     setEvidencePreview(null)
     setAppDialog(null)
     setConfirmDialog(null)
@@ -2055,6 +2127,7 @@ export function App() {
     setSelectedTimelinessClient(detail)
     setSelectedTimelinessClientId(detail.id)
     setTimelinessOverrideForm(createTimelinessOverrideForm(detail))
+    setTimelinessCriterionDirty(false)
   }
 
   async function loadTimelinessDashboard(preferredId?: number | null) {
@@ -2068,6 +2141,7 @@ export function App() {
       setSelectedTimelinessClient(null)
       setSelectedTimelinessClientId(null)
       setTimelinessOverrideForm(createTimelinessOverrideForm())
+      setTimelinessCriterionDirty(false)
     }
   }
 
@@ -3381,6 +3455,112 @@ export function App() {
     }
   }
 
+  function updateTimelinessCriterionReview(criterionKey: string, updates: Partial<Pick<TimelinessChecklistResult, 'manager_status' | 'manager_comment'>>) {
+    setSelectedTimelinessClient((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        checklist_results: current.checklist_results.map((result) =>
+          result.key === criterionKey
+            ? {
+                ...result,
+                ...updates,
+              }
+            : result,
+        ),
+      }
+    })
+    setTimelinessCriterionDirty(true)
+  }
+
+  async function saveTimelinessCriterionReviews() {
+    if (!selectedTimelinessClient || !canOverrideTimeliness) return
+    setIsBusy(true)
+    setError('')
+    try {
+      const payload = selectedTimelinessClient.checklist_results.map((result) => ({
+        criterion_key: result.key,
+        status: result.manager_status || 'Not Reviewed',
+        comment: result.manager_comment || '',
+      }))
+      const detail = await apiRequest<TimelinessClientDetail>(
+        `/timeliness/clients/${selectedTimelinessClient.id}/criterion-reviews${timelinessQueryString()}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      )
+      setSelectedTimelinessClient(detail)
+      setSelectedTimelinessClientId(detail.id)
+      setTimelinessCriterionDirty(false)
+      setStatus(`Saved manager checklist notes for patient ${detail.patient_id}.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to save manager checklist notes')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  function exportSelectedTimelinessCounselorActions() {
+    if (!selectedTimelinessClient) {
+      setError('Select a treatment-plan item before exporting a counselor action list.')
+      return
+    }
+    const safePatientId = selectedTimelinessClient.patient_id.replace(/[^a-z0-9_-]+/gi, '-')
+    downloadTextFile(
+      `treatment-plan-counselor-actions-${safePatientId}.csv`,
+      buildSelectedTimelinessCounselorActions(selectedTimelinessClient),
+      'text/csv',
+    )
+    setStatus(`Exported counselor action list for patient ${selectedTimelinessClient.patient_id}.`)
+  }
+
+  async function clearAllPatientData() {
+    setIsBusy(true)
+    setError('')
+    try {
+      const result = await apiRequest<ClearPatientDataResponse>('/patient-data', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation_phrase: CLEAR_PATIENT_DATA_CONFIRMATION }),
+      })
+      setCharts([])
+      setSelectedChart(null)
+      setSelectedChartId(null)
+      setNoteSets([])
+      setSelectedNoteSet(null)
+      setSelectedNoteSetId(null)
+      setTimelinessDashboard(null)
+      setSelectedTimelinessClient(null)
+      setSelectedTimelinessClientId(null)
+      setTimelinessCriterionDirty(false)
+      await loadWorkspace()
+      setStatus(result.message)
+      if (result.status === 'partial') setError(result.message)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to clear patient data')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  function openClearPatientDataDialog() {
+    setConfirmDialog({
+      title: 'Clear all patient data?',
+      message:
+        'This removes local patient/chart/treatment-plan/manual-upload/review data and encrypted uploaded files. It preserves user accounts, app settings, API credentials, audit logs, docs, and rules.',
+      confirmLabel: 'Clear patient data',
+      cancelLabel: 'Cancel',
+      confirmationPhrase: CLEAR_PATIENT_DATA_CONFIRMATION,
+      confirmationLabel: `Type ${CLEAR_PATIENT_DATA_CONFIRMATION} to confirm`,
+      onConfirm: () => {
+        setConfirmDialog(null)
+        void clearAllPatientData()
+      },
+    })
+  }
+
   function openApiConnectivityHarness() {
     const harnessWindow = window.open('/api-configuration', '_blank')
     const currentToken = readStoredSessionToken()
@@ -3473,10 +3653,13 @@ export function App() {
     <main className='shell' onClickCapture={handleButtonAuditCapture}>
       <section className='hero'>
         <div>
-          <p className='eyebrow'>R3 Recovery Services Chart Audit</p>
-          <h1>Clinical notes completeness review</h1>
+          <div className='brand-lockup'>
+            <img src={`${API}/branding/header-logo`} alt='R3 Recovery Services' className='brand-logo' />
+            <p className='eyebrow'>R3 Recovery Services Status Dashboard</p>
+          </div>
+          <h1>Clinical Notes Analyzer</h1>
           <p className='hero-copy'>
-            Upload a patient binder, review each chart-audit criterion, and route final approval through the office manager.
+            Local-first compliance workspace for treatment-plan timeliness, deterministic checklist review, manual upload, workflow queues, and API readiness.
           </p>
         </div>
         <div className='status-card'>
@@ -3575,7 +3758,7 @@ export function App() {
           </section>
 
           <nav className='view-tabs'>
-            {(['dashboard', 'reviews', 'timeliness', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
+            {(['dashboard', 'timeliness', 'reviews', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -3689,6 +3872,11 @@ export function App() {
                         </div>
                       </dl>
                       <div className='decision-actions'>
+                        {canRunAllevaTreatmentPlanSync ? (
+                          <button type='button' onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })} disabled={isBusy}>
+                            Retrieve Active Treatment Plans
+                          </button>
+                        ) : null}
                         <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
                           Open Treatment plans
                         </button>
@@ -3780,6 +3968,9 @@ export function App() {
                         </button>
                         <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
                           App settings
+                        </button>
+                        <button type='button' className='danger-button' onClick={openClearPatientDataDialog} disabled={isBusy}>
+                          Clear All Patient Data
                         </button>
                       </>
                     ) : null}
@@ -4053,6 +4244,9 @@ export function App() {
 	                        <button type='button' className='ghost-button' onClick={() => exportSelectedTimeliness('json')}>
 	                          Export JSON
 	                        </button>
+	                        <button type='button' className='ghost-button' onClick={exportSelectedTimelinessCounselorActions}>
+	                          Export counselor actions
+	                        </button>
 	                        <span className={`pill pill--${timelinessTone(selectedTimelinessClient.status)}`}>{selectedTimelinessClient.status}</span>
 	                      </div>
 	                    </div>
@@ -4179,7 +4373,14 @@ export function App() {
 	                            Selected-client checklist result using app {versionInfo?.version ? `${versionPrefix(versionInfo)}${versionInfo.version}` : 'version unavailable'} and checklist content v{selectedTimelinessClient.checklist_version || 'Not loaded'}.
 	                          </p>
 	                        </div>
-	                        <span className='pill pill--neutral'>{selectedTimelinessClient.checklist_results.length} steps</span>
+	                        <div className='button-row'>
+	                          {canOverrideTimeliness ? (
+	                            <button type='button' onClick={() => void saveTimelinessCriterionReviews()} disabled={isBusy || !timelinessCriterionDirty}>
+	                              Save manager notes
+	                            </button>
+	                          ) : null}
+	                          <span className='pill pill--neutral'>{selectedTimelinessClient.checklist_results.length} steps</span>
+	                        </div>
 	                      </div>
 	                      {selectedTimelinessClient.checklist_results.length ? (
 	                        <div className='finding-list checklist-result-list'>
@@ -4194,6 +4395,41 @@ export function App() {
 	                                </span>
 	                                <span className={`pill pill--${timelinessTone(result.status)}`}>{result.status}</span>
 	                              </summary>
+	                              <div className='criterion-review-controls'>
+	                                <div>
+	                                  <span className={`pill pill--${managerCriterionTone(result.manager_status || 'Not Reviewed')}`}>
+	                                    Manager: {result.manager_status || 'Not Reviewed'}
+	                                  </span>
+	                                  {result.manager_updated_at ? <small>Saved {formatDateTime(result.manager_updated_at)}</small> : <small>Not saved yet</small>}
+	                                </div>
+	                                {canOverrideTimeliness ? (
+	                                  <div className='criterion-review-form'>
+	                                    <label>
+	                                      <span>Manager status</span>
+	                                      <select
+	                                        value={result.manager_status || 'Not Reviewed'}
+	                                        onChange={(event) => updateTimelinessCriterionReview(result.key, { manager_status: event.target.value })}
+	                                      >
+	                                        {MANAGER_CRITERION_STATUSES.map((statusOption) => (
+	                                          <option key={statusOption} value={statusOption}>
+	                                            {statusOption}
+	                                          </option>
+	                                        ))}
+	                                      </select>
+	                                    </label>
+	                                    <label>
+	                                      <span>Manager comment / counselor action</span>
+	                                      <textarea
+	                                        value={result.manager_comment || ''}
+	                                        onChange={(event) => updateTimelinessCriterionReview(result.key, { manager_comment: event.target.value })}
+	                                        placeholder='Add follow-up needed for this criterion'
+	                                      />
+	                                    </label>
+	                                  </div>
+	                                ) : result.manager_comment ? (
+	                                  <p className='muted-text'>{result.manager_comment}</p>
+	                                ) : null}
+	                              </div>
 	                              <dl>
 	                                <div>
 	                                  <dt>Source evidence</dt>
@@ -4565,16 +4801,6 @@ export function App() {
                 <div className='panel-heading'>
                   <h2>Automated review queue</h2>
                   <div className='button-row'>
-                    {canRunAllevaTreatmentPlanSync ? (
-                      <button
-                        type='button'
-                        className='ghost-button'
-                        onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })}
-                        disabled={isBusy}
-                      >
-                        Pull active treatment plans
-                      </button>
-                    ) : null}
                     <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
                       Refresh
                     </button>
@@ -6335,7 +6561,7 @@ export function App() {
                               )
                             }
                           />
-                          Run sync every time the app starts
+                          Run sync every time the app starts (off by default for beta)
                         </label>
                         <label className='checkbox-row'>
                           <input
@@ -6424,6 +6650,20 @@ export function App() {
                         </button>
                       </div>
                       {appSettings?.emr_last_check_message ? <p className='muted-text'>Last API check: {appSettings.emr_last_check_message}</p> : null}
+                    </section>
+                    <section className='panel-subsection full-width danger-zone'>
+                      <div className='panel-heading'>
+                        <div>
+                          <h3>Clear All Patient Data</h3>
+                          <p>
+                            Removes local patient/chart/treatment-plan/manual-upload/review data and encrypted uploaded files. App settings, API credentials,
+                            user accounts, audit logs, rules, and documentation are preserved.
+                          </p>
+                        </div>
+                        <button type='button' className='danger-button' onClick={openClearPatientDataDialog} disabled={isBusy}>
+                          Clear All Patient Data
+                        </button>
+                      </div>
                     </section>
                     <section className='panel-subsection full-width'>
                       <div className='panel-heading'>

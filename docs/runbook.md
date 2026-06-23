@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-20
+Date: 2026-06-23
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` / build `2026.06.21.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026.06.23.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -28,14 +28,17 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` / build `2026
 - Current and historical binders can be listed with `GET /api/patient-note-sets` and inspected with `GET /api/patient-note-sets/{id}`.
 - Stored source files can be retrieved with `GET /api/patient-note-sets/{note_set_id}/documents/{document_id}/download` after authentication and authorization checks.
 - Uploaded binders can be deleted with `DELETE /api/patient-note-sets/{id}` by an authorized user. Deletion removes the selected note set, linked generated review charts, upload-derived timeliness records, and encrypted stored files. If the deleted binder was the current active version and an older version remains, the latest remaining version is reactivated and resynced into the timeliness tracker.
+- Admins can clear all local patient/chart/treatment-plan/manual-upload/review data with `DELETE /api/patient-data` by supplying the exact confirmation phrase `CLEAR ALL PATIENT DATA`. This preserves app settings, API credentials, user accounts, audit logs, rules, and docs.
 - Every stored file has a SHA-256 digest in the database; use that hash when validating backup integrity or investigating file tampering.
 - Forensic audit logs are retained after binder deletion.
 
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Beta 1.4.4-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Beta 1.4.5-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
+- Managers can save status/comments on each selected-client 42-step checklist criterion and export a counselor action CSV for that client.
+- Review Queue remains the generated/manual uploaded-binder chart-review workbench. Treatment Plans remains the active due-date/timeliness work queue.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
 - The LOC-change treatment-plan update window is still unvalidated and must stay configurable and visibly marked as unresolved.
@@ -57,6 +60,7 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` / build `2026
 
 - `Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
 - App startup sync uses the same REST concept. It is disabled by default.
+- Manual retrieval is available from the Status Dashboard EMR/API card and from App Settings, but it uses the same approval and mapping gates as startup sync.
 - To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
 - Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
@@ -67,6 +71,7 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.4-beta.1` / build `2026
 - The timeliness evaluator uses the laptop/facility-local current date on startup and during runtime.
 - The recurring update clock starts from the latest valid treatment-plan review/update date, or from admission date when no later valid review/update exists.
 - PHP levels use 30 calendar days; other configured treatment levels use 60 calendar days.
+- Due today and one day before due are `Urgent`; two through seven days before due are `Due Soon`; eight or more days before due are `Compliant`; only dates before the evaluation date are `Overdue`.
 - LOC changes use a separate manager-editable 7-calendar-day preset. The setting remains unvalidated until R3/Marleigh confirms the final rule.
 - Every timeliness analysis result is audited with patient ID, status, due date, rule used, current date, and active workflow key/version/checklist context.
 - Exports include both the legacy checklist/domain rows and active workflow-step statuses.

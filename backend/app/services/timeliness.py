@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -117,6 +117,10 @@ class TimelinessChecklistResult:
     override_reason_required: bool
     audit_event: str
     export_fields: list[str]
+    manager_status: str = 'Not Reviewed'
+    manager_comment: str = ''
+    manager_updated_by_id: int | None = None
+    manager_updated_at: datetime | None = None
 
 
 def _utc_now() -> datetime:
@@ -159,11 +163,11 @@ def _status_from_due_date(due_date: date | None, evaluation_date: date) -> tuple
     days_until = _days_until(due_date, evaluation_date)
     if days_until is None:
         return None, None
-    if days_until <= 0:
+    if days_until < 0:
         return TimelinessStatus.overdue.value, days_until
-    if days_until <= 5:
+    if days_until <= 1:
         return TimelinessStatus.urgent.value, days_until
-    if days_until <= 10:
+    if days_until <= 7:
         return TimelinessStatus.due_soon.value, days_until
     return TimelinessStatus.compliant.value, days_until
 
@@ -935,7 +939,23 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
             ['validation_data_kind', 'artifact_path', 'redaction_status'],
         ),
     ]
-    return sorted(results, key=lambda item: item.step)
+    reviews_by_key = {review.criterion_key: review for review in client.criterion_reviews}
+    enriched_results = []
+    for result in results:
+        review = reviews_by_key.get(result.key)
+        if review is None:
+            enriched_results.append(result)
+            continue
+        enriched_results.append(
+            replace(
+                result,
+                manager_status=review.status or 'Not Reviewed',
+                manager_comment=review.comment or '',
+                manager_updated_by_id=review.updated_by_id,
+                manager_updated_at=review.updated_at,
+            )
+        )
+    return sorted(enriched_results, key=lambda item: item.step)
 
 
 def _client_options():
@@ -943,6 +963,7 @@ def _client_options():
         selectinload(TreatmentPlanClient.level_of_care_history),
         selectinload(TreatmentPlanClient.treatment_plans),
         selectinload(TreatmentPlanClient.overrides),
+        selectinload(TreatmentPlanClient.criterion_reviews),
     )
 
 

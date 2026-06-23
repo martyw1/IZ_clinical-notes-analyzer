@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     allowed_hosts: str = 'localhost,127.0.0.1,::1,testserver'
     upload_dir: str = 'uploads'
     log_dir: str = 'logs'
+    header_logo_path: str = ''
     rules_config_path: str = DEFAULT_RULES_CONFIG_PATH
     max_upload_file_bytes: int = 50 * 1024 * 1024
     max_upload_total_bytes: int = 250 * 1024 * 1024
@@ -171,6 +172,23 @@ class Settings(BaseSettings):
         if configured.is_absolute():
             return configured
         return self.local_app_data_dir / configured
+
+    @property
+    def header_logo_file(self) -> Path | None:
+        """Return the configured or bundled header logo file, if available."""
+        candidates: list[Path] = []
+        if self.header_logo_path.strip():
+            configured = Path(self.header_logo_path).expanduser()
+            if configured.is_absolute():
+                candidates.append(configured)
+            else:
+                candidates.append(self.local_app_data_dir / configured)
+                candidates.append(REPO_ROOT / configured)
+        candidates.append(REPO_ROOT / 'backend' / 'app' / 'assets' / 'r3-recovery-services-logo.png')
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
 
     @property
     def rules_config_file(self) -> Path:
