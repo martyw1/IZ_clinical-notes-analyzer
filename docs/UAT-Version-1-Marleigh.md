@@ -2,9 +2,9 @@
 
 Use synthetic data only for this script.
 
-Current beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
 
-Beta 1.4.5-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, and removes active FHIR/SMART-on-FHIR setup from Alleva workflows. Alleva setup is REST/OpenAPI/HL7-readiness only.
+Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds Patient-ID-only privacy hardening, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, redacted diagnostics, and REST/OpenAPI/HL7-readiness-only Alleva setup.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -15,11 +15,11 @@ Beta 1.4.5-beta.1 keeps the Windows startup reliability fixes, aligns app versio
 7. Confirm the LOC-change blocker says the timing window is unvalidated.
 8. Open Status Dashboard.
 9. Confirm the R3 logo appears above the title and the dashboard shows checklist version `v1.2.0`.
-10. Confirm `/api/version` reports app version `1.4.5-beta.1`, channel `beta-local-desktop`, and prerelease metadata after this beta is installed.
-11. Confirm the app footer also shows `Beta v1.4.5-beta.1`.
+10. Confirm `/api/version` reports app version `1.4.6-beta.1`, channel `beta-local-desktop`, and prerelease metadata after this beta is installed.
+11. Confirm the app footer also shows `Beta v1.4.6-beta.1`.
 12. Confirm the Review source section shows EMR/API access, Manual upload, and `Retrieve Active Treatment Plans`.
 13. Open Treatment plans.
-14. Confirm the updated evidence queue banner is visible, the selected-client 42-step checklist evaluation opens in Treatment Plans, and the footer shows `Beta v1.4.5-beta.1`.
+14. Confirm the updated evidence queue banner is visible, the selected-client 42-step checklist evaluation opens in Treatment Plans, and the footer shows `Beta v1.4.6-beta.1`.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
 17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison.
@@ -49,10 +49,13 @@ Beta 1.4.5-beta.1 keeps the Windows startup reliability fixes, aligns app versio
 41. Open Forensic logs.
 42. Confirm sign-in, upload, review, override, API test, workflow, and settings actions appear without secrets or uploaded note text.
 43. Sign in as an office manager and confirm User management can manage counselor accounts, Workflow profiles is available, and App settings/Forensic logs are not available.
-44. Sign in as a counselor and confirm User management, Workflow profiles, App settings, Forensic logs, manager approvals, and treatment-plan overrides are not available.
-45. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
-46. Confirm the Beta 1.4.5-beta.1 local recovery utility exists at `scripts\update-local-admin.ps1`.
-47. In App settings, confirm Alleva REST treatment-plan sync has its own base URL/OpenAPI/startup controls and remains gated by approval plus endpoint mapping validation.
-48. Close the browser and app window.
-49. Relaunch and confirm prior review status and Treatment Plan manager notes are still present.
-50. Use the uninstall shortcut only after confirming no local data needs to be preserved.
+44. Sign in as a counselor and confirm User management, Workflow profiles, App settings, Forensic logs, Treatment plans, manager approvals, and treatment-plan overrides are not available.
+45. Upload a synthetic file whose text includes a fake patient name/address and confirm the UI still labels the chart with Patient ID only.
+46. Export CSV/JSON reports and confirm patient names, addresses, original local filenames, source attachment URLs, and secrets are absent.
+47. Run `IZ Clinical Notes Analyzer Diagnostics` and confirm the zip is created under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`.
+48. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
+49. Confirm the Beta 1.4.6-beta.1 local recovery utility exists at `scripts\update-local-admin.ps1`.
+50. In App settings, confirm Alleva REST treatment-plan sync has its own base URL/OpenAPI/startup controls and remains gated by approval plus endpoint mapping validation.
+51. Close the browser and app window.
+52. Relaunch and confirm prior review status and Treatment Plan manager notes are still present.
+53. Use the uninstall shortcut only after confirming no local data needs to be preserved.

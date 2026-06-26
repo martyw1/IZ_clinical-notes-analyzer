@@ -1,14 +1,14 @@
-# Codebase Map - Current Beta 1.4.5-beta.1
+# Codebase Map - Current Beta 1.4.6-beta.1
 
-Date: 2026-06-23
+Date: 2026-06-25
 
 Branch: `main`
 
-Version: `1.4.5-beta.1` / build `2026.06.23.1`
+Version: `1.4.6-beta.1` / build `2026.06.25.1`
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Beta 1.4.5-beta.1 app shape.
+This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Beta 1.4.6-beta.1 app shape.
 
 ## Current architecture
 
@@ -40,7 +40,7 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, role checks, and reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File validation, patient ID detection, encrypted file writes, path traversal prevention, and protected text helper. |
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
-| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, selected-client 42-step checklist result generation with saved manager status/comments, upload/API-style re-evaluation, fallback generated names, workflow-version audit context, and manual override audit records. |
+| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, selected-client 42-step checklist result generation with saved manager status/comments, upload/API-style re-evaluation, Patient-ID-only display, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
 | API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py` | OpenAPI/Swagger discovery, operation testing, REST/OpenAPI/HL7 readiness, API endpoint profiles, and gated Alleva REST treatment-plan sync into the R3 timeliness engine. Ungated live import is disabled. |
 | Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF-style payloads, fallback JSONL log. |
@@ -75,7 +75,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Beta 1.4.5-beta.1 local desktop startup. |
+| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Beta 1.4.6-beta.1 local desktop startup. |
 | `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
 | `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
 | `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
@@ -120,7 +120,7 @@ The active non-technical deployment target is Windows.
 
 1. `Settings.rules_config_file` resolves the YAML file.
 2. Rules config is loaded and validated.
-3. The timeliness service models initial/master signature rules, ongoing review recurrences, unvalidated LOC-change review, status priority, source conflicts, missing data, fallback generated names, and manual override audit records.
+3. The timeliness service models initial/master signature rules, ongoing review recurrences, unvalidated LOC-change review, status priority, source conflicts, missing data, Patient-ID-only display, and manual override audit records.
 4. Workflow profile CRUD/versioning exists as admin/manager-managed definitions with draft/published/archived versions, transition rules, default Treatment Plan Timeliness seeding, validation, and draft-only delete limits.
 
 ## Test commands
@@ -162,13 +162,13 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Beta 1.4.5-beta.1 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
+`scripts/build-windows-installer.ps1` creates a Beta 1.4.6-beta.1 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 
 | Risk | Current state | Impact |
 | --- | --- | --- |
-| Browser/full-stack smoke is source-checkout validated only | Beta 1.4.5-beta.1 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, selected-client and global 42-step checklist visibility, manager criterion notes/actions, date-clock/workflow-export behavior, gated Alleva REST sync readiness, API settings consolidation, legacy audit-schema repair, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
+| Browser/full-stack smoke is source-checkout validated only | Beta 1.4.6-beta.1 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, selected-client and global 42-step checklist visibility, manager criterion notes/actions, date-clock/workflow-export behavior, gated Alleva REST sync readiness, API settings consolidation, legacy audit-schema repair, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
 | Live Alleva import is disabled | API harness and API profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, protected saved configuration, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and safe operator handling. |
@@ -182,7 +182,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 The current app version is:
 
 ```text
-1.4.5-beta.1
+1.4.6-beta.1
 ```
 
 Checklist content version remains:

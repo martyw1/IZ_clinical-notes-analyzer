@@ -1,8 +1,8 @@
 # Open Blockers
 
-Date: 2026-06-23
+Date: 2026-06-25
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026.06.23.1`.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1`.
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -10,7 +10,7 @@ Status: unvalidated.
 
 The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/App settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
 
-Current implementation state: the setting exists in the database and admin App settings UI. Beta 1.4.5-beta.1 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, LOC-change due date, selected-client 42-step checklist evaluation, and saved manager status/comment notes side by side. The checklist content version remains `1.2.0` and includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
+Current implementation state: the setting exists in the database and admin App settings UI. Beta 1.4.6-beta.1 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, LOC-change due date, selected-client 42-step checklist evaluation, and saved manager status/comment notes side by side. The checklist content version remains `1.2.0` and includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
 
 ## Alleva REST treatment-plan sync approval and mapping
 
@@ -18,7 +18,7 @@ Owner: R3 + Alleva
 
 Status: Open
 
-Current implementation state: Beta 1.4.5-beta.1 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping. Manual retrieval is available from the Status Dashboard EMR/API card and the App Settings sync controls, but both use the same approval and mapping gates. App settings now presents one active Alleva/API connection; saved endpoint profiles are presets that must be activated into the active connection before they affect readiness checks, periodic checks, API harness tests, or approved REST sync.
+Current implementation state: Beta 1.4.6-beta.1 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping. Manual retrieval is available from the Status Dashboard EMR/API card and the App Settings sync controls, but both use the same approval and mapping gates. App settings now presents one active Alleva/API connection; saved endpoint profiles are presets that must be activated into the active connection before they affect readiness checks, periodic checks, API harness tests, or approved REST sync.
 
 Current diagnostic behavior: manual sync now reports the specific failing stage instead of surfacing generic exception text. If client credentials obtain a token but Alleva returns `401 Unauthorized` or `403 Forbidden` for `/clients`, `/treatment-plans`, or `/treatment-reviews`, the App Settings status identifies this as endpoint authorization/permission failure and asks R3/Alleva to confirm tenant access, token audience/scope, endpoint permission, and API version.
 
@@ -46,14 +46,15 @@ Status: in progress for Version 1.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
-Current implementation state: Beta 1.4.5-beta.1 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/uninstall commands, built frontend assets, Start Menu shortcut creation, AppData preflight reports, manual-upload delete-button usability fixes, selected-client 42-step checklist detail visibility, Status Dashboard branding, admin-only clear-patient-data controls, and legacy SQLite audit-log repair for retired FHIR-era audit columns. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
+Current implementation state: Beta 1.4.6-beta.1 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/diagnostics/uninstall commands, built frontend assets, Start Menu and desktop shortcut creation, AppData preflight reports, redacted diagnostics bundles, manual-upload delete-button usability fixes, selected-client 42-step checklist detail visibility, Status Dashboard branding, admin-only clear-patient-data controls, and legacy SQLite audit-log repair for retired FHIR-era audit columns. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.4.5-beta.1` and `beta-local-desktop` on that machine.
-- The `Treatment plans` tab shows the updated evidence queue, selected-client 42-step checklist evaluation with manager notes, and footer version `Beta v1.4.5-beta.1`, proving the date-clock/source-evidence workflow UI is the currently served build.
+- `/api/version` and the UI footer show `1.4.6-beta.1` and `beta-local-desktop` on that machine.
+- The `Treatment plans` tab shows the updated evidence queue, selected-client 42-step checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`, proving the date-clock/source-evidence workflow UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
+- The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
 ## Alleva Client-Credentials Token Request
@@ -84,7 +85,7 @@ Required resolution evidence:
 
 Status: resolved for Vitest on this Windows 11 laptop.
 
-Frontend Vitest and production build completed locally on 2026-06-23 for Beta 1.4.5-beta.1. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
+Frontend Vitest and production build completed locally on 2026-06-25 for Beta 1.4.6-beta.1. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
 
 Required resolution evidence:
 

@@ -7,7 +7,7 @@ This is a synthetic example for development and testing only. It is based on the
 The app should support two equal intake paths:
 
 1. **Manual upload**: a staff member downloads or exports clinical notes/documents from Alleva, then uploads them into this app for a patient.
-2. **Direct API access**: an administrator configures API access, then a user searches by patient ID or patient name, pulls available notes/documents, stores them as a patient note set, and runs the same completeness checks.
+2. **Direct API access**: an administrator configures API access, then an approved workflow searches by patient ID only, pulls available notes/documents, stores them as a patient note set, and runs the same completeness checks.
 
 Both intake paths should land in the same internal structure:
 
@@ -39,7 +39,6 @@ Patient Note Set
 ```json
 {
   "patient_id": "ALV-100245",
-  "client_name": "Jordan Sample",
   "source_system": "Alleva",
   "source_export_id": "manual-export-2026-05-14-001",
   "source_patient_resource_id": "patient/ALV-100245",
@@ -59,8 +58,8 @@ The browser-side upload workflow can send a manifest like this alongside the upl
 ```json
 [
   {
-    "client_file_name": "ALV-100245_Intake-Packet_2026-04-15.pdf",
-    "document_label": "Intake Packet",
+    "client_file_name": "document-1.pdf",
+    "document_label": "Document 1",
     "alleva_bucket": "custom_forms",
     "document_type": "intake_packet",
     "completion_status": "completed",
@@ -69,14 +68,13 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-15",
     "description": "Admission intake packet and baseline consent forms.",
     "source_document_id": "cf-100245-0001",
-    "source_attachment_url": "https://api.allevasoft.com/documents/cf-100245-0001/download",
-    "source_author": "M. Johnson, MS, LPC",
-    "source_custodian": "R3 Recovery Services",
+    "source_author": "",
+    "source_custodian": "",
     "source_security_label": "clinical"
   },
   {
-    "client_file_name": "ALV-100245_Safety-Plan_2026-04-15.pdf",
-    "document_label": "Safety Plan",
+    "client_file_name": "document-2.pdf",
+    "document_label": "Document 2",
     "alleva_bucket": "custom_forms",
     "document_type": "safety_plan",
     "completion_status": "completed",
@@ -85,14 +83,13 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-15",
     "description": "Client safety plan completed at admission.",
     "source_document_id": "cf-100245-0002",
-    "source_attachment_url": "https://api.allevasoft.com/documents/cf-100245-0002/download",
-    "source_author": "M. Johnson, MS, LPC",
-    "source_custodian": "R3 Recovery Services",
+    "source_author": "",
+    "source_custodian": "",
     "source_security_label": "clinical"
   },
   {
-    "client_file_name": "ALV-100245_Progress-Note_2026-04-22.txt",
-    "document_label": "Individual Progress Note - 2026-04-22",
+    "client_file_name": "document-3.txt",
+    "document_label": "Document 3",
     "alleva_bucket": "notes",
     "document_type": "individual_progress_note",
     "completion_status": "completed",
@@ -101,14 +98,13 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-22",
     "description": "Individual session progress note.",
     "source_document_id": "note-100245-0422",
-    "source_attachment_url": "https://api.allevasoft.com/documents/note-100245-0422/download",
-    "source_author": "M. Johnson, MS, LPC",
-    "source_custodian": "R3 Recovery Services",
+    "source_author": "",
+    "source_custodian": "",
     "source_security_label": "clinical"
   },
   {
-    "client_file_name": "ALV-100245_UDS-Lab_2026-04-21.pdf",
-    "document_label": "UDS Lab Result - 2026-04-21",
+    "client_file_name": "document-4.pdf",
+    "document_label": "Document 4",
     "alleva_bucket": "labs",
     "document_type": "uds_lab_result",
     "completion_status": "completed",
@@ -117,9 +113,8 @@ The browser-side upload workflow can send a manifest like this alongside the upl
     "document_date": "2026-04-21",
     "description": "Urine drug screen lab result.",
     "source_document_id": "lab-100245-0421",
-    "source_attachment_url": "https://api.allevasoft.com/documents/lab-100245-0421/download",
-    "source_author": "External Laboratory",
-    "source_custodian": "R3 Recovery Services",
+    "source_author": "",
+    "source_custodian": "",
     "source_security_label": "clinical"
   }
 ]
@@ -134,7 +129,6 @@ Source System: Alleva
 Source Bucket: Notes
 Document Type: Individual Progress Note
 Patient ID: ALV-100245
-Client Name: Jordan Sample
 Date of Service: 2026-04-22
 Level of Care: IOP
 Clinician: M. Johnson, MS, LPC
@@ -163,8 +157,8 @@ Client will attend scheduled groups this week, complete assigned recovery-suppor
 Some exports may arrive as tabular data. The app should preserve the source row and normalize key fields.
 
 ```csv
-patient_id,client_name,document_date,bucket,document_type,title,status,client_signed,staff_signed,author,source_document_id,source_attachment_url
-ALV-100245,Jordan Sample,2026-04-22,notes,individual_progress_note,Individual Progress Note - 2026-04-22,completed,false,true,"M. Johnson, MS, LPC",note-100245-0422,https://api.allevasoft.com/documents/note-100245-0422/download
+patient_id,document_date,bucket,document_type,title,status,client_signed,staff_signed,source_document_id
+ALV-100245,2026-04-22,notes,individual_progress_note,Document 3,completed,false,true,note-100245-0422
 ```
 
 ## Example REST API readiness planning output
@@ -175,11 +169,10 @@ Until the live API contract is confirmed, API lookup should produce a clear REST
 {
   "query_mode": "patient_id",
   "patient_id": "ALV-100245",
-  "patient_name": null,
   "planned_requests": [
     {
       "step": "resolve_client",
-      "purpose": "Find the client record for the supplied ID or name.",
+      "purpose": "Find the client record for the supplied ID.",
       "method": "GET",
       "url": "/clients?identifier=ALV-100245"
     },

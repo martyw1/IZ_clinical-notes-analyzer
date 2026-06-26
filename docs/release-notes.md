@@ -1,10 +1,29 @@
 # Release Notes
 
-Current app version: `1.4.5-beta.1` / build `2026.06.23.1`.
+Current app version: `1.4.6-beta.1` / build `2026.06.25.1`.
 
 Current release channel: `beta-local-desktop`.
 
-Current release date in version metadata: `2026-06-23`.
+Current release date in version metadata: `2026-06-25`.
+
+## 1.4.6-beta.1 - Patient-ID privacy hardening
+
+Build: `2026.06.25.1`
+
+Version metadata name: `Beta 1.4.6-beta.1 Patient-ID privacy hardening`
+
+Summary:
+
+- Makes Patient ID the only patient identifier accepted for upload, Treatment Plans, chart labels, generated review records, exports, downloads, API summaries, and audit context.
+- Removes patient names, addresses, contact details, source filenames, source attachment URLs, author/custodian labels, and similar direct identifiers from new upload/import storage and browser payloads; existing local rows are neutralized by schema compatibility startup.
+- Rejects deprecated manual `client_name` uploads and chart creates when a patient name is supplied, while preserving compatibility fields by setting them to Patient ID.
+- Disables Alleva/API name matching for treatment-plan sync readiness; REST records must map by patient/client ID, and name-only records remain unmapped.
+- Tightens Treatment Plan Timeliness dashboard/detail/override access to administrators and office managers because counselor ownership is not explicit in that table.
+- Blocks unsafe bootstrap-admin defaults in production-like/local-client startup readiness and changes default reset-on-startup to off unless a recovery script explicitly enables it.
+- Adds redacted diagnostics collection through `scripts\collect-diagnostics.ps1`, `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`, and installer-created Start Menu/Desktop Diagnostics shortcuts.
+- Hardens the standalone API configuration page against OpenAPI/schema text injection by building generated operation fields with DOM APIs rather than markup strings.
+- Adds CSV formula injection protection and keeps saved API client credentials write-only in browser responses.
+- Validation evidence is recorded in `docs/validation/validation-report-2026-06-25-patient-id-privacy-hardening.md`.
 
 ## 1.4.5-beta.1 - R3 beta-client readiness
 
@@ -125,4 +144,4 @@ Current version values must stay aligned in:
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
 
-Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.5-beta.1`.
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.6-beta.1`.

@@ -1,8 +1,8 @@
 # API Configuration and Connectivity Test
 
-Date: 2026-06-23
+Date: 2026-06-25
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026.06.23.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
 
 ## Where to open it
 
@@ -71,13 +71,15 @@ The default `ALL Patient Records` payload includes:
 - `Limit`, `Cursor`, `api-version`, `X-Version`, optional `StartDate`/`EndDate`, and selected `fields`
 - `max_pages` for bounded cursor pagination
 
-The backend returns a bounded operational table with patient/client ID, source ID, client name if returned by Alleva, admission date, status, client flag, discharge date, level of care, facility, primary clinician, and first contact date. It also returns TSV text intended for Excel copy/paste. These rows can contain PHI when Alleva returns names, so operators should only copy/share them through approved R3 workflows. The app does not write raw quick-pull rows to audit details or report files; audit records store only the report type, operation, auth mode, counts, and outcome.
+The backend returns a bounded operational table with patient/client ID, source ID, admission date, status, client flag, discharge date, level of care, facility, primary clinician, and first contact date. Patient names and addresses returned by Alleva are ignored/redacted and are not used for local matching. It also returns TSV text intended for Excel copy/paste. Operators should still treat the output as sensitive because patient IDs and treatment context can be regulated data. The app does not write raw quick-pull rows to audit details or report files; audit records store only the report type, operation, auth mode, counts, and outcome.
 
 ## Alleva REST treatment-plan sync
 
-Beta `1.4.5-beta.1` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Beta `1.4.6-beta.1` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+
+Treatment-plan sync readiness maps records by patient/client ID only. Name-only matches are intentionally disabled; records without an approved ID mapping remain unmapped instead of being guessed from patient names.
 
 Manual sync status messages distinguish common failure stages for non-technical users:
 
@@ -116,6 +118,8 @@ The settings form validates these fields before save. If one or more required va
 The background checker authenticates with the saved client ID/secret, applies the selected token auth style, and runs the same bounded OpenAPI/readiness probe used by the harness. App settings shows the last check time, status, message, last success/failure, and next scheduled check through the Review Source Discovery payload.
 
 Periodic checks are readiness checks only. They do not import live patient charts or treatment plans until R3 has vendor endpoint mapping, pagination/rate limits, attachment handling, documentation, and compliance approval.
+
+See also: [`docs/alleva-treatment-plan-data-coverage.md`](alleva-treatment-plan-data-coverage.md) for the Swagger-derived treatment-plan coverage matrix, ID mapping rules, unknown/unavailable source-data states, and test coverage references.
 
 ## API endpoint profiles
 
@@ -175,7 +179,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Beta 1.4.5-beta.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Beta 1.4.6-beta.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 

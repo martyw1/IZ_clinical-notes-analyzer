@@ -1,12 +1,12 @@
 # Windows Deployment and Test Guide Version 1
 
-Current beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
 
 ## Target
 
 Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Beta 1.4.5-beta.1 keeps the Version 1 startup reliability, stale-build safeguards, global and selected-client 42-step workflow coverage, selected-client manager notes/action export, redacted PDF handling, treatment-plan date-clock behavior, workflow/checklist exports, admin-only clear-patient-data controls, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
+Beta 1.4.6-beta.1 keeps the Version 1 startup reliability, stale-build safeguards, global and selected-client 42-step workflow coverage, selected-client manager notes/action export, redacted PDF handling, Patient-ID-only privacy hardening, treatment-plan date-clock behavior, workflow/checklist exports, admin-only clear-patient-data controls, redacted diagnostics, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
 
 ## Prerequisites for Source Build
 
@@ -31,6 +31,8 @@ scripts\preflight-windows.ps1 -AssumeYes
 
 Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates the full Windows runtime dependency set, validates rules and the Treatment Plan Checklist, confirms frontend build assets, detects stale `frontend\dist` assets, checks the app port, and writes a JSON report.
 
+Startup readiness fails closed when a production-like/local-client run is missing a bootstrap admin password or still uses a known placeholder/test value. The Windows preflight/install path generates local values; do not ship a release folder with `BOOTSTRAP_ADMIN_PASSWORD=change-me`.
+
 ## Local Launch
 
 ```powershell
@@ -43,7 +45,7 @@ The double-click launcher uses:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Beta 1.4.5-beta.1 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+Expected Beta 1.4.6-beta.1 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
 
 ## Admin Access Reset
 
@@ -94,22 +96,31 @@ Release package:
 scripts\build-windows-installer.ps1
 ```
 
+Diagnostics bundle:
+
+```powershell
+scripts\collect-diagnostics.ps1
+```
+
 ## Release Artifacts
 
 The release builder writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
 
 The release folder contains:
 
 - `Install-IZ-Clinical-Notes-Analyzer.cmd`
 - `Launch-IZ-Clinical-Notes-Analyzer.cmd`
+- `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`
 - `Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 
-Note: the Beta 1.4.5-beta.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+The installer creates Start Menu and desktop shortcuts for Launch, Diagnostics, and Uninstall. The Diagnostics shortcut creates a redacted zip under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics` and excludes uploads, local databases, generated reports, and raw `.env` values.
+
+Note: the Beta 1.4.6-beta.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
 
 ## Security Checks
 

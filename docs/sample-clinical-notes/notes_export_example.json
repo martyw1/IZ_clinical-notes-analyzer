@@ -1,7 +1,6 @@
 [
   {
     "patient_id": "TEST-PATIENT-001",
-    "patient_name": "Test Patient One",
     "service_date": "2026-05-01",
     "document_type": "Treatment Plan Tracking Note",
     "treatment_plan_reference": "TP-TEST-PATIENT-001-2026-04",

@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-23
+Date: 2026-06-25
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026.06.23.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -24,6 +24,7 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026
 ## Patient note set handling
 
 - Patient note uploads are keyed by `patient_id` and stored under the encrypted local upload directory.
+- Patient ID is the only patient identifier used for local upload/import/display/export/log workflows. Patient names, addresses, source filenames, attachment URLs, author/custodian labels, and contact-style direct identifiers are not used as local display labels or matching keys.
 - Initial uploads use `POST /api/patient-note-sets` with `upload_mode=initial`; later changes use `upload_mode=update`, which creates a new immutable version instead of replacing the prior set.
 - Current and historical binders can be listed with `GET /api/patient-note-sets` and inspected with `GET /api/patient-note-sets/{id}`.
 - Stored source files can be retrieved with `GET /api/patient-note-sets/{note_set_id}/documents/{document_id}/download` after authentication and authorization checks.
@@ -35,12 +36,12 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The queue uses deterministic rules and current Beta 1.4.5-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- The queue uses deterministic rules and current Beta 1.4.6-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
 - Managers can save status/comments on each selected-client 42-step checklist criterion and export a counselor action CSV for that client.
 - Review Queue remains the generated/manual uploaded-binder chart-review workbench. Treatment Plans remains the active due-date/timeliness work queue.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
-- Missing names use safe generated placeholders: `no-name-found_YYYY-MM-DD_HHMMSS` or `no-value-found_YYYY-MM-DD_HHMMSS`.
+- Counselors do not have Treatment Plans queue access because that table does not have explicit counselor ownership; they continue to use role-scoped review, upload, and account workflows.
 - The LOC-change treatment-plan update window is still unvalidated and must stay configurable and visibly marked as unresolved.
 
 ## API readiness checks
@@ -91,6 +92,7 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026
 - Use `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` for double-click launch.
 - Ordinary launch prompts before installing missing dependencies or rebuilding frontend assets.
 - Use `scripts\preflight-windows.ps1 -AssumeYes` only for unattended support validation.
+- Use `scripts\collect-diagnostics.ps1` or the `IZ Clinical Notes Analyzer Diagnostics` shortcut to collect a redacted support bundle. The bundle excludes uploads, local databases, generated reports, and raw `.env` values.
 - Do not move runtime data into the OneDrive-backed source repository.
 
 ## Recovery

@@ -6,13 +6,13 @@ Checklist ID: `treatment-plan-v1`
 
 Checklist content version: `1.2.0`
 
-Current app version using this checklist: `1.4.5-beta.1`
+Current app version using this checklist: `1.4.6-beta.1`
 
-Documentation last reviewed: `2026-06-23`
+Documentation last reviewed: `2026-06-25`
 
 ## Purpose
 
-This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `1.4.5-beta.1` is tracked separately in `VERSION` and `VERSION.json`.
+This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `1.4.6-beta.1` is tracked separately in `VERSION` and `VERSION.json`.
 
 It is deliberately deterministic. Missing or conflicting admission dates, LOC evidence, treatment-plan dates, signatures, or source documents must produce `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` instead of guessed compliance.
 
@@ -77,7 +77,7 @@ Published workflow history is preserved. Only unused draft-only profiles that we
 
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Beta 1.4.5-beta.1 keeps a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Beta 1.4.6-beta.1 keeps a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
 
 Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
 

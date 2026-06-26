@@ -1,8 +1,8 @@
 # Admin Access Reset Guide
 
-Date: 2026-06-23
+Date: 2026-06-25
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.5-beta.1` / build `2026.06.23.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Use this path when at least one working admin account can sign in.
 7. Communicate any one-time credential only through an R3-approved secure channel.
 8. Confirm the action appears in `Forensic logs` without exposing the credential value.
 
-Beta 1.4.5-beta.1 role scope reminder:
+Beta 1.4.6-beta.1 role scope reminder:
 
 - Admins can manage admin, manager, and counselor accounts.
 - Office managers can manage counselor accounts only.
@@ -68,6 +68,8 @@ BOOTSTRAP_ADMIN_PASSWORD=<secure-local-value>
 RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true
 ```
 
+After recovery, turn `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` back to `false` unless an authorized admin is actively performing another local recovery. Production-like/local-client startup readiness blocks missing or known placeholder bootstrap admin values.
+
 ## Security notes
 
 - The local settings file must not be committed to Git.
@@ -85,4 +87,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
+Expected beta version: `1.4.6-beta.1` / build `2026.06.25.1`.

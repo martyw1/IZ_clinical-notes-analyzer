@@ -13,7 +13,7 @@ These files are **synthetic examples only**. They contain no real PHI and should
 
 ## Fields demonstrated
 
-The examples cover patient identifier, optional synthetic patient name, service date, treatment-plan reference, problem/goal/objective/intervention, progress/status, provider/counselor, signature or completion status, review/approval status, and missing/deficient item examples.
+The examples cover patient identifier, service date, treatment-plan reference, problem/goal/objective/intervention, progress/status, provider/counselor, signature or completion status, review/approval status, and missing/deficient item examples. Patient names are intentionally omitted because the app uses Patient ID only.
 
 ## Parsing assumptions
 

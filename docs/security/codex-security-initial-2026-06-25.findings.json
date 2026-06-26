@@ -1,0 +1,1188 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Counselor-allowed timeliness and review-source APIs query clients without ownership scoping."
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_58c5cdf3379eee2b6b143bb3",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:cdcc65e46047ced2ed3e979a3c24ce34cd2522a0548594a736d14af1c4f2a467"
+      },
+      "identity": {
+        "anchor": "timeliness-counselor-bola",
+        "instance": "timeliness-counselor-bola-79"
+      },
+      "locations": [
+        {
+          "path": "backend/app/api/timeliness_routes.py",
+          "role": "entrypoint",
+          "startLine": 79
+        },
+        {
+          "path": "backend/app/api/timeliness_routes.py",
+          "role": "entrypoint",
+          "startLine": 173
+        },
+        {
+          "path": "backend/app/services/review_source_discovery.py",
+          "role": "sibling_surface",
+          "startLine": 125
+        }
+      ],
+      "occurrenceId": "occ_6d9981421d9d79afb0b65ea1",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Filter counselor reads to owned patients/charts or restrict routes to manager/admin and add negative access tests.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Counselor-allowed timeliness and review-source APIs query clients without ownership scoping."
+      },
+      "ruleId": "timeliness-counselor-bola",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "high",
+        "rationale": "Counselor-allowed timeliness and review-source APIs query clients without ownership scoping."
+      },
+      "summary": "Counselor-allowed timeliness and review-source APIs query clients without ownership scoping.",
+      "taxonomy": {
+        "category": "Authorization bypass / IDOR",
+        "cwe": [
+          "CWE-639",
+          "CWE-862"
+        ]
+      },
+      "title": "Counselors can enumerate and read arbitrary timeliness clients",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Counselor-allowed timeliness and review-source APIs query clients without ownership scoping."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Static bootstrap admin defaults can create full admin access if a source/install flow misses randomization."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_f965a012b49598256d37859c",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:006899fe1fdf81f1dbbe43abc672138ac81c9e26c2307b5be8017490eb2111f2"
+      },
+      "identity": {
+        "anchor": "default-bootstrap-admin",
+        "instance": "default-bootstrap-admin-79"
+      },
+      "locations": [
+        {
+          "path": "backend/app/core/config.py",
+          "role": "root_control",
+          "startLine": 79
+        },
+        {
+          "path": "backend/app/main.py",
+          "role": "sink",
+          "startLine": 58
+        }
+      ],
+      "occurrenceId": "occ_8a236e5736a847a851418ffb",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Fail readiness/startup for unsafe bootstrap defaults and disable reset-by-default for installed builds.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Static bootstrap admin defaults can create full admin access if a source/install flow misses randomization."
+      },
+      "ruleId": "default-bootstrap-admin",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "high",
+        "rationale": "Static bootstrap admin defaults can create full admin access if a source/install flow misses randomization."
+      },
+      "summary": "Static bootstrap admin defaults can create full admin access if a source/install flow misses randomization.",
+      "taxonomy": {
+        "category": "Default credential",
+        "cwe": [
+          "CWE-798",
+          "CWE-259"
+        ]
+      },
+      "title": "Default bootstrap admin credential and reset behavior remain unsafe",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Static bootstrap admin defaults can create full admin access if a source/install flow misses randomization."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "OpenAPI metadata is interpolated into HTML and assigned to innerHTML in the admin API harness."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_e96285c44e4d384c9fcadf32",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:bf3cc1bc0febd60d2688ab9375d84ef52b1b0047d10390a29cd847bc8aa76891"
+      },
+      "identity": {
+        "anchor": "openapi-harness-xss",
+        "instance": "openapi-harness-xss-483"
+      },
+      "locations": [
+        {
+          "path": "backend/app/api/api_config_ui_routes.py",
+          "role": "root_control",
+          "startLine": 483
+        },
+        {
+          "path": "backend/app/api/api_config_ui_routes.py",
+          "role": "sink",
+          "startLine": 510
+        }
+      ],
+      "occurrenceId": "occ_cba5c45f6f9153efe9bc0f90",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Build the form with DOM/text APIs or strict escaping and add an XSS regression test.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "OpenAPI metadata is interpolated into HTML and assigned to innerHTML in the admin API harness."
+      },
+      "ruleId": "openapi-harness-xss",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "high",
+        "rationale": "OpenAPI metadata is interpolated into HTML and assigned to innerHTML in the admin API harness."
+      },
+      "summary": "OpenAPI metadata is interpolated into HTML and assigned to innerHTML in the admin API harness.",
+      "taxonomy": {
+        "category": "Cross-site scripting",
+        "cwe": [
+          "CWE-79"
+        ]
+      },
+      "title": "OpenAPI metadata can execute script in the admin API harness",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "OpenAPI metadata is interpolated into HTML and assigned to innerHTML in the admin API harness."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "API quick-pull and operation-test paths can return names, TSV rows, raw JSON, or body previews from external patient APIs."
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_a653f895d542f37f2fe30bcf",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:3850532b02defe9c1ca789e592d066dd6dd139c5227761210b4d342c2737e12a"
+      },
+      "identity": {
+        "anchor": "api-harness-phi-exposure",
+        "instance": "api-harness-phi-exposure-433"
+      },
+      "locations": [
+        {
+          "path": "backend/app/api/api_config_routes.py",
+          "role": "source",
+          "startLine": 433
+        },
+        {
+          "path": "backend/app/api/api_config_routes.py",
+          "role": "sink",
+          "startLine": 979
+        },
+        {
+          "path": "backend/app/services/api_connectivity.py",
+          "role": "sink",
+          "startLine": 790
+        }
+      ],
+      "occurrenceId": "occ_4d36686e0c290b172d20111d",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Apply direct-identifier minimization to API payloads and remove raw response/body persistence.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "API quick-pull and operation-test paths can return names, TSV rows, raw JSON, or body previews from external patient APIs."
+      },
+      "ruleId": "api-harness-phi-exposure",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "API quick-pull and operation-test paths can return names, TSV rows, raw JSON, or body previews from external patient APIs."
+      },
+      "summary": "API quick-pull and operation-test paths can return names, TSV rows, raw JSON, or body previews from external patient APIs.",
+      "taxonomy": {
+        "category": "Sensitive data exposure",
+        "cwe": [
+          "CWE-359",
+          "CWE-200"
+        ]
+      },
+      "title": "API readiness harness can return live PHI and raw operation responses",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "API quick-pull and operation-test paths can return names, TSV rows, raw JSON, or body previews from external patient APIs."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "CSV cells are quoted but formula-leading values are not neutralized before export/clipboard."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_af6c656606daee4d2c5f4413",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c01b6cf4221cd100dea7a7e118f535380b5d3445a2f4bf6de7e67d33a00b7c36"
+      },
+      "identity": {
+        "anchor": "csv-formula-injection",
+        "instance": "csv-formula-injection-1247"
+      },
+      "locations": [
+        {
+          "path": "frontend/src/App.tsx",
+          "role": "root_control",
+          "startLine": 1247
+        }
+      ],
+      "occurrenceId": "occ_a392f7daa370024dafd9338d",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Prefix formula-leading cells and add export tests.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "CSV cells are quoted but formula-leading values are not neutralized before export/clipboard."
+      },
+      "ruleId": "csv-formula-injection",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "CSV cells are quoted but formula-leading values are not neutralized before export/clipboard."
+      },
+      "summary": "CSV cells are quoted but formula-leading values are not neutralized before export/clipboard.",
+      "taxonomy": {
+        "category": "CSV formula injection",
+        "cwe": [
+          "CWE-1236"
+        ]
+      },
+      "title": "CSV and clipboard exports allow spreadsheet formula injection",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "CSV cells are quoted but formula-leading values are not neutralized before export/clipboard."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "The OAuth client-credentials helper accepts HTTP token URLs and can post secrets over cleartext transport."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_8829b4d4c86ac68ac8fa98db",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:2d7d09fad987a1d57e7fba398515bda44b93527613de4fc1ac96c7daf7503265"
+      },
+      "identity": {
+        "anchor": "oauth-http-token-url",
+        "instance": "oauth-http-token-url-83"
+      },
+      "locations": [
+        {
+          "path": "backend/app/services/api_connectivity.py",
+          "role": "root_control",
+          "startLine": 83
+        },
+        {
+          "path": "backend/app/services/api_connectivity.py",
+          "role": "sink",
+          "startLine": 263
+        }
+      ],
+      "occurrenceId": "occ_6db4de850839d7f9cb50f1a5",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Require HTTPS for token URLs except tightly controlled local synthetic tests.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "The OAuth client-credentials helper accepts HTTP token URLs and can post secrets over cleartext transport."
+      },
+      "ruleId": "oauth-http-token-url",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "The OAuth client-credentials helper accepts HTTP token URLs and can post secrets over cleartext transport."
+      },
+      "summary": "The OAuth client-credentials helper accepts HTTP token URLs and can post secrets over cleartext transport.",
+      "taxonomy": {
+        "category": "Cleartext credential transmission",
+        "cwe": [
+          "CWE-319"
+        ]
+      },
+      "title": "OAuth client credentials can be sent to cleartext HTTP token URLs",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "The OAuth client-credentials helper accepts HTTP token URLs and can post secrets over cleartext transport."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Patient display names and raw filenames can be accepted, persisted, returned, displayed, exported, and used as download names."
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_06959710abfe294521a91b1c",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:f149291943ad279c6eaec3397188970dcd7539485e83687f1ad431bcc70edf3b"
+      },
+      "identity": {
+        "anchor": "patient-id-only-privacy",
+        "instance": "patient-id-only-privacy-191"
+      },
+      "locations": [
+        {
+          "path": "backend/app/models/models.py",
+          "role": "storage",
+          "startLine": 191
+        },
+        {
+          "path": "backend/app/models/models.py",
+          "role": "storage",
+          "startLine": 247
+        },
+        {
+          "path": "backend/app/api/routes.py",
+          "role": "source",
+          "startLine": 1761
+        },
+        {
+          "path": "frontend/src/App.tsx",
+          "role": "display",
+          "startLine": 4205
+        }
+      ],
+      "occurrenceId": "occ_231b783a7c857e1e3c59d0e2",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Reject patient names, replace raw filenames with opaque document labels, use patient_id in UI/exports, and add canary privacy scans.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Patient display names and raw filenames can be accepted, persisted, returned, displayed, exported, and used as download names."
+      },
+      "ruleId": "patient-id-only-privacy",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Patient display names and raw filenames can be accepted, persisted, returned, displayed, exported, and used as download names."
+      },
+      "summary": "Patient display names and raw filenames can be accepted, persisted, returned, displayed, exported, and used as download names.",
+      "taxonomy": {
+        "category": "PHI minimization failure",
+        "cwe": [
+          "CWE-359",
+          "CWE-200"
+        ]
+      },
+      "title": "Patient names, labels, and raw filenames persist into storage UI exports and downloads",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Patient display names and raw filenames can be accepted, persisted, returned, displayed, exported, and used as download names."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Audit rows store request query strings verbatim, so PHI or secrets in query params become durable logs."
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_49511cf5e343e2053dc3db7a",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:f61273cc6fe379089d0c5c74451e7677f758ec96703ba41961d0dbe165cd1a15"
+      },
+      "identity": {
+        "anchor": "audit-query-string-redaction",
+        "instance": "audit-query-string-redaction-162"
+      },
+      "locations": [
+        {
+          "path": "backend/app/services/audit.py",
+          "role": "source",
+          "startLine": 162
+        },
+        {
+          "path": "backend/app/services/audit.py",
+          "role": "sink",
+          "startLine": 416
+        }
+      ],
+      "occurrenceId": "occ_91c36c58b1b1d5af460f1388",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Redact or allowlist query strings before audit persistence.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Audit rows store request query strings verbatim, so PHI or secrets in query params become durable logs."
+      },
+      "ruleId": "audit-query-string-redaction",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Audit rows store request query strings verbatim, so PHI or secrets in query params become durable logs."
+      },
+      "summary": "Audit rows store request query strings verbatim, so PHI or secrets in query params become durable logs.",
+      "taxonomy": {
+        "category": "Sensitive data logging",
+        "cwe": [
+          "CWE-532"
+        ]
+      },
+      "title": "Raw request query strings are persisted in forensic audit logs",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Audit rows store request query strings verbatim, so PHI or secrets in query params become durable logs."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Rules responses include full source_fields from PHI-capable chart input."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_de2b24f2044f95087aeebc76",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:00a2510137bde65fd760c28e7a49932006e0df2b24a0aa8af47eb21117ff653a"
+      },
+      "identity": {
+        "anchor": "rules-response-phi-echo",
+        "instance": "rules-response-phi-echo-63"
+      },
+      "locations": [
+        {
+          "path": "backend/app/api/rules_routes.py",
+          "role": "sink",
+          "startLine": 63
+        },
+        {
+          "path": "backend/app/services/rules_engine.py",
+          "role": "root_control",
+          "startLine": 453
+        }
+      ],
+      "occurrenceId": "occ_85c97bfdc032299fd45bb4f3",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Omit or sanitize source_fields before returning rule results.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Rules responses include full source_fields from PHI-capable chart input."
+      },
+      "ruleId": "rules-response-phi-echo",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Rules responses include full source_fields from PHI-capable chart input."
+      },
+      "summary": "Rules responses include full source_fields from PHI-capable chart input.",
+      "taxonomy": {
+        "category": "Sensitive data echo",
+        "cwe": [
+          "CWE-359",
+          "CWE-200"
+        ]
+      },
+      "title": "Rules evaluation response echoes PHI-capable source chart fields",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Rules responses include full source_fields from PHI-capable chart input."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Settings/audit payloads can expose API client IDs, endpoint URLs, token URLs, and vendor connection metadata."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_5b42d8414c238c0775823409",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:ae281ff3467f1055b75d8c362469283271c6dacb1c59e57ba9b93234e8094ffd"
+      },
+      "identity": {
+        "anchor": "settings-audit-connection-material",
+        "instance": "settings-audit-connection-material-50"
+      },
+      "locations": [
+        {
+          "path": "backend/app/services/app_settings.py",
+          "role": "source",
+          "startLine": 50
+        },
+        {
+          "path": "backend/app/services/audit.py",
+          "role": "sink",
+          "startLine": 425
+        }
+      ],
+      "occurrenceId": "occ_dc09e2ad17214cb7dfc87d10",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Expose configured-state flags and redact connection material before audit/diagnostic output.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Settings/audit payloads can expose API client IDs, endpoint URLs, token URLs, and vendor connection metadata."
+      },
+      "ruleId": "settings-audit-connection-material",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Settings/audit payloads can expose API client IDs, endpoint URLs, token URLs, and vendor connection metadata."
+      },
+      "summary": "Settings/audit payloads can expose API client IDs, endpoint URLs, token URLs, and vendor connection metadata.",
+      "taxonomy": {
+        "category": "Sensitive configuration exposure",
+        "cwe": [
+          "CWE-200"
+        ]
+      },
+      "title": "Settings and audit paths expose vendor connection material",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Settings/audit payloads can expose API client IDs, endpoint URLs, token URLs, and vendor connection metadata."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Tracked reference metadata contains preview URLs for a recording described as containing identifiable chart content."
+      },
+      "confidence": {
+        "level": "low",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_eeb08bce4d26d0884f536bf3",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:47b25d169e2122339e0ab7366efaf58bee6e783c623e6499a38acbfddf55562c"
+      },
+      "identity": {
+        "anchor": "loom-metadata-preview-urls",
+        "instance": "loom-metadata-preview-urls-14"
+      },
+      "locations": [
+        {
+          "path": "video-extract (2026-06-05)/reference-assets/loom-apollo-metadata.json",
+          "role": "root_control",
+          "startLine": 14
+        }
+      ],
+      "occurrenceId": "occ_b9ee1916e498c11e28681b0d",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Remove/redact external media URLs and scan release/source artifacts.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Tracked reference metadata contains preview URLs for a recording described as containing identifiable chart content."
+      },
+      "ruleId": "loom-metadata-preview-urls",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Tracked reference metadata contains preview URLs for a recording described as containing identifiable chart content."
+      },
+      "summary": "Tracked reference metadata contains preview URLs for a recording described as containing identifiable chart content.",
+      "taxonomy": {
+        "category": "Potential PHI artifact exposure",
+        "cwe": [
+          "CWE-200",
+          "CWE-359"
+        ]
+      },
+      "title": "Tracked Loom metadata may expose preview URLs for identifiable chart recording",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Tracked reference metadata contains preview URLs for a recording described as containing identifiable chart content."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Unquoted batch set assignments let metacharacters in install paths execute as the launching user."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_c291c2f3ebf438b1ada3527c",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:71c3d53e10416aab3cee3487bb896153321279347bb325813f052c54e0e0537f"
+      },
+      "identity": {
+        "anchor": "windows-batch-path-injection",
+        "instance": "windows-batch-path-injection-9"
+      },
+      "locations": [
+        {
+          "path": "scripts/Start-IZ-Clinical-Notes-Analyzer.cmd",
+          "role": "root_control",
+          "startLine": 9
+        },
+        {
+          "path": "scripts/build-windows-installer.ps1",
+          "role": "sink",
+          "startLine": 93
+        }
+      ],
+      "occurrenceId": "occ_30d683fdf2d0be5d1c56bd7a",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Use quoted set syntax or replace batch launchers with a safer app launcher.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Unquoted batch set assignments let metacharacters in install paths execute as the launching user."
+      },
+      "ruleId": "windows-batch-path-injection",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "medium",
+        "rationale": "Unquoted batch set assignments let metacharacters in install paths execute as the launching user."
+      },
+      "summary": "Unquoted batch set assignments let metacharacters in install paths execute as the launching user.",
+      "taxonomy": {
+        "category": "Command injection",
+        "cwe": [
+          "CWE-78",
+          "CWE-88"
+        ]
+      },
+      "title": "Windows launcher batch files allow install-path command injection",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Unquoted batch set assignments let metacharacters in install paths execute as the launching user."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Admin reset copies the full secret .env to plaintext backups."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_3db683c1c2fe78cd476e1876",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:3bd5a836e9a811953077e47328a83f76a6be9a1942923864223f8bec85009fda"
+      },
+      "identity": {
+        "anchor": "env-backup-secret-sprawl",
+        "instance": "env-backup-secret-sprawl-47"
+      },
+      "locations": [
+        {
+          "path": "scripts/update-local-admin.ps1",
+          "role": "root_control",
+          "startLine": 47
+        }
+      ],
+      "occurrenceId": "occ_3ecec52f9e323ecbac090aa4",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Avoid full .env backups or redact/exclude backup secrets.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Admin reset copies the full secret .env to plaintext backups."
+      },
+      "ruleId": "env-backup-secret-sprawl",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "low",
+        "rationale": "Admin reset copies the full secret .env to plaintext backups."
+      },
+      "summary": "Admin reset copies the full secret .env to plaintext backups.",
+      "taxonomy": {
+        "category": "Secret sprawl",
+        "cwe": [
+          "CWE-312",
+          "CWE-522"
+        ]
+      },
+      "title": "Admin reset utility duplicates secret env files into backups",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Admin reset copies the full secret .env to plaintext backups."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Login audit/access intelligence can treat caller-supplied forwarding headers as source IP."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_6c74ae6f1dd1b3b842847dcb",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:29473e89bfe6095bebf5c89bab09a585c37fb7c452aa92232e7dfb55bd61abfe"
+      },
+      "identity": {
+        "anchor": "forwarded-ip-spoof",
+        "instance": "forwarded-ip-spoof-131"
+      },
+      "locations": [
+        {
+          "path": "backend/app/api/auth_user_routes.py",
+          "role": "source",
+          "startLine": 131
+        },
+        {
+          "path": "backend/app/services/access_intel.py",
+          "role": "root_control",
+          "startLine": 41
+        }
+      ],
+      "occurrenceId": "occ_56e6808a9568e54254c789fe",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Ignore forwarding headers unless behind a configured trusted proxy.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Login audit/access intelligence can treat caller-supplied forwarding headers as source IP."
+      },
+      "ruleId": "forwarded-ip-spoof",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "low",
+        "rationale": "Login audit/access intelligence can treat caller-supplied forwarding headers as source IP."
+      },
+      "summary": "Login audit/access intelligence can treat caller-supplied forwarding headers as source IP.",
+      "taxonomy": {
+        "category": "Trusting untrusted forwarding headers",
+        "cwe": [
+          "CWE-807"
+        ]
+      },
+      "title": "Login access intelligence trusts spoofable forwarding headers",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Login audit/access intelligence can treat caller-supplied forwarding headers as source IP."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Smoke reset mode prints the chosen admin password to stdout."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_0c422e3abdabaaeb8ee03ef7",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:1020b4265c5cbe059f6018511ce15c0b54bfe7a1d26646305dd823ccde545cb1"
+      },
+      "identity": {
+        "anchor": "smoke-password-print",
+        "instance": "smoke-password-print-91"
+      },
+      "locations": [
+        {
+          "path": "scripts/smoke.sh",
+          "role": "root_control",
+          "startLine": 91
+        }
+      ],
+      "occurrenceId": "occ_c1d7e915cbfd06d45a01c089",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Do not print password values; print only reset status.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Smoke reset mode prints the chosen admin password to stdout."
+      },
+      "ruleId": "smoke-password-print",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "low",
+        "rationale": "Smoke reset mode prints the chosen admin password to stdout."
+      },
+      "summary": "Smoke reset mode prints the chosen admin password to stdout.",
+      "taxonomy": {
+        "category": "Secret exposure in logs",
+        "cwe": [
+          "CWE-532"
+        ]
+      },
+      "title": "Smoke script prints reset admin password",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Smoke reset mode prints the chosen admin password to stdout."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Startup transcript can capture Uvicorn access logs containing request paths/query strings."
+      },
+      "confidence": {
+        "level": "medium",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_94da2037b0d73c7c9966f2d1",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:67c4e227ae4843958d25a16a13d98bf594bcc8adea4f8cb16e984ea3ac084c8b"
+      },
+      "identity": {
+        "anchor": "startup-diagnostic-log-leak",
+        "instance": "startup-diagnostic-log-leak-77"
+      },
+      "locations": [
+        {
+          "path": "scripts/startup-windows-local.ps1",
+          "role": "root_control",
+          "startLine": 77
+        },
+        {
+          "path": "scripts/startup-windows-local.ps1",
+          "role": "sink",
+          "startLine": 106
+        }
+      ],
+      "occurrenceId": "occ_70264529d43366a813406406",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Disable access logs or redact diagnostic bundles.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Startup transcript can capture Uvicorn access logs containing request paths/query strings."
+      },
+      "ruleId": "startup-diagnostic-log-leak",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "low",
+        "rationale": "Startup transcript can capture Uvicorn access logs containing request paths/query strings."
+      },
+      "summary": "Startup transcript can capture Uvicorn access logs containing request paths/query strings.",
+      "taxonomy": {
+        "category": "Sensitive data logging",
+        "cwe": [
+          "CWE-532"
+        ]
+      },
+      "title": "Startup transcript can persist URL identifiers from access logs",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Startup transcript can capture Uvicorn access logs containing request paths/query strings."
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "summary": "See affected locations and discovery artifacts."
+        },
+        "reachability": {
+          "summary": "Reachability calibrated for localhost Windows desktop app and authenticated role boundaries."
+        },
+        "summary": "Public readiness details can include local database/upload/log paths."
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "Supported by worker source review, existing tests, or targeted reproduction recorded in scan artifacts."
+      },
+      "findingId": "csf_872209e04e2e87bb4dadafd7",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:8d6333c995503cb6e1ad2946938f8123bd20b84a952b8401453e8085560dedf9"
+      },
+      "identity": {
+        "anchor": "readiness-path-disclosure",
+        "instance": "readiness-path-disclosure-52"
+      },
+      "locations": [
+        {
+          "path": "backend/app/services/runtime_checks.py",
+          "role": "root_control",
+          "startLine": 52
+        },
+        {
+          "path": "backend/app/main.py",
+          "role": "entrypoint",
+          "startLine": 240
+        }
+      ],
+      "occurrenceId": "occ_e101e88bd1fd5b7b5358deeb",
+      "preventiveControls": [
+        "Run Codex Security and privacy canary scans before release."
+      ],
+      "provenance": {
+        "source": "Initial Codex Security scan df5818d4"
+      },
+      "remediation": "Redact public readiness or require auth for detailed diagnostics.",
+      "remediationTests": [
+        "Add regression tests for this dataflow and privacy/security invariant."
+      ],
+      "rootCause": {
+        "summary": "Public readiness details can include local database/upload/log paths."
+      },
+      "ruleId": "readiness-path-disclosure",
+      "severity": {
+        "changeConditions": "Severity changes if reachability or data sensitivity differs from the scanned local Windows HIPAA-adjacent workflow.",
+        "level": "low",
+        "rationale": "Public readiness details can include local database/upload/log paths."
+      },
+      "summary": "Public readiness details can include local database/upload/log paths.",
+      "taxonomy": {
+        "category": "Information disclosure",
+        "cwe": [
+          "CWE-200"
+        ]
+      },
+      "title": "Unauthenticated readiness diagnostics expose local paths",
+      "validation": {
+        "confidenceRationale": "Evidence is recorded in discovery artifacts and candidate ledgers.",
+        "method": "static source trace plus targeted worker validation",
+        "summary": "Public readiness details can include local database/upload/log paths."
+      }
+    }
+  ],
+  "scanId": "df5818d4-276d-4b45-8da2-b596e6c7b6b7",
+  "schemaVersion": "1.0"
+}

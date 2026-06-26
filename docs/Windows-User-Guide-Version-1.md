@@ -2,18 +2,18 @@
 
 This guide is for R3 staff using a normal Windows 11 laptop or desktop.
 
-Current beta version: `1.4.5-beta.1` / build `2026.06.23.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
 
-Beta 1.4.5-beta.1 keeps the Version 1 Windows startup reliability fixes, repairs legacy local audit-log startup errors, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, adds Status Dashboard R3 branding, and removes active FHIR/SMART-on-FHIR configuration from Alleva workflows. Alleva integration is REST/OpenAPI/HL7-readiness only, with exact App settings validation messages, one active Alleva/API connection, optional saved endpoint presets, and gated Alleva REST treatment-plan sync controls.
+Beta 1.4.6-beta.1 keeps the Version 1 Windows startup reliability fixes, adds Patient-ID-only privacy hardening, suppresses patient names/addresses/direct identifiers from upload/import/display/export/log paths, adds redacted diagnostics, repairs legacy local audit-log startup errors, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, adds Status Dashboard R3 branding, and keeps Alleva integration as REST/OpenAPI/HL7-readiness only with gated treatment-plan sync controls.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`.
+1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for the preflight window to finish.
-4. Use the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
+4. Use the Start Menu or desktop shortcut named `IZ Clinical Notes Analyzer`.
 
-The installer is per-user and installs under `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`.
+The installer is per-user and installs under `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`. It creates Launch, Diagnostics, and Uninstall shortcuts in the Start Menu and on the desktop.
 
 ## First Launch
 
@@ -29,7 +29,7 @@ When a working admin account can sign in, use `User management` to reset another
 
 When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
 
-The Beta 1.4.5-beta.1 local recovery path is:
+The Beta 1.4.6-beta.1 local recovery path is:
 
 ```powershell
 .\scripts\update-local-admin.ps1
@@ -41,7 +41,7 @@ Run the utility from the repo root, save the generated value securely, restart t
 ## Main Screens
 
 - Status Dashboard: R3-branded summary, source selection, current queue, checklist version, EMR/API readiness, manual upload entry point, `Retrieve Active Treatment Plans`, and admin-only `Clear All Patient Data`.
-- Treatment plans: the default landing screen for admins and office managers, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, saved manager status/comment notes for each 42-step criterion, counselor action export, and CSV/JSON export with workflow-step statuses.
+- Treatment plans: admin/office-manager-only default landing screen, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, saved manager status/comment notes for each 42-step criterion, counselor action export, and CSV/JSON export with workflow-step statuses.
 - Review queue: generated/manual uploaded-binder chart review workbench with detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
 - Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
 - Manual upload: upload exported clinical note or treatment plan files, inspect uploaded binder details, download stored documents when authorized, and delete an uploaded binder when it should be removed from the local app.
@@ -57,7 +57,7 @@ Version 1 includes a direct API readiness harness and mock source discovery. Liv
 
 Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings is the source of truth for the one active Alleva/API connection; the harness loads and tests that same connection.
 
-Use the harness in order: load or save the active settings, test authentication/connectivity, then run `ALL Patient Records` if the connection test result is understood. `ALL Patient Records` calls Alleva `GET /clients` with the visible `Limit`, `Cursor`, `fields`, `api-version`, and `X-Version` settings and returns tab-separated rows that can be pasted into Excel. The output can contain PHI when Alleva returns names, so use approved R3 handling when copying or sharing it.
+Use the harness in order: load or save the active settings, test authentication/connectivity, then run `ALL Patient Records` if the connection test result is understood. `ALL Patient Records` calls Alleva `GET /clients` with the visible `Limit`, `Cursor`, `fields`, `api-version`, and `X-Version` settings and returns tab-separated rows that can be pasted into Excel. Patient names and addresses returned by Alleva are ignored/redacted; operators should still treat patient IDs and treatment context as sensitive regulated data.
 
 For Alleva OAuth setup, it is normal to paste the client ID and client secret supplied by R3/Alleva. The client secret is encrypted locally and is never shown again after save. The browser only shows whether a secret is configured. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete. Startup treatment-plan sync is off by default for beta; use manual retrieval only after R3/Alleva approval and mapping validation.
 
@@ -68,6 +68,8 @@ When API monitoring is unavailable, manual upload is treated as an upload-time s
 ## Upload Mode
 
 Supported file types are shown in the upload screen. Use synthetic data for testing. Production use with PHI requires R3-approved controls and secure local handling.
+
+Manual upload intentionally uses Patient ID only. Do not type patient names or addresses into Patient ID, upload notes, filenames for support screenshots, or any testing artifacts. If a source document contains names/addresses, the app ignores those values for matching and does not use them as display labels.
 
 To delete a binder that was uploaded and analyzed, open `Manual upload`, select the binder, type the patient ID exactly in the delete confirmation field, and click `Delete uploaded binder`. If you click before the confirmation matches, the app shows exact guidance instead of leaving the button unavailable. This removes the local uploaded binder, its linked automated review, linked upload-derived timeliness records, and encrypted stored files from the computer. Forensic audit logs remain.
 
@@ -85,6 +87,10 @@ Admins can clear local patient/chart/treatment-plan/manual-upload/review data fr
 - Health check: `http://localhost:8000/api/health`
 - Readiness check: `http://localhost:8000/api/readiness`
 - Version check: `http://localhost:8000/api/version`
+- Diagnostics shortcut: `IZ Clinical Notes Analyzer Diagnostics`
+- Diagnostics script: `scripts\collect-diagnostics.ps1`
+
+Diagnostics bundles are written under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`. They exclude uploaded clinical documents, SQLite databases, generated reports, and raw `.env` values; included logs and configuration summaries are redacted before packaging.
 
 ## Uninstall
 
