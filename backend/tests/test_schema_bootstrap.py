@@ -73,6 +73,7 @@ def test_ensure_schema_compatibility_adds_app_settings_columns(tmp_path):
     assert 'access_intel_enabled' in columns
     assert 'llm_enabled' in columns
     assert 'llm_model' in columns
+    assert 'alleva_treatment_plan_patient_name_import_enabled' in columns
     assert 'treatment_plan_loc_change_window_days' in columns
     assert 'treatment_plan_loc_change_window_validated' in columns
 

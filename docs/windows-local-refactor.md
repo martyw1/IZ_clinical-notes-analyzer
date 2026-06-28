@@ -29,7 +29,7 @@ The local clinic runtime should work on ordinary Windows 10 and Windows 11 consu
 | `backend/tests/test_rules_engine.py` | Unit tests for the first rules workflow. |
 | `scripts/test-local-app-stack.ps1` | Source-checkout local full stack smoke test. |
 | `scripts/test-alleva-api-connectivity.ps1` | Swagger/OpenAPI/API reachability probe for Alleva connectivity. |
-| `scripts/start-desktop-local.ps1` | Lean source-checkout desktop runtime starter. |
+| `scripts/start-windows-local.ps1` -> `scripts/startup-windows-local.ps1` | Current source-checkout desktop runtime starter path. The older `scripts/start-desktop-local.ps1` was moved to `depricated/scripts/start-desktop-local.ps1` as legacy archive history. |
 
 ## Recommended Windows developer test flow
 

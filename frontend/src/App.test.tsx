@@ -217,6 +217,10 @@ function appSettingsPayload() {
     alleva_treatment_plan_sync_approved: false,
     alleva_treatment_plan_endpoint_mapping_validated: false,
     alleva_treatment_plan_sync_limit: 250,
+    alleva_treatment_plan_detail_fetch_enabled: false,
+    alleva_treatment_plan_patient_name_import_enabled: false,
+    alleva_treatment_plan_name_join_fallback_enabled: false,
+    alleva_treatment_plan_detail_fetch_limit: 50,
     alleva_treatment_plan_sync_last_at: null,
     alleva_treatment_plan_sync_last_status: '',
     alleva_treatment_plan_sync_last_message: '',
@@ -1422,6 +1426,10 @@ describe('App turnkey workflow', () => {
           alleva_treatment_plan_sync_approved: body.alleva_treatment_plan_sync_approved,
           alleva_treatment_plan_endpoint_mapping_validated: body.alleva_treatment_plan_endpoint_mapping_validated,
           alleva_treatment_plan_sync_limit: body.alleva_treatment_plan_sync_limit,
+          alleva_treatment_plan_detail_fetch_enabled: body.alleva_treatment_plan_detail_fetch_enabled,
+          alleva_treatment_plan_patient_name_import_enabled: body.alleva_treatment_plan_patient_name_import_enabled,
+          alleva_treatment_plan_name_join_fallback_enabled: body.alleva_treatment_plan_name_join_fallback_enabled,
+          alleva_treatment_plan_detail_fetch_limit: body.alleva_treatment_plan_detail_fetch_limit,
           treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
           treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
         }
@@ -1502,10 +1510,15 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
     fireEvent.change(screen.getByLabelText('API client ID'), { target: { value: 'rest-client' } })
     fireEvent.change(screen.getByLabelText('API client secret'), { target: { value: 'rest-secret' } })
+    expect(screen.getByLabelText('Import and display Alleva patient names')).not.toBeChecked()
+    fireEvent.click(screen.getByLabelText('Import and display Alleva patient names'))
+    fireEvent.click(screen.getByLabelText('Allow name fallback only for validation'))
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
     await waitFor(() => expect(screen.getByText('Application settings have been saved and verified.')).toBeInTheDocument())
     expect(savedSettings.api_client_id).toBe('rest-client')
     expect(savedSettings.api_client_secret_configured).toBe(true)
+    expect(savedSettings.alleva_treatment_plan_patient_name_import_enabled).toBe(true)
+    expect(savedSettings.alleva_treatment_plan_name_join_fallback_enabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())

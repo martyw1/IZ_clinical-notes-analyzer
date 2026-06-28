@@ -6,6 +6,14 @@ Current release channel: `beta-local-desktop`.
 
 Current release date in version metadata: `2026-06-25`.
 
+## Unreleased - 2026-06-28 remediation
+
+- Adds a disabled-by-default `Import and display Alleva patient names` App settings control. Alleva treatment-plan sync stores generated redacted display labels by default and redacts existing Alleva-sourced names again when the setting is saved off.
+- Keeps validation-only name fallback separate from patient-name import/display and verifies both settings persist after save/readback.
+- Adds an admin-only `Pull / refresh treatment plans` button directly on the Treatment Plans tab.
+- Moves documented unused/legacy code files into `depricated/` with a manifest and excludes deprecated folders from Windows release packaging.
+- Validation evidence is recorded in `docs/validation/validation-report-2026-06-28-treatment-plan-redaction-cleanup.md`.
+
 ## 1.4.6-beta.1 - Patient-ID privacy hardening
 
 Build: `2026.06.25.1`

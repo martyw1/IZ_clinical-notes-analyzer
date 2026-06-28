@@ -64,6 +64,8 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 - Manual retrieval is available from the Status Dashboard EMR/API card and from App Settings, but it uses the same approval and mapping gates as startup sync.
 - To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
 - Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
+- Patient-name import/display is off by default. When it is off, Alleva-sourced Treatment Plan clients keep generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels; saving App settings with the control off redacts existing Alleva-sourced names again.
+- Name-fallback matching is a separate validation-only setting. Keep it off unless R3 is actively validating endpoint ID mapping.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
 - If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.
 
@@ -115,6 +117,6 @@ The `.env` file, SQLite database, and encrypted uploads must stay together. If t
 
 ## Legacy Docker/PostgreSQL artifacts
 
-Docker/PostgreSQL is not the current supported R3 Windows desktop path. The root full-stack `docker-compose.yml` is not active in this branch. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after cleanup evidence; deprecated startup scripts remain as legacy references.
+Docker/PostgreSQL is not the current supported R3 Windows desktop path. The root full-stack `docker-compose.yml` is not active in this branch. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after cleanup evidence; later legacy startup/helper scripts were moved under `depricated/` and must not be used as launch instructions.
 
 Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as ordinary Windows desktop-user requirements. Do not restore the old Docker stack to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.

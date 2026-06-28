@@ -73,6 +73,9 @@ function Copy-RepoContent {
         (Join-Path $RootDir 'logs'),
         (Join-Path $RootDir '.pytest_cache'),
         (Join-Path $RootDir 'htmlcov'),
+        (Join-Path $RootDir 'depricated'),
+        (Join-Path $RootDir 'deprecated'),
+        (Join-Path $RootDir 'depriceated'),
         (Join-Path $RootDir 'walkthroughs (2026-03-04)'),
         (Join-Path $RootDir 'video-extract (2026-06-05)')
     )

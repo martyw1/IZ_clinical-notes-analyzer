@@ -68,6 +68,7 @@ def app_settings_public_payload(settings_row: AppSetting) -> dict[str, object]:
         'alleva_treatment_plan_endpoint_mapping_validated': settings_row.alleva_treatment_plan_endpoint_mapping_validated,
         'alleva_treatment_plan_sync_limit': settings_row.alleva_treatment_plan_sync_limit,
         'alleva_treatment_plan_detail_fetch_enabled': settings_row.alleva_treatment_plan_detail_fetch_enabled,
+        'alleva_treatment_plan_patient_name_import_enabled': settings_row.alleva_treatment_plan_patient_name_import_enabled,
         'alleva_treatment_plan_name_join_fallback_enabled': settings_row.alleva_treatment_plan_name_join_fallback_enabled,
         'alleva_treatment_plan_detail_fetch_limit': settings_row.alleva_treatment_plan_detail_fetch_limit,
         'alleva_treatment_plan_sync_last_at': settings_row.alleva_treatment_plan_sync_last_at,

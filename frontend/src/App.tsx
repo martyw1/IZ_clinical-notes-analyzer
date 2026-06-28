@@ -392,6 +392,7 @@ type AppSettings = {
   alleva_treatment_plan_endpoint_mapping_validated: boolean
   alleva_treatment_plan_sync_limit: number
   alleva_treatment_plan_detail_fetch_enabled?: boolean
+  alleva_treatment_plan_patient_name_import_enabled?: boolean
   alleva_treatment_plan_name_join_fallback_enabled?: boolean
   alleva_treatment_plan_detail_fetch_limit?: number
   alleva_treatment_plan_sync_last_at: string | null
@@ -444,6 +445,7 @@ type AppSettingsForm = {
   alleva_treatment_plan_endpoint_mapping_validated: boolean
   alleva_treatment_plan_sync_limit: number
   alleva_treatment_plan_detail_fetch_enabled: boolean
+  alleva_treatment_plan_patient_name_import_enabled: boolean
   alleva_treatment_plan_name_join_fallback_enabled: boolean
   alleva_treatment_plan_detail_fetch_limit: number
   facility_timezone: string
@@ -1107,6 +1109,7 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     alleva_treatment_plan_endpoint_mapping_validated: settings.alleva_treatment_plan_endpoint_mapping_validated,
     alleva_treatment_plan_sync_limit: settings.alleva_treatment_plan_sync_limit || 250,
     alleva_treatment_plan_detail_fetch_enabled: Boolean(settings.alleva_treatment_plan_detail_fetch_enabled),
+    alleva_treatment_plan_patient_name_import_enabled: Boolean(settings.alleva_treatment_plan_patient_name_import_enabled),
     alleva_treatment_plan_name_join_fallback_enabled: Boolean(settings.alleva_treatment_plan_name_join_fallback_enabled),
     alleva_treatment_plan_detail_fetch_limit: settings.alleva_treatment_plan_detail_fetch_limit ?? 50,
     facility_timezone: settings.facility_timezone || 'local_machine',
@@ -4150,6 +4153,11 @@ export function App() {
 	                    <button type='button' className='ghost-button' onClick={() => void loadTimelinessDashboard()} disabled={isBusy}>
 	                      Refresh
 	                    </button>
+	                    {user?.role === 'admin' ? (
+	                      <button type='button' onClick={() => void runAllevaTreatmentPlanSyncNow()} disabled={isBusy}>
+	                        Pull / refresh treatment plans
+	                      </button>
+	                    ) : null}
 	                  </div>
 	                </div>
 
@@ -6673,6 +6681,18 @@ export function App() {
                         <label className='checkbox-row'>
                           <input
                             type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_patient_name_import_enabled}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_patient_name_import_enabled: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Import and display Alleva patient names
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
                             checked={settingsForm.alleva_treatment_plan_sync_on_startup}
                             onChange={(event) =>
                               setSettingsForm((current) =>
@@ -6720,8 +6740,7 @@ export function App() {
                         </label>
                       </div>
                       <p className='muted-text field-note'>
-                        The sync, startup, approval, and mapping checkboxes are separate safety gates. The manual button below reports whether sync is off,
-                        blocked by missing approval/mapping, blocked by authentication, blocked by endpoint permission/version, empty, completed with warnings, or completed successfully.
+                        The sync, startup, approval, mapping, patient-name import, and name-fallback checkboxes are separate safety gates. Names stay redacted in the Treatment Plans queue unless import/display is enabled here and saved.
                       </p>
                       <div className='form-actions'>
                         <button

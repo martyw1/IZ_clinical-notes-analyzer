@@ -474,6 +474,62 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         db.close()
 
 
+def test_alleva_rest_sync_redacts_patient_names_by_default_and_requires_opt_in(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        base_clients = [
+            {
+                'id': 1101,
+                'clientId': 'PAT-NAME-REDAC',
+                'name': {'clientFullName': 'Synthetic Import Name'},
+                'status': 'Active',
+                'isClient': True,
+                'admissionDateTime': '2026-02-26T09:00:00Z',
+                'levelOfCare': 'PHP',
+            }
+        ]
+        base_plans = [
+            {
+                'id': 1501,
+                'client': {'id': 1101, 'clientId': 'PAT-NAME-REDAC'},
+                'isInitialTP': False,
+                'isActive': True,
+                'isComplete': True,
+                'startDate': '2026-03-03T10:00:00Z',
+                'staffSignatureDate': '2026-03-03',
+                'clientSignature': {'signatureDateTime': '2026-03-03T11:00:00Z'},
+            }
+        ]
+
+        sync_alleva_rest_payloads(
+            db,
+            clients_payload=base_clients,
+            treatment_plans_payload=base_plans,
+            treatment_reviews_payload=[],
+        )
+        db.commit()
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-NAME-REDAC')).scalar_one()
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
+        assert stored_client.permitted_name != 'Synthetic Import Name'
+
+        sync_alleva_rest_payloads(
+            db,
+            clients_payload=base_clients,
+            treatment_plans_payload=base_plans,
+            treatment_reviews_payload=[],
+            patient_name_import_enabled=True,
+        )
+        db.commit()
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-NAME-REDAC')).scalar_one()
+        assert stored_client.permitted_name == 'Synthetic Import Name'
+    finally:
+        db.close()
+
+
 def test_alleva_rest_sync_keeps_active_client_with_discharge_conflict_and_aggregate_detail(app_with_sqlite):
     app, session_local = app_with_sqlite
     with TestClient(app):
@@ -839,6 +895,8 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
             json={
                 'llm_api_key': 'sk-synthetic-test',
                 'access_reputation_api_key': 'rep-synthetic-test',
+                'alleva_treatment_plan_patient_name_import_enabled': True,
+                'alleva_treatment_plan_name_join_fallback_enabled': True,
                 'treatment_plan_loc_change_window_days': 3,
                 'treatment_plan_loc_change_window_validated': False,
             },
@@ -847,6 +905,8 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
         payload = updated.json()
         assert payload['llm_api_key_configured'] is True
         assert payload['access_reputation_api_key_configured'] is True
+        assert payload['alleva_treatment_plan_patient_name_import_enabled'] is True
+        assert payload['alleva_treatment_plan_name_join_fallback_enabled'] is True
         assert payload['treatment_plan_loc_change_window_days'] == 3
         assert payload['treatment_plan_loc_change_window_validated'] is False
         assert payload['alleva_treatment_plan_sync_on_startup'] is False
@@ -856,5 +916,55 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
         app_settings = db.execute(select(AppSetting)).scalar_one()
         assert text_secret_is_encrypted(app_settings.llm_api_key)
         assert text_secret_is_encrypted(app_settings.access_reputation_api_key)
+        assert app_settings.alleva_treatment_plan_patient_name_import_enabled is True
+        assert app_settings.alleva_treatment_plan_name_join_fallback_enabled is True
+    finally:
+        db.close()
+
+
+def test_settings_save_with_patient_name_import_off_redacts_existing_alleva_names(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        sync_alleva_rest_payloads(
+            db,
+            clients_payload=[
+                {
+                    'id': 9101,
+                    'clientId': 'PAT-REDACT-SAVE',
+                    'name': {'clientFullName': 'Synthetic Existing Name'},
+                    'status': 'Active',
+                    'isClient': True,
+                    'admissionDateTime': '2026-02-26T09:00:00Z',
+                    'levelOfCare': 'PHP',
+                }
+            ],
+            treatment_plans_payload=[],
+            treatment_reviews_payload=[],
+            patient_name_import_enabled=True,
+        )
+        db.commit()
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REDACT-SAVE')).scalar_one()
+        assert stored_client.permitted_name == 'Synthetic Existing Name'
+    finally:
+        db.close()
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        response = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={'alleva_treatment_plan_patient_name_import_enabled': False},
+        )
+        assert response.status_code == 200
+        assert response.json()['alleva_treatment_plan_patient_name_import_enabled'] is False
+
+    db = session_local()
+    try:
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REDACT-SAVE')).scalar_one()
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
     finally:
         db.close()

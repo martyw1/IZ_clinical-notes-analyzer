@@ -141,6 +141,7 @@ class AppSetting(Base):
     alleva_treatment_plan_endpoint_mapping_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     alleva_treatment_plan_sync_limit: Mapped[int] = mapped_column(Integer, default=250)
     alleva_treatment_plan_detail_fetch_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    alleva_treatment_plan_patient_name_import_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     alleva_treatment_plan_name_join_fallback_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     alleva_treatment_plan_detail_fetch_limit: Mapped[int] = mapped_column(Integer, default=50)
     alleva_treatment_plan_sync_last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)

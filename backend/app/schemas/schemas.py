@@ -109,6 +109,7 @@ class AppSettingsUpdate(BaseModel):
     alleva_treatment_plan_endpoint_mapping_validated: bool | None = None
     alleva_treatment_plan_sync_limit: int | None = Field(default=None, ge=1, le=5000)
     alleva_treatment_plan_detail_fetch_enabled: bool | None = None
+    alleva_treatment_plan_patient_name_import_enabled: bool | None = None
     alleva_treatment_plan_name_join_fallback_enabled: bool | None = None
     alleva_treatment_plan_detail_fetch_limit: int | None = Field(default=None, ge=0, le=5000)
     facility_timezone: str | None = Field(default=None, max_length=80)
@@ -154,6 +155,7 @@ class AppSettingsOut(BaseModel):
     alleva_treatment_plan_endpoint_mapping_validated: bool
     alleva_treatment_plan_sync_limit: int
     alleva_treatment_plan_detail_fetch_enabled: bool
+    alleva_treatment_plan_patient_name_import_enabled: bool
     alleva_treatment_plan_name_join_fallback_enabled: bool
     alleva_treatment_plan_detail_fetch_limit: int
     alleva_treatment_plan_sync_last_at: datetime | None = None

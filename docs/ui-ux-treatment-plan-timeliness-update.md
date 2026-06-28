@@ -14,9 +14,9 @@ Primary inputs:
 - `verification-steps.md`
 - `clinical-logic-spec.md`
 - `source-evidence-matrix.md`
-- `frontend-reference/TreatmentPlanTimelinessVideoMockup.tsx`
-- `frontend-reference/treatment-plan-timeliness-video.css`
-- `frontend-reference/mockup-data.json`
+- `depricated/video-extract (2026-06-05)/frontend-reference/TreatmentPlanTimelinessVideoMockup.tsx`
+- `depricated/video-extract (2026-06-05)/frontend-reference/treatment-plan-timeliness-video.css`
+- `depricated/video-extract (2026-06-05)/frontend-reference/mockup-data.json`
 
 ## Production UI Changes
 
@@ -65,7 +65,7 @@ Beta 1.4.6-beta.1 uses the latest valid treatment-plan review/update date, or ad
 
 ## Alleva REST Sync UI
 
-App settings now presents Alleva integration as REST/OpenAPI/HL7-readiness only. The active Alleva/API connection uses the Alleva API base URL, OpenAPI URL, OAuth token URL, client ID, encrypted client secret, token auth style, API version, record limit, startup toggle, approval checkbox, and endpoint-mapping validation checkbox. Saved endpoint profiles are presets that must be activated before they affect the active connection. Active FHIR/SMART-on-FHIR discovery, scopes, import-plan controls, and base URL fields have been removed after vendor guidance.
+App settings now presents Alleva integration as REST/OpenAPI/HL7-readiness only. The active Alleva/API connection uses the Alleva API base URL, OpenAPI URL, OAuth token URL, client ID, encrypted client secret, token auth style, API version, record limit, startup toggle, approval checkbox, endpoint-mapping validation checkbox, disabled-by-default current-plan detail fetch, disabled-by-default patient-name import/display, and disabled-by-default validation-only name fallback. Saved endpoint profiles are presets that must be activated before they affect the active connection. Active FHIR/SMART-on-FHIR discovery, scopes, import-plan controls, and base URL fields have been removed after vendor guidance.
 
 ## Remaining R3/Marleigh Questions
 

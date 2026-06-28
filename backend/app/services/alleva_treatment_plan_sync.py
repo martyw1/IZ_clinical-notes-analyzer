@@ -509,7 +509,7 @@ def _mark_status(db: Session, settings_row: AppSetting, *, status: str, message:
     db.commit()
 
 
-def _client_lookup(active_clients: list[dict[str, Any]]) -> tuple[dict[str, str], dict[str, str]]:
+def _client_lookup(active_clients: list[dict[str, Any]], *, include_names: bool = False) -> tuple[dict[str, str], dict[str, str]]:
     by_alias: dict[str, str] = {}
     by_name: dict[str, str] = {}
     duplicate_names: set[str] = set()
@@ -519,6 +519,8 @@ def _client_lookup(active_clients: list[dict[str, Any]]) -> tuple[dict[str, str]
             continue
         for alias in _client_aliases(raw):
             by_alias[alias] = patient_id
+        if not include_names:
+            continue
         name = _client_name(raw).strip().lower()
         if name:
             if name in by_name and by_name[name] != patient_id:
@@ -730,12 +732,12 @@ def sync_alleva_rest_payloads(
     treatment_reviews_payload: list[dict[str, Any]],
     plan_detail_fetcher: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     detail_fetch_limit: int = 0,
+    patient_name_import_enabled: bool = False,
     name_join_fallback_enabled: bool = False,
     actor: User | None = None,
 ) -> dict[str, Any]:
     active_clients = [client for client in clients_payload if _is_active_client(client) and _patient_id_from_client(client)]
-    by_alias, by_name = _client_lookup(active_clients)
-    by_name_for_matching = by_name if name_join_fallback_enabled else {}
+    by_alias, by_name_for_matching = _client_lookup(active_clients, include_names=name_join_fallback_enabled)
     plans_group = _group_by_client(treatment_plans_payload, by_alias=by_alias, by_name=by_name_for_matching, name_field='clientName')
     reviews_group = _group_by_client(treatment_reviews_payload, by_alias=by_alias, by_name=by_name_for_matching, name_field='clientName')
     for record_ids in plans_group.unmapped_record_ids:
@@ -792,7 +794,7 @@ def sync_alleva_rest_payloads(
             db.flush()
 
         warnings, discharge_conflict = _active_client_warnings(raw_client)
-        display_name = _client_name(raw_client)
+        display_name = _client_name(raw_client) if patient_name_import_enabled else ''
         client.permitted_name = display_name or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=patient_id)
         client.is_active = True
         client.current_level_of_care = _first_text(raw_client, 'levelOfCare')
@@ -1071,6 +1073,7 @@ def run_alleva_treatment_plan_sync(
             treatment_reviews_payload=treatment_reviews,
             plan_detail_fetcher=plan_detail_fetcher,
             detail_fetch_limit=max(0, min(settings_row.alleva_treatment_plan_detail_fetch_limit or 0, 5000)),
+            patient_name_import_enabled=settings_row.alleva_treatment_plan_patient_name_import_enabled,
             name_join_fallback_enabled=settings_row.alleva_treatment_plan_name_join_fallback_enabled,
             actor=actor,
         )

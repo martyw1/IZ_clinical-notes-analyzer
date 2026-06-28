@@ -79,7 +79,9 @@ Beta `1.4.6-beta.1` keeps the separate Alleva REST treatment-plan sync configura
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
-Treatment-plan sync readiness maps records by patient/client ID only. Name-only matches are intentionally disabled; records without an approved ID mapping remain unmapped instead of being guessed from patient names.
+Treatment-plan sync readiness maps records by patient/client ID by default. Name-only matches are intentionally disabled; records without an approved ID mapping remain unmapped instead of being guessed from patient names. App settings includes a separate validation-only name-fallback control for approved mapping investigations, but it stays off by default.
+
+Alleva patient-name import/display is also a separate App settings control and stays off by default. When it is off, the sync stores generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels for Alleva-sourced treatment-plan clients even if the `/clients` payload contains a name. Turning the setting off later redacts existing Alleva-sourced treatment-plan names again.
 
 Manual sync status messages distinguish common failure stages for non-technical users:
 
@@ -98,6 +100,7 @@ Startup sync is disabled by default. Before enabling it, admins must confirm and
 - Pagination/cursor behavior, rate limits, date filters, and retry expectations.
 - Authoritative response fields for active/discharged status, admission date, current level of care, treatment-plan kind, completion status, client signature date, staff/creator signature date, last modified/update date, and next review due date.
 - Credential scopes and tenant/environment boundaries for R3 Recovery Services.
+- Whether R3 has explicitly approved storing/displaying Alleva patient names, or whether the redacted default must remain in place.
 
 If any required setting is missing, App settings lists the exact missing field and will not arm startup sync. The live sync route records a blocked status rather than importing partial or unmapped data.
 

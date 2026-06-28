@@ -22,8 +22,8 @@ This is the S0 cleanup audit. No files were deleted or moved in this station. S1
 | Frontend dependencies/config | `frontend/package.json`, `frontend/package-lock.json`, `frontend/tsconfig.json`, `frontend/vite.config.ts` |
 | Frontend container/static serving | `frontend/Dockerfile`, `frontend/nginx.conf` |
 | Deterministic rules | `config/rules/alleva_treatment_plan_completeness_rules.yaml` |
-| Windows launch/validation | `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts/startup-windows-local.ps1`, `scripts/test-local-app-stack.ps1`, `scripts/test-api-configuration-local.ps1`, `scripts/test-alleva-api-connectivity.ps1`, `scripts/start-desktop-local.ps1` |
-| Developer/server launch | `scripts/smoke.sh`, `scripts/startup-macos.sh`, `scripts/startup-ubuntu-24.04.sh`, `scripts/startup-windows.ps1`, `scripts/lib/dedicated-postgres.sh` |
+| Windows launch/validation | `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts/start-windows-local.ps1`, `scripts/startup-windows-local.ps1`, `scripts/test-local-app-stack.ps1`, `scripts/test-api-configuration-local.ps1`, `scripts/test-alleva-api-connectivity.ps1` |
+| Developer/server launch | `scripts/smoke.sh`; legacy Docker/PostgreSQL launchers moved to `depricated/scripts/` |
 | Docker/CI | `.github/workflows/ci.yml`; Docker compose overlays removed from active source when proven unused for the Windows desktop path |
 | Operator/developer docs | `docs/*.md`, `docs/Product Requirements Document.pdf`, `docs/prd-treatment-plan-timeliness-mvp-2026-06-01.docx`, `docs/prd-ver0.0-old-original.rtf`, `docs/open-blockers.md` |
 | Synthetic examples | `docs/sample-clinical-notes/` |
@@ -36,7 +36,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 
 | Candidate | Evidence | Safety assessment |
 |---|---|---|
-| `scripts/startup-windows.ps1` | Main README and AGENTS point to `startup-windows-local.ps1`; this script appears to be an older Docker/PostgreSQL Windows path. | Potentially removable only if no supported server-mode Windows workflow needs it. Retain for now. |
+| `scripts/startup-windows.ps1` | Main README and AGENTS point to `startup-windows-local.ps1`; this script was an older Docker/PostgreSQL Windows path. | Moved to `depricated/scripts/startup-windows.ps1` on 2026-06-28 after reference scan confirmed it is not in the active Windows launch path. |
 | `docker-compose.db-expose.yml` | Minimal overlay exposed a Postgres port and was not referenced by active launch, test, backend, frontend, config, or CI paths. | Removed 2026-06-17 after S0 validation and reference scan; see `docs/removal-log.md`. |
 | `docs/prd-ver0.0-old-original.rtf` | Renamed legacy PRD archive. | Not dead if archive history is desired. Retain unless superseded archive policy says remove. |
 | `docs/chart-review-workflow-codex-build-prompt.md` | Historical build prompt for earlier chart-audit workflow. | Legacy reference, not runtime dead code. Retain until docs archive policy is set. |
@@ -49,7 +49,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 | Product direction | Existing chart-audit dashboard and workflow labels | Current app still says "Clinical notes completeness review" and "R3 Chart Audit"; v0.5.0 needs Treatment Plan Timeliness Tracker positioning. Do not remove until replacement workflow is implemented. |
 | Rules | Broad `IOP`/`OUTPATIENT` rules | PRD needs configurable IOP-5, IOP-19, IOP-3, OP aliases and 30/60-day recurrence. Existing rules should be migrated/expanded, not deleted blindly. |
 | Docs | Older PRD/runbook/refactor notes | Useful as implementation history. Move to archive only after README and current PRD cover required operator/developer information. |
-| Server-mode scripts | macOS/Ubuntu/Docker/PostgreSQL launchers | Not ordinary Windows requirements, but still referenced in docs and CI/server contexts. Keep unless product scope removes server mode. |
+| Server-mode scripts | macOS/Ubuntu/Docker/PostgreSQL launchers | Moved to `depricated/scripts/` on 2026-06-28. They are retained as source history only and are not current launch instructions. |
 
 ## Duplicate Code Paths
 
@@ -57,7 +57,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 |---|---|---|
 | Settings/API credential editing | `backend/app/api/routes.py`, `backend/app/api/api_config_routes.py`, frontend settings UI | S2 encrypts LLM/access reputation keys; S4 adds direct API harness redacted reports, saved-key encryption coverage, offline OpenAPI tests, and route/audit redaction checks. |
 | API configuration UI | React settings view plus standalone `api_config_ui_routes.py` HTML page | Useful for desktop direct harness, but duplicate UX paths need consistency tests. |
-| Startup scripts | `startup-windows-local.ps1`, `start-desktop-local.ps1`, `startup-windows.ps1`, macOS/Ubuntu scripts | Keep all currently referenced scripts, but distinguish ordinary Windows local runtime from Docker/server launchers in docs. |
+| Startup scripts | `startup-windows-local.ps1`, `start-windows-local.ps1`, old Docker/server launchers | Active launch is `Start-IZ-Clinical-Notes-Analyzer.cmd` -> `start-windows-local.ps1` -> `startup-windows-local.ps1`; old launchers are quarantined under `depricated/scripts/`. |
 | Health/readiness endpoints | `/health`, `/api/health`, `/api/readiness`, `/api/system/readiness` | Intentional compatibility overlap, but should be documented. |
 | Treatment plan logic | `config/rules/*.yaml`, `backend/app/services/rules_engine.py`, `backend/app/services/evaluation.py`, audit template | Rules engine and chart-audit evaluator both touch treatment-plan concepts. v0.5.0 should make one canonical timeliness engine/API. |
 
@@ -69,7 +69,7 @@ These are candidates only. Do not delete until S1 proves they are unreferenced, 
 | `docs/windows-local-refactor.md` | Refactor notes may be partially superseded by README. | No. Update/archive after v0.5.0 docs stabilize. |
 | `docs/runbook.md` | Mentions dedicated PostgreSQL runtime, while Windows target is SQLite-first. | No. Clarify server vs desktop modes. |
 | `docs/CODEX_COMPLETION_LOG.md` | Historical completion log needs new station entries. | No. Append after stations. |
-| `scripts/startup-windows.ps1` | Older Docker/PostgreSQL Windows path can confuse ordinary Windows users. | No. Either document as legacy/server or remove in S1 after references and need are resolved. |
+| `scripts/startup-windows.ps1` | Older Docker/PostgreSQL Windows path can confuse ordinary Windows users. | Moved to `depricated/scripts/startup-windows.ps1` on 2026-06-28. |
 
 ## Unused Dependency Candidates
 
@@ -173,7 +173,7 @@ Not safe to remove yet:
 2. Create `docs/removal-log.md` before deleting anything.
 3. Compare the untracked root `Product Requirements Document.docx` with tracked PRD artifacts and decide keep/move/delete/ignore.
 4. Review `walkthroughs/` for PHI and decide whether it is local-only evidence, archive material, or safe synthetic documentation.
-5. Classify `scripts/startup-windows.ps1` as legacy/server-mode or remove it after references and product scope are resolved.
+5. Completed 2026-06-28: moved legacy startup/helper scripts and unused UI reference code into `depricated/` with `depricated/DEPRECATED-MANIFEST.md`.
 6. Completed 2026-06-17: `docker-compose.db-expose.yml` was removed after reference scan proved it unused in active paths.
 7. Continue S7 Windows Home packaging, installer/repair/uninstall planning, and target Dell validation now that S6 smoke coverage is hardened.
 8. Keep `docs/open-blockers.md`, README, and PRD implementation notes current until the unvalidated LOC-change window is resolved.

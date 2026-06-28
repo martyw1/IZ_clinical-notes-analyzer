@@ -2,7 +2,7 @@
 
 Initial date: 2026-06-04
 
-Latest update: 2026-06-20
+Latest update: 2026-06-28
 
 Scope: historical S1 cleanup records plus later main-branch legacy Docker/PostgreSQL removal records.
 
@@ -24,15 +24,28 @@ Cleanup is intentionally conservative. Files are removed only when they are gene
 
 | Path | Reason retained |
 |---|---|
-| `scripts/startup-windows.ps1` | Potential legacy/server-mode Windows launcher, but not proven obsolete. Not the current Version 1.4.2 local-desktop launch path. |
-| `scripts/startup-macos.sh` | Deprecated legacy launcher retained for history. Not a current R3 Windows desktop path. |
-| `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy launcher retained for history. Not a current R3 Windows desktop path. |
-| `scripts/lib/dedicated-postgres.sh` | Legacy helper retained only for deprecated Docker/PostgreSQL startup references. |
+| `depricated/scripts/startup-windows.ps1` | Deprecated legacy Windows launcher retained as archive history only after being moved out of active `scripts/`. |
+| `depricated/scripts/startup-macos.sh` | Deprecated legacy launcher retained as archive history only. Not a current R3 Windows desktop path. |
+| `depricated/scripts/startup-ubuntu-24.04.sh` | Deprecated legacy launcher retained as archive history only. Not a current R3 Windows desktop path. |
+| `depricated/scripts/lib/dedicated-postgres.sh` | Legacy helper retained as archive history only for deprecated Docker/PostgreSQL startup references. |
 | `docs/prd-ver0.0-old-original.rtf` | Historical PRD archive. |
 | `docs/chart-review-workflow-codex-build-prompt.md` | Historical chart-audit build prompt and implementation context. |
 | `docs/windows-startup-known-issue-20260514.md` | Historical startup issue note; now marked resolved and superseded by current Version 1.4.2 guidance. |
 | `Product Requirements Document.docx` | Untracked root artifact, likely duplicate/reference material; ignored to avoid accidental commit, but not deleted. |
 | `walkthroughs/` | Untracked walkthrough exports/screenshots/transcripts; ignored because they may contain sensitive or non-synthetic content, but not deleted. |
+
+## Moved to Deprecated Archive
+
+| Original path | New path | Safety evidence |
+|---|---|---|
+| `diag-build-tools/git_sync_20260611-mac.sh` | `depricated/diag-build-tools/git_sync_20260611-mac.sh` | `rg` found no active references. Not part of Windows launch, backend, frontend, config, CI, or packaging paths. |
+| `diag-build-tools/git_sync_20260611-win.ps1` | `depricated/diag-build-tools/git_sync_20260611-win.ps1` | `rg` found no active references. Not part of Windows launch, backend, frontend, config, CI, or packaging paths. |
+| `scripts/start-desktop-local.ps1` | `depricated/scripts/start-desktop-local.ps1` | Active launch path is `Start-IZ-Clinical-Notes-Analyzer.cmd` -> `start-windows-local.ps1` -> `startup-windows-local.ps1`. |
+| `scripts/startup-windows.ps1` | `depricated/scripts/startup-windows.ps1` | Deprecated legacy Docker/PostgreSQL Windows launcher; not called by current Windows startup wrappers. |
+| `scripts/startup-macos.sh` | `depricated/scripts/startup-macos.sh` | Deprecated legacy Docker/PostgreSQL macOS launcher; not part of Windows local desktop requirements. |
+| `scripts/startup-ubuntu-24.04.sh` | `depricated/scripts/startup-ubuntu-24.04.sh` | Deprecated legacy Docker/PostgreSQL Ubuntu launcher; not part of Windows local desktop requirements. |
+| `scripts/lib/dedicated-postgres.sh` | `depricated/scripts/lib/dedicated-postgres.sh` | Legacy helper used only by deprecated Docker/PostgreSQL startup paths. |
+| `video-extract (2026-06-05)/frontend-reference/` | `depricated/video-extract (2026-06-05)/frontend-reference/` | Historical UI reference code already translated into the active React app; no active references to the component file. |
 
 ## Ignore Rule Updates
 
@@ -40,7 +53,7 @@ Updated `.gitignore` to keep runtime SQLite files, logs, temporary files, covera
 
 ## Current Legacy Boundary
 
-As of Version `1.4.2`, Docker, PostgreSQL, nginx, and old Compose artifacts are not ordinary R3 Windows desktop requirements. Do not restore the old Docker/server stack to active paths unless R3 explicitly reintroduces that deployment model and updates README, Windows docs, CI, tests, release instructions, and validation evidence together.
+As of the 2026-06-28 cleanup pass, Docker, PostgreSQL, nginx, old Compose artifacts, and quarantined legacy startup/helper scripts are not ordinary R3 Windows desktop requirements. Do not restore the old Docker/server stack to active paths unless R3 explicitly reintroduces that deployment model and updates README, Windows docs, CI, tests, release instructions, and validation evidence together.
 
 ## Follow-Up Checks
 

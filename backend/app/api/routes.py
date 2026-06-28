@@ -72,6 +72,7 @@ from app.services.api_connectivity import request_client_credentials_token
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import (
+    NAME_NOT_FOUND_STATUS,
     display_name_for_patient_name_status,
     detect_patient_id_from_uploads,
     extract_upload_metadata_from_uploads,
@@ -419,6 +420,7 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'alleva_treatment_plan_endpoint_mapping_validated': settings_row.alleva_treatment_plan_endpoint_mapping_validated,
         'alleva_treatment_plan_sync_limit': settings_row.alleva_treatment_plan_sync_limit,
         'alleva_treatment_plan_detail_fetch_enabled': settings_row.alleva_treatment_plan_detail_fetch_enabled,
+        'alleva_treatment_plan_patient_name_import_enabled': settings_row.alleva_treatment_plan_patient_name_import_enabled,
         'alleva_treatment_plan_name_join_fallback_enabled': settings_row.alleva_treatment_plan_name_join_fallback_enabled,
         'alleva_treatment_plan_detail_fetch_limit': settings_row.alleva_treatment_plan_detail_fetch_limit,
         'alleva_treatment_plan_sync_last_at': settings_row.alleva_treatment_plan_sync_last_at,
@@ -431,6 +433,22 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
     }
+
+
+def _redact_alleva_treatment_plan_names(db: Session) -> int:
+    clients = (
+        db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.source_evidence.like('Alleva REST%')))
+        .scalars()
+        .all()
+    )
+    redacted_count = 0
+    for client in clients:
+        if client.permitted_name.startswith('no-name-found_'):
+            continue
+        client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=client.patient_id)
+        client.updated_at = _utc_now()
+        redacted_count += 1
+    return redacted_count
 
 
 def _emr_profile_payload(profile: EmrEndpointProfile) -> dict[str, object]:
@@ -900,6 +918,7 @@ def update_app_settings(
 ):
     settings_row = get_or_create_app_settings(db)
     before_state = _settings_snapshot(settings_row)
+    redacted_alleva_patient_name_count = 0
 
     if payload.organization_name is not None:
         settings_row.organization_name = payload.organization_name.strip() or settings_row.organization_name
@@ -977,6 +996,8 @@ def update_app_settings(
         settings_row.alleva_treatment_plan_sync_limit = payload.alleva_treatment_plan_sync_limit
     if payload.alleva_treatment_plan_detail_fetch_enabled is not None:
         settings_row.alleva_treatment_plan_detail_fetch_enabled = payload.alleva_treatment_plan_detail_fetch_enabled
+    if payload.alleva_treatment_plan_patient_name_import_enabled is not None:
+        settings_row.alleva_treatment_plan_patient_name_import_enabled = payload.alleva_treatment_plan_patient_name_import_enabled
     if payload.alleva_treatment_plan_name_join_fallback_enabled is not None:
         settings_row.alleva_treatment_plan_name_join_fallback_enabled = payload.alleva_treatment_plan_name_join_fallback_enabled
     if payload.alleva_treatment_plan_detail_fetch_limit is not None:
@@ -993,6 +1014,8 @@ def update_app_settings(
     _validate_emr_enablement(settings_row)
     _validate_periodic_api_check(settings_row)
     _validate_alleva_treatment_plan_sync(settings_row)
+    if not settings_row.alleva_treatment_plan_patient_name_import_enabled:
+        redacted_alleva_patient_name_count = _redact_alleva_treatment_plan_names(db)
 
     touch_app_settings(settings_row, actor=user)
     db.commit()
@@ -1008,7 +1031,8 @@ def update_app_settings(
         target_entity='app_settings',
         target_entity_type='app_setting',
         target_entity_id=str(settings_row.id),
-        details=after_state,
+        details=after_state
+        | ({'redacted_alleva_patient_name_count': redacted_alleva_patient_name_count} if redacted_alleva_patient_name_count else {}),
         before_state=before_state,
         after_state=after_state,
         diff_state={key: {'before': before_state.get(key), 'after': after_state.get(key)} for key in sorted(set(before_state) | set(after_state)) if before_state.get(key) != after_state.get(key)},

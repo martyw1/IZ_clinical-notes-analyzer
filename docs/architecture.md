@@ -10,7 +10,7 @@ IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app fo
 
 The active Beta 1.4.6-beta.1 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
 
-The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
+The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Legacy startup/helper scripts and historical UI reference code that are not part of the active Windows local path were later moved under `depricated/`. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment or requests that historical reference code be active again, with README, Windows docs, CI, tests, and release instructions updated together.
 
 ## Runtime components
 

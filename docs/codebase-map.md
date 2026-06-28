@@ -16,7 +16,7 @@ This file is the current orientation map for the remote repository. Older S0/S1/
 
 The app is a local-first FastAPI plus React/Vite application. The normal Windows target is a one-machine desktop-style localhost app using SQLite, local encrypted uploads, role-based access control, deterministic Treatment Plan Tracking, workflow profiles, and local audit logs under per-user app data.
 
-Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 requirements and are not the active R3 desktop deployment path. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after reference scans; deprecated legacy startup scripts remain for historical context and must not be treated as current launch instructions.
+Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 requirements and are not the active R3 desktop deployment path. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after reference scans; deprecated legacy startup/helper scripts and historical UI reference code now live under `depricated/` and must not be treated as current launch instructions.
 
 ## Backend entrypoints
 
@@ -77,10 +77,10 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher. Do not use for Beta 1.4.6-beta.1 local desktop startup. |
-| `scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher. |
-| `scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher. |
-| `scripts/lib/dedicated-postgres.sh` | Legacy helper | Preserved for deprecated Docker/PostgreSQL launchers only. |
+| `depricated/scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher moved out of active `scripts/`. Do not use for local desktop startup. |
+| `depricated/scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher moved out of active `scripts/`. |
+| `depricated/scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher moved out of active `scripts/`. |
+| `depricated/scripts/lib/dedicated-postgres.sh` | Legacy helper | PostgreSQL helper moved out of active `scripts/`; retained only as deprecated history. |
 
 ## Data storage paths
 
@@ -177,7 +177,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, protected values, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
 | Signed installer is not complete | Release folder builder exists, but no signed MSI/MSIX with repair/modify support exists. | Non-technical rollout still needs final target-machine packaged validation. |
 | Root diagnostic script can expose sensitive values | `Test-AllevaApi.ps1` is intentionally detailed by default. | Use only on approved private diagnostic machines; use redaction mode for shareable logs and still review output. |
-| Legacy Docker files were removed from the active tree | Deprecated startup scripts remain, but the old Docker/nginx archive and compose overlay were removed after S1 cleanup evidence. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements or restore the old stack without an explicit R3/server decision. |
+| Legacy Docker files were removed from the active tree | Old Docker/nginx archive and compose overlay were removed after S1 cleanup evidence; legacy startup/helper scripts are quarantined under `depricated/`. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements or restore the old stack without an explicit R3/server decision. |
 
 ## Version Metadata
 

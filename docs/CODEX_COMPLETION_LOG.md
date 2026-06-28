@@ -1,5 +1,13 @@
 # Codex completion log - 2026-05-14
 
+## 2026-06-28 treatment-plan redaction and cleanup remediation
+- Added disabled-by-default Alleva patient-name import/display setting and kept validation-only name fallback as a separate saved setting.
+- Changed Alleva treatment-plan sync to store generated redacted labels by default and to redact existing Alleva-sourced treatment-plan names when App settings is saved with patient-name import off.
+- Added an admin-only `Pull / refresh treatment plans` button to the Treatment Plans tab.
+- Moved unused/legacy code files into `depricated/` with `depricated/DEPRECATED-MANIFEST.md`, while preserving the active Windows launch path.
+- Verification passed focused backend redaction/schema tests, full backend pytest (`118 passed, 2 skipped`), frontend Vitest (`17 passed`), frontend production build, Windows local stack smoke, API configuration smoke, Alleva connectivity probe, and in-app browser validation against a disposable synthetic local app launched through the normal PowerShell startup path.
+- Validation evidence is recorded in `docs/validation/validation-report-2026-06-28-treatment-plan-redaction-cleanup.md`.
+
 ## 2026-06-23 v1.4.5-beta.1 R3 beta-client readiness
 - Updated app/version metadata to `1.4.5-beta.1` / build `2026.06.23.1` on the `beta-local-desktop` channel.
 - Renamed `Chart audit` to `Status Dashboard`, moved `Treatment plans` immediately after it, added bundled R3 logo support, and removed the desktop floating shortcuts/intake-guide page.
