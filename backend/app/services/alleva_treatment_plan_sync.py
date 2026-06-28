@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from http import HTTPStatus
-from typing import Any
-from urllib.parse import urljoin
+from typing import Any, Callable
+from urllib.parse import quote, urljoin
 
 import httpx
 from sqlalchemy import delete, select
@@ -27,7 +29,10 @@ ALLEVA_REST_SOURCE = 'Alleva REST'
 SYNC_ENDPOINTS = {
     'clients': '/clients',
     'treatment_plans': '/treatment-plans',
+    'treatment_plan_detail': '/treatment-plans/{id}',
+    'treatment_plan_diagnosis': '/treatment-plans/{id}/diagnosis',
     'treatment_reviews': '/treatment-reviews',
+    'treatment_review_detail': '/treatment-reviews/{id}',
 }
 
 
@@ -49,6 +54,15 @@ class AllevaSyncExternalError(Exception):
         self.endpoint = endpoint
         self.status_code = status_code
         self.status = status
+
+
+@dataclass
+class GroupByClientResult:
+    records_by_client: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    unmapped_count: int = 0
+    unmapped_record_ids: list[dict[str, str]] = field(default_factory=list)
+    confidence_by_client: dict[str, str] = field(default_factory=dict)
+    name_fallback_count: int = 0
 
 
 def _utc_now() -> datetime:
@@ -75,6 +89,19 @@ def _first_text(payload: dict[str, Any], *keys: str) -> str:
     return ''
 
 
+def _bool_value(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {'true', '1', 'yes', 'y', 'active', 'complete', 'completed'}:
+        return True
+    if text in {'false', '0', 'no', 'n', 'inactive', 'discharged', 'closed', 'deceased', 'incomplete'}:
+        return False
+    return default
+
+
 def _date_text(value: Any) -> str:
     raw = _strip(value)
     if not raw:
@@ -84,6 +111,20 @@ def _date_text(value: Any) -> str:
     if ' ' in raw and raw[:10].count('-') == 2:
         return raw[:10]
     return raw
+
+
+def _date_value(value: Any) -> date | None:
+    raw = _date_text(value)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _json_list(values: list[str]) -> str:
+    return json.dumps(list(dict.fromkeys(item for item in values if item)), separators=(',', ':'))
 
 
 def _client_name(payload: dict[str, Any]) -> str:
@@ -127,15 +168,73 @@ def _nested_client_aliases(payload: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(aliases))
 
 
+def _join_candidates(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    for key, confidence in (('clientId', 'clientId_match'), ('leadId', 'leadId_match'), ('patientId', 'id_match')):
+        value = _strip(payload.get(key))
+        if value:
+            candidates.append((value, confidence))
+    client = payload.get('client')
+    if isinstance(client, dict):
+        for key, confidence in (
+            ('clientId', 'clientId_match'),
+            ('leadId', 'leadId_match'),
+            ('id', 'id_match'),
+            ('uniqueId', 'id_match'),
+            ('mrn', 'id_match'),
+        ):
+            value = _strip(client.get(key))
+            if value:
+                candidates.append((value, confidence))
+    return list(dict.fromkeys(candidates))
+
+
+def _confidence_rank(value: str) -> int:
+    return {
+        'clientId_match': 4,
+        'leadId_match': 3,
+        'id_match': 2,
+        'name_fallback': 1,
+        'unknown': 0,
+    }.get(value, 0)
+
+
+def _record_public_ids(record: dict[str, Any]) -> dict[str, str]:
+    client = record.get('client') if isinstance(record.get('client'), dict) else {}
+    return {
+        'record_id': _first_text(record, 'id', 'treatmentPlanId', 'treatmentPlanReviewId', 'href'),
+        'client_id': _first_text(record, 'clientId') or (_first_text(client, 'clientId') if isinstance(client, dict) else ''),
+        'source_client_id': _first_text(record, 'patientId') or (_first_text(client, 'id') if isinstance(client, dict) else ''),
+        'lead_id': _first_text(record, 'leadId') or (_first_text(client, 'leadId') if isinstance(client, dict) else ''),
+    }
+
+
 def _is_active_client(payload: dict[str, Any]) -> bool:
-    if bool(payload.get('isDischarge')):
-        return False
-    if _strip(payload.get('dischargeDateTime')) or _strip(payload.get('actualSysDischargeDateTime')):
-        return False
     status = _first_text(payload, 'status', 'statusName').lower()
     if status and any(word in status for word in ('discharge', 'inactive', 'closed', 'deceased')):
         return False
+    status_is_active = bool(status and 'active' in status)
+    if _bool_value(payload.get('isDischarge'), default=False) and not status_is_active:
+        return False
+    if not status and (_strip(payload.get('dischargeDateTime')) or _strip(payload.get('actualSysDischargeDateTime'))):
+        return False
+    if payload.get('isClient') is not None and not _bool_value(payload.get('isClient'), default=True) and not status_is_active:
+        return False
     return True
+
+
+def _active_client_warnings(payload: dict[str, Any]) -> tuple[list[str], bool]:
+    warnings: list[str] = []
+    status = _first_text(payload, 'status', 'statusName').lower()
+    discharge_fields_present = bool(
+        _strip(payload.get('dischargeDateTime'))
+        or _strip(payload.get('actualSysDischargeDateTime'))
+        or _bool_value(payload.get('isDischarge'), default=False)
+    )
+    discharge_conflict = bool(status and 'active' in status and discharge_fields_present)
+    if discharge_conflict:
+        warnings.append('active_status_discharge_field_conflict')
+    return warnings, discharge_conflict
 
 
 def _extract_records(payload: Any) -> list[dict[str, Any]]:
@@ -277,6 +376,64 @@ def _fetch_collection(
     return records[:limit]
 
 
+def _fetch_detail(
+    *,
+    base_url: str,
+    path: str,
+    bearer_token: str,
+    api_version: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    url = _endpoint_url(base_url, path)
+    headers = {
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {bearer_token}',
+        'X-Version': api_version,
+    }
+    params = {'api-version': api_version}
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+        try:
+            response = client.get(url, headers=headers, params=params)
+            response.read()
+        except httpx.RequestError as exc:
+            _raise_request_failure(path=path, api_version=api_version, exc=exc)
+        if not 200 <= response.status_code < 300:
+            category, message = _endpoint_http_failure_message(path=path, status_code=response.status_code, api_version=api_version)
+            logger.warning('Alleva treatment-plan sync detail endpoint returned %s for %s url=%s', response.status_code, path, redact_url(str(response.url)))
+            raise AllevaSyncExternalError(
+                message,
+                stage='endpoint_request',
+                category=category,
+                endpoint=path,
+                status_code=response.status_code,
+            )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise AllevaSyncExternalError(
+                f'Alleva GET {path} responded, but the response was not JSON. Confirm this endpoint path and API version {api_version}.',
+                stage='endpoint_response',
+                category='endpoint_non_json_response',
+                endpoint=path,
+                status_code=response.status_code,
+            ) from exc
+    if isinstance(payload, dict):
+        for key in ('data', 'result', 'record'):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                return nested
+        return payload
+    if isinstance(payload, list):
+        return {'items': [item for item in payload if isinstance(item, dict)]}
+    raise AllevaSyncExternalError(
+        f'Alleva GET {path} returned JSON, but not a resource object the app can map.',
+        stage='endpoint_response',
+        category='endpoint_unexpected_json_shape',
+        endpoint=path,
+        status_code=response.status_code,
+    )
+
+
 def _fetch_optional_collection(
     *,
     base_url: str,
@@ -379,43 +536,136 @@ def _group_by_client(
     by_alias: dict[str, str],
     by_name: dict[str, str],
     name_field: str = 'clientName',
-) -> tuple[dict[str, list[dict[str, Any]]], int]:
+) -> GroupByClientResult:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    unmapped = 0
+    unmapped_record_ids: list[dict[str, str]] = []
+    confidence_by_client: dict[str, str] = {}
+    name_fallback_count = 0
     for record in records:
         patient_id = ''
-        for alias in _nested_client_aliases(record):
+        confidence = 'unknown'
+        for alias, candidate_confidence in _join_candidates(record):
             patient_id = by_alias.get(alias, '')
             if patient_id:
+                confidence = candidate_confidence
                 break
         if not patient_id:
             name = _first_text(record, name_field).strip().lower()
             patient_id = by_name.get(name, '') if name else ''
+            if patient_id:
+                confidence = 'name_fallback'
+                name_fallback_count += 1
         if patient_id:
             grouped[patient_id].append(record)
+            previous = confidence_by_client.get(patient_id, 'unknown')
+            if _confidence_rank(confidence) > _confidence_rank(previous):
+                confidence_by_client[patient_id] = confidence
         else:
-            unmapped += 1
-    return dict(grouped), unmapped
+            unmapped_record_ids.append(_record_public_ids(record))
+    return GroupByClientResult(
+        records_by_client=dict(grouped),
+        unmapped_count=len(unmapped_record_ids),
+        unmapped_record_ids=unmapped_record_ids,
+        confidence_by_client=confidence_by_client,
+        name_fallback_count=name_fallback_count,
+    )
+
+
+def _list_value(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _content_counts(raw: dict[str, Any]) -> dict[str, int]:
+    problems = [item for item in _list_value(raw.get('problems')) if isinstance(item, dict)]
+    problem_count = len(problems)
+    diagnosis_count = sum(len(_list_value(problem.get('diagnoses'))) for problem in problems)
+    if not diagnosis_count:
+        diagnosis_count = len(_list_value(raw.get('diagnoses'))) or len(_list_value(raw.get('diagnosis'))) or len(_list_value(raw.get('items')))
+    goals = [goal for problem in problems for goal in _list_value(problem.get('goals')) if isinstance(goal, dict)]
+    objectives = [objective for goal in goals for objective in _list_value(goal.get('objectives')) if isinstance(objective, dict)]
+    interventions = [intervention for objective in objectives for intervention in _list_value(objective.get('interventions')) if isinstance(intervention, dict)]
+    return {
+        'problem_count': problem_count,
+        'diagnosis_count': diagnosis_count,
+        'goal_count': len(goals),
+        'objective_count': len(objectives),
+        'intervention_count': len(interventions),
+    }
+
+
+def _signature_date(raw: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = raw.get(key)
+        if isinstance(value, dict):
+            date_value = _date_text(value.get('signatureDateTime') or value.get('signedAt') or value.get('date'))
+        else:
+            date_value = _date_text(value)
+        if date_value:
+            return date_value
+    return ''
+
+
+def _merge_plan_detail(raw_plan: dict[str, Any], detail: dict[str, Any] | None) -> dict[str, Any]:
+    if not detail:
+        return raw_plan
+    merged = {**raw_plan, **detail}
+    merged['_detail_fetched'] = True
+    merged['_content_source'] = 'detail'
+    return merged
+
+
+def _select_current_plan(plans: list[dict[str, Any]], *, today: date | None = None) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    if not plans:
+        return None, []
+    today = today or _utc_now().date()
+    active = [plan for plan in plans if _bool_value(plan.get('isActive'), default=True)]
+    if not active:
+        return None, list(plans)
+
+    def key(plan: dict[str, Any]) -> tuple[int, date, date, date, str]:
+        end_date = _date_value(plan.get('endDate'))
+        current_window = 1 if end_date is None or end_date >= today else 0
+        return (
+            current_window,
+            _date_value(plan.get('startDate')) or date.min,
+            _date_value(plan.get('lastModified')) or date.min,
+            _date_value(plan.get('createdDate')) or date.min,
+            _first_text(plan, 'id', 'href'),
+        )
+
+    current = sorted(active, key=key, reverse=True)[0]
+    historical = [plan for plan in plans if plan is not current]
+    return current, historical
 
 
 def _plan_record_from_treatment_plan(raw: dict[str, Any]) -> TreatmentPlanRecord:
-    is_initial = bool(raw.get('isInitialTP'))
-    is_complete = bool(raw.get('isComplete'))
+    is_initial = _bool_value(raw.get('isInitialTP'), default=False)
+    is_complete = _bool_value(raw.get('isComplete'), default=False)
+    is_active = _bool_value(raw.get('isActive'), default=True)
     client_signature = raw.get('clientSignature') if isinstance(raw.get('clientSignature'), dict) else {}
     staff_signature = raw.get('staffSignature') if isinstance(raw.get('staffSignature'), dict) else {}
     creator_signature = raw.get('creatorSignature') if isinstance(raw.get('creatorSignature'), dict) else {}
-    signature_date = _date_text(client_signature.get('signatureDateTime')) if isinstance(client_signature, dict) else ''
+    guardian_signature = raw.get('guardianSignature') if isinstance(raw.get('guardianSignature'), dict) else {}
+    signature_date = (
+        _date_text(raw.get('clientSignatureDate'))
+        or (_date_text(client_signature.get('signatureDateTime')) if isinstance(client_signature, dict) else '')
+    )
     staff_signature_date = (
         _date_text(raw.get('staffSignatureDate') or raw.get('creatorSignatureDate') or raw.get('therapistSignatureDate'))
         or (_date_text(staff_signature.get('signatureDateTime')) if isinstance(staff_signature, dict) else '')
         or (_date_text(creator_signature.get('signatureDateTime')) if isinstance(creator_signature, dict) else '')
     )
+    guardian_signature_date = _signature_date(raw, 'guardianSignatureDate', 'guardianSignature')
     source_id = _first_text(raw, 'id', 'href')
+    counts = _content_counts(raw)
+    detail_fetched = bool(raw.get('_detail_fetched'))
     conflict = '' if is_complete else 'Alleva REST TreatmentPlan is not marked complete.'
     if is_complete and not signature_date:
         conflict = 'Alleva REST TreatmentPlan does not expose a client signature date in the mapped public schema.'
     if is_complete and signature_date and not staff_signature_date:
         conflict = 'Alleva REST TreatmentPlan does not expose a staff signature date in the mapped public schema.'
+    if is_complete and detail_fetched and not (counts['problem_count'] or counts['diagnosis_count']):
+        conflict = 'Plan marked isComplete but has no documented problems or diagnoses.'
     return TreatmentPlanRecord(
         plan_kind=TreatmentPlanKind.initial if is_initial else TreatmentPlanKind.master,
         document_date=_date_text(raw.get('startDate') or raw.get('createdDate') or raw.get('lastModified')),
@@ -428,6 +678,22 @@ def _plan_record_from_treatment_plan(raw: dict[str, Any]) -> TreatmentPlanRecord
         source_document_id=source_id,
         is_valid=is_complete,
         conflict_note=conflict,
+        problem_count=counts['problem_count'],
+        diagnosis_count=counts['diagnosis_count'],
+        goal_count=counts['goal_count'],
+        objective_count=counts['objective_count'],
+        intervention_count=counts['intervention_count'],
+        has_guardian_signature=bool(guardian_signature_date or guardian_signature),
+        guardian_signature_date=guardian_signature_date,
+        alleva_is_active=is_active,
+        alleva_is_complete=is_complete,
+        alleva_is_initial_tp=is_initial,
+        alleva_start_date=_date_text(raw.get('startDate')),
+        alleva_end_date=_date_text(raw.get('endDate')),
+        alleva_last_modified=_date_text(raw.get('lastModified')),
+        detail_fetched=detail_fetched,
+        detail_fetched_at=_utc_now() if detail_fetched else None,
+        content_source=_first_text(raw, '_content_source') or ('detail' if detail_fetched else 'collection'),
     )
 
 
@@ -462,13 +728,50 @@ def sync_alleva_rest_payloads(
     clients_payload: list[dict[str, Any]],
     treatment_plans_payload: list[dict[str, Any]],
     treatment_reviews_payload: list[dict[str, Any]],
+    plan_detail_fetcher: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+    detail_fetch_limit: int = 0,
+    name_join_fallback_enabled: bool = False,
+    actor: User | None = None,
 ) -> dict[str, Any]:
     active_clients = [client for client in clients_payload if _is_active_client(client) and _patient_id_from_client(client)]
     by_alias, by_name = _client_lookup(active_clients)
-    plans_by_client, unmapped_plans = _group_by_client(treatment_plans_payload, by_alias=by_alias, by_name=by_name, name_field='clientName')
-    reviews_by_client, unmapped_reviews = _group_by_client(treatment_reviews_payload, by_alias=by_alias, by_name=by_name, name_field='clientName')
+    by_name_for_matching = by_name if name_join_fallback_enabled else {}
+    plans_group = _group_by_client(treatment_plans_payload, by_alias=by_alias, by_name=by_name_for_matching, name_field='clientName')
+    reviews_group = _group_by_client(treatment_reviews_payload, by_alias=by_alias, by_name=by_name_for_matching, name_field='clientName')
+    for record_ids in plans_group.unmapped_record_ids:
+        log_event(
+            db,
+            action='alleva.treatment_plan_sync.unmapped_plan',
+            actor=actor,
+            event_category='integration',
+            target_entity='alleva_treatment_plan_sync',
+            target_entity_type='integration_sync',
+            details=record_ids,
+            outcome_status='failure',
+            severity='warning',
+            message='Alleva treatment plan record could not be matched to an active client by approved ID fields.',
+        )
+    for record_ids in reviews_group.unmapped_record_ids:
+        log_event(
+            db,
+            action='alleva.treatment_plan_sync.unmapped_review',
+            actor=actor,
+            event_category='integration',
+            target_entity='alleva_treatment_plan_sync',
+            target_entity_type='integration_sync',
+            details=record_ids,
+            outcome_status='failure',
+            severity='warning',
+            message='Alleva treatment review record could not be matched to an active client by approved ID fields.',
+        )
 
     touched_ids: list[int] = []
+    detail_fetch_attempt_count = 0
+    detail_fetch_success_count = 0
+    detail_fetch_failed_count = 0
+    current_plan_selected_count = 0
+    current_plan_missing_count = 0
+    detail_limit = max(0, detail_fetch_limit)
     for raw_client in active_clients:
         patient_id = _patient_id_from_client(raw_client)
         if not patient_id:
@@ -476,7 +779,7 @@ def sync_alleva_rest_payloads(
         client = (
             db.execute(
                 select(TreatmentPlanClient)
-                .options(selectinload(TreatmentPlanClient.level_of_care_history), selectinload(TreatmentPlanClient.treatment_plans))
+                .options(selectinload(TreatmentPlanClient.level_of_care_history), selectinload(TreatmentPlanClient.treatment_plans), selectinload(TreatmentPlanClient.current_plan_record))
                 .where(TreatmentPlanClient.patient_id == patient_id)
             )
             .scalars()
@@ -488,6 +791,7 @@ def sync_alleva_rest_payloads(
             db.add(client)
             db.flush()
 
+        warnings, discharge_conflict = _active_client_warnings(raw_client)
         display_name = _client_name(raw_client)
         client.permitted_name = display_name or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=patient_id)
         client.is_active = True
@@ -496,9 +800,21 @@ def sync_alleva_rest_payloads(
         client.admission_date = _date_text(raw_client.get('admissionDateTime') or raw_client.get('admissionDate'))
         client.source_note_set_id = None
         client.source_evidence = f'{ALLEVA_REST_SOURCE} /clients record {patient_id}'
+        client.alleva_source_id = _first_text(raw_client, 'id')
+        client.alleva_client_id = _first_text(raw_client, 'clientId')
+        client.alleva_lead_id = _first_text(raw_client, 'leadId')
+        client.alleva_unique_id = _first_text(raw_client, 'uniqueId')
+        client.alleva_mrn = _first_text(raw_client, 'mrn')
+        plan_confidence = plans_group.confidence_by_client.get(patient_id, '')
+        review_confidence = reviews_group.confidence_by_client.get(patient_id, '')
+        client.id_join_confidence = max([plan_confidence, review_confidence, 'unknown'], key=_confidence_rank)
+        client.id_join_warnings = _json_list(['name_join_fallback_used'] if client.id_join_confidence == 'name_fallback' else [])
+        client.discharge_conflict = discharge_conflict
         client.last_imported_at = _utc_now()
         client.updated_at = _utc_now()
 
+        client.current_plan_record_id = None
+        db.flush()
         db.execute(delete(LevelOfCareHistory).where(LevelOfCareHistory.client_id == client.id, LevelOfCareHistory.source_evidence.like(f'{ALLEVA_REST_SOURCE}%')))
         db.execute(delete(TreatmentPlanRecord).where(TreatmentPlanRecord.client_id == client.id, TreatmentPlanRecord.source_section.like(f'{ALLEVA_REST_SOURCE}%')))
         db.flush()
@@ -514,10 +830,67 @@ def sync_alleva_rest_payloads(
                 )
             )
 
-        for raw_plan in plans_by_client.get(patient_id, []):
-            client.treatment_plans.append(_plan_record_from_treatment_plan(raw_plan))
-        for raw_review in reviews_by_client.get(patient_id, []):
+        current_plan, historical_plans = _select_current_plan(plans_group.records_by_client.get(patient_id, []))
+        current_plan_record: TreatmentPlanRecord | None = None
+        if current_plan is None:
+            warnings.append('no_current_active_plan')
+            current_plan_missing_count += 1
+        else:
+            current_plan_selected_count += 1
+            if plan_detail_fetcher is not None and detail_limit and detail_fetch_attempt_count < detail_limit:
+                detail_fetch_attempt_count += 1
+                try:
+                    current_plan = _merge_plan_detail(current_plan, plan_detail_fetcher(current_plan))
+                    if current_plan.get('_detail_fetched'):
+                        detail_fetch_success_count += 1
+                except AllevaSyncExternalError as exc:
+                    detail_fetch_failed_count += 1
+                    warnings.append('current_plan_detail_fetch_failed')
+                    log_event(
+                        db,
+                        action='alleva.treatment_plan_detail_fetch.failed',
+                        actor=actor,
+                        event_category='integration',
+                        target_entity=f'treatment_plan:{_first_text(current_plan, "id", "href")}',
+                        target_entity_type='alleva_treatment_plan',
+                        details={
+                            'treatment_plan_id': _first_text(current_plan, 'id', 'href'),
+                            'endpoint': exc.endpoint,
+                            'category': exc.category,
+                            'status_code': exc.status_code,
+                        },
+                        outcome_status='failure',
+                        severity='warning',
+                        message='Alleva current treatment plan detail could not be fetched; collection-level plan data was retained.',
+                    )
+                except Exception as exc:
+                    detail_fetch_failed_count += 1
+                    warnings.append('current_plan_detail_fetch_failed')
+                    logger.exception('Unexpected Alleva treatment-plan detail fetch failure for plan %s', _first_text(current_plan, 'id', 'href'))
+                    log_event(
+                        db,
+                        action='alleva.treatment_plan_detail_fetch.failed',
+                        actor=actor,
+                        event_category='integration',
+                        target_entity=f'treatment_plan:{_first_text(current_plan, "id", "href")}',
+                        target_entity_type='alleva_treatment_plan',
+                        details={'treatment_plan_id': _first_text(current_plan, 'id', 'href'), 'category': exc.__class__.__name__},
+                        outcome_status='failure',
+                        severity='warning',
+                        message='Alleva current treatment plan detail fetch failed unexpectedly; collection-level plan data was retained.',
+                    )
+
+        for raw_plan in ([current_plan] if current_plan is not None else []) + historical_plans:
+            record = _plan_record_from_treatment_plan(raw_plan)
+            client.treatment_plans.append(record)
+            if raw_plan is current_plan:
+                current_plan_record = record
+        for raw_review in reviews_group.records_by_client.get(patient_id, []):
             client.treatment_plans.append(_plan_record_from_treatment_review(raw_review))
+        client.data_quality_warnings = _json_list(warnings)
+        db.flush()
+        if current_plan_record is not None:
+            client.current_plan_record_id = current_plan_record.id
         touched_ids.append(client.id)
 
     return {
@@ -525,8 +898,18 @@ def sync_alleva_rest_payloads(
         'upserted_client_count': len(touched_ids),
         'treatment_plan_count': len(treatment_plans_payload),
         'treatment_review_count': len(treatment_reviews_payload),
-        'unmapped_treatment_plan_count': unmapped_plans,
-        'unmapped_treatment_review_count': unmapped_reviews,
+        'unmapped_treatment_plan_count': plans_group.unmapped_count,
+        'unmapped_treatment_review_count': reviews_group.unmapped_count,
+        'unmapped_plan_ids': plans_group.unmapped_record_ids,
+        'unmapped_review_ids': reviews_group.unmapped_record_ids,
+        'name_join_fallback_count': plans_group.name_fallback_count + reviews_group.name_fallback_count,
+        'current_plan_selected_count': current_plan_selected_count,
+        'current_plan_missing_count': current_plan_missing_count,
+        'detail_fetch_enabled': plan_detail_fetcher is not None and detail_limit > 0,
+        'detail_fetch_attempt_count': detail_fetch_attempt_count,
+        'detail_fetch_success_count': detail_fetch_success_count,
+        'detail_fetch_failed_count': detail_fetch_failed_count,
+        'detail_fetch_skipped_count': max(0, current_plan_selected_count - detail_fetch_attempt_count),
         'client_ids': touched_ids,
     }
 
@@ -606,12 +989,101 @@ def run_alleva_treatment_plan_sync(
             limit=limit,
             timeout_seconds=settings_row.emr_api_timeout_seconds,
         )
-        summary = sync_alleva_rest_payloads(db, clients_payload=clients, treatment_plans_payload=treatment_plans, treatment_reviews_payload=treatment_reviews)
+        plan_detail_fetcher = None
+        if settings_row.alleva_treatment_plan_detail_fetch_enabled:
+            def plan_detail_fetcher(raw_plan: dict[str, Any]) -> dict[str, Any] | None:
+                plan_id = _first_text(raw_plan, 'id', 'treatmentPlanId')
+                if not plan_id:
+                    raise AllevaSyncExternalError(
+                        'Alleva treatment-plan detail fetch could not run because the selected current plan has no ID.',
+                        stage='endpoint_request',
+                        category='missing_treatment_plan_id',
+                        endpoint=SYNC_ENDPOINTS['treatment_plan_detail'],
+                        status='warn',
+                    )
+                encoded_id = quote(plan_id, safe='')
+                detail_path = SYNC_ENDPOINTS['treatment_plan_detail'].format(id=encoded_id)
+                log_event(
+                    db,
+                    action='alleva.treatment_plan_detail_fetch.attempted',
+                    actor=actor,
+                    event_category='integration',
+                    target_entity=f'treatment_plan:{plan_id}',
+                    target_entity_type='alleva_treatment_plan',
+                    details={'treatment_plan_id': plan_id, 'endpoint': detail_path},
+                    message='Fetching Alleva current treatment plan detail for nested clinical content.',
+                )
+                detail = _fetch_detail(
+                    base_url=base_url,
+                    path=detail_path,
+                    bearer_token=bearer_token,
+                    api_version=api_version,
+                    timeout_seconds=settings_row.emr_api_timeout_seconds,
+                )
+                counts = _content_counts(detail)
+                if counts['diagnosis_count'] == 0:
+                    diagnosis_path = SYNC_ENDPOINTS['treatment_plan_diagnosis'].format(id=encoded_id)
+                    try:
+                        diagnosis_detail = _fetch_detail(
+                            base_url=base_url,
+                            path=diagnosis_path,
+                            bearer_token=bearer_token,
+                            api_version=api_version,
+                            timeout_seconds=settings_row.emr_api_timeout_seconds,
+                        )
+                        diagnoses = _list_value(diagnosis_detail.get('items')) or _list_value(diagnosis_detail.get('diagnoses')) or _list_value(diagnosis_detail.get('diagnosis'))
+                        if diagnoses:
+                            detail = {**detail, 'diagnoses': diagnoses}
+                    except AllevaSyncExternalError as exc:
+                        log_event(
+                            db,
+                            action='alleva.treatment_plan_diagnosis_fetch.failed',
+                            actor=actor,
+                            event_category='integration',
+                            target_entity=f'treatment_plan:{plan_id}',
+                            target_entity_type='alleva_treatment_plan',
+                            details={
+                                'treatment_plan_id': plan_id,
+                                'endpoint': exc.endpoint or diagnosis_path,
+                                'category': exc.category,
+                                'status_code': exc.status_code,
+                            },
+                            outcome_status='failure',
+                            severity='warning',
+                            message='Alleva treatment-plan diagnosis detail endpoint could not be read; nested treatment-plan detail was retained.',
+                        )
+                log_event(
+                    db,
+                    action='alleva.treatment_plan_detail_fetch.completed',
+                    actor=actor,
+                    event_category='integration',
+                    target_entity=f'treatment_plan:{plan_id}',
+                    target_entity_type='alleva_treatment_plan',
+                    details={'treatment_plan_id': plan_id, 'endpoint': detail_path, **_content_counts(detail)},
+                    message='Fetched Alleva current treatment plan detail for nested clinical content.',
+                )
+                return detail
+
+        summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=clients,
+            treatment_plans_payload=treatment_plans,
+            treatment_reviews_payload=treatment_reviews,
+            plan_detail_fetcher=plan_detail_fetcher,
+            detail_fetch_limit=max(0, min(settings_row.alleva_treatment_plan_detail_fetch_limit or 0, 5000)),
+            name_join_fallback_enabled=settings_row.alleva_treatment_plan_name_join_fallback_enabled,
+            actor=actor,
+        )
         db.commit()
         touched_clients = (
             db.execute(
                 select(TreatmentPlanClient)
-                .options(selectinload(TreatmentPlanClient.level_of_care_history), selectinload(TreatmentPlanClient.treatment_plans), selectinload(TreatmentPlanClient.overrides))
+                .options(
+                    selectinload(TreatmentPlanClient.level_of_care_history),
+                    selectinload(TreatmentPlanClient.treatment_plans),
+                    selectinload(TreatmentPlanClient.current_plan_record),
+                    selectinload(TreatmentPlanClient.overrides),
+                )
                 .where(TreatmentPlanClient.id.in_(summary['client_ids']))
             )
             .scalars()
@@ -653,6 +1125,14 @@ def run_alleva_treatment_plan_sync(
             warning_parts.append(f'{summary["unmapped_treatment_plan_count"]} treatment plan record(s) could not be matched to an active client.')
         if summary['unmapped_treatment_review_count']:
             warning_parts.append(f'{summary["unmapped_treatment_review_count"]} treatment review record(s) could not be matched to an active client.')
+        if summary['name_join_fallback_count']:
+            warning_parts.append(f'{summary["name_join_fallback_count"]} record(s) used the disabled-by-default name fallback; verify ID mapping before relying on these joins.')
+        if summary['current_plan_missing_count']:
+            warning_parts.append(f'{summary["current_plan_missing_count"]} active client(s) had no current active treatment plan selected.')
+        if summary['detail_fetch_failed_count']:
+            warning_parts.append(f'{summary["detail_fetch_failed_count"]} current treatment plan detail fetch(es) failed; collection-level plan data was retained.')
+        if summary['detail_fetch_enabled'] and summary['detail_fetch_skipped_count']:
+            warning_parts.append(f'{summary["detail_fetch_skipped_count"]} current treatment plan detail fetch(es) were skipped by the configured detail-fetch cap.')
         status = 'warn' if warning_parts else 'ok'
         message = (
             f'Alleva treatment-plan sync completed{" with warnings" if warning_parts else ""}; '

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import delete, func, select
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_roles
@@ -31,6 +32,7 @@ from app.models.models import (
     Role,
     TreatmentPlanClient,
     TreatmentPlanCriterionReview,
+    TreatmentPlanKind,
     TreatmentPlanOverride,
     TreatmentPlanRecord,
     User,
@@ -63,8 +65,10 @@ from app.schemas.schemas import (
     UiEventInput,
 )
 from app.services.audit import log_event
-from app.services.alleva_treatment_plan_sync import run_alleva_treatment_plan_sync
+from app.services.alleva_retrieval import content_counts, fetch_alleva_detail, id_mapping_summary
+from app.services.alleva_treatment_plan_sync import SYNC_ENDPOINTS, run_alleva_treatment_plan_sync
 from app.services.api_monitor import run_periodic_api_check
+from app.services.api_connectivity import request_client_credentials_token
 from app.services.app_settings import app_settings_public_payload, get_or_create_app_settings, touch_app_settings
 from app.services.evaluation import apply_report_to_chart, generate_evaluation_report
 from app.services.patient_notes import (
@@ -79,7 +83,8 @@ from app.services.patient_notes import (
 )
 from app.services.runtime_checks import readiness_payload
 from app.services.review_source_discovery import discovery_payload as review_source_discovery_payload
-from app.services.secure_storage import encrypt_text_secret, read_secure_file
+from app.services.patient_identity_minimization import sanitize_patient_payload
+from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret, read_secure_file
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.timezone import format_local_timestamp, localize_datetime, normalize_timezone_name
 from app.services.timeliness import (
@@ -143,6 +148,10 @@ ALLEVA_DOCUMENT_MANAGER_SECTIONS = [
         'source_description': 'Other Alleva chart material approved by the client for review import.',
     },
 ]
+
+
+class AllevaDetailSampleInput(BaseModel):
+    patient_ids: list[str] = Field(default_factory=list, max_length=10)
 
 
 def _utc_now() -> datetime:
@@ -409,6 +418,9 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'alleva_treatment_plan_sync_approved': settings_row.alleva_treatment_plan_sync_approved,
         'alleva_treatment_plan_endpoint_mapping_validated': settings_row.alleva_treatment_plan_endpoint_mapping_validated,
         'alleva_treatment_plan_sync_limit': settings_row.alleva_treatment_plan_sync_limit,
+        'alleva_treatment_plan_detail_fetch_enabled': settings_row.alleva_treatment_plan_detail_fetch_enabled,
+        'alleva_treatment_plan_name_join_fallback_enabled': settings_row.alleva_treatment_plan_name_join_fallback_enabled,
+        'alleva_treatment_plan_detail_fetch_limit': settings_row.alleva_treatment_plan_detail_fetch_limit,
         'alleva_treatment_plan_sync_last_at': settings_row.alleva_treatment_plan_sync_last_at,
         'alleva_treatment_plan_sync_last_status': settings_row.alleva_treatment_plan_sync_last_status,
         'alleva_treatment_plan_sync_last_message': settings_row.alleva_treatment_plan_sync_last_message,
@@ -776,6 +788,7 @@ def clear_all_patient_data(
         db.execute(delete(WorkflowTransition))
         db.execute(delete(AuditItemResponse))
         db.execute(delete(Chart))
+        db.execute(update(TreatmentPlanClient).values(current_plan_record_id=None))
         db.execute(delete(TreatmentPlanCriterionReview))
         db.execute(delete(TreatmentPlanOverride))
         db.execute(delete(TreatmentPlanRecord))
@@ -962,6 +975,12 @@ def update_app_settings(
         settings_row.alleva_treatment_plan_endpoint_mapping_validated = payload.alleva_treatment_plan_endpoint_mapping_validated
     if payload.alleva_treatment_plan_sync_limit is not None:
         settings_row.alleva_treatment_plan_sync_limit = payload.alleva_treatment_plan_sync_limit
+    if payload.alleva_treatment_plan_detail_fetch_enabled is not None:
+        settings_row.alleva_treatment_plan_detail_fetch_enabled = payload.alleva_treatment_plan_detail_fetch_enabled
+    if payload.alleva_treatment_plan_name_join_fallback_enabled is not None:
+        settings_row.alleva_treatment_plan_name_join_fallback_enabled = payload.alleva_treatment_plan_name_join_fallback_enabled
+    if payload.alleva_treatment_plan_detail_fetch_limit is not None:
+        settings_row.alleva_treatment_plan_detail_fetch_limit = payload.alleva_treatment_plan_detail_fetch_limit
     if payload.facility_timezone is not None:
         try:
             settings_row.facility_timezone = normalize_timezone_name(payload.facility_timezone)
@@ -1358,6 +1377,226 @@ def run_alleva_treatment_plan_sync_now(request: Request, user: User = Depends(re
         message='Manual Alleva REST treatment-plan sync requested.',
     )
     return {'sync_result': result, 'settings': app_settings_public_payload(settings_row)}
+
+
+def _stored_alleva_patient_records(clients: list[TreatmentPlanClient]) -> list[dict[str, object]]:
+    return [
+        {
+            'id': client.alleva_source_id,
+            'clientId': client.alleva_client_id or client.patient_id,
+            'leadId': client.alleva_lead_id,
+            'uniqueId': client.alleva_unique_id,
+            'mrn': client.alleva_mrn,
+            'status': 'Active' if client.is_active else 'Inactive',
+        }
+        for client in clients
+    ]
+
+
+def _stored_alleva_plan_records(clients: list[TreatmentPlanClient], *, reviews: bool = False) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for client in clients:
+        for plan in client.treatment_plans:
+            is_review = plan.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}
+            if reviews != is_review:
+                continue
+            records.append(
+                {
+                    'id': plan.source_document_id,
+                    'treatmentPlanReviewId': plan.source_document_id if is_review else '',
+                    'client': {
+                        'id': client.alleva_source_id,
+                        'clientId': client.alleva_client_id or client.patient_id,
+                        'leadId': client.alleva_lead_id,
+                    },
+                    'clientId': client.alleva_client_id,
+                    'patientId': client.alleva_source_id,
+                    'leadId': client.alleva_lead_id,
+                }
+            )
+    return records
+
+
+@router.get('/emr/alleva/id-mapping')
+def get_alleva_id_mapping_matrix(request: Request, user: User = Depends(require_roles(Role.admin)), db: Session = Depends(get_db)):
+    clients = list(
+        db.execute(
+            select(TreatmentPlanClient)
+            .options(selectinload(TreatmentPlanClient.treatment_plans))
+            .where(TreatmentPlanClient.is_active.is_(True))
+            .order_by(TreatmentPlanClient.patient_id.asc())
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    patient_records = _stored_alleva_patient_records(clients)
+    plan_records = _stored_alleva_plan_records(clients)
+    review_records = _stored_alleva_plan_records(clients, reviews=True)
+    summary = id_mapping_summary(patient_records, plan_records, review_records)
+    log_event(
+        db,
+        request,
+        'alleva.id_mapping.read',
+        actor=user,
+        event_category='integration',
+        target_entity='alleva_id_mapping',
+        target_entity_type='integration_diagnostic',
+        details={
+            'patient_record_count': summary['patient_record_count'],
+            'treatment_plan_record_count': summary['treatment_plan_record_count'],
+            'treatment_review_record_count': summary['treatment_review_record_count'],
+            'mapped_treatment_plan_count': summary['mapped_treatment_plan_count'],
+            'mapped_treatment_review_count': summary['mapped_treatment_review_count'],
+        },
+        message='Alleva stored ID mapping matrix viewed.',
+    )
+    return summary | {
+        'source': 'stored_treatment_plan_clients',
+        'stored_active_client_count': len(clients),
+        'join_confidence_counts': {
+            confidence: sum(1 for client in clients if client.id_join_confidence == confidence)
+            for confidence in sorted({client.id_join_confidence for client in clients} | {'unknown'})
+        },
+    }
+
+
+def _alleva_bearer_token(settings_row: AppSetting) -> tuple[str, dict[str, object]]:
+    missing = []
+    if not settings_row.alleva_api_base_url.strip():
+        missing.append('Alleva REST API base URL')
+    if not settings_row.api_oauth_token_url.strip():
+        missing.append('Alleva OAuth token URL')
+    if not settings_row.api_client_id.strip():
+        missing.append('Alleva API client ID')
+    if not settings_row.api_client_secret:
+        missing.append('Alleva API client secret')
+    if missing:
+        raise HTTPException(status_code=400, detail=f'Missing required Alleva API setting(s): {", ".join(missing)}')
+    token_result, bearer_token = request_client_credentials_token(
+        token_url=settings_row.api_oauth_token_url,
+        client_id=settings_row.api_client_id,
+        client_secret=decrypt_text_secret(settings_row.api_client_secret),
+        scope='',
+        timeout_seconds=settings_row.emr_api_timeout_seconds,
+        token_auth_style=settings_row.api_token_auth_style,
+    )
+    if not bearer_token:
+        raise HTTPException(status_code=400, detail=token_result.get('message') or 'Alleva token request did not return an access token.')
+    return bearer_token, token_result
+
+
+@router.post('/emr/alleva/sync/detail-sample')
+def fetch_alleva_treatment_plan_detail_sample(
+    payload: AllevaDetailSampleInput,
+    request: Request,
+    user: User = Depends(require_roles(Role.admin)),
+    db: Session = Depends(get_db),
+):
+    patient_ids = [item.strip() for item in payload.patient_ids if item.strip()]
+    if not patient_ids:
+        raise HTTPException(status_code=400, detail='At least one patient_id is required')
+    if len(patient_ids) > 10:
+        raise HTTPException(status_code=400, detail='At most 10 patient_ids can be sampled at once')
+    settings_row = get_or_create_app_settings(db)
+    bearer_token, token_result = _alleva_bearer_token(settings_row)
+    base_url = settings_row.alleva_api_base_url.strip() or DEFAULT_ALLEVA_API_BASE_URL
+    api_version = settings_row.alleva_api_version.strip() or '1.0'
+    clients = list(
+        db.execute(
+            select(TreatmentPlanClient)
+            .options(selectinload(TreatmentPlanClient.treatment_plans), selectinload(TreatmentPlanClient.current_plan_record))
+            .where(TreatmentPlanClient.patient_id.in_(patient_ids))
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    by_patient = {client.patient_id: client for client in clients}
+    results: list[dict[str, object]] = []
+    for patient_id in patient_ids:
+        client = by_patient.get(patient_id)
+        if client is None:
+            results.append({'patient_id': patient_id, 'status': 'not_found', 'message': 'No local treatment-plan client exists for this patient ID.'})
+            continue
+        plan = client.current_plan_record or next(
+            (
+                item
+                for item in sorted(client.treatment_plans, key=lambda candidate: (candidate.alleva_is_active, candidate.alleva_start_date, candidate.alleva_last_modified, candidate.id or 0), reverse=True)
+                if item.plan_kind in {TreatmentPlanKind.initial, TreatmentPlanKind.master}
+            ),
+            None,
+        )
+        if plan is None or not plan.source_document_id:
+            results.append({'patient_id': patient_id, 'status': 'no_plan', 'message': 'No local current treatment plan ID is available to sample.'})
+            continue
+        encoded_id = quote(plan.source_document_id, safe='')
+        detail_path = SYNC_ENDPOINTS['treatment_plan_detail'].format(id=encoded_id)
+        detail_result = fetch_alleva_detail(
+            base_url=base_url,
+            path=detail_path,
+            operation_parameters={'api-version': api_version, 'X-Version': api_version},
+            bearer_token=bearer_token,
+            timeout_seconds=settings_row.emr_api_timeout_seconds,
+        )
+        if detail_result.error or not detail_result.records:
+            results.append(
+                {
+                    'patient_id': patient_id,
+                    'treatment_plan_id': plan.source_document_id,
+                    'status': 'detail_failed',
+                    'endpoint': detail_path,
+                    'error': detail_result.error,
+                    'diagnostics': detail_result.diagnostics(),
+                }
+            )
+            continue
+        detail = detail_result.records[0]
+        counts = content_counts(detail)
+        diagnosis_endpoint_used = False
+        if counts['diagnosis_count'] == 0:
+            diagnosis_path = SYNC_ENDPOINTS['treatment_plan_diagnosis'].format(id=encoded_id)
+            diagnosis_result = fetch_alleva_detail(
+                base_url=base_url,
+                path=diagnosis_path,
+                operation_parameters={'api-version': api_version, 'X-Version': api_version},
+                bearer_token=bearer_token,
+                timeout_seconds=settings_row.emr_api_timeout_seconds,
+            )
+            if diagnosis_result.records:
+                diagnoses = diagnosis_result.records[0].get('items') or diagnosis_result.records[0].get('diagnoses') or diagnosis_result.records[0].get('diagnosis')
+                if isinstance(diagnoses, list) and diagnoses:
+                    detail = {**detail, 'diagnoses': diagnoses}
+                    counts = content_counts(detail)
+                    diagnosis_endpoint_used = True
+        results.append(
+            {
+                'patient_id': patient_id,
+                'treatment_plan_id': plan.source_document_id,
+                'status': 'ok',
+                'endpoint': detail_path,
+                'diagnosis_endpoint_used': diagnosis_endpoint_used,
+                'content_counts': counts,
+                'detail': sanitize_patient_payload(detail),
+                'diagnostics': detail_result.diagnostics(),
+            }
+        )
+    log_event(
+        db,
+        request,
+        'alleva.treatment_plan_detail_sample.run',
+        actor=user,
+        event_category='integration',
+        target_entity='alleva_treatment_plan_detail_sample',
+        target_entity_type='integration_diagnostic',
+        details={
+            'requested_count': len(patient_ids),
+            'ok_count': sum(1 for item in results if item.get('status') == 'ok'),
+            'token_status': token_result.get('status') if isinstance(token_result, dict) else '',
+        },
+        message='Alleva treatment-plan detail sample requested.',
+    )
+    return {'status': 'ok', 'requested_count': len(patient_ids), 'results': results}
 
 
 @router.get('/audit-template', response_model=list[AuditTemplateSectionOut])
@@ -2010,6 +2249,8 @@ def delete_patient_note_set(
             if timeliness_only_from_deleted_note_set and not replacement_note_set:
                 db.delete(timeliness_client)
             else:
+                timeliness_client.current_plan_record_id = None
+                db.flush()
                 db.execute(delete(LevelOfCareHistory).where(LevelOfCareHistory.source_note_set_id == note_set.id))
                 db.execute(delete(TreatmentPlanRecord).where(TreatmentPlanRecord.source_note_set_id == note_set.id))
                 if timeliness_client.source_note_set_id == note_set.id:

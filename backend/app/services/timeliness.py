@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from typing import Any
@@ -205,6 +206,16 @@ def _latest_plan(plans: list[TreatmentPlanRecord], kind: TreatmentPlanKind) -> T
     return matching[0] if matching else None
 
 
+def _selected_current_plan(client: TreatmentPlanClient, plans: list[TreatmentPlanRecord]) -> tuple[TreatmentPlanRecord | None, bool]:
+    current_id = getattr(client, 'current_plan_record_id', None)
+    if current_id:
+        current = next((plan for plan in plans if plan.id == current_id), None)
+        if current is not None:
+            return current, True
+    fallback = _latest_plan(plans, TreatmentPlanKind.master) or _latest_plan(plans, TreatmentPlanKind.initial)
+    return fallback, False
+
+
 def _latest_review_plan(plans: list[TreatmentPlanRecord]) -> TreatmentPlanRecord | None:
     matching = [plan for plan in plans if plan.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}]
     matching.sort(
@@ -333,12 +344,15 @@ def _comparison_source_evidence(latest_review: TreatmentPlanRecord | None, activ
 def _evidence_completeness(
     client: TreatmentPlanClient,
     *,
+    current_plan: TreatmentPlanRecord | None,
+    current_plan_selected: bool,
     latest_review: TreatmentPlanRecord | None,
     active_loc: LevelOfCareHistory | None,
     mapped_loc: str | None,
     interval_days: int | None,
     document_due: date | None,
 ) -> tuple[int, list[str]]:
+    current_plan_is_alleva = bool(current_plan and ('Alleva REST' in current_plan.source_evidence or 'Alleva REST' in current_plan.source_section))
     checks = [
         ('Admission date', _date(client.admission_date) is not None),
         ('Current level of care', bool(mapped_loc and interval_days is not None)),
@@ -347,6 +361,22 @@ def _evidence_completeness(
         ('Treatment Plan Review source evidence', bool(latest_review and latest_review.source_evidence.strip())),
         ('Source-document Next Review Due', document_due is not None),
     ]
+    if current_plan_is_alleva:
+        checks.append(('Current treatment plan selected', current_plan_selected))
+    if current_plan and (current_plan.detail_fetched or current_plan_is_alleva):
+        if current_plan.detail_fetched:
+            checks.extend(
+                [
+                    ('Treatment plan has diagnoses', current_plan.diagnosis_count > 0),
+                    ('Treatment plan has problems', current_plan.problem_count > 0),
+                    ('Treatment plan has goals', current_plan.goal_count > 0),
+                    ('Treatment plan has objectives', current_plan.objective_count > 0),
+                    ('Treatment plan has interventions', current_plan.intervention_count > 0),
+                    ('Treatment plan marked complete in Alleva', current_plan.alleva_is_complete),
+                ]
+            )
+        else:
+            checks.append(('Treatment plan clinical detail fetched', False))
     complete = sum(1 for _label, is_complete in checks if is_complete)
     score = round((complete / len(checks)) * 100) if checks else 0
     missing = [label for label, is_complete in checks if not is_complete]
@@ -364,13 +394,26 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     mapped_loc, interval_days = map_level_of_care(client.current_level_of_care)
     has_conflict = any(plan.conflict_note.strip() for plan in plans)
     latest_review = _latest_review_plan(plans)
+    current_plan, current_plan_selected = _selected_current_plan(client, plans)
     active_loc = _active_level_of_care(loc_history)
     document_due = _date(latest_review.displayed_next_due_date) if latest_review else None
     staff_signature = _date(latest_review.staff_signature_date) if latest_review else None
     loc_effective = _date(active_loc.effective_date) if active_loc else None
     last_review = _valid_review_date(plans)
-    date_clock_anchor = last_review or admission
-    date_clock_anchor_source = 'last valid treatment-plan review/update date' if last_review else 'admission date'
+    current_plan_anchor = (
+        _date(current_plan.alleva_start_date)
+        or _date(current_plan.document_date)
+        or _date(current_plan.alleva_last_modified)
+        if current_plan is not None
+        else None
+    )
+    date_clock_anchor = last_review or admission or current_plan_anchor
+    if last_review:
+        date_clock_anchor_source = 'last valid treatment-plan review/update date'
+    elif admission:
+        date_clock_anchor_source = 'admission date'
+    else:
+        date_clock_anchor_source = 'current treatment-plan start/modified date'
     signature_anchor_due = _add_days(date_clock_anchor, interval_days)
     loc_change_window_days = _loc_change_window_days(app_settings)
     loc_anchor_due = _add_days(loc_effective, loc_change_window_days) if len(loc_history) > 1 else None
@@ -506,12 +549,16 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     evidence_summary = '; '.join(result.evidence_summary for result in rule_results[:3])
     evidence_completeness_percent, missing_evidence_fields = _evidence_completeness(
         client,
+        current_plan=current_plan,
+        current_plan_selected=current_plan_selected,
         latest_review=latest_review,
         active_loc=active_loc,
         mapped_loc=mapped_loc,
         interval_days=interval_days,
         document_due=document_due,
     )
+    if current_plan is not None and ('Alleva REST' in current_plan.source_evidence or 'Alleva REST' in current_plan.source_section) and not current_plan_selected:
+        missing_evidence_fields.append('current_plan_not_selected')
     evidence_comparison = EvidenceComparison(
         document_next_due_date=_date_str(document_due),
         signature_anchor_due_date=_date_str(signature_anchor_due),
@@ -568,6 +615,18 @@ def _plan_evidence(plan: TreatmentPlanRecord | None) -> str:
 
 def _plans_evidence(plans: list[TreatmentPlanRecord]) -> str:
     return _combined_evidence(*[_plan_evidence(plan) for plan in plans])
+
+
+def _json_list_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        payload = json.loads(value)
+    except (TypeError, ValueError):
+        return [value.strip()] if value.strip() else []
+    if isinstance(payload, list):
+        return [str(item) for item in payload if str(item).strip()]
+    return []
 
 
 def _status_for_presence(is_present: bool, *, missing_status: str = TimelinessStatus.missing_data.value) -> str:
@@ -962,6 +1021,7 @@ def _client_options():
     return (
         selectinload(TreatmentPlanClient.level_of_care_history),
         selectinload(TreatmentPlanClient.treatment_plans),
+        selectinload(TreatmentPlanClient.current_plan_record),
         selectinload(TreatmentPlanClient.overrides),
         selectinload(TreatmentPlanClient.criterion_reviews),
     )
@@ -995,6 +1055,8 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
     client.source_note_set_id = source_note_set_id
     client.last_imported_at = _utc_now()
     client.updated_at = _utc_now()
+    client.current_plan_record_id = None
+    db.flush()
 
     client.level_of_care_history[:] = [
         LevelOfCareHistory(
@@ -1025,6 +1087,10 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
         )
         for item in payload.treatment_plans
     ]
+    db.flush()
+    selected, _selected_by_id = _selected_current_plan(client, list(client.treatment_plans))
+    if selected is not None:
+        client.current_plan_record_id = selected.id
     return client
 
 
@@ -1083,6 +1149,8 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
     client.source_evidence = f'Patient note set {note_set.id} version {note_set.version}'
     client.last_imported_at = _utc_now()
     client.updated_at = _utc_now()
+    client.current_plan_record_id = None
+    db.flush()
 
     db.execute(delete(LevelOfCareHistory).where(LevelOfCareHistory.client_id == client.id, LevelOfCareHistory.source_note_set_id == note_set.id))
     db.execute(delete(TreatmentPlanRecord).where(TreatmentPlanRecord.client_id == client.id, TreatmentPlanRecord.source_note_set_id == note_set.id))
@@ -1120,6 +1188,10 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
             )
         )
 
+    db.flush()
+    selected, _selected_by_id = _selected_current_plan(client, list(client.treatment_plans))
+    if selected is not None:
+        client.current_plan_record_id = selected.id
     return client
 
 
@@ -1143,6 +1215,10 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
         'missing_evidence_fields': evaluation.missing_evidence_fields,
         'last_checked_at': evaluation.last_checked_at,
         'last_imported_at': client.last_imported_at,
+        'discharge_conflict': client.discharge_conflict,
+        'data_quality_warnings': _json_list_values(client.data_quality_warnings),
+        'id_join_confidence': client.id_join_confidence,
+        'current_plan_record_id': client.current_plan_record_id,
     }
 
 
@@ -1154,6 +1230,12 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
         **summary_payload(evaluation),
         'is_active': client.is_active,
         'source_evidence': client.source_evidence,
+        'alleva_lead_id': client.alleva_lead_id,
+        'alleva_client_id': client.alleva_client_id,
+        'alleva_unique_id': client.alleva_unique_id,
+        'alleva_mrn': client.alleva_mrn,
+        'alleva_source_id': client.alleva_source_id,
+        'id_join_warnings': _json_list_values(client.id_join_warnings),
         'checklist_id': checklist['checklist_id'],
         'checklist_version': checklist['version'],
         'evidence_comparison': evaluation.evidence_comparison.__dict__,
@@ -1186,6 +1268,23 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
                 'source_document_id': item.source_document_id,
                 'is_valid': item.is_valid,
                 'conflict_note': item.conflict_note,
+                'problem_count': item.problem_count,
+                'diagnosis_count': item.diagnosis_count,
+                'goal_count': item.goal_count,
+                'objective_count': item.objective_count,
+                'intervention_count': item.intervention_count,
+                'has_guardian_signature': item.has_guardian_signature,
+                'guardian_signature_date': item.guardian_signature_date,
+                'alleva_is_active': item.alleva_is_active,
+                'alleva_is_complete': item.alleva_is_complete,
+                'alleva_is_initial_tp': item.alleva_is_initial_tp,
+                'alleva_start_date': item.alleva_start_date,
+                'alleva_end_date': item.alleva_end_date,
+                'alleva_last_modified': item.alleva_last_modified,
+                'detail_fetched': item.detail_fetched,
+                'detail_fetched_at': item.detail_fetched_at,
+                'content_source': item.content_source,
+                'is_current': item.id == client.current_plan_record_id,
             }
             for item in sorted(client.treatment_plans, key=lambda item: (_date(item.staff_signature_date) or _date(item.document_date) or date.min, item.id or 0), reverse=True)
         ],
@@ -1203,4 +1302,64 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
             for item in sorted(client.overrides, key=lambda item: item.created_at, reverse=True)
         ],
         'audit_history': audit_history,
+    }
+
+
+def treatment_plan_aggregate_payload(client: TreatmentPlanClient) -> dict[str, Any]:
+    def plan_payload(item: TreatmentPlanRecord) -> dict[str, Any]:
+        return {
+            'id': item.id,
+            'plan_kind': item.plan_kind.value,
+            'document_date': item.document_date,
+            'staff_signature_date': item.staff_signature_date,
+            'client_signature_date': item.client_signature_date,
+            'reviewer_signature_date': item.reviewer_signature_date,
+            'displayed_next_due_date': item.displayed_next_due_date,
+            'source_evidence': item.source_evidence,
+            'source_section': item.source_section,
+            'source_document_id': item.source_document_id,
+            'is_valid': item.is_valid,
+            'conflict_note': item.conflict_note,
+            'problem_count': item.problem_count,
+            'diagnosis_count': item.diagnosis_count,
+            'goal_count': item.goal_count,
+            'objective_count': item.objective_count,
+            'intervention_count': item.intervention_count,
+            'has_guardian_signature': item.has_guardian_signature,
+            'guardian_signature_date': item.guardian_signature_date,
+            'alleva_is_active': item.alleva_is_active,
+            'alleva_is_complete': item.alleva_is_complete,
+            'alleva_is_initial_tp': item.alleva_is_initial_tp,
+            'alleva_start_date': item.alleva_start_date,
+            'alleva_end_date': item.alleva_end_date,
+            'alleva_last_modified': item.alleva_last_modified,
+            'detail_fetched': item.detail_fetched,
+            'detail_fetched_at': item.detail_fetched_at,
+            'content_source': item.content_source,
+            'is_current': item.id == client.current_plan_record_id,
+        }
+
+    plans = sorted(client.treatment_plans, key=lambda item: (_date(item.staff_signature_date) or _date(item.document_date) or date.min, item.id or 0), reverse=True)
+    current = next((item for item in plans if item.id == client.current_plan_record_id), None)
+    return {
+        'patient_id': client.patient_id,
+        'permitted_name': client.permitted_name,
+        'is_active': client.is_active,
+        'current_level_of_care': client.current_level_of_care,
+        'counselor_name': client.counselor_name,
+        'admission_date': client.admission_date,
+        'alleva_ids': {
+            'lead_id': client.alleva_lead_id,
+            'client_id': client.alleva_client_id,
+            'unique_id': client.alleva_unique_id,
+            'mrn': client.alleva_mrn,
+            'source_id': client.alleva_source_id,
+        },
+        'id_join_confidence': client.id_join_confidence,
+        'id_join_warnings': _json_list_values(client.id_join_warnings),
+        'data_quality_warnings': _json_list_values(client.data_quality_warnings),
+        'discharge_conflict': client.discharge_conflict,
+        'current_plan': plan_payload(current) if current is not None else None,
+        'historical_plans': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.initial, TreatmentPlanKind.master} and item.id != client.current_plan_record_id],
+        'review_records': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}],
     }

@@ -28,6 +28,7 @@ from app.services.timeliness import (
     get_client as get_timeliness_client,
     list_clients as list_timeliness_clients,
     summary_payload as timeliness_summary_payload,
+    treatment_plan_aggregate_payload,
     upsert_client as upsert_timeliness_client,
 )
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
@@ -207,6 +208,33 @@ def get_timeliness_client_detail(
         message=f'Treatment Plan Timeliness client {client.patient_id} viewed.',
     )
     return timeliness_detail_payload(evaluation, audit_history)
+
+
+@router.get('/clients/{client_id}/treatment-plan')
+def get_timeliness_client_treatment_plan_aggregate(
+    client_id: int,
+    request: Request,
+    user: User = Depends(require_roles(*NOTE_SET_ROLES)),
+    db: Session = Depends(get_db),
+):
+    client = get_timeliness_client(db, client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
+    payload = treatment_plan_aggregate_payload(client)
+    log_event(
+        db,
+        request,
+        'timeliness.client.treatment_plan_aggregate.read',
+        actor=user,
+        event_category='data_access',
+        target_entity=f'treatment_plan_client:{client.id}',
+        target_entity_type='treatment_plan_aggregate',
+        target_entity_id=str(client.id),
+        patient_id=client.patient_id,
+        details={'patient_id': client.patient_id, 'has_current_plan': payload['current_plan'] is not None},
+        message=f'Treatment plan aggregate viewed for {client.patient_id}.',
+    )
+    return payload
 
 
 @router.post('/clients/{client_id}/overrides', response_model=TimelinessOverrideOut)

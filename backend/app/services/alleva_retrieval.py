@@ -113,6 +113,24 @@ def parse_date(value: Any) -> date | None:
         return None
 
 
+def content_counts(payload: dict[str, Any]) -> dict[str, int]:
+    safe = sanitize_patient_payload(payload)
+    problems = [item for item in list_records(safe.get('problems')) if isinstance(item, dict)]
+    diagnosis_count = sum(len(list_records(problem.get('diagnoses'))) for problem in problems)
+    if not diagnosis_count:
+        diagnosis_count = len(list_records(safe.get('diagnoses'))) or len(list_records(safe.get('diagnosis'))) or len(list_records(safe.get('items')))
+    goals = [goal for problem in problems for goal in list_records(problem.get('goals')) if isinstance(goal, dict)]
+    objectives = [objective for goal in goals for objective in list_records(goal.get('objectives')) if isinstance(objective, dict)]
+    interventions = [intervention for objective in objectives for intervention in list_records(objective.get('interventions')) if isinstance(intervention, dict)]
+    return {
+        'problem_count': len(problems),
+        'diagnosis_count': diagnosis_count,
+        'goal_count': len(goals),
+        'objective_count': len(objectives),
+        'intervention_count': len(interventions),
+    }
+
+
 def bool_value(value: Any, *, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -333,6 +351,79 @@ def fetch_alleva_collection(
     return result
 
 
+def fetch_alleva_detail(
+    *,
+    base_url: str,
+    path: str,
+    operation_parameters: dict[str, Any],
+    api_key: str = '',
+    bearer_token: str = '',
+    api_key_header_name: str = 'x-api-key',
+    timeout_seconds: int = 10,
+) -> AllevaCollectionResult:
+    query, headers = query_and_headers(operation_parameters)
+    if api_key:
+        headers[api_key_header_name or 'x-api-key'] = api_key
+    if bearer_token:
+        headers['Authorization'] = f'Bearer {bearer_token}'
+    result = AllevaCollectionResult(path=path, query_parameters=query)
+    url = urljoin(base_url.rstrip('/') + '/', path.lstrip('/'))
+    api_version = text_value(query.get('api-version')) or text_value(headers.get('X-Version')) or DEFAULT_API_VERSION
+    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+        try:
+            response = client.get(url, params=query, headers=headers)
+            response.read()
+        except httpx.TimeoutException:
+            result.complete = False
+            result.error = {'category': 'network_timeout', 'message': f'Alleva did not respond before the configured timeout while reading GET {path}.', 'url': redact_url(url)}
+            return result
+        except httpx.RequestError:
+            result.complete = False
+            result.error = {'category': 'network_failure', 'message': f'The app could not reach Alleva GET {path}. Check internet access, base URL, and local firewall/proxy settings.', 'url': redact_url(url)}
+            return result
+        result.pages.append(AllevaPageDiagnostic(page_index=0, cursor=0, limit=1, status_code=response.status_code, record_count=0, url=redact_url(str(response.url))))
+        if not 200 <= response.status_code < 300:
+            category, message = endpoint_failure_message(path=path, status_code=response.status_code, api_version=api_version)
+            result.complete = False
+            result.error = {
+                'category': category,
+                'status_code': response.status_code,
+                'message': message,
+                'response_body_preview': redacted_text(redact_sensitive_text(response.text[:600])),
+                'url': redact_url(str(response.url)),
+            }
+            return result
+        try:
+            payload = response.json()
+        except ValueError:
+            result.complete = False
+            result.error = {
+                'category': 'endpoint_non_json_response',
+                'status_code': response.status_code,
+                'message': f'Alleva GET {path} responded, but the response was not JSON. Confirm this endpoint path and API version {api_version}.',
+                'response_body_preview': redacted_text(redact_sensitive_text(response.text[:600])),
+                'url': redact_url(str(response.url)),
+            }
+            return result
+    if isinstance(payload, dict):
+        for key in ('data', 'result', 'record'):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                result.records = [nested]
+                result.pages[0].record_count = 1
+                return result
+        result.records = [payload]
+        result.pages[0].record_count = 1
+        return result
+    if isinstance(payload, list):
+        result.records = [{'items': [item for item in payload if isinstance(item, dict)]}]
+        result.pages[0].record_count = len(payload)
+        return result
+    result.complete = False
+    result.error = {'category': 'endpoint_unexpected_json_shape', 'message': f'Alleva GET {path} returned JSON, but not a resource object the app can map.'}
+    return result
+
+
 def patient_identifier_summary(payload: dict[str, Any]) -> dict[str, str]:
     safe = sanitize_patient_payload(payload)
     return {
@@ -371,18 +462,21 @@ def review_identifier_summary(payload: dict[str, Any]) -> dict[str, str]:
 
 def patient_status_scope(payload: dict[str, Any]) -> tuple[str, str]:
     safe = sanitize_patient_payload(payload)
-    if bool_value(safe.get('isDischarge'), default=False):
-        return 'discharged', 'isDischarge is true'
-    if text_value(safe.get('dischargeDateTime') or safe.get('actualSysDischargeDateTime')):
-        return 'discharged', 'discharge date is present'
     status = first_text(safe, 'status', 'statusName').lower()
     if any(word in status for word in ('discharge', 'closed', 'deceased')):
         return 'discharged', f'status is {status}'
     if any(word in status for word in ('inactive', 'prospect', 'lead')):
         return 'inactive', f'status is {status}'
+    status_is_active = bool(status and 'active' in status)
+    if bool_value(safe.get('isDischarge'), default=False) and not status_is_active:
+        return 'discharged', 'isDischarge is true and status is not active'
+    if not status and text_value(safe.get('dischargeDateTime') or safe.get('actualSysDischargeDateTime')):
+        return 'discharged', 'discharge date is present and active status is not present'
     if safe.get('isClient') is not None and not bool_value(safe.get('isClient'), default=True):
         return 'inactive', 'isClient is false'
-    return 'active', 'no discharge/inactive fields returned'
+    if status_is_active and text_value(safe.get('dischargeDateTime') or safe.get('actualSysDischargeDateTime')):
+        return 'active', 'status is active; discharge date present as data-quality warning'
+    return 'active', 'status is active-compatible'
 
 
 def treatment_plan_status_scope(payload: dict[str, Any]) -> tuple[str, str]:
@@ -447,6 +541,11 @@ def normalize_treatment_plan_row(payload: dict[str, Any], *, today: date) -> dic
         'is_active': scope == 'active',
         'is_complete': is_complete,
         'last_modified': date_text(safe.get('lastModified')),
+        'is_initial_tp': bool_value(safe.get('isInitialTP'), default=False),
+        'client_signature_date': date_text(nested_first_text(safe, 'clientSignature.signatureDateTime') or safe.get('clientSignatureDate')),
+        'guardian_signature_date': date_text(nested_first_text(safe, 'guardianSignature.signatureDateTime') or safe.get('guardianSignatureDate')),
+        'has_guardian_signature': bool(nested_first_text(safe, 'guardianSignature.signatureDateTime') or safe.get('guardianSignatureDate') or safe.get('guardianSignature')),
+        **content_counts(safe),
         'why': '; '.join(reasons),
     }
 
@@ -576,8 +675,12 @@ def source_coverage_summary(patient_records: list[dict[str, Any]], plan_records:
         'admission_date': any(row.get('admission_date') for row in normalized_patients),
         'current_level_of_care': any(row.get('level_of_care') for row in normalized_patients),
         'treatment_plan_summary': bool(plan_records),
-        'treatment_plan_detail_or_nested_content': any(item.get('problems') for item in [sanitize_patient_payload(record) for record in plan_records]),
+        'treatment_plan_detail_or_nested_content': any(item.get('problems') or normalize_treatment_plan_row(item, today=date.today()).get('problem_count', 0) > 0 for item in [sanitize_patient_payload(record) for record in plan_records]),
         'treatment_plan_signatures': any(nested_first_text(sanitize_patient_payload(record), 'clientSignature.signatureDateTime', 'staffSignature.signatureDateTime', 'creatorSignature.signatureDateTime') for record in plan_records),
+        'guardian_signature_retrieved': any(normalize_treatment_plan_row(record, today=date.today()).get('has_guardian_signature') for record in plan_records),
+        'is_initial_tp_classified': any('isInitialTP' in sanitize_patient_payload(record) for record in plan_records),
+        'id_join_verified': bool(id_mapping_summary(patient_records, plan_records, review_records).get('mapped_treatment_plan_count')),
+        'treatment_review_to_patient_join_verified': bool(review_records and id_mapping_summary(patient_records, plan_records, review_records).get('mapped_treatment_review_count')),
         'treatment_review_dates': any(date_text(sanitize_patient_payload(record).get('createdDated') or sanitize_patient_payload(record).get('createdDate') or sanitize_patient_payload(record).get('generatedDate')) for record in (review_records or [])),
         'next_review_due': any(date_text(sanitize_patient_payload(record).get('nextReviewDue') or sanitize_patient_payload(record).get('nextReviewDueDate')) for record in (review_records or [])),
     }

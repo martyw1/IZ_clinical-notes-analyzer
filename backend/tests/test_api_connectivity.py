@@ -98,6 +98,22 @@ class MockedHttpxClient:
                         'isActive': True,
                         'isComplete': True,
                         'lastModified': '2026-01-02T00:00:00',
+                        'isInitialTP': False,
+                        'problems': [
+                            {
+                                'diagnoses': [{'code': 'F10.20'}],
+                                'goals': [
+                                    {
+                                        'objectives': [
+                                            {
+                                                'interventions': [{'description': 'Synthetic intervention'}],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                        'guardianSignature': {'signatureDateTime': '2026-01-02T09:00:00'},
                     },
                     {
                         'id': 102,
@@ -142,6 +158,17 @@ class MockedHttpxClient:
                         'isClient': True,
                         'admissionDateTime': '2025-02-03T09:00:00',
                         'dischargeDateTime': '2025-03-03T09:00:00',
+                    },
+                    {
+                        'id': 203,
+                        'clientId': 'PAT-ACTIVE-DISCHARGE-FIELD',
+                        'name': {'clientFullName': 'Synthetic Active With Discharge Field'},
+                        'status': 'Active',
+                        'isClient': True,
+                        'admissionDateTime': '2026-03-03T09:00:00',
+                        'dischargeDateTime': '2026-06-01T09:00:00',
+                        'actualSysDischargeDateTime': '2026-06-01T09:00:00',
+                        'levelOfCare': 'PHP',
                     },
                 ],
             )
@@ -709,7 +736,7 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         all_payload = all_patients.json()
         assert all_payload['status'] == 'ok'
         assert all_payload['source_operation'] == 'GET /clients'
-        assert all_payload['returned_count'] == 2
+        assert all_payload['returned_count'] == 3
         assert all_payload['columns'][:4] == ['patient_id', 'source_id', 'client_name', 'admission_date']
         assert all_payload['rows'][0]['client_name'] == 'Synthetic Active Client'
         assert all_payload['tsv'].splitlines()[0].startswith('patient_id\tsource_id\tclient_name\tadmission_date')
@@ -719,6 +746,13 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert active.status_code == 200
         assert active.json()['returned_count'] == 2
         assert {row['patient_id'] for row in active.json()['rows']} == {'PAT-ACTIVE-001', 'PAT-OVERDUE-001'}
+        active_plan_row = next(row for row in active.json()['rows'] if row['treatment_plan_id'] == '101')
+        assert active_plan_row['problem_count'] == 1
+        assert active_plan_row['diagnosis_count'] == 1
+        assert active_plan_row['goal_count'] == 1
+        assert active_plan_row['objective_count'] == 1
+        assert active_plan_row['intervention_count'] == 1
+        assert active_plan_row['has_guardian_signature'] is True
 
         overdue = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'overdue_treatment_plans'})
         assert overdue.status_code == 200
@@ -733,9 +767,12 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
 
         patients = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_patients'})
         assert patients.status_code == 200
-        assert patients.json()['returned_count'] == 1
-        assert patients.json()['rows'][0]['patient_id'] == 'PAT-ACTIVE-001'
-        assert patients.json()['rows'][0]['first_admitted'] == '2026-02-03'
+        assert patients.json()['returned_count'] == 2
+        patient_rows = {row['patient_id']: row for row in patients.json()['rows']}
+        assert set(patient_rows) == {'PAT-ACTIVE-001', 'PAT-ACTIVE-DISCHARGE-FIELD'}
+        assert patient_rows['PAT-ACTIVE-001']['first_admitted'] == '2026-02-03'
+        assert patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['discharge_conflict'] is True
+        assert 'status is Active' in patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['why_active']
 
     db = session_local()
     try:

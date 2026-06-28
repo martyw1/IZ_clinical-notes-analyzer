@@ -378,6 +378,29 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
     db = session_local()
     try:
         settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
+
+        def detail_fetcher(raw_plan):
+            if raw_plan.get('id') != 502:
+                return None
+            return {
+                'id': 502,
+                'problems': [
+                    {
+                        'diagnoses': [{'code': 'F10.20'}],
+                        'goals': [
+                            {
+                                'objectives': [
+                                    {
+                                        'interventions': [{'description': 'Synthetic intervention'}],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                'guardianSignature': {'signatureDateTime': '2026-03-03T12:00:00Z'},
+            }
+
         summary = sync_alleva_rest_payloads(
             db,
             clients_payload=[
@@ -406,6 +429,7 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
                     'client': {'id': 101},
                     'isInitialTP': False,
                     'isComplete': True,
+                    'isActive': True,
                     'startDate': '2026-03-03T10:00:00Z',
                     'staffSignatureDate': '2026-03-03',
                     'clientSignature': {'signatureDateTime': '2026-03-03T11:00:00Z'},
@@ -414,19 +438,33 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
             treatment_reviews_payload=[
                 {
                     'id': 701,
-                    'clientName': 'Synthetic Client',
+                    'client': {'id': 101, 'clientId': 1001},
                     'createdDate': '2026-03-20T12:00:00Z',
                     'staffSignatureDate': '2026-03-20',
                     'clientSignatureDate': '2026-03-20',
                     'nextReviewDueDate': '2026-04-19',
                 }
             ],
+            plan_detail_fetcher=detail_fetcher,
+            detail_fetch_limit=10,
         )
         db.commit()
 
         assert summary['upserted_client_count'] == 1
         assert summary['unmapped_treatment_review_count'] == 0
+        assert summary['current_plan_selected_count'] == 1
+        assert summary['detail_fetch_attempt_count'] == 1
+        assert summary['detail_fetch_success_count'] == 1
         stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == '1001')).scalar_one()
+        current_plan = next(plan for plan in stored_client.treatment_plans if plan.id == stored_client.current_plan_record_id)
+        assert current_plan.source_document_id == '502'
+        assert current_plan.detail_fetched is True
+        assert current_plan.problem_count == 1
+        assert current_plan.diagnosis_count == 1
+        assert current_plan.goal_count == 1
+        assert current_plan.objective_count == 1
+        assert current_plan.intervention_count == 1
+        assert current_plan.has_guardian_signature is True
         evaluation = evaluate_client(stored_client, settings_row, evaluation_date=date(2026, 4, 1))
         assert evaluation.status == 'Compliant'
         assert evaluation.next_due_date == '2026-04-19'
@@ -434,6 +472,193 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert any(plan.source_section == 'Alleva REST treatment-reviews' for plan in stored_client.treatment_plans)
     finally:
         db.close()
+
+
+def test_alleva_rest_sync_keeps_active_client_with_discharge_conflict_and_aggregate_detail(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=[
+                {
+                    'id': 201,
+                    'clientId': 'PAT-ACTIVE-DISCH',
+                    'name': {'clientFullName': 'Synthetic Active Conflict'},
+                    'status': 'Active',
+                    'isClient': True,
+                    'admissionDateTime': '2026-04-01T09:00:00Z',
+                    'dischargeDateTime': '2026-06-01T09:00:00Z',
+                    'levelOfCare': 'PHP',
+                }
+            ],
+            treatment_plans_payload=[
+                {
+                    'id': 801,
+                    'client': {'id': 201, 'clientId': 'PAT-ACTIVE-DISCH'},
+                    'isInitialTP': False,
+                    'isActive': True,
+                    'isComplete': True,
+                    'startDate': '2026-05-01T10:00:00Z',
+                    'staffSignatureDate': '2026-05-01',
+                    'clientSignature': {'signatureDateTime': '2026-05-01T11:00:00Z'},
+                }
+            ],
+            treatment_reviews_payload=[],
+            plan_detail_fetcher=lambda _raw: {
+                'problems': [
+                    {
+                        'diagnoses': [{'code': 'F33.1'}],
+                        'goals': [{'objectives': [{'interventions': [{'description': 'Synthetic intervention'}]}]}],
+                    }
+                ],
+            },
+            detail_fetch_limit=5,
+        )
+        db.commit()
+
+        assert summary['active_client_count'] == 1
+        assert summary['upserted_client_count'] == 1
+        assert summary['current_plan_selected_count'] == 1
+        assert summary['detail_fetch_success_count'] == 1
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-ACTIVE-DISCH')).scalar_one()
+        assert stored_client.is_active is True
+        assert stored_client.discharge_conflict is True
+        assert 'active_status_discharge_field_conflict' in json.loads(stored_client.data_quality_warnings)
+        assert stored_client.current_plan_record_id is not None
+        current_plan = next(plan for plan in stored_client.treatment_plans if plan.id == stored_client.current_plan_record_id)
+        assert current_plan.detail_fetched is True
+        assert current_plan.problem_count == 1
+        assert current_plan.diagnosis_count == 1
+        assert current_plan.goal_count == 1
+        assert current_plan.objective_count == 1
+        assert current_plan.intervention_count == 1
+        client_id = stored_client.id
+    finally:
+        db.close()
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        aggregate = client.get(f'/api/timeliness/clients/{client_id}/treatment-plan', headers=headers)
+        assert aggregate.status_code == 200
+        payload = aggregate.json()
+        assert payload['patient_id'] == 'PAT-ACTIVE-DISCH'
+        assert payload['current_plan']['source_document_id'] == '801'
+        assert payload['current_plan']['problem_count'] == 1
+        assert payload['current_plan']['detail_fetched'] is True
+        assert 'active_status_discharge_field_conflict' in payload['data_quality_warnings']
+
+
+def test_alleva_detail_sample_fetches_current_plan_content_counts(app_with_sqlite, monkeypatch):
+    app, session_local = app_with_sqlite
+    detail_calls = []
+
+    def fake_token_request(**kwargs):
+        assert kwargs['client_secret'] == 'alleva-rest-secret'
+        return {'status': 'ok', 'token_type': 'Bearer'}, 'mock-access-token'
+
+    class FakeDetailResult:
+        def __init__(self, path, records):
+            self.path = path
+            self.records = records
+            self.error = None
+
+        def diagnostics(self):
+            return {
+                'endpoint': self.path,
+                'record_count': len(self.records),
+                'complete': True,
+                'pages': [],
+            }
+
+    def fake_fetch_detail(**kwargs):
+        detail_calls.append(kwargs)
+        assert kwargs['bearer_token'] == 'mock-access-token'
+        return FakeDetailResult(
+            kwargs['path'],
+            [
+                {
+                    'id': 'TP 901',
+                    'problems': [
+                        {
+                            'diagnoses': [{'code': 'F10.20'}],
+                            'goals': [{'objectives': [{'interventions': [{'description': 'Synthetic intervention'}]}]}],
+                        }
+                    ],
+                }
+            ],
+        )
+
+    monkeypatch.setattr('app.api.routes.request_client_credentials_token', fake_token_request)
+    monkeypatch.setattr('app.api.routes.fetch_alleva_detail', fake_fetch_detail)
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        saved_settings = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'alleva_api_base_url': 'https://api.example.test',
+                'api_oauth_token_url': 'https://authorization.example.test/connect/token',
+                'api_client_id': 'alleva-rest-client',
+                'api_client_secret': 'alleva-rest-secret',
+                'api_token_auth_style': 'body',
+            },
+        )
+        assert saved_settings.status_code == 200
+
+        db = session_local()
+        try:
+            sync_alleva_rest_payloads(
+                db,
+                clients_payload=[
+                    {
+                        'id': 301,
+                        'clientId': 'PAT-SAMPLE',
+                        'status': 'Active',
+                        'isClient': True,
+                        'admissionDateTime': '2026-04-01T09:00:00Z',
+                        'levelOfCare': 'PHP',
+                    }
+                ],
+                treatment_plans_payload=[
+                    {
+                        'id': 'TP 901',
+                        'client': {'id': 301, 'clientId': 'PAT-SAMPLE'},
+                        'isInitialTP': False,
+                        'isActive': True,
+                        'isComplete': True,
+                        'startDate': '2026-05-01T10:00:00Z',
+                        'staffSignatureDate': '2026-05-01',
+                        'clientSignature': {'signatureDateTime': '2026-05-01T11:00:00Z'},
+                    }
+                ],
+                treatment_reviews_payload=[],
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        sample = client.post('/api/emr/alleva/sync/detail-sample', headers=headers, json={'patient_ids': ['PAT-SAMPLE']})
+        assert sample.status_code == 200
+        payload = sample.json()
+        assert payload['status'] == 'ok'
+        assert payload['requested_count'] == 1
+        result = payload['results'][0]
+        assert result['status'] == 'ok'
+        assert result['treatment_plan_id'] == 'TP 901'
+        assert result['endpoint'] == '/treatment-plans/TP%20901'
+        assert result['content_counts'] == {
+            'problem_count': 1,
+            'diagnosis_count': 1,
+            'goal_count': 1,
+            'objective_count': 1,
+            'intervention_count': 1,
+        }
+        assert detail_calls[0]['path'] == '/treatment-plans/TP%20901'
 
 
 def test_timeliness_missing_data_and_manual_override_are_audited(app_with_sqlite):

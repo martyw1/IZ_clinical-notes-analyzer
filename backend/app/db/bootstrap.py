@@ -58,6 +58,9 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'alleva_treatment_plan_sync_approved': 'BOOLEAN NOT NULL DEFAULT FALSE',
         'alleva_treatment_plan_endpoint_mapping_validated': 'BOOLEAN NOT NULL DEFAULT FALSE',
         'alleva_treatment_plan_sync_limit': 'INTEGER NOT NULL DEFAULT 250',
+        'alleva_treatment_plan_detail_fetch_enabled': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'alleva_treatment_plan_name_join_fallback_enabled': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'alleva_treatment_plan_detail_fetch_limit': 'INTEGER NOT NULL DEFAULT 50',
         'alleva_treatment_plan_sync_last_at': 'TIMESTAMP WITH TIME ZONE',
         'alleva_treatment_plan_sync_last_status': "VARCHAR(40) NOT NULL DEFAULT ''",
         'alleva_treatment_plan_sync_last_message': "TEXT NOT NULL DEFAULT ''",
@@ -195,6 +198,34 @@ REQUIRED_COLUMNS: dict[str, dict[str, str]] = {
         'reviewer_signature_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'displayed_next_due_date': "VARCHAR(40) NOT NULL DEFAULT ''",
         'source_section': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'problem_count': 'INTEGER NOT NULL DEFAULT 0',
+        'diagnosis_count': 'INTEGER NOT NULL DEFAULT 0',
+        'goal_count': 'INTEGER NOT NULL DEFAULT 0',
+        'objective_count': 'INTEGER NOT NULL DEFAULT 0',
+        'intervention_count': 'INTEGER NOT NULL DEFAULT 0',
+        'has_guardian_signature': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'guardian_signature_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'alleva_is_active': 'BOOLEAN NOT NULL DEFAULT TRUE',
+        'alleva_is_complete': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'alleva_is_initial_tp': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'alleva_start_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'alleva_end_date': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'alleva_last_modified': "VARCHAR(40) NOT NULL DEFAULT ''",
+        'detail_fetched': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'detail_fetched_at': 'TIMESTAMP WITH TIME ZONE',
+        'content_source': "VARCHAR(40) NOT NULL DEFAULT 'collection'",
+    },
+    'treatment_plan_clients': {
+        'alleva_lead_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'alleva_client_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'alleva_unique_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'alleva_mrn': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'alleva_source_id': "VARCHAR(120) NOT NULL DEFAULT ''",
+        'id_join_confidence': "VARCHAR(40) NOT NULL DEFAULT 'unknown'",
+        'id_join_warnings': "TEXT NOT NULL DEFAULT ''",
+        'data_quality_warnings': "TEXT NOT NULL DEFAULT ''",
+        'discharge_conflict': 'BOOLEAN NOT NULL DEFAULT FALSE',
+        'current_plan_record_id': 'INTEGER',
     },
 }
 
@@ -242,6 +273,9 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'alleva_treatment_plan_sync_approved': 'BOOLEAN NOT NULL DEFAULT 0',
     'alleva_treatment_plan_endpoint_mapping_validated': 'BOOLEAN NOT NULL DEFAULT 0',
     'alleva_treatment_plan_sync_limit': 'INTEGER NOT NULL DEFAULT 250',
+    'alleva_treatment_plan_detail_fetch_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
+    'alleva_treatment_plan_name_join_fallback_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
+    'alleva_treatment_plan_detail_fetch_limit': 'INTEGER NOT NULL DEFAULT 50',
     'alleva_treatment_plan_sync_last_at': 'TEXT',
     'alleva_treatment_plan_sync_last_status': "TEXT NOT NULL DEFAULT ''",
     'alleva_treatment_plan_sync_last_message': "TEXT NOT NULL DEFAULT ''",
@@ -337,6 +371,32 @@ SQLITE_COLUMN_DEFS: Mapping[str, str] = {
     'displayed_next_due_date': "TEXT NOT NULL DEFAULT ''",
     'reviewer_signature_date': "TEXT NOT NULL DEFAULT ''",
     'source_section': "TEXT NOT NULL DEFAULT ''",
+    'problem_count': 'INTEGER NOT NULL DEFAULT 0',
+    'diagnosis_count': 'INTEGER NOT NULL DEFAULT 0',
+    'goal_count': 'INTEGER NOT NULL DEFAULT 0',
+    'objective_count': 'INTEGER NOT NULL DEFAULT 0',
+    'intervention_count': 'INTEGER NOT NULL DEFAULT 0',
+    'has_guardian_signature': 'BOOLEAN NOT NULL DEFAULT 0',
+    'guardian_signature_date': "TEXT NOT NULL DEFAULT ''",
+    'alleva_is_active': 'BOOLEAN NOT NULL DEFAULT 1',
+    'alleva_is_complete': 'BOOLEAN NOT NULL DEFAULT 0',
+    'alleva_is_initial_tp': 'BOOLEAN NOT NULL DEFAULT 0',
+    'alleva_start_date': "TEXT NOT NULL DEFAULT ''",
+    'alleva_end_date': "TEXT NOT NULL DEFAULT ''",
+    'alleva_last_modified': "TEXT NOT NULL DEFAULT ''",
+    'detail_fetched': 'BOOLEAN NOT NULL DEFAULT 0',
+    'detail_fetched_at': 'TEXT',
+    'content_source': "TEXT NOT NULL DEFAULT 'collection'",
+    'alleva_lead_id': "TEXT NOT NULL DEFAULT ''",
+    'alleva_client_id': "TEXT NOT NULL DEFAULT ''",
+    'alleva_unique_id': "TEXT NOT NULL DEFAULT ''",
+    'alleva_mrn': "TEXT NOT NULL DEFAULT ''",
+    'alleva_source_id': "TEXT NOT NULL DEFAULT ''",
+    'id_join_confidence': "TEXT NOT NULL DEFAULT 'unknown'",
+    'id_join_warnings': "TEXT NOT NULL DEFAULT ''",
+    'data_quality_warnings': "TEXT NOT NULL DEFAULT ''",
+    'discharge_conflict': 'BOOLEAN NOT NULL DEFAULT 0',
+    'current_plan_record_id': 'INTEGER',
 }
 
 SQLITE_RETIRED_AUDIT_LOG_COLUMNS = {'fhir_audit_event'}
@@ -499,5 +559,8 @@ def ensure_schema_compatibility(engine: Engine) -> list[dict[str, str]]:
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_event_category ON audit_logs(event_category)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_patient_id ON audit_logs(patient_id)'))
                 connection.execute(text('CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs(hash)'))
+
+        if inspector.has_table('treatment_plan_clients'):
+            connection.execute(text('CREATE INDEX IF NOT EXISTS idx_treatment_plan_clients_current_plan ON treatment_plan_clients(current_plan_record_id)'))
 
     return added_columns

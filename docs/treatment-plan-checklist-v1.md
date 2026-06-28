@@ -8,6 +8,8 @@ Checklist content version: `1.2.0`
 
 Current app version using this checklist: `1.4.6-beta.1`
 
+Current checked-in app metadata remains `1.4.5-beta.1` / build `2026.06.23.1` until the release-version files are advanced.
+
 Documentation last reviewed: `2026-06-25`
 
 ## Purpose

@@ -343,9 +343,9 @@ def _bool_value(value: Any, *, default: bool = False) -> bool:
     if value is None:
         return default
     text = str(value).strip().lower()
-    if text in {'true', '1', 'yes', 'y', 'active'}:
+    if text in {'true', '1', 'yes', 'y', 'active', 'complete', 'completed'}:
         return True
-    if text in {'false', '0', 'no', 'n', 'inactive'}:
+    if text in {'false', '0', 'no', 'n', 'inactive', 'discharged', 'closed', 'deceased', 'incomplete'}:
         return False
     return default
 
@@ -398,6 +398,13 @@ def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
         reasons.append(f'endDate {end_date.isoformat()} is not overdue as of {today.isoformat()}')
     if not is_complete:
         reasons.append('isComplete is false or missing')
+    problems = payload.get('problems') if isinstance(payload.get('problems'), list) else []
+    goals = [goal for problem in problems if isinstance(problem, dict) for goal in (problem.get('goals') or []) if isinstance(goal, dict)]
+    objectives = [objective for goal in goals for objective in (goal.get('objectives') or []) if isinstance(objective, dict)]
+    interventions = [intervention for objective in objectives for intervention in (objective.get('interventions') or []) if isinstance(intervention, dict)]
+    diagnosis_count = sum(len(problem.get('diagnoses') or []) for problem in problems if isinstance(problem, dict))
+    if not diagnosis_count:
+        diagnosis_count = len(payload.get('diagnoses') or []) if isinstance(payload.get('diagnoses'), list) else 0
     return {
         'treatment_plan_id': _first_text(payload, 'id'),
         'patient_id': _plan_client_id(payload),
@@ -406,17 +413,27 @@ def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
         'end_date': end_date.isoformat() if end_date else _date_only(payload.get('endDate')),
         'is_active': is_active,
         'is_complete': is_complete,
+        'is_initial_tp': _bool_value(payload.get('isInitialTP'), default=False),
+        'problem_count': len(problems),
+        'diagnosis_count': diagnosis_count,
+        'goal_count': len(goals),
+        'objective_count': len(objectives),
+        'intervention_count': len(interventions),
+        'guardian_signature_date': _date_only((payload.get('guardianSignature') or {}).get('signatureDateTime')) if isinstance(payload.get('guardianSignature'), dict) else _date_only(payload.get('guardianSignatureDate')),
+        'has_guardian_signature': bool(payload.get('guardianSignature') or payload.get('guardianSignatureDate')),
         'last_modified': _date_only(payload.get('lastModified')),
         'why': '; '.join(reasons),
     }
 
 
 def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    discharge_date = _date_only(payload.get('dischargeDateTime'))
+    discharge_date = _date_only(payload.get('dischargeDateTime') or payload.get('actualSysDischargeDateTime'))
     status = _first_text(payload, 'status')
     reasons = []
-    if not discharge_date:
-        reasons.append('no dischargeDateTime returned')
+    if status and 'active' in status.lower() and discharge_date:
+        reasons.append('status is Active; discharge date retained as data-quality warning')
+    elif not discharge_date:
+        reasons.append('no actual discharge date returned')
     if not status or not any(word in status.lower() for word in ('inactive', 'discharge', 'closed', 'deceased')):
         reasons.append('status is active-compatible')
     return {
@@ -424,6 +441,8 @@ def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
         'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
         'first_admitted': _date_only(payload.get('admissionDateTime') or payload.get('firstContactDate')),
         'status': status,
+        'discharge_date': discharge_date,
+        'discharge_conflict': bool(status and 'active' in status.lower() and (discharge_date or _bool_value(payload.get('isDischarge'), default=False))),
         'level_of_care': _first_text(payload, 'levelOfCare'),
         'facility': _first_text(payload, 'facilityName'),
         'why_active': '; '.join(reasons) or 'active-compatible fields returned',
@@ -438,6 +457,8 @@ ALL_PATIENT_RECORD_COLUMNS = [
     'status',
     'is_client',
     'discharge_date',
+    'actual_sys_discharge_date',
+    'is_discharge',
     'level_of_care',
     'facility',
     'primary_clinician',
@@ -455,6 +476,8 @@ ALL_PATIENT_RECORD_FIELDS = [
     'admissionDateTime',
     'firstContactDate',
     'dischargeDateTime',
+    'actualSysDischargeDateTime',
+    'isDischarge',
     'facilityName',
     'levelOfCare',
     'primaryClinician',
@@ -471,6 +494,8 @@ def _all_patient_record_summary(payload: dict[str, Any]) -> dict[str, Any]:
         'status': _first_text(payload, 'status'),
         'is_client': _bool_value(payload.get('isClient'), default=True),
         'discharge_date': _date_only(payload.get('dischargeDateTime')),
+        'actual_sys_discharge_date': _date_only(payload.get('actualSysDischargeDateTime')),
+        'is_discharge': _bool_value(payload.get('isDischarge'), default=False),
         'level_of_care': _first_text(payload, 'levelOfCare'),
         'facility': _first_text(payload, 'facilityName'),
         'primary_clinician': _first_text(payload, 'primaryClinician', 'primaryClinicians'),
@@ -487,10 +512,13 @@ def _rows_to_tsv(rows: list[dict[str, Any]], columns: list[str]) -> str:
 
 
 def _is_active_patient(payload: dict[str, Any]) -> bool:
-    if _text(payload.get('dischargeDateTime')):
-        return False
     status = _first_text(payload, 'status').lower()
     if status and any(word in status for word in ('inactive', 'discharge', 'closed', 'deceased')):
+        return False
+    status_is_active = bool(status and 'active' in status)
+    if _bool_value(payload.get('isDischarge'), default=False) and not status_is_active:
+        return False
+    if not status and _text(payload.get('dischargeDateTime') or payload.get('actualSysDischargeDateTime')):
         return False
     if payload.get('isClient') is not None and not _bool_value(payload.get('isClient'), default=True):
         return False

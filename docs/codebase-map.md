@@ -6,6 +6,8 @@ Branch: `main`
 
 Version: `1.4.6-beta.1` / build `2026.06.25.1`
 
+Current checked-in app metadata remains `1.4.5-beta.1` / build `2026.06.23.1` until the release-version files are advanced.
+
 ## Scope
 
 This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Beta 1.4.6-beta.1 app shape.

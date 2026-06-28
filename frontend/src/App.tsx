@@ -7,6 +7,8 @@ import {
   type ConfirmDialogState,
   type UploadProgressState,
 } from './components/feedback'
+import { DataQualityWarnings } from './components/DataQualityWarnings'
+import { TreatmentPlanContentSummary } from './components/TreatmentPlanContentSummary'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -194,6 +196,10 @@ type TimelinessClientSummary = {
   missing_evidence_fields: string[]
   last_checked_at: string
   last_imported_at: string | null
+  discharge_conflict?: boolean
+  data_quality_warnings?: string[]
+  id_join_confidence?: string
+  current_plan_record_id?: number | null
 }
 
 type TimelinessDashboard = {
@@ -272,6 +278,23 @@ type TimelinessTreatmentPlan = {
   source_document_id: string
   is_valid: boolean
   conflict_note: string
+  problem_count?: number
+  diagnosis_count?: number
+  goal_count?: number
+  objective_count?: number
+  intervention_count?: number
+  has_guardian_signature?: boolean
+  guardian_signature_date?: string
+  alleva_is_active?: boolean
+  alleva_is_complete?: boolean
+  alleva_is_initial_tp?: boolean
+  alleva_start_date?: string
+  alleva_end_date?: string
+  alleva_last_modified?: string
+  detail_fetched?: boolean
+  detail_fetched_at?: string | null
+  content_source?: string
+  is_current?: boolean
 }
 
 type TimelinessOverride = {
@@ -316,6 +339,12 @@ type TimelinessClientDetail = TimelinessClientSummary & {
   treatment_plans: TimelinessTreatmentPlan[]
   overrides: TimelinessOverride[]
   audit_history: AuditLogRecord[]
+  alleva_lead_id?: string
+  alleva_client_id?: string
+  alleva_unique_id?: string
+  alleva_mrn?: string
+  alleva_source_id?: string
+  id_join_warnings?: string[]
 }
 
 type ClearPatientDataResponse = {
@@ -362,6 +391,9 @@ type AppSettings = {
   alleva_treatment_plan_sync_approved: boolean
   alleva_treatment_plan_endpoint_mapping_validated: boolean
   alleva_treatment_plan_sync_limit: number
+  alleva_treatment_plan_detail_fetch_enabled?: boolean
+  alleva_treatment_plan_name_join_fallback_enabled?: boolean
+  alleva_treatment_plan_detail_fetch_limit?: number
   alleva_treatment_plan_sync_last_at: string | null
   alleva_treatment_plan_sync_last_status: string
   alleva_treatment_plan_sync_last_message: string
@@ -411,6 +443,9 @@ type AppSettingsForm = {
   alleva_treatment_plan_sync_approved: boolean
   alleva_treatment_plan_endpoint_mapping_validated: boolean
   alleva_treatment_plan_sync_limit: number
+  alleva_treatment_plan_detail_fetch_enabled: boolean
+  alleva_treatment_plan_name_join_fallback_enabled: boolean
+  alleva_treatment_plan_detail_fetch_limit: number
   facility_timezone: string
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
@@ -429,6 +464,12 @@ type AllevaTreatmentPlanSyncResponse = {
     active_client_count?: number
     treatment_plan_count?: number
     treatment_review_count?: number
+    current_plan_selected_count?: number
+    current_plan_missing_count?: number
+    detail_fetch_attempt_count?: number
+    detail_fetch_success_count?: number
+    detail_fetch_failed_count?: number
+    detail_fetch_skipped_count?: number
     missing_fields?: string[]
   }
   settings: AppSettings
@@ -1065,6 +1106,9 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     alleva_treatment_plan_sync_approved: settings.alleva_treatment_plan_sync_approved,
     alleva_treatment_plan_endpoint_mapping_validated: settings.alleva_treatment_plan_endpoint_mapping_validated,
     alleva_treatment_plan_sync_limit: settings.alleva_treatment_plan_sync_limit || 250,
+    alleva_treatment_plan_detail_fetch_enabled: Boolean(settings.alleva_treatment_plan_detail_fetch_enabled),
+    alleva_treatment_plan_name_join_fallback_enabled: Boolean(settings.alleva_treatment_plan_name_join_fallback_enabled),
+    alleva_treatment_plan_detail_fetch_limit: settings.alleva_treatment_plan_detail_fetch_limit ?? 50,
     facility_timezone: settings.facility_timezone || 'local_machine',
     treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days ?? 7,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
@@ -2889,6 +2933,12 @@ export function App() {
   }
 
   function openPlanEvidence(plan: TimelinessTreatmentPlan) {
+    const contentTotal =
+      (plan.problem_count ?? 0) +
+      (plan.diagnosis_count ?? 0) +
+      (plan.goal_count ?? 0) +
+      (plan.objective_count ?? 0) +
+      (plan.intervention_count ?? 0)
     setEvidencePreview({
       title: `${planKindLabel(plan.plan_kind)} treatment-plan evidence`,
       subtitle: plan.source_section || plan.source_evidence || 'Treatment plan source',
@@ -2898,10 +2948,17 @@ export function App() {
         { label: 'Client signature', value: plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional for ongoing reviews' : 'Missing') },
         { label: 'Reviewer signature', value: displayDate(plan.reviewer_signature_date) },
         { label: 'Displayed Next Review Due', value: displayDate(plan.displayed_next_due_date), emphasis: Boolean(plan.displayed_next_due_date) },
+        { label: 'Current plan selected', value: plan.is_current ? 'Yes' : 'No' },
+        { label: 'Detail fetch status', value: plan.detail_fetched ? 'Loaded from detail endpoint' : 'Not loaded' },
+        { label: 'Clinical content elements', value: String(contentTotal), emphasis: contentTotal > 0 },
+        { label: 'Problems / diagnoses', value: `${plan.problem_count ?? 0} / ${plan.diagnosis_count ?? 0}` },
+        { label: 'Goals / objectives / interventions', value: `${plan.goal_count ?? 0} / ${plan.objective_count ?? 0} / ${plan.intervention_count ?? 0}` },
+        { label: 'Alleva lifecycle', value: plan.alleva_is_active ? 'Active' : plan.alleva_end_date ? `Ended ${plan.alleva_end_date}` : 'Not recorded' },
+        { label: 'Guardian signature', value: plan.has_guardian_signature ? `Present${plan.guardian_signature_date ? ` (${plan.guardian_signature_date})` : ''}` : 'Not recorded' },
         { label: 'Source document ID', value: plan.source_document_id || 'Not recorded' },
         { label: 'Source evidence', value: plan.source_evidence || 'Not recorded' },
       ],
-      note: plan.conflict_note || 'Evidence preview shows date/signature metadata only; raw clinical document text is not displayed here.',
+      note: plan.conflict_note || 'Evidence preview shows aggregate metadata and clinical content counts; raw clinical document text is not displayed here.',
     })
   }
 
@@ -4205,9 +4262,11 @@ export function App() {
 	                            <strong>{item.permitted_name || item.patient_id}</strong>
 	                            <small>{item.patient_id}</small>
 	                            <small>{item.counselor_name || 'Primary clinician pending'}</small>
+	                            {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
 	                          </span>
 	                          <span>
 	                            <span className={`pill pill--${timelinessTone(item.status)}`}>{item.status}</span>
+	                            {!item.current_plan_record_id ? <small className='text-warning'>Current plan not selected</small> : null}
 	                          </span>
 	                          <span>
 	                            <strong>{item.next_due_date || 'Missing'}</strong>
@@ -4296,6 +4355,25 @@ export function App() {
 	                        <p>Required evidence fields are present for this calculation.</p>
 	                      )}
 	                    </section>
+
+	                    <DataQualityWarnings
+	                      dischargeConflict={selectedTimelinessClient.discharge_conflict}
+	                      warnings={selectedTimelinessClient.data_quality_warnings}
+	                      idJoinWarnings={selectedTimelinessClient.id_join_warnings}
+	                      idJoinConfidence={selectedTimelinessClient.id_join_confidence}
+	                      identifiers={{
+	                        sourceId: selectedTimelinessClient.alleva_source_id,
+	                        leadId: selectedTimelinessClient.alleva_lead_id,
+	                        clientId: selectedTimelinessClient.alleva_client_id,
+	                        uniqueId: selectedTimelinessClient.alleva_unique_id,
+	                        mrn: selectedTimelinessClient.alleva_mrn,
+	                      }}
+	                    />
+
+	                    <TreatmentPlanContentSummary
+	                      plans={selectedTimelinessClient.treatment_plans}
+	                      currentPlanRecordId={selectedTimelinessClient.current_plan_record_id}
+	                    />
 
 	                    <section className='panel-subsection evidence-comparison-panel'>
 	                      <div className='panel-heading'>
@@ -4529,6 +4607,7 @@ export function App() {
 	                            <span>Staff</span>
 	                            <span>Client</span>
 	                            <span>Next due</span>
+	                            <span>Content</span>
 	                            <span>Status</span>
 	                            <span>Evidence</span>
 	                          </div>
@@ -4542,6 +4621,12 @@ export function App() {
 	                              <span>{signedLabel(plan.staff_signature_date)}</span>
 	                              <span>{plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional' : 'Missing')}</span>
 	                              <span>{plan.displayed_next_due_date || 'Not recorded'}</span>
+	                              <span>
+	                                <strong>{(plan.problem_count ?? 0) + (plan.diagnosis_count ?? 0) + (plan.goal_count ?? 0) + (plan.objective_count ?? 0) + (plan.intervention_count ?? 0)} items</strong>
+	                                <small>
+	                                  {plan.is_current ? 'Current' : 'Historical'} - {plan.detail_fetched ? 'Detail loaded' : 'Detail pending'}
+	                                </small>
+	                              </span>
 	                              <span>{plan.is_valid && !plan.conflict_note ? 'Valid' : plan.conflict_note || 'Needs review'}</span>
 	                              <span>
 	                                <button type='button' className='table-action-button' onClick={() => openPlanEvidence(plan)}>
@@ -6114,6 +6199,14 @@ export function App() {
                     </dd>
                   </div>
                   <div>
+                    <dt>Plan detail fetch</dt>
+                    <dd>
+                      {appSettings?.alleva_treatment_plan_detail_fetch_enabled
+                        ? `On, cap ${appSettings.alleva_treatment_plan_detail_fetch_limit ?? 50}`
+                        : 'Off'}
+                    </dd>
+                  </div>
+                  <div>
                     <dt>Last Alleva sync</dt>
                     <dd>
                       {appSettings?.alleva_treatment_plan_sync_last_at
@@ -6539,6 +6632,20 @@ export function App() {
                             }
                           />
                         </label>
+                        <label>
+                          Current-plan detail fetch cap
+                          <input
+                            type='number'
+                            min={0}
+                            max={5000}
+                            value={settingsForm.alleva_treatment_plan_detail_fetch_limit}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_detail_fetch_limit: Number(event.target.value || 0) } : current
+                              )
+                            }
+                          />
+                        </label>
                         <label className='checkbox-row'>
                           <input
                             type='checkbox'
@@ -6550,6 +6657,18 @@ export function App() {
                             }
                           />
                           Enable Alleva REST treatment-plan sync
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_detail_fetch_enabled}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_detail_fetch_enabled: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Fetch current-plan clinical detail
                         </label>
                         <label className='checkbox-row'>
                           <input
@@ -6586,6 +6705,18 @@ export function App() {
                             }
                           />
                           Active-client, treatment-plan, review, pagination, and status fields are validated
+                        </label>
+                        <label className='checkbox-row'>
+                          <input
+                            type='checkbox'
+                            checked={settingsForm.alleva_treatment_plan_name_join_fallback_enabled}
+                            onChange={(event) =>
+                              setSettingsForm((current) =>
+                                current ? { ...current, alleva_treatment_plan_name_join_fallback_enabled: event.target.checked } : current
+                              )
+                            }
+                          />
+                          Allow name fallback only for validation
                         </label>
                       </div>
                       <p className='muted-text field-note'>

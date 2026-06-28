@@ -421,6 +421,11 @@ label {
   color: #62736b;
 }
 
+.text-warning {
+  color: #8a5d00;
+  font-weight: 700;
+}
+
 .compact-status-frame {
   display: grid;
   gap: 0.45rem;
@@ -1072,6 +1077,111 @@ label {
   color: #52646d;
 }
 
+.data-quality-panel,
+.treatment-plan-content-summary {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid #d4dde1;
+  background: #ffffff;
+}
+
+.data-quality-panel {
+  border-left: 4px solid #d89b22;
+}
+
+.treatment-plan-content-summary {
+  border-left: 4px solid #0b6f86;
+}
+
+.data-quality-panel__heading,
+.treatment-plan-content-summary__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.data-quality-panel h3,
+.data-quality-panel p,
+.treatment-plan-content-summary h3,
+.treatment-plan-content-summary p {
+  margin: 0;
+}
+
+.data-quality-panel p,
+.treatment-plan-content-summary p {
+  color: #52646d;
+}
+
+.data-quality-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #5f4708;
+}
+
+.identifier-grid,
+.treatment-plan-content-summary__grid,
+.treatment-plan-content-summary dl {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.identifier-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+}
+
+.identifier-grid div,
+.treatment-plan-content-summary dl div {
+  min-width: 0;
+}
+
+.identifier-grid dt,
+.treatment-plan-content-summary dt,
+.treatment-plan-content-summary__primary span {
+  color: #62736b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.identifier-grid dd,
+.treatment-plan-content-summary dd {
+  margin: 0.18rem 0 0;
+  color: #263940;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.treatment-plan-content-summary__grid {
+  grid-template-columns: minmax(150px, 0.26fr) minmax(0, 1fr);
+}
+
+.treatment-plan-content-summary__primary {
+  display: grid;
+  align-content: center;
+  gap: 0.2rem;
+  border-right: 1px solid #d4dde1;
+  padding-right: 0.85rem;
+}
+
+.treatment-plan-content-summary__primary strong {
+  color: #263940;
+  font-size: 1.8rem;
+}
+
+.treatment-plan-content-summary__primary small {
+  color: #62736b;
+}
+
+.treatment-plan-content-summary dl {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+}
+
 .evidence-meter {
   display: inline-flex;
   width: min(100%, 110px);
@@ -1150,8 +1260,8 @@ label {
 
 .timeliness-table--evidence .timeliness-table__head,
 .timeliness-table--evidence .timeliness-table__row {
-  grid-template-columns: 0.7fr 1fr 0.78fr 0.78fr 0.78fr 0.78fr minmax(150px, 1fr) 0.58fr;
-  min-width: 1040px;
+  grid-template-columns: 0.65fr 0.9fr 0.72fr 0.72fr 0.72fr 0.72fr 0.86fr minmax(150px, 1fr) 0.55fr;
+  min-width: 1160px;
 }
 
 .table-action-button {
@@ -1339,6 +1449,7 @@ ol {
   .file-editor-row__fields,
   .form-grid,
   .timeliness-client-summary,
+  .treatment-plan-content-summary__grid,
   .comparison-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1347,6 +1458,11 @@ ol {
     border-right: 0;
     border-bottom: 1px solid #d4dde1;
     padding: 0 0 0.85rem;
+  }
+
+  .identifier-grid,
+  .treatment-plan-content-summary dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1372,9 +1488,23 @@ ol {
   .timeliness-filter-strip,
   .timeliness-client-summary,
   .timeliness-client-summary dl,
+  .identifier-grid,
+  .treatment-plan-content-summary__grid,
+  .treatment-plan-content-summary dl,
   .comparison-grid,
   .evidence-modal__body {
     grid-template-columns: 1fr;
+  }
+
+  .data-quality-panel__heading,
+  .treatment-plan-content-summary__header {
+    display: grid;
+  }
+
+  .treatment-plan-content-summary__primary {
+    border-right: 0;
+    border-bottom: 1px solid #d4dde1;
+    padding: 0 0 0.85rem;
   }
 
   .queue-item,

@@ -108,6 +108,9 @@ class AppSettingsUpdate(BaseModel):
     alleva_treatment_plan_sync_approved: bool | None = None
     alleva_treatment_plan_endpoint_mapping_validated: bool | None = None
     alleva_treatment_plan_sync_limit: int | None = Field(default=None, ge=1, le=5000)
+    alleva_treatment_plan_detail_fetch_enabled: bool | None = None
+    alleva_treatment_plan_name_join_fallback_enabled: bool | None = None
+    alleva_treatment_plan_detail_fetch_limit: int | None = Field(default=None, ge=0, le=5000)
     facility_timezone: str | None = Field(default=None, max_length=80)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
     treatment_plan_loc_change_window_validated: bool | None = None
@@ -150,6 +153,9 @@ class AppSettingsOut(BaseModel):
     alleva_treatment_plan_sync_approved: bool
     alleva_treatment_plan_endpoint_mapping_validated: bool
     alleva_treatment_plan_sync_limit: int
+    alleva_treatment_plan_detail_fetch_enabled: bool
+    alleva_treatment_plan_name_join_fallback_enabled: bool
+    alleva_treatment_plan_detail_fetch_limit: int
     alleva_treatment_plan_sync_last_at: datetime | None = None
     alleva_treatment_plan_sync_last_status: str
     alleva_treatment_plan_sync_last_message: str
@@ -685,6 +691,23 @@ class TimelinessTreatmentPlanOut(BaseModel):
     source_document_id: str
     is_valid: bool
     conflict_note: str
+    problem_count: int = 0
+    diagnosis_count: int = 0
+    goal_count: int = 0
+    objective_count: int = 0
+    intervention_count: int = 0
+    has_guardian_signature: bool = False
+    guardian_signature_date: str = ''
+    alleva_is_active: bool = True
+    alleva_is_complete: bool = False
+    alleva_is_initial_tp: bool = False
+    alleva_start_date: str = ''
+    alleva_end_date: str = ''
+    alleva_last_modified: str = ''
+    detail_fetched: bool = False
+    detail_fetched_at: datetime | None = None
+    content_source: str = 'collection'
+    is_current: bool = False
 
 
 class TimelinessOverrideOut(BaseModel):
@@ -775,6 +798,10 @@ class TimelinessClientSummaryOut(BaseModel):
     missing_evidence_fields: list[str]
     last_checked_at: datetime
     last_imported_at: datetime | None = None
+    discharge_conflict: bool = False
+    data_quality_warnings: list[str] = Field(default_factory=list)
+    id_join_confidence: str = 'unknown'
+    current_plan_record_id: int | None = None
 
 
 class TimelinessDashboardOut(BaseModel):
@@ -807,6 +834,12 @@ class TimelinessClientDetailOut(TimelinessClientSummaryOut):
     treatment_plans: list[TimelinessTreatmentPlanOut]
     overrides: list[TimelinessOverrideOut]
     audit_history: list[AuditLogOut]
+    alleva_lead_id: str = ''
+    alleva_client_id: str = ''
+    alleva_unique_id: str = ''
+    alleva_mrn: str = ''
+    alleva_source_id: str = ''
+    id_join_warnings: list[str] = Field(default_factory=list)
 
 
 class ClearPatientDataInput(BaseModel):

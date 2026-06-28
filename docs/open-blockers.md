@@ -4,6 +4,8 @@ Date: 2026-06-25
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1`.
 
+Current checked-in app metadata remains `1.4.5-beta.1` / build `2026.06.23.1` until the release-version files are advanced.
+
 ## LOC-Change Treatment-Plan Update Window
 
 Status: unvalidated.
