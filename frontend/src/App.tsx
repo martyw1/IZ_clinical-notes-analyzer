@@ -1005,7 +1005,7 @@ class ApiRequestError extends Error {
   }
 }
 
-function readErrorMessage(status: number, payload: ApiError | null) {
+function readErrorMessage(status: number, payload: ApiError | null, isSessionExpired = false) {
   const detail = payload?.detail
   const detailText =
     typeof detail === 'string' && detail.trim()
@@ -1019,7 +1019,7 @@ function readErrorMessage(status: number, payload: ApiError | null) {
         ? detail.msg.trim()
         : payload?.raw?.trim() || ''
 
-  if (status === 401) return 'Your session has expired. Sign in again to continue.'
+  if (status === 401) return isSessionExpired ? 'Your session has expired. Sign in again to continue.' : detailText || 'Invalid credentials'
   if (status === 403) return detailText || 'Your account does not have access to that action.'
   if (status === 413) return 'The selected upload is too large. Remove files or split the binder into a smaller upload.'
   if (status === 422) return detailText || 'Some required information is missing or needs a different format.'
@@ -1778,10 +1778,10 @@ export function App() {
   }, [evidencePreview, appDialog, confirmDialog])
 
   useEffect(() => {
-    if (error) {
+    if (error && user) {
       setAppDialog({ title: 'Action could not be completed', message: error })
     }
-  }, [error])
+  }, [error, user])
 
   useEffect(() => {
     let isMounted = true
@@ -1865,8 +1865,9 @@ export function App() {
     const response = await fetch(`${API}${path}`, { ...init, headers })
     const payload = (await readJson(response)) as ApiError | T | null
     if (!response.ok) {
-      if (response.status === 401) handleExpiredSession()
-      throw new ApiRequestError(response.status, readErrorMessage(response.status, payload as ApiError | null))
+      const isSessionExpired = response.status === 401 && includeAuth && Boolean(token)
+      if (isSessionExpired) handleExpiredSession()
+      throw new ApiRequestError(response.status, readErrorMessage(response.status, payload as ApiError | null, isSessionExpired))
     }
     return payload as T
   }
@@ -1930,7 +1931,9 @@ export function App() {
         }
 
         if (xhr.status < 200 || xhr.status >= 300) {
-          reject(new ApiRequestError(xhr.status, readErrorMessage(xhr.status, payload as ApiError | null)))
+          const isSessionExpired = xhr.status === 401 && Boolean(token)
+          if (isSessionExpired) handleExpiredSession()
+          reject(new ApiRequestError(xhr.status, readErrorMessage(xhr.status, payload as ApiError | null, isSessionExpired)))
           return
         }
         resolve(payload as PatientNoteSetDetail)
@@ -2528,6 +2531,7 @@ export function App() {
     event.preventDefault()
     setIsBusy(true)
     setError('')
+    setAppDialog(null)
     setStatus(`Signing in as ${loginForm.username}...`)
     try {
       const login = await apiRequest<{ access_token: string; must_reset_password: boolean }>(
@@ -2551,6 +2555,9 @@ export function App() {
         setStatus(`Signed in as ${profile.full_name || profile.username}. Loading workspace...`)
       }
     } catch (caught) {
+      if (caught instanceof ApiRequestError && caught.status === 401) {
+        setStatus('Sign in failed. Check the username and password.')
+      }
       setError(caught instanceof Error ? caught.message : 'Login failed')
     } finally {
       setIsBusy(false)
@@ -2678,7 +2685,9 @@ export function App() {
       })
       if (!response.ok) {
         const payload = (await readJson(response)) as ApiError | null
-        throw new Error(readErrorMessage(response.status, payload))
+        const isSessionExpired = response.status === 401 && Boolean(token)
+        if (isSessionExpired) handleExpiredSession()
+        throw new Error(readErrorMessage(response.status, payload, isSessionExpired))
       }
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)

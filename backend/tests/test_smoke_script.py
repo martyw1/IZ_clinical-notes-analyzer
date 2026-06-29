@@ -3,6 +3,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -126,10 +127,18 @@ def write_fake_curl(tmp_path: Path) -> Path:
     return fake_curl
 
 
+def write_python3_shim(tmp_path: Path) -> Path:
+    python3 = tmp_path / 'python3'
+    python3.write_text(f"#!/usr/bin/env bash\nexec '{Path(sys.executable).as_posix()}' \"$@\"\n", encoding='utf-8')
+    python3.chmod(python3.stat().st_mode | stat.S_IEXEC)
+    return python3
+
+
 def run_smoke(tmp_path: Path, state: dict[str, object], extra_env: dict[str, str] | None = None):
     if shutil.which('bash') is None:
         pytest.skip('bash is not available on PATH; shell smoke script tests require Bash.')
     write_fake_curl(tmp_path)
+    write_python3_shim(tmp_path)
     state_path = tmp_path / 'curl-state.json'
     state_path.write_text(json.dumps(state), encoding='utf-8')
 

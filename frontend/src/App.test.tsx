@@ -922,6 +922,52 @@ describe('App turnkey workflow', () => {
     })
   })
 
+  it('keeps invalid login credentials on the sign-in form without an expired-session modal', async () => {
+    installFetchMock({
+      'POST /api/auth/login': () => ({ status: 401, body: { detail: 'Invalid credentials' } }),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByText('Invalid credentials')).toBeInTheDocument())
+    expect(screen.getByText('Sign in failed. Check the username and password.')).toBeInTheDocument()
+    expect(screen.queryByText(/session has expired/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Action could not be completed' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('clears a stale stored session token and returns to sign in', async () => {
+    window.sessionStorage.setItem('iz-cna-session-token', 'stale-token')
+    installFetchMock({
+      'GET /api/users/me': () => ({ status: 401, body: { detail: 'Invalid token' } }),
+      'GET /api/charts': [],
+      'GET /api/patient-note-sets': [],
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument())
+    expect(window.sessionStorage.getItem('iz-cna-session-token')).toBeNull()
+    expect(screen.getByText('Session expired. Sign in again to continue.')).toBeInTheDocument()
+  })
+
+  it('does not store a token when post-login profile verification is unauthorized', async () => {
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'unverified-token', must_reset_password: false },
+      'GET /api/users/me': () => ({ status: 401, body: { detail: 'Invalid token' } }),
+    })
+
+    render(<App />)
+    signIn()
+
+    await waitFor(() => expect(screen.getByText('Invalid token')).toBeInTheDocument())
+    expect(screen.getByText('Sign in failed. Check the username and password.')).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('iz-cna-session-token')).toBeNull()
+    expect(screen.queryByText(/session has expired/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
   it('renders the summary dashboard and admin tools for administrators', async () => {
     window.history.replaceState(null, '', '/?view=dashboard')
     installFetchMock({
