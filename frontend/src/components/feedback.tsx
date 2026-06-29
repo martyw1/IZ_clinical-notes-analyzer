@@ -33,9 +33,8 @@ function formatBytes(bytes: number) {
 }
 
 function summarizeFileNames(fileNames: string[]) {
-  const visible = fileNames.slice(0, 3)
-  const remaining = fileNames.length - visible.length
-  return remaining > 0 ? `${visible.join(', ')} and ${remaining} more` : visible.join(', ')
+  if (!fileNames.length) return 'No files selected'
+  return `${fileNames.length} selected ${fileNames.length === 1 ? 'file' : 'files'}`
 }
 
 type UploadProgressPanelProps = {

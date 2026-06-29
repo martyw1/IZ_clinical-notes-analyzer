@@ -131,7 +131,7 @@ def _api_items(db: Session, app_settings: AppSetting) -> list[dict[str, Any]]:
                 'source_type': 'api',
                 'source_item_id': f'timeliness-client-{client.id}',
                 'patient_id': client.patient_id,
-                'display_name': client.permitted_name or client.patient_id,
+                'display_name': client.patient_id,
                 'document_type': 'treatment_plan',
                 'source_system_or_file': app_settings.emr_vendor_name or 'Mock EMR/API source',
                 'review_status': _timeliness_status(evaluation.status),

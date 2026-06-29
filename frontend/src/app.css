@@ -589,6 +589,28 @@ label {
   align-items: flex-start;
 }
 
+.evaluated-value-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.evaluated-value-row {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-left: 3px solid rgba(31, 112, 85, 0.22);
+  padding-left: 0.65rem;
+}
+
+.evaluated-value-row span {
+  color: #22352d;
+}
+
+.evaluated-value-row small {
+  color: #6f8177;
+}
+
 .criteria-grid {
   display: grid;
   gap: 1rem;

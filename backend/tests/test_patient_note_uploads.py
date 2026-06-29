@@ -95,7 +95,8 @@ def test_detect_patient_id_from_uploaded_files(app_with_sqlite):
         payload = response.json()
         assert payload['patient_id'] == 'PAT-DETECT-100'
         assert payload['confidence'] == 'high'
-        assert payload['source_filename'] == 'alleva-intake.txt'
+        assert payload['source_filename'] == 'uploaded file'
+        assert 'alleva-intake.txt' not in response.text
 
     db = session_local()
     try:
@@ -128,7 +129,8 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
 
         detail = client.get(f"/api/patient-note-sets/{payload['id']}", headers=headers)
         assert detail.status_code == 200
-        assert detail.json()['documents'][0]['original_filename'] == 'intake-packet.pdf'
+        assert detail.json()['documents'][0]['original_filename'] == 'clinical-note-document-1.pdf'
+        assert 'intake-packet.pdf' not in detail.text
 
         download = client.get(
             f"/api/patient-note-sets/{payload['id']}/documents/{payload['documents'][0]['id']}/download",
@@ -136,6 +138,8 @@ def test_initial_patient_note_upload_and_download(app_with_sqlite):
         )
         assert download.status_code == 200
         assert download.content == b'Intake packet completed and signed.\nPrimary clinician assigned.\n'
+        assert 'clinical-note-document-1.pdf' in download.headers['content-disposition']
+        assert 'intake-packet.pdf' not in download.headers['content-disposition']
 
         chart = client.get(f"/api/charts/{payload['review_chart_id']}", headers=headers)
         assert chart.status_code == 200
@@ -437,7 +441,7 @@ def test_redacted_example_pdf_upload_extracts_clinician_loc_and_placeholder_name
         chart_payload = chart.json()
         assert chart_payload['primary_clinician'] == payload['primary_clinician']
         assert chart_payload['level_of_care'] == 'GOP'
-        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', chart_payload['client_name'])
+        assert chart_payload['client_name'] == 'PAT-REDACTED-JTXP'
         assert 'redacted_hidden' in chart_payload['other_details']
 
     db = session_local()
@@ -472,7 +476,7 @@ def test_redacted_iop_example_pdf_upload_extracts_level_of_care(app_with_sqlite)
         assert payload['review_chart_id'] is not None
 
 
-def test_reanalysis_preserves_operator_display_name_for_redacted_upload(app_with_sqlite):
+def test_reanalysis_does_not_promote_operator_display_name_for_redacted_upload(app_with_sqlite):
     app, session_local = app_with_sqlite
     pdf_path = REPO_ROOT / 'example-treatment-plans' / 'JTXP.pdf'
 
@@ -510,16 +514,18 @@ def test_reanalysis_preserves_operator_display_name_for_redacted_upload(app_with
         }
         updated = client.put(f'/api/charts/{chart_id}', headers=headers, json=update_payload)
         assert updated.status_code == 200
-        assert updated.json()['client_name'] == 'Synthetic Display Name'
+        assert updated.json()['client_name'] == 'PAT-REANALYZE-JTXP'
+        assert 'Synthetic Display Name' not in updated.text
 
         reanalyzed = client.post(f'/api/charts/{chart_id}/reanalyze', headers=headers)
         assert reanalyzed.status_code == 200
-        assert reanalyzed.json()['client_name'] == 'Synthetic Display Name'
+        assert reanalyzed.json()['client_name'] == 'PAT-REANALYZE-JTXP'
+        assert 'Synthetic Display Name' not in reanalyzed.text
 
     db = session_local()
     try:
         stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-REANALYZE-JTXP')).scalar_one()
-        assert stored_client.permitted_name == 'Synthetic Display Name'
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
         assert db.execute(select(AuditLog).where(AuditLog.action == 'chart.reanalyze')).scalar_one_or_none() is not None
     finally:
         db.close()

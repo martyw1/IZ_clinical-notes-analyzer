@@ -228,6 +228,14 @@ type TimelinessRuleResult = {
   evidence_summary: string
 }
 
+type TimelinessEvaluatedValue = {
+  field: string
+  label: string
+  value: unknown
+  status: string
+  source?: string
+}
+
 type TimelinessChecklistResult = {
   step: number
   key: string
@@ -238,6 +246,7 @@ type TimelinessChecklistResult = {
   source_evidence: string
   finding_message: string
   evidence_fields_used: string[]
+  evaluated_values: TimelinessEvaluatedValue[]
   required_metadata: string[]
   required_documents: string[]
   checks: string[]
@@ -1296,6 +1305,19 @@ function csvCell(value: unknown) {
   return `"${raw.replace(/"/g, '""')}"`
 }
 
+function formatEvaluatedValue(value: unknown) {
+  if (value == null || value === '') return 'Not recorded'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (Array.isArray(value)) return value.length ? value.map(formatEvaluatedValue).join('; ') : 'None'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function evaluatedValuesSummary(values: TimelinessEvaluatedValue[] | undefined) {
+  if (!values?.length) return ''
+  return values.map((item) => `${item.label || item.field}: ${formatEvaluatedValue(item.value)} (${item.status})`).join('; ')
+}
+
 function downloadTextFile(filename: string, content: string, contentType: string) {
   const blob = new Blob([content], { type: contentType })
   const url = URL.createObjectURL(blob)
@@ -1313,10 +1335,10 @@ function timelinessTaskItems(items: TimelinessClientSummary[]) {
 }
 
 function buildTimelinessTaskList(items: TimelinessClientSummary[]) {
-  const header = ['client_label', 'due_date', 'status', 'current_loc', 'primary_clinician', 'reason']
+  const header = ['patient_id', 'due_date', 'status', 'current_loc', 'primary_clinician', 'reason']
   const rows = timelinessTaskItems(items).map((item) =>
     [
-      item.permitted_name || item.patient_id,
+      item.patient_id,
       item.next_due_date || 'Not calculated',
       item.status,
       item.current_level_of_care || 'Missing',
@@ -1337,7 +1359,6 @@ function buildSelectedTimelinessCounselorActions(client: TimelinessClientDetail)
   })
   const header = [
     'patient_id',
-    'client_label',
     'current_loc',
     'primary_clinician',
     'next_due_date',
@@ -1354,7 +1375,6 @@ function buildSelectedTimelinessCounselorActions(client: TimelinessClientDetail)
   const rows = actionableCriteria.map((result) =>
     [
       client.patient_id,
-      client.permitted_name || client.patient_id,
       client.current_level_of_care || 'Missing',
       client.counselor_name || 'Unassigned',
       client.next_due_date || 'Not calculated',
@@ -1697,7 +1717,6 @@ export function App() {
       const matchesQuery =
         !query ||
         item.patient_id.toLowerCase().includes(query) ||
-        item.permitted_name.toLowerCase().includes(query) ||
         item.current_level_of_care.toLowerCase().includes(query) ||
         item.counselor_name.toLowerCase().includes(query)
       return matchesStatus && matchesQuery
@@ -2580,7 +2599,6 @@ export function App() {
     try {
       const body = new FormData()
       body.set('patient_id', uploadForm.patient_id)
-      body.set('client_name', uploadForm.client_name)
       body.set('upload_mode', uploadForm.upload_mode)
       body.set('level_of_care', uploadForm.level_of_care)
       body.set('admission_date', uploadForm.admission_date)
@@ -2615,7 +2633,7 @@ export function App() {
       setUploadForm(
         createUploadForm({
           patient_id: uploaded.patient_id,
-          client_name: uploadForm.client_name,
+          client_name: '',
           upload_mode: 'update',
           level_of_care: uploaded.level_of_care,
           admission_date: uploaded.admission_date,
@@ -2725,6 +2743,7 @@ export function App() {
         status: result.status,
         source_evidence: result.source_evidence,
         finding_message: result.finding_message,
+        evaluated_values: evaluatedValuesSummary(result.evaluated_values),
         severity: result.severity,
         reviewer_action: result.reviewer_actions.join('; '),
         override_reason: '',
@@ -2780,6 +2799,7 @@ export function App() {
         status,
         source_evidence: sourceEvidence || '',
         finding_message: finding,
+        evaluated_values: '',
         severity: String(step.severity_default || ''),
         reviewer_action: '',
         override_reason: '',
@@ -2816,14 +2836,14 @@ export function App() {
         'application/json',
       )
     } else {
-      const header = ['row_type', 'step', 'section_or_key', 'label', 'status', 'notes_or_finding', 'evidence_location', 'evidence_date', 'expiration_date', 'instructions_or_severity']
+      const header = ['row_type', 'step', 'section_or_key', 'label', 'status', 'notes_or_finding', 'evaluated_values', 'evidence_location', 'evidence_date', 'expiration_date', 'instructions_or_severity']
       const checklistRows = selectedChart.checklist_items.map((item) =>
         ['checklist_domain', item.step, item.section, item.label, STATUS_LABELS[item.status], item.notes, item.evidence_location, item.evidence_date, item.expiration_date, item.instructions]
           .map(csvCell)
           .join(','),
       )
       const workflowRows = workflowSteps.map((item) =>
-        [item.row_type, item.step, item.key, item.label, item.status, item.finding_message, item.source_evidence, '', '', item.severity].map(csvCell).join(','),
+        [item.row_type, item.step, item.key, item.label, item.status, item.finding_message, item.evaluated_values, item.source_evidence, '', '', item.severity].map(csvCell).join(','),
       )
       downloadTextFile(`review-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...checklistRows, ...workflowRows].join('\n'), 'text/csv')
     }
@@ -2858,12 +2878,12 @@ export function App() {
         'application/json',
       )
     } else {
-      const header = ['row_type', 'id_or_step', 'label', 'status', 'due_date_or_key', 'evidence_summary_or_source', 'finding_or_rule']
+      const header = ['row_type', 'id_or_step', 'label', 'status', 'due_date_or_key', 'evidence_summary_or_source', 'finding_or_rule', 'evaluated_values']
       const rows = selectedTimelinessClient.rule_results.map((result) =>
-        ['timeliness_rule', result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary, result.rule_id].map(csvCell).join(','),
+        ['timeliness_rule', result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary, result.rule_id, ''].map(csvCell).join(','),
       )
       const workflowRows = workflowSteps.map((item) =>
-        [item.row_type, item.step, item.label, item.status, item.key, item.source_evidence, item.finding_message].map(csvCell).join(','),
+        [item.row_type, item.step, item.label, item.status, item.key, item.source_evidence, item.finding_message, item.evaluated_values].map(csvCell).join(','),
       )
       downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows, ...workflowRows].join('\n'), 'text/csv')
     }
@@ -2917,7 +2937,7 @@ export function App() {
     const comparison = selectedTimelinessClient.evidence_comparison
     setEvidencePreview({
       title: 'Review due-date evidence',
-      subtitle: selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id,
+      subtitle: selectedTimelinessClient.patient_id,
       fields: [
         { label: 'Current date used', value: displayDate(comparison.current_date), emphasis: true },
         { label: 'Date-clock anchor', value: `${displayDate(comparison.date_clock_anchor_date)} (${comparison.date_clock_anchor_source || 'not selected'})`, emphasis: true },
@@ -3769,7 +3789,7 @@ export function App() {
           <div className='panel info-panel'>
             <h2>Workflow</h2>
             <ol>
-              <li>Counselor uploads a patient note binder using patient ID and client name when available.</li>
+              <li>Counselor uploads a patient note binder using Patient ID only.</li>
               <li>The app runs an automatic clinical-note checklist evaluation.</li>
               <li>The reviewer can drill into any criterion and mark it ok or not ok.</li>
               <li>The office manager approves or returns the chart for correction.</li>
@@ -4264,11 +4284,10 @@ export function App() {
 	                          }
                           data-audit-label='Open treatment-plan evidence'
 	                          onClick={() => void loadTimelinessClientDetail(item.id)}
-	                          aria-label={`Open ${item.permitted_name || item.patient_id} treatment plan evidence`}
+	                          aria-label={`Open ${item.patient_id} treatment plan evidence`}
 	                        >
 	                          <span>
-	                            <strong>{item.permitted_name || item.patient_id}</strong>
-	                            <small>{item.patient_id}</small>
+	                            <strong>{item.patient_id}</strong>
 	                            <small>{item.counselor_name || 'Primary clinician pending'}</small>
 	                            {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
 	                          </span>
@@ -4301,7 +4320,7 @@ export function App() {
 	                  <>
 	                    <div className='panel-heading'>
 	                      <div>
-	                        <h2>{selectedTimelinessClient.permitted_name || selectedTimelinessClient.patient_id}</h2>
+	                        <h2>{selectedTimelinessClient.patient_id}</h2>
 	                        <p>{selectedTimelinessClient.patient_id}</p>
 	                      </div>
 	                      <div className='button-row'>
@@ -4517,6 +4536,31 @@ export function App() {
 	                                ) : null}
 	                              </div>
 	                              <dl>
+	                                <div>
+	                                  <dt>Why this result</dt>
+	                                  <dd>{result.finding_message || 'No finding message recorded.'}</dd>
+	                                </div>
+	                                <div>
+	                                  <dt>Evaluated values</dt>
+	                                  <dd>
+	                                    {result.evaluated_values?.length ? (
+	                                      <div className='evaluated-value-list'>
+	                                        {result.evaluated_values.map((item) => (
+	                                          <div key={`${result.key}-${item.field}-${item.label}`} className='evaluated-value-row'>
+	                                            <strong>{item.label || item.field}</strong>
+	                                            <span>{formatEvaluatedValue(item.value)}</span>
+	                                            <small>
+	                                              {item.status || 'unknown'}
+	                                              {item.source ? ` - ${item.source}` : ''}
+	                                            </small>
+	                                          </div>
+	                                        ))}
+	                                      </div>
+	                                    ) : (
+	                                      'No evaluated values recorded'
+	                                    )}
+	                                  </dd>
+	                                </div>
 	                                <div>
 	                                  <dt>Source evidence</dt>
 	                                  <dd>{result.source_evidence || 'Not recorded'}</dd>
@@ -5217,7 +5261,7 @@ export function App() {
               <section className='panel detail-panel'>
                 <h2>Upload clinical notes</h2>
                 <p>
-                  Manual upload is the primary local workflow. Use the patient ID as the source-of-truth key and add the client name when it is present in the export.
+                  Manual upload is the primary local workflow. Use the patient ID as the source-of-truth key; patient names are not used as local display labels.
                 </p>
                 <div className='rule-alert'>
                   <strong>Manual upload is a point-in-time snapshot</strong>
@@ -5238,14 +5282,6 @@ export function App() {
                         }
                         setUploadForm((current) => ({ ...current, patient_id: nextValue }))
                       }}
-                    />
-                  </label>
-                  <label>
-                    Client name
-                    <input
-                      value={uploadForm.client_name}
-                      placeholder='Optional, for chart audit context'
-                      onChange={(event) => setUploadForm((current) => ({ ...current, client_name: event.target.value }))}
                     />
                   </label>
                   <label>

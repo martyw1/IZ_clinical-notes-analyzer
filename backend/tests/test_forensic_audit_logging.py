@@ -78,7 +78,8 @@ def test_chart_changes_emit_forensic_audit_records(app_with_sqlite):
         assert insert_log.before_state is None
         assert insert_log.after_state is not None
         assert '"patient_id":"PAT-001"' in insert_log.after_state
-        assert '"client_name":"Patient-001"' in insert_log.after_state
+        assert '"client_name":"PAT-001"' in insert_log.after_state
+        assert 'Patient-001' not in insert_log.after_state
 
         update_log = next(
             log for log in logs if log.action == 'data.update.commit' and log.target_entity_type == 'chart' and log.target_entity_id == str(chart_id)

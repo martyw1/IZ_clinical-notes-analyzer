@@ -480,13 +480,16 @@ function versionPayload() {
 }
 
 function timelinessChecklistResultsPayload() {
-  const representativeSteps: Record<number, { key: string; title: string; status: string; finding_message: string; evidence_fields_used: string[] }> = {
+  const representativeSteps: Record<number, { key: string; title: string; status: string; finding_message: string; evidence_fields_used: string[]; evaluated_values?: Array<Record<string, unknown>> }> = {
     1: {
       key: 'confirm_correct_client_chart',
       title: 'Confirm this is the correct client chart',
       status: 'Confirmed',
       finding_message: 'Selected treatment-plan client is keyed by patient ID PAT-TP-001.',
       evidence_fields_used: ['patient_id', 'source_evidence'],
+      evaluated_values: [
+        { field: 'patient_id', label: 'Patient ID', value: 'PAT-TP-001', status: 'present', source: 'Synthetic spreadsheet row' },
+      ],
     },
     4: {
       key: 'confirm_admission_date',
@@ -494,6 +497,9 @@ function timelinessChecklistResultsPayload() {
       status: 'Confirmed',
       finding_message: 'Admission date is 2026-02-26.',
       evidence_fields_used: ['admission_date'],
+      evaluated_values: [
+        { field: 'admission_date', label: 'Admission date', value: '2026-02-26', status: 'present', source: 'Synthetic spreadsheet row' },
+      ],
     },
     6: {
       key: 'confirm_loc_rule_mapping',
@@ -501,6 +507,10 @@ function timelinessChecklistResultsPayload() {
       status: 'Confirmed',
       finding_message: 'LOC IOP-5 maps to configured 60-calendar-day review clock.',
       evidence_fields_used: ['current_level_of_care', 'mapped_level_of_care'],
+      evaluated_values: [
+        { field: 'current_level_of_care', label: 'Current LOC', value: 'IOP-5', status: 'present', source: 'Synthetic LOC update' },
+        { field: 'mapped_level_of_care', label: 'Mapped LOC rule category', value: 'IOP-5', status: 'present', source: 'config/rules' },
+      ],
     },
     14: {
       key: 'initial_plan_exists',
@@ -521,7 +531,15 @@ function timelinessChecklistResultsPayload() {
       title: 'Calculate the next Treatment Plan Review due date',
       status: 'Due Soon',
       finding_message: 'Date clock due date is 2026-06-01.',
-      evidence_fields_used: ['date_clock_anchor_date', 'interval_days', 'next_due_date'],
+      evidence_fields_used: ['date_clock_anchor_date', 'interval_days', 'date_clock_due_date', 'document_next_due_date', 'signature_anchor_due_date', 'loc_anchor_due_date'],
+      evaluated_values: [
+        { field: 'date_clock_anchor_date', label: 'Date-clock anchor date', value: '2026-04-02', status: 'present', source: 'last valid treatment-plan review/update date' },
+        { field: 'interval_days', label: 'LOC cadence interval', value: 60, status: 'present', source: 'config/rules' },
+        { field: 'date_clock_due_date', label: 'Calculated date-clock due date', value: '2026-06-01', status: 'present', source: 'last valid treatment-plan review/update date' },
+        { field: 'document_next_due_date', label: 'Source-document Next Review Due', value: '', status: 'missing', source: 'Treatment Plan Review synthetic record' },
+        { field: 'signature_anchor_due_date', label: 'Signature-anchor due date', value: '2026-06-01', status: 'present', source: 'last valid treatment-plan review/update date' },
+        { field: 'loc_anchor_due_date', label: 'LOC effective-anchor due date', value: '2026-04-06', status: 'present', source: 'Synthetic LOC update' },
+      ],
     },
     31: {
       key: 'loc_change_deadline_unresolved',
@@ -529,6 +547,10 @@ function timelinessChecklistResultsPayload() {
       status: 'Needs Review',
       finding_message: 'LOC-change window remains unvalidated by R3/Marleigh.',
       evidence_fields_used: ['loc_change_window_days', 'loc_change_rule_validated'],
+      evaluated_values: [
+        { field: 'loc_change_window_days', label: 'LOC-change window days', value: 7, status: 'unknown', source: 'App settings' },
+        { field: 'loc_change_rule_validated', label: 'LOC-change rule validated', value: false, status: 'unknown', source: 'App settings' },
+      ],
     },
     32: {
       key: 'flag_missing_data_not_compliance',
@@ -536,6 +558,10 @@ function timelinessChecklistResultsPayload() {
       status: 'Missing Data',
       finding_message: 'Missing evidence fields: Source-document Next Review Due.',
       evidence_fields_used: ['missing_evidence_fields', 'rule_used'],
+      evaluated_values: [
+        { field: 'missing_evidence_fields', label: 'Missing evidence fields', value: 'Source-document Next Review Due', status: 'missing', source: 'Date-clock calculation' },
+        { field: 'rule_used', label: 'Rule used', value: 'TP-REVIEW-60', status: 'present', source: 'Date-clock calculation' },
+      ],
     },
     34: {
       key: 'require_manual_override_reason',
@@ -550,6 +576,9 @@ function timelinessChecklistResultsPayload() {
       status: 'Due Soon',
       finding_message: 'Final selected-client result is Due Soon.',
       evidence_fields_used: ['overall_status', 'evidence_summary'],
+      evaluated_values: [
+        { field: 'overall_status', label: 'Overall status', value: 'Due Soon', status: 'present', source: 'Final selected-client result' },
+      ],
     },
   }
   return Array.from({ length: 42 }, (_unused, index) => {
@@ -565,6 +594,15 @@ function timelinessChecklistResultsPayload() {
       source_evidence: 'Synthetic Treatment Plan Review; Synthetic LOC update',
       finding_message: representative?.finding_message || 'Reviewer should confirm this checklist item for the selected client.',
       evidence_fields_used: representative?.evidence_fields_used || ['source_evidence'],
+      evaluated_values:
+        representative?.evaluated_values ||
+        (representative?.evidence_fields_used || ['source_evidence']).map((field) => ({
+          field,
+          label: field.replace(/_/g, ' '),
+          value: field === 'source_evidence' ? 'Synthetic Treatment Plan Review; Synthetic LOC update' : 'Not recorded',
+          status: field === 'source_evidence' ? 'present' : 'missing',
+          source: 'Synthetic fixture',
+        })),
       required_metadata: ['patient_id'],
       required_documents: ['treatment_plan_documents'],
       checks: ['Synthetic deterministic check.'],
@@ -987,7 +1025,7 @@ describe('App turnkey workflow', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
     expect(screen.getByText(/Updated evidence queue/)).toBeInTheDocument()
-    expect(screen.getAllByText('Synthetic Client').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('PAT-TP-001').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Unvalidated by R3\/Marleigh/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
 
@@ -1033,9 +1071,10 @@ describe('App turnkey workflow', () => {
     expect(screen.getByRole('status', { name: 'Treatment plan timeliness update status' })).toHaveTextContent(/Source-document Next Review Due/)
     fireEvent.click(screen.getByRole('button', { name: /Needs Review 1/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Ambiguous Review Client treatment plan evidence/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Open PAT-TP-AMBIG treatment plan evidence/i }))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Ambiguous Review Client' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'PAT-TP-AMBIG' })).toBeInTheDocument())
+    expect(screen.queryByText('Ambiguous Review Client')).not.toBeInTheDocument()
     expect(screen.getAllByText('2026-05-29').length).toBeGreaterThan(0)
     expect(screen.getAllByText('2026-06-01').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Unvalidated LOC-change rule/i).length).toBeGreaterThan(0)
@@ -1079,8 +1118,9 @@ describe('App turnkey workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy task list' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
-    expect(writeText.mock.calls[0][0]).toContain('client_label')
-    expect(writeText.mock.calls[0][0]).toContain('Synthetic Client')
+    expect(writeText.mock.calls[0][0]).toContain('patient_id')
+    expect(writeText.mock.calls[0][0]).toContain('PAT-TP-001')
+    expect(writeText.mock.calls[0][0]).not.toContain('Synthetic Client')
   })
 
   it('exports selected review and treatment plan reports as CSV and JSON', async () => {
@@ -1120,6 +1160,9 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: '42-Step Checklist Evaluation' })).toBeInTheDocument())
     expect(screen.getByText('Step 1. Confirm this is the correct client chart')).toBeInTheDocument()
     expect(screen.getByText('Step 31. Hold the LOC-change deadline as unresolved until R3 confirms it')).toBeInTheDocument()
+    expect(screen.getAllByText('Why this result').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Evaluated values').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Admission date').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Export task list' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
@@ -1215,7 +1258,6 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Manual upload' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Manual upload' }))
 
-    fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Aegis Test' } })
     fireEvent.change(screen.getByLabelText('Level of care'), { target: { value: 'Residential' } })
     fireEvent.change(screen.getByLabelText('Primary clinician'), { target: { value: 'Marleigh Johnson' } })
     fireEvent.change(screen.getByLabelText('Clinical note files'), {

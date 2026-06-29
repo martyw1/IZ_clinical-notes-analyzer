@@ -30,6 +30,29 @@ MAX_PATHS_RETURNED = 40
 HTTP_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
 REDACTED = '[redacted]'
 SENSITIVE_NAME_PARTS = ('authorization', 'api_key', 'apikey', 'access_token', 'refresh_token', 'bearer', 'client_secret', 'secret', 'password', 'token')
+PATIENT_NAME_FIELD_NAMES = {
+    'client_name',
+    'client_full_name',
+    'clientfullname',
+    'patient_name',
+    'patient_full_name',
+    'patientfullname',
+    'full_name',
+    'fullname',
+    'display_name',
+    'displayname',
+    'preferred_name',
+    'preferred',
+    'first_name',
+    'firstname',
+    'last_name',
+    'lastname',
+    'given_name',
+    'givenname',
+    'family_name',
+    'familyname',
+    'name',
+}
 TOKEN_AUTH_STYLES = {'body', 'basic', 'basic_urlencoded', 'both', 'all'}
 
 
@@ -90,10 +113,21 @@ def _is_sensitive_name(value: str) -> bool:
     return any(part in normalized for part in SENSITIVE_NAME_PARTS)
 
 
+def _is_patient_name_field(value: str) -> bool:
+    normalized = re.sub(r'[^a-z0-9]+', '_', value.lower()).strip('_')
+    compact = normalized.replace('_', '')
+    return normalized in PATIENT_NAME_FIELD_NAMES or compact in PATIENT_NAME_FIELD_NAMES
+
+
 def redact_sensitive_text(value: str) -> str:
     redacted = re.sub(r'(?i)(bearer\s+)[A-Za-z0-9._~+/\-=]+', rf'\1{REDACTED}', value)
-    return re.sub(
+    redacted = re.sub(
         r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|secret|token|bearer)([\"']?\s*[:=]\s*[\"']?)[^\"',\s}]+",
+        rf'\1\2{REDACTED}',
+        redacted,
+    )
+    return re.sub(
+        r"(?i)\b((?:client|patient)[_-]?(?:full[_-]?)?name|clientFullName|patientFullName)([\"']?\s*[:=]\s*[\"']?)[^\"',}\n]+",
         rf'\1\2{REDACTED}',
         redacted,
     )
@@ -104,7 +138,7 @@ def redact_sensitive_value(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
-            redacted[key_text] = REDACTED if _is_sensitive_name(key_text) else redact_sensitive_value(item)
+            redacted[key_text] = REDACTED if _is_sensitive_name(key_text) or _is_patient_name_field(key_text) else redact_sensitive_value(item)
         return redacted
     if isinstance(value, list):
         return [redact_sensitive_value(item) for item in value]

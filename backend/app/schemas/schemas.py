@@ -741,6 +741,7 @@ class TimelinessChecklistResultOut(BaseModel):
     source_evidence: str
     finding_message: str
     evidence_fields_used: list[str]
+    evaluated_values: list[dict[str, Any]]
     required_metadata: list[str]
     required_documents: list[str]
     checks: list[str]

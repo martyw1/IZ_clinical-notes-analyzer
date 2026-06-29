@@ -39,7 +39,8 @@ def test_audit_template_and_chart_creation(app_with_sqlite):
         assert created.status_code == 200
         payload = created.json()
         assert payload['patient_id'] == 'PAT-001'
-        assert payload['client_name'] == 'Aegis Test'
+        assert payload['client_name'] == 'PAT-001'
+        assert 'Aegis Test' not in created.text
         assert payload['auditor_name'] == 'admin'
         assert len(payload['checklist_items']) == len(AUDIT_TEMPLATE)
         assert payload['pending_items'] == len(AUDIT_TEMPLATE)

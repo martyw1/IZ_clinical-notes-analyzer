@@ -339,6 +339,13 @@ def _note_set_summary(note_set: PatientNoteSet) -> dict[str, object]:
     }
 
 
+def _safe_document_filename(document: PatientNoteDocument) -> str:
+    suffix = Path(document.original_filename or '').suffix.lower()
+    if suffix not in {'.csv', '.doc', '.docx', '.jpeg', '.jpg', '.pdf', '.png', '.rtf', '.txt', '.zip'}:
+        suffix = ''
+    return f'clinical-note-document-{document.id}{suffix}'
+
+
 def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
     documents = sorted(note_set.documents, key=lambda document: (document.document_date, document.id))
     return {
@@ -347,7 +354,7 @@ def _note_set_detail(note_set: PatientNoteSet) -> dict[str, object]:
             {
                 'id': document.id,
                 'document_label': document.document_label,
-                'original_filename': document.original_filename,
+                'original_filename': _safe_document_filename(document),
                 'content_type': document.content_type,
                 'size_bytes': document.size_bytes,
                 'sha256': document.sha256,
@@ -549,11 +556,12 @@ def _make_only_default_profile(db: Session, profile: EmrEndpointProfile) -> None
 def _chart_summary(chart: Chart) -> dict[str, object]:
     _ensure_all_responses(chart)
     counts = _status_counts(chart)
+    patient_id = chart.patient_id
     return {
         'id': chart.id,
         'source_note_set_id': chart.source_note_set_id,
-        'patient_id': chart.patient_id,
-        'client_name': chart.client_name,
+        'patient_id': patient_id,
+        'client_name': patient_id,
         'level_of_care': chart.level_of_care,
         'admission_date': chart.admission_date,
         'discharge_date': chart.discharge_date,
@@ -647,9 +655,7 @@ def _audit_log_payload(log: AuditLog, timezone_name: str) -> dict[str, object]:
 
 
 def _normalized_chart_name(payload: ChartUpdate | ChartCreate) -> str:
-    patient_id = payload.patient_id.strip()
-    client_name = payload.client_name.strip()
-    return client_name or patient_id
+    return payload.patient_id.strip()
 
 
 def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate) -> None:
@@ -690,12 +696,12 @@ def _apply_chart_updates(chart: Chart, payload: ChartUpdate | ChartCreate) -> No
 
 
 def _sync_chart_display_name_to_timeliness(db: Session, chart: Chart) -> None:
-    if not chart.patient_id.strip() or not chart.client_name.strip():
+    if not chart.patient_id.strip():
         return
     client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == chart.patient_id)).scalar_one_or_none()
     if client is None:
         return
-    client.permitted_name = chart.client_name.strip()
+    client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=chart.patient_id)
     client.updated_at = _utc_now()
 
 
@@ -719,12 +725,12 @@ def _parse_manifest(file_manifest: str, files: list[UploadFile]) -> list[Patient
     for metadata, upload in zip(manifest, files):
         expected_name = upload.filename or ''
         if metadata.client_file_name and metadata.client_file_name != expected_name:
-            raise HTTPException(status_code=400, detail=f'File manifest mismatch for uploaded file {expected_name}')
+            raise HTTPException(status_code=400, detail='File manifest mismatch for one uploaded file')
         normalized.append(
             metadata.model_copy(
                 update={
                     'client_file_name': expected_name,
-                    'document_label': metadata.document_label.strip() or Path(expected_name or 'document').stem,
+                    'document_label': metadata.document_label.strip() or 'Uploaded clinical document',
                     'document_type': metadata.document_type.strip() or 'clinical_note',
                     'description': metadata.description.strip(),
                     'document_date': metadata.document_date.strip(),
@@ -752,7 +758,7 @@ def _validate_upload_batch(files: list[UploadFile]) -> None:
             total_size += size
             if size > settings.max_upload_file_bytes:
                 limit_mb = settings.max_upload_file_bytes // (1024 * 1024)
-                raise HTTPException(status_code=413, detail=f'{upload.filename or "Uploaded file"} exceeds the {limit_mb}MB per-file limit')
+                raise HTTPException(status_code=413, detail=f'One uploaded file exceeds the {limit_mb}MB per-file limit')
     if total_size > settings.max_upload_total_bytes:
         limit_mb = settings.max_upload_total_bytes // (1024 * 1024)
         raise HTTPException(status_code=413, detail=f'Upload exceeds the {limit_mb}MB total binder limit')
@@ -1782,12 +1788,11 @@ def reanalyze_chart(chart_id: int, request: Request, user: User = Depends(requir
     note_set = _find_note_set(chart.source_note_set_id, user, db)
     app_settings = get_or_create_app_settings(db)
     timeliness_client = sync_from_note_set(db, note_set)
-    if chart.client_name.strip():
-        timeliness_client.permitted_name = chart.client_name.strip()
+    timeliness_client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=note_set.patient_id)
     report = generate_evaluation_report(note_set, app_settings=app_settings)
     old_state = chart.state
     apply_report_to_chart(chart, report)
-    chart.client_name = chart.client_name.strip() or note_set.patient_id
+    chart.client_name = note_set.patient_id
     chart.level_of_care = note_set.level_of_care
     chart.admission_date = note_set.admission_date
     chart.discharge_date = note_set.discharge_date
@@ -1951,7 +1956,7 @@ async def detect_patient_id_for_uploads(
     return _patient_id_detection_payload(
         detection.patient_id,
         detection.confidence,
-        detection.source_filename,
+        'uploaded file' if detection.source_filename else None,
         detection.source_kind,
         detection.match_text,
         detection.reason,
@@ -2021,16 +2026,12 @@ async def upload_patient_note_set(
     resolved_primary_clinician = primary_clinician.strip() or extracted_metadata.primary_clinician
     resolved_level_of_care = level_of_care.strip() or extracted_metadata.level_of_care
     resolved_admission_date = admission_date.strip() or extracted_metadata.admission_date
-    resolved_client_name = client_name.strip() or display_name_for_patient_name_status(
+    resolved_client_name = display_name_for_patient_name_status(
         extracted_metadata.patient_name_status,
         effective_local_now,
         patient_id=normalized_patient_id,
     )
-    client_name_status_detail = (
-        'Operator supplied a permitted display name.'
-        if client_name.strip()
-        else extracted_metadata.patient_name_message
-    )
+    client_name_status_detail = extracted_metadata.patient_name_message
 
     manifest = _parse_manifest(file_manifest, files)
     existing_active = db.execute(
@@ -2127,8 +2128,7 @@ async def upload_patient_note_set(
 
         note_set.documents[:] = created_documents
         timeliness_client = sync_from_note_set(db, note_set)
-        if resolved_client_name:
-            timeliness_client.permitted_name = resolved_client_name
+        timeliness_client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=normalized_patient_id)
         report = generate_evaluation_report(note_set, app_settings=app_settings)
         apply_report_to_chart(chart, report)
         chart.notes = note_set.upload_notes
@@ -2372,7 +2372,7 @@ def download_patient_note_document(
         details={'note_set_id': note_set.id, 'size_bytes': document.size_bytes, 'sha256': document.sha256},
         message=f'Clinical note document {document.id} downloaded by {user.username}.',
     )
-    safe_download_name = (Path(document.original_filename).name or 'clinical-note').replace('"', '')
+    safe_download_name = _safe_document_filename(document).replace('"', '')
     return Response(
         content=decrypted_content,
         media_type=document.content_type,

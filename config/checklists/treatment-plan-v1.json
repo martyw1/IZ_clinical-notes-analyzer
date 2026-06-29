@@ -483,7 +483,7 @@
       "checks": ["Calculate signature anchor due date.", "Show document Next Review Due and LOC effective anchor when present."],
       "finding_examples": ["Calculated due date differs from displayed Next Review Due.", "Interval cannot be found for LOC."],
       "remediation_suggestions": ["Review the evidence comparison and document the accepted anchor."],
-      "evidence_fields": ["document_next_due_date", "signature_anchor_due_date", "loc_anchor_due_date"],
+      "evidence_fields": ["date_clock_anchor_date", "interval_days", "date_clock_due_date", "document_next_due_date", "signature_anchor_due_date", "loc_anchor_due_date"],
       "automation_level": "deterministic_with_human_confirmation",
       "severity_default": "critical",
       "status_options": ["Confirmed", "Due Soon", "Urgent", "Overdue", "Needs Review", "Missing Data", "Overridden"],

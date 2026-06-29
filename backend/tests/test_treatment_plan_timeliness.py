@@ -174,6 +174,7 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert detail_payload['checklist_id'] == 'treatment-plan-v1'
         assert detail_payload['checklist_version'] == '1.2.0'
         assert len(detail_payload['checklist_results']) == 42
+        assert all(item['evaluated_values'] for item in detail_payload['checklist_results'])
         checklist_by_key = {item['key']: item for item in detail_payload['checklist_results']}
         assert checklist_by_key['confirm_correct_client_chart']['status'] == 'Confirmed'
         assert checklist_by_key['confirm_admission_date']['status'] == 'Confirmed'
@@ -184,6 +185,20 @@ def test_timeliness_dashboard_surfaces_iop_5_loc_anchor_ambiguity(app_with_sqlit
         assert checklist_by_key['loc_change_deadline_unresolved']['finding_examples']
         assert checklist_by_key['loc_change_deadline_unresolved']['remediation_suggestions']
         assert checklist_by_key['loc_change_deadline_unresolved']['manual_override_allowed'] is True
+        values_by_step = {
+            key: {value['field']: value for value in item['evaluated_values']}
+            for key, item in checklist_by_key.items()
+        }
+        assert values_by_step['confirm_admission_date']['admission_date']['value'] == '2026-02-26'
+        assert values_by_step['confirm_loc_rule_mapping']['mapped_level_of_care']['value'] == 'IOP-5'
+        assert values_by_step['calculate_next_review_due_date']['date_clock_anchor_date']['value'] == '2026-04-02'
+        assert values_by_step['calculate_next_review_due_date']['interval_days']['value'] == 60
+        assert values_by_step['calculate_next_review_due_date']['date_clock_due_date']['value'] == '2026-06-01'
+        assert values_by_step['calculate_next_review_due_date']['loc_anchor_due_date']['value'] == '2026-04-06'
+        assert values_by_step['loc_change_deadline_unresolved']['loc_change_rule_validated']['value'] is False
+        assert values_by_step['flag_missing_data_not_compliance']['missing_evidence_fields']['status'] == 'missing'
+        assert values_by_step['produce_final_checklist_result']['overall_status']['value'] == 'Needs Review'
+        assert 'Final selected-client result is Needs Review' in checklist_by_key['produce_final_checklist_result']['finding_message']
 
 
 def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
@@ -338,7 +353,7 @@ def test_api_style_treatment_plan_repull_updates_record_and_reevaluates(app_with
         initial['permitted_name'] = ''
         created = client.post('/api/timeliness/clients', headers=headers, json=initial)
         assert created.status_code == 200
-        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', created.json()['permitted_name'])
+        assert created.json()['permitted_name'] == 'PAT-TP-REPULL'
 
         first_dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-27', headers=headers)
         assert first_dashboard.status_code == 200

@@ -127,7 +127,7 @@ def _api_configuration_page() -> HTMLResponse:
           <li>Endpoint: GET /clients</li>
           <li>Parameters: Limit, Cursor, optional StartDate/EndDate, fields, api-version</li>
           <li>Header: X-Version</li>
-          <li>Output fields: patient/client ID, source ID, client name if returned by Alleva, admission date, status, client flag, discharge date, level of care, facility, primary clinician, first contact date</li>
+          <li>Output fields: patient/client ID, source ID, admission date, status, client flag, discharge date, level of care, facility, primary clinician, first contact date. Patient names are not requested or displayed.</li>
         </ul>
         <button onclick="prepareAllevaQuickPull('all_patient_records')" class="secondary">Reset ALL Patient Records request</button>
         <button onclick="runAllevaQuickPull()" class="primary-action">Run ALL Patient Records pull</button>
@@ -208,7 +208,7 @@ def _api_configuration_page() -> HTMLResponse:
           Cursor: 0,
           StartDate: '',
           EndDate: '',
-          fields: ['id', 'clientId', 'uniqueId', 'mrn', 'name', 'status', 'isClient', 'admissionDateTime', 'firstContactDate', 'dischargeDateTime', 'facilityName', 'levelOfCare', 'primaryClinician', 'primaryClinicians'],
+          fields: ['id', 'clientId', 'uniqueId', 'mrn', 'status', 'isClient', 'admissionDateTime', 'firstContactDate', 'dischargeDateTime', 'facilityName', 'levelOfCare', 'primaryClinician', 'primaryClinicians'],
           'api-version': version,
           'X-Version': version
         };

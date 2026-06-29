@@ -314,7 +314,7 @@ def _detect_patient_id_in_text(text: str, *, source_filename: str) -> PatientIdD
                 source_filename=source_filename,
                 source_kind='text_label',
                 match_text=match.group(0),
-                reason=f'Detected patient ID from labeled content in {source_filename}.',
+                reason='Detected patient ID from labeled content in an uploaded clinical document.',
             )
 
     for pattern in PATIENT_ID_TOKEN_PATTERNS:
@@ -329,7 +329,7 @@ def _detect_patient_id_in_text(text: str, *, source_filename: str) -> PatientIdD
                 source_filename=source_filename,
                 source_kind='text_token',
                 match_text=match.group(0),
-                reason=f'Detected patient ID token in {source_filename}.',
+                reason='Detected patient ID token in an uploaded clinical document.',
             )
 
     return None
@@ -350,7 +350,7 @@ def _detect_patient_id_in_filename(filename: str) -> PatientIdDetection | None:
                 source_filename=filename,
                 source_kind='filename_label',
                 match_text=match.group(0),
-                reason=f'Detected patient ID from the filename {filename}.',
+                reason='Detected patient ID from an uploaded document label.',
             )
 
     for pattern in PATIENT_ID_TOKEN_PATTERNS:
@@ -365,7 +365,7 @@ def _detect_patient_id_in_filename(filename: str) -> PatientIdDetection | None:
                 source_filename=filename,
                 source_kind='filename_token',
                 match_text=match.group(0),
-                reason=f'Detected patient ID token from the filename {filename}.',
+                reason='Detected patient ID token from an uploaded document label.',
             )
 
     return None
@@ -425,7 +425,7 @@ def _extract_upload_metadata_from_text(text: str, *, source_filename: str) -> Up
         admission_date=admission_date,
         patient_name_status=patient_name_status,
         patient_name_message=patient_name_message,
-        source_summary=f'{source_filename}: {", ".join(found)}',
+        source_summary=f'Uploaded clinical document: {", ".join(found)}',
     )
 
 

@@ -79,7 +79,7 @@ def _first_text(payload: dict[str, Any], *keys: str) -> str:
         if value is None:
             continue
         if isinstance(value, dict):
-            nested = _first_text(value, 'clientFullName', 'fullName', 'name', 'preferred', 'first', 'last')
+            nested = _first_text(value, 'clientId', 'id', 'leadId', 'luin', 'uniqueId', 'mrn', 'href', 'status', 'statusName')
             if nested:
                 return nested
             continue

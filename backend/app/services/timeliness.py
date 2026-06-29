@@ -83,6 +83,7 @@ class EvidenceComparison:
 @dataclass(frozen=True)
 class TimelinessEvaluation:
     client: TreatmentPlanClient
+    patient_name_display_enabled: bool
     status: str
     next_due_date: str | None
     days_until_due: int | None
@@ -107,6 +108,7 @@ class TimelinessChecklistResult:
     severity: str
     source_evidence: str
     finding_message: str
+    evaluated_values: list[dict[str, Any]]
     evidence_fields_used: list[str]
     required_metadata: list[str]
     required_documents: list[str]
@@ -579,6 +581,7 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     )
     return TimelinessEvaluation(
         client=client,
+        patient_name_display_enabled=app_settings.alleva_treatment_plan_patient_name_import_enabled,
         status=status,
         next_due_date=next_due_date,
         days_until_due=days_until_due,
@@ -617,6 +620,33 @@ def _plans_evidence(plans: list[TreatmentPlanRecord]) -> str:
     return _combined_evidence(*[_plan_evidence(plan) for plan in plans])
 
 
+def _checklist_value_status(value: Any) -> str:
+    if value is None:
+        return 'missing'
+    if isinstance(value, str) and not value.strip():
+        return 'missing'
+    if isinstance(value, (list, tuple, set, dict)) and not value:
+        return 'missing'
+    return 'present'
+
+
+def _checklist_value(
+    field: str,
+    label: str,
+    value: Any,
+    *,
+    source: str = '',
+    status: str | None = None,
+) -> dict[str, Any]:
+    return {
+        'field': field,
+        'label': label,
+        'value': value,
+        'status': status or _checklist_value_status(value),
+        'source': source,
+    }
+
+
 def _json_list_values(value: str | None) -> list[str]:
     if not value:
         return []
@@ -644,6 +674,7 @@ def _checklist_result(
     finding_message: str,
     source_evidence: str = '',
     evidence_fields_used: list[str] | None = None,
+    evaluated_values: list[dict[str, Any]] | None = None,
     severity: str | None = None,
 ) -> TimelinessChecklistResult:
     return TimelinessChecklistResult(
@@ -655,6 +686,7 @@ def _checklist_result(
         severity=severity or str(step.get('severity_default') or 'info'),
         source_evidence=source_evidence,
         finding_message=finding_message,
+        evaluated_values=evaluated_values or [],
         evidence_fields_used=evidence_fields_used or [],
         required_metadata=[str(item) for item in step.get('required_metadata', [])],
         required_documents=[str(item) for item in step.get('required_documents', [])],
@@ -693,13 +725,151 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
     loc_change_rule = _rule_result_by_prefix(rule_results, 'TP-LOC-CHANGE')
     conflict_rule = _rule_result_by_id(rule_results, 'TP-DUE-DATE-CONFLICT') or _rule_result_by_id(rule_results, 'TP-CONFLICTING-EVIDENCE')
 
+    def joined(values: list[str]) -> str:
+        return ', '.join(dict.fromkeys([value.strip() for value in values if value and value.strip()]))
+
+    def date_values(field_name: str) -> str:
+        return joined([getattr(plan, field_name) for plan in plans])
+
+    def plan_kind_values() -> str:
+        return joined([plan.plan_kind.value for plan in plans])
+
+    def document_id_values() -> str:
+        return joined([plan.source_document_id for plan in plans])
+
+    def source_section_values() -> str:
+        return joined([plan.source_section for plan in plans])
+
+    def loc_history_summary() -> str:
+        parts = []
+        for item in loc_history:
+            state = f'effective {item.effective_date or "missing effective date"}'
+            if item.discharge_date.strip():
+                state += f', discharged {item.discharge_date}'
+            parts.append(f'{item.level_of_care or "Missing LOC"} ({state})')
+        return '; '.join(parts)
+
+    def completion_summary() -> str:
+        if not plans:
+            return ''
+        invalid = [plan for plan in plans if not plan.is_valid or plan.conflict_note.strip()]
+        if invalid:
+            return f'{len(invalid)} of {len(plans)} treatment-plan record(s) invalid, incomplete, or conflicted'
+        return f'{len(plans)} treatment-plan record(s) valid with no conflict notes'
+
+    def conflict_summary() -> str:
+        conflicts = joined([plan.conflict_note for plan in plans])
+        return conflicts or (conflict_rule.evidence_summary if conflict_rule else '')
+
+    def initial_or_master_dates(plan: TreatmentPlanRecord | None, field_name: str) -> str:
+        return getattr(plan, field_name) if plan is not None else ''
+
+    def override_field_values(field_name: str) -> str:
+        if field_name == 'reason':
+            return f'{len(client.overrides)} override reason(s) recorded' if client.overrides else ''
+        if field_name == 'created_by':
+            return joined([str(override.created_by_id) for override in client.overrides])
+        return joined([getattr(override, field_name) for override in client.overrides])
+
+    def audit_values(field_name: str) -> str:
+        if field_name == 'audit_event_id':
+            return str(len(audit_history)) if audit_history else ''
+        if field_name == 'audit_action':
+            return joined([getattr(log, 'action', '') for log in audit_history[:5]])
+        if field_name == 'timestamp':
+            return joined([str(getattr(log, 'timestamp_utc', '') or getattr(log, 'timestamp', '')) for log in audit_history[:3]])
+        return ''
+
+    loc_change_window_status = 'present' if evaluation.evidence_comparison.loc_change_rule_validated else 'unknown'
+    field_values = {
+        'patient_id': _checklist_value('patient_id', 'Patient ID', client.patient_id, source=client.source_evidence),
+        'source_evidence': _checklist_value('source_evidence', 'Source evidence', source_evidence),
+        'source_note_set_id': _checklist_value('source_note_set_id', 'Uploaded binder ID', client.source_note_set_id, source=client.source_evidence),
+        'last_imported_at': _checklist_value('last_imported_at', 'Last imported at', client.last_imported_at.isoformat() if client.last_imported_at else '', source=client.source_evidence),
+        'active_status': _checklist_value('active_status', 'Active status', 'Active' if client.is_active else 'Inactive', source=client.source_evidence, status='present' if client.is_active else 'not_applicable'),
+        'admission_date': _checklist_value('admission_date', 'Admission date', client.admission_date, source=client.source_evidence),
+        'current_level_of_care': _checklist_value('current_level_of_care', 'Current LOC', client.current_level_of_care, source=_combined_evidence(client.source_evidence, active_loc.source_evidence if active_loc else '')),
+        'mapped_level_of_care': _checklist_value('mapped_level_of_care', 'Mapped LOC rule category', mapped_loc, source='config/rules'),
+        'rules_version': _checklist_value('rules_version', 'Rules version', 'configured deterministic rules', source='config/rules'),
+        'loc_history': _checklist_value('loc_history', 'LOC history', loc_history_summary(), source=_combined_evidence(*[item.source_evidence for item in loc_history])),
+        'effective_date': _checklist_value('effective_date', 'LOC effective dates', joined([item.effective_date for item in loc_history]), source=_combined_evidence(*[item.source_evidence for item in loc_history])),
+        'discharge_date': _checklist_value('discharge_date', 'LOC discharge dates', joined([item.discharge_date for item in loc_history]) or 'No LOC discharge date recorded', source=_combined_evidence(*[item.source_evidence for item in loc_history]), status='present' if joined([item.discharge_date for item in loc_history]) else 'not_applicable'),
+        'document_type': _checklist_value('document_type', 'Treatment-plan document types', plan_kind_values(), source=plans_source_evidence),
+        'source_document_id': _checklist_value('source_document_id', 'Source document IDs', document_id_values(), source=plans_source_evidence),
+        'source_section': _checklist_value('source_section', 'Source sections', source_section_values(), source=plans_source_evidence),
+        'document_date': _checklist_value('document_date', 'Document dates', date_values('document_date'), source=plans_source_evidence),
+        'completion_status': _checklist_value('completion_status', 'Completion/validity status', completion_summary(), source=plans_source_evidence),
+        'staff_signature_date': _checklist_value('staff_signature_date', 'Staff signature dates', date_values('staff_signature_date'), source=plans_source_evidence),
+        'client_signature_date': _checklist_value('client_signature_date', 'Client signature dates', date_values('client_signature_date'), source=plans_source_evidence),
+        'conflict_note': _checklist_value('conflict_note', 'Conflict note', conflict_summary() or 'No conflict note recorded', source=_combined_evidence(plans_source_evidence, evaluation.evidence_comparison.conflict_explanation), status='conflicting' if conflict_rule or conflict_summary() else 'not_applicable'),
+        'rule_used': _checklist_value('rule_used', 'Rule used', evaluation.rule_used, source=evaluation.evidence_summary),
+        'latest_valid_review_date': _checklist_value('latest_valid_review_date', 'Latest valid review/update date', evaluation.last_valid_review_date, source=_plan_evidence(latest_review)),
+        'date_clock_anchor_date': _checklist_value('date_clock_anchor_date', 'Date-clock anchor date', evaluation.evidence_comparison.date_clock_anchor_date, source=evaluation.evidence_comparison.date_clock_anchor_source),
+        'document_next_due_date': _checklist_value('document_next_due_date', 'Source-document Next Review Due', evaluation.evidence_comparison.document_next_due_date, source=plans_source_evidence),
+        'signature_anchor_due_date': _checklist_value('signature_anchor_due_date', 'Signature-anchor due date', evaluation.evidence_comparison.signature_anchor_due_date, source=evaluation.evidence_comparison.date_clock_anchor_source),
+        'date_clock_due_date': _checklist_value('date_clock_due_date', 'Calculated date-clock due date', evaluation.evidence_comparison.date_clock_due_date, source=evaluation.evidence_comparison.date_clock_anchor_source),
+        'loc_anchor_due_date': _checklist_value('loc_anchor_due_date', 'LOC effective-anchor due date', evaluation.evidence_comparison.loc_anchor_due_date, source=active_loc.source_evidence if active_loc else ''),
+        'loc_change_due_date': _checklist_value('loc_change_due_date', 'LOC-change due date', evaluation.evidence_comparison.loc_change_due_date, source=active_loc.source_evidence if active_loc else ''),
+        'interval_days': _checklist_value('interval_days', 'LOC cadence interval', interval_days, source='config/rules'),
+        'next_due_date': _checklist_value('next_due_date', 'Next due date', evaluation.next_due_date, source=evaluation.evidence_summary),
+        'overall_status': _checklist_value('overall_status', 'Overall status', evaluation.status, source=evaluation.evidence_summary),
+        'days_until_due': _checklist_value('days_until_due', 'Days until due', evaluation.days_until_due, source=evaluation.evidence_summary),
+        'previous_level_of_care': _checklist_value('previous_level_of_care', 'Previous LOC', loc_history[-2].level_of_care if loc_change_present else '', source=_combined_evidence(*[item.source_evidence for item in loc_history]), status='present' if loc_change_present else 'not_applicable'),
+        'loc_effective_date': _checklist_value('loc_effective_date', 'Current LOC effective date', evaluation.evidence_comparison.loc_effective_date or (active_loc.effective_date if active_loc else ''), source=active_loc.source_evidence if active_loc else ''),
+        'loc_change_document': _checklist_value('loc_change_document', 'LOC-change document', _plan_evidence(loc_update), source=_plan_evidence(loc_update), status='present' if loc_update else ('missing' if loc_change_present else 'not_applicable')),
+        'loc_change_window_days': _checklist_value('loc_change_window_days', 'LOC-change window days', evaluation.evidence_comparison.loc_change_window_days, source='App settings', status=loc_change_window_status),
+        'loc_change_rule_validated': _checklist_value('loc_change_rule_validated', 'LOC-change rule validated', evaluation.evidence_comparison.loc_change_rule_validated, source='App settings', status=loc_change_window_status),
+        'clock_start_source': _checklist_value('clock_start_source', 'Clock start source', evaluation.evidence_comparison.date_clock_anchor_source, source=evaluation.evidence_comparison.source_evidence),
+        'missing_evidence_fields': _checklist_value('missing_evidence_fields', 'Missing evidence fields', ', '.join(evaluation.missing_evidence_fields), source=evaluation.evidence_summary, status='missing' if evaluation.missing_evidence_fields else 'not_applicable'),
+        'reviewer': _checklist_value('reviewer', 'Reviewer path', 'Admin/manager review available; counselor view is read-only for overrides', source='RBAC workflow'),
+        'review_action': _checklist_value('review_action', 'Review action', 'Manual confirmation available when deterministic result is blocked', source='RBAC workflow'),
+        'comment': _checklist_value('comment', 'Manager comment', 'Stored per checklist item when entered', source='criterion review state', status='unknown'),
+        'override_reason': _checklist_value('override_reason', 'Override reason', override_field_values('reason'), source='manual overrides'),
+        'affected_rule': _checklist_value('affected_rule', 'Affected override rules', override_field_values('affected_rule'), source='manual overrides'),
+        'created_by': _checklist_value('created_by', 'Override creator IDs', override_field_values('created_by'), source='manual overrides'),
+        'severity_counts': _checklist_value('severity_counts', 'Checklist severity/status counts', 'Computed from the 42 checklist rows in this response', source='checklist evaluation', status='unknown'),
+        'evidence_summary': _checklist_value('evidence_summary', 'Evidence summary', evaluation.evidence_summary, source=source_evidence),
+        'worklist_status': _checklist_value('worklist_status', 'Worklist status', evaluation.status, source=evaluation.evidence_summary),
+        'last_status_change_at': _checklist_value('last_status_change_at', 'Last status/update timestamp', client.updated_at.isoformat() if client.updated_at else '', source='treatment_plan_clients.updated_at'),
+        'manager_review_state': _checklist_value('manager_review_state', 'Manager review state', 'Available' if evaluation.status != TimelinessStatus.compliant.value else 'Optional', source='workflow routing'),
+        'reviewer_role': _checklist_value('reviewer_role', 'Reviewer role', 'admin/manager', source='RBAC workflow'),
+        'correction_comment': _checklist_value('correction_comment', 'Correction comment', 'Required if manager returns chart for correction', source='workflow routing', status='unknown'),
+        'returned_by': _checklist_value('returned_by', 'Returned by', '', source='workflow routing', status='not_applicable'),
+        'returned_at': _checklist_value('returned_at', 'Returned at', '', source='workflow routing', status='not_applicable'),
+        'approval_state': _checklist_value('approval_state', 'Approval state', 'Ready only when deterministic result is compliant/approved or issues are accepted', source='workflow routing'),
+        'accepted_issue_count': _checklist_value('accepted_issue_count', 'Accepted issue count', len(client.overrides), source='manual overrides'),
+        'approved_by': _checklist_value('approved_by', 'Approved by', '', source='workflow routing', status='not_applicable'),
+        'audit_event_id': _checklist_value('audit_event_id', 'Audit event count', audit_values('audit_event_id'), source='audit history'),
+        'audit_action': _checklist_value('audit_action', 'Recent audit actions', audit_values('audit_action'), source='audit history'),
+        'timestamp': _checklist_value('timestamp', 'Recent audit timestamps', audit_values('timestamp'), source='audit history'),
+        'last_refresh_at': _checklist_value('last_refresh_at', 'Last API refresh/import timestamp', client.last_imported_at.isoformat() if client.last_imported_at else '', source=client.source_evidence),
+        'next_refresh_at': _checklist_value('next_refresh_at', 'Next refresh timestamp', '', source='periodic API monitoring', status='unknown'),
+        'changed_item_count': _checklist_value('changed_item_count', 'Changed item count', 'Not calculated in selected-client detail', source='periodic API monitoring', status='unknown'),
+        'error_count': _checklist_value('error_count', 'API error count', 'Not calculated in selected-client detail', source='periodic API monitoring', status='unknown'),
+        'validation_data_kind': _checklist_value('validation_data_kind', 'Validation data kind', 'synthetic/non-production' if 'synthetic' in source_evidence.lower() or client.patient_id.upper().startswith(('PAT-', 'SYNTH-')) else 'requires reviewer confirmation', source=source_evidence),
+        'artifact_path': _checklist_value('artifact_path', 'Artifact path/source', source_evidence, source=source_evidence),
+        'redaction_status': _checklist_value('redaction_status', 'Patient-name redaction status', 'Treatment Plans browser display and exports use Patient ID only', source='patient-name privacy setting'),
+    }
+
+    def evaluated_values_for(fields: list[str], evidence: str) -> list[dict[str, Any]]:
+        values = []
+        for field in fields:
+            field_value = dict(field_values.get(field) or _checklist_value(field, field.replace('_', ' ').title(), '', status='unknown'))
+            if not field_value.get('source'):
+                field_value['source'] = evidence
+            values.append(field_value)
+        return values
+
     def step(key: str, status: str, finding: str, evidence: str = '', fields: list[str] | None = None) -> TimelinessChecklistResult:
+        result_fields = fields or []
+        result_evidence = evidence or source_evidence
         return _checklist_result(
             steps_by_key[key],
             status=status,
             finding_message=finding,
-            source_evidence=evidence or source_evidence,
-            evidence_fields_used=fields or [],
+            source_evidence=result_evidence,
+            evidence_fields_used=result_fields,
+            evaluated_values=evaluated_values_for(result_fields, result_evidence),
         )
 
     results = [
@@ -848,21 +1018,21 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
             _status_for_rule(review_rule, missing_status=TimelinessStatus.missing_data.value),
             review_rule.evidence_summary if review_rule else 'Next review due date could not be calculated from admission/review and LOC evidence.',
             _combined_evidence(_plan_evidence(latest_review), evaluation.evidence_comparison.conflict_explanation),
-            ['date_clock_anchor_date', 'interval_days', 'next_due_date'],
+            ['date_clock_anchor_date', 'interval_days', 'date_clock_due_date', 'document_next_due_date', 'signature_anchor_due_date', 'loc_anchor_due_date'],
         ),
         step(
             'apply_php_timing_rule',
             _status_for_rule(review_rule) if mapped_loc == 'php' else 'Not Applicable',
             review_rule.evidence_summary if mapped_loc == 'php' and review_rule else 'PHP timing does not apply to the selected current LOC.' if mapped_loc != 'php' else 'PHP timing could not be evaluated.',
             source_evidence,
-            ['current_level_of_care', 'interval_days'],
+            ['current_level_of_care', 'mapped_level_of_care', 'interval_days', 'date_clock_due_date'],
         ),
         step(
             'apply_iop_op_timing_rule',
             _status_for_rule(review_rule) if mapped_loc and mapped_loc != 'php' else 'Not Applicable',
             review_rule.evidence_summary if mapped_loc and mapped_loc != 'php' and review_rule else 'IOP/OP timing does not apply to the selected current LOC.' if mapped_loc == 'php' else 'IOP/OP timing could not be evaluated.',
             source_evidence,
-            ['current_level_of_care', 'interval_days'],
+            ['current_level_of_care', 'mapped_level_of_care', 'interval_days', 'date_clock_due_date'],
         ),
         step(
             'mark_current_inside_window',
@@ -1046,7 +1216,7 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
         db.add(client)
         db.flush()
 
-    client.permitted_name = payload.permitted_name.strip() or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=patient_id)
+    client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=patient_id)
     client.is_active = payload.is_active
     client.current_level_of_care = payload.current_level_of_care.strip()
     client.counselor_name = payload.counselor_name.strip()
@@ -1122,14 +1292,12 @@ def _document_plan_kind(document: PatientNoteDocument) -> TreatmentPlanKind | No
 
 
 def _document_source_evidence(document: PatientNoteDocument, *, note_set_id: int) -> str:
-    label = document.document_label or document.original_filename or 'Treatment plan document'
+    label = document.document_label or 'Treatment plan document'
     parts = [f'{label} from note set {note_set_id}']
     if document.original_filename.lower().endswith('.pdf'):
         parts.append('manual upload page 1')
     if document.source_document_id.strip():
         parts.append(f'Alleva document ID {document.source_document_id.strip()}')
-    if document.source_attachment_url.strip():
-        parts.append(f'attachment {document.source_attachment_url.strip()}')
     return '; '.join(parts)
 
 
@@ -1140,7 +1308,7 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
         db.add(client)
         db.flush()
 
-    client.permitted_name = client.permitted_name or display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=note_set.patient_id)
+    client.permitted_name = display_name_for_patient_name_status(NAME_NOT_FOUND_STATUS, patient_id=note_set.patient_id)
     client.is_active = not bool(note_set.discharge_date.strip())
     client.current_level_of_care = note_set.level_of_care
     client.counselor_name = note_set.primary_clinician
@@ -1195,12 +1363,18 @@ def sync_from_note_set(db: Session, note_set: PatientNoteSet) -> TreatmentPlanCl
     return client
 
 
+def _client_display_label(client: TreatmentPlanClient, *, patient_name_display_enabled: bool) -> str:
+    if patient_name_display_enabled and client.permitted_name.strip():
+        return client.permitted_name.strip()
+    return client.patient_id
+
+
 def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
     client = evaluation.client
     return {
         'id': client.id,
         'patient_id': client.patient_id,
-        'permitted_name': client.permitted_name,
+        'permitted_name': _client_display_label(client, patient_name_display_enabled=evaluation.patient_name_display_enabled),
         'current_level_of_care': client.current_level_of_care,
         'counselor_name': client.counselor_name,
         'admission_date': client.admission_date,
@@ -1305,7 +1479,7 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
     }
 
 
-def treatment_plan_aggregate_payload(client: TreatmentPlanClient) -> dict[str, Any]:
+def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_name_display_enabled: bool = False) -> dict[str, Any]:
     def plan_payload(item: TreatmentPlanRecord) -> dict[str, Any]:
         return {
             'id': item.id,
@@ -1343,7 +1517,7 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient) -> dict[str, A
     current = next((item for item in plans if item.id == client.current_plan_record_id), None)
     return {
         'patient_id': client.patient_id,
-        'permitted_name': client.permitted_name,
+        'permitted_name': _client_display_label(client, patient_name_display_enabled=patient_name_display_enabled),
         'is_active': client.is_active,
         'current_level_of_care': client.current_level_of_care,
         'counselor_name': client.counselor_name,

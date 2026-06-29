@@ -306,7 +306,7 @@ def _first_text(payload: dict[str, Any], *keys: str) -> str:
     for key in keys:
         value = payload.get(key)
         if isinstance(value, dict):
-            nested = _first_text(value, 'clientId', 'id', 'uniqueId', 'mrn', 'name', 'clientFullName', 'status', 'admissionDateTime')
+            nested = _first_text(value, 'clientId', 'id', 'uniqueId', 'mrn', 'leadId', 'href', 'status', 'statusName', 'admissionDateTime')
             if nested:
                 return nested
             continue
@@ -357,18 +357,6 @@ def _patient_id(payload: dict[str, Any]) -> str:
         if nested:
             return nested
     return _first_text(payload, 'clientId', 'id', 'uniqueId', 'mrn')
-
-
-def _patient_name(payload: dict[str, Any]) -> str:
-    name = payload.get('name')
-    if isinstance(name, dict):
-        full = _first_text(name, 'clientFullName', 'fullName', 'displayName', 'preferred')
-        if full:
-            return full
-        first = _first_text(name, 'first', 'firstName', 'givenName')
-        last = _first_text(name, 'last', 'lastName', 'familyName')
-        return ' '.join(part for part in [first, last] if part)
-    return _first_text(payload, 'clientFullName', 'fullName', 'name')
 
 
 def _plan_client_id(payload: dict[str, Any]) -> str:
@@ -452,7 +440,6 @@ def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
 ALL_PATIENT_RECORD_COLUMNS = [
     'patient_id',
     'source_id',
-    'client_name',
     'admission_date',
     'status',
     'is_client',
@@ -470,7 +457,6 @@ ALL_PATIENT_RECORD_FIELDS = [
     'clientId',
     'uniqueId',
     'mrn',
-    'name',
     'status',
     'isClient',
     'admissionDateTime',
@@ -489,7 +475,6 @@ def _all_patient_record_summary(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         'patient_id': _patient_id(payload),
         'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
-        'client_name': _patient_name(payload),
         'admission_date': _date_only(payload.get('admissionDateTime') or payload.get('admissionDate')),
         'status': _first_text(payload, 'status'),
         'is_client': _bool_value(payload.get('isClient'), default=True),

@@ -737,10 +737,11 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert all_payload['status'] == 'ok'
         assert all_payload['source_operation'] == 'GET /clients'
         assert all_payload['returned_count'] == 3
-        assert all_payload['columns'][:4] == ['patient_id', 'source_id', 'client_name', 'admission_date']
-        assert all_payload['rows'][0]['client_name'] == 'Synthetic Active Client'
-        assert all_payload['tsv'].splitlines()[0].startswith('patient_id\tsource_id\tclient_name\tadmission_date')
-        assert 'PAT-ACTIVE-001\t201\tSynthetic Active Client\t2026-02-03' in all_payload['tsv']
+        assert all_payload['columns'][:3] == ['patient_id', 'source_id', 'admission_date']
+        assert 'client_name' not in all_payload['rows'][0]
+        assert all_payload['tsv'].splitlines()[0].startswith('patient_id\tsource_id\tadmission_date')
+        assert 'PAT-ACTIVE-001\t201\t2026-02-03' in all_payload['tsv']
+        assert 'Synthetic Active Client' not in all_payload['tsv']
 
         active = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_treatment_plans'})
         assert active.status_code == 200
