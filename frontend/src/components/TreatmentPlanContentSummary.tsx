@@ -1,3 +1,5 @@
+import { contentItemMetadataSummary, contentStatusLabel, safeContentItems } from '../treatmentPlanContentSafety'
+
 type TreatmentPlanContent = {
   id: number
   plan_kind: string
@@ -18,6 +20,15 @@ type TreatmentPlanContent = {
   detail_fetched?: boolean | null
   detail_fetched_at?: string | null
   content_source?: string | null
+  content_items?: Array<{
+    kind: string
+    label: string
+    source_path: string
+    text_present?: boolean
+    metadata?: Record<string, unknown>
+  }> | null
+  content_capture_status?: string | null
+  content_capture_warnings?: string | null
   is_current?: boolean | null
 }
 
@@ -60,6 +71,7 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
     ['Objectives', currentPlan?.objective_count],
     ['Interventions', currentPlan?.intervention_count],
   ]
+  const contentItems = safeContentItems(currentPlan?.content_items)
 
   return (
     <section className='treatment-plan-content-summary' aria-label='Current treatment-plan content summary'>
@@ -75,6 +87,7 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
           <span>Clinical content elements</span>
           <strong>{contentTotal(currentPlan)}</strong>
           <small>{currentPlan?.alleva_is_complete === false ? 'Alleva marks plan incomplete' : currentPlan?.alleva_is_complete ? 'Alleva marks plan complete' : 'Completeness flag not loaded'}</small>
+          <small>{contentStatusLabel(currentPlan?.content_capture_status)}</small>
         </div>
         <dl>
           {contentCounts.map(([label, value]) => (
@@ -91,8 +104,24 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
             <dt>Lifecycle</dt>
             <dd>{currentPlan?.alleva_is_active ? 'Active' : currentPlan?.alleva_end_date ? 'Ended' : 'Unknown'}</dd>
           </div>
+          <div>
+            <dt>Captured facts</dt>
+            <dd>{contentItems.length}</dd>
+          </div>
         </dl>
       </div>
+      {contentItems.length ? (
+        <div className='treatment-plan-content-summary__facts'>
+          {contentItems.map((item) => (
+            <div key={`${item.kind}-${item.source_path}-${item.label}`}>
+              <strong>{item.label}</strong>
+              <span>{contentItemMetadataSummary(item)}</span>
+              <small>{item.source_path}</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {currentPlan?.content_capture_warnings ? <p className='treatment-plan-content-summary__warning'>{currentPlan.content_capture_warnings}</p> : null}
     </section>
   )
 }

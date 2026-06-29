@@ -84,7 +84,7 @@ from app.services.patient_notes import (
 )
 from app.services.runtime_checks import readiness_payload
 from app.services.review_source_discovery import discovery_payload as review_source_discovery_payload
-from app.services.patient_identity_minimization import sanitize_patient_payload
+from app.services.patient_identity_minimization import is_direct_patient_identifier_key, is_sensitive_key
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret, read_secure_file
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.timezone import format_local_timestamp, localize_datetime, normalize_timezone_name
@@ -1607,7 +1607,17 @@ def fetch_alleva_treatment_plan_detail_sample(
                 'endpoint': detail_path,
                 'diagnosis_endpoint_used': diagnosis_endpoint_used,
                 'content_counts': counts,
-                'detail': sanitize_patient_payload(detail),
+                'detail_summary': {
+                    'raw_detail_returned': False,
+                    'top_level_fields': sorted(
+                        [
+                            str(key)
+                            for key in detail.keys()
+                            if not is_sensitive_key(key) and not is_direct_patient_identifier_key(key, (), aggressive=True)
+                        ]
+                    ),
+                    'privacy_note': 'Raw treatment-plan detail is omitted from this diagnostic response; use content_counts and mapped facts in Treatment Plans.',
+                },
                 'diagnostics': detail_result.diagnostics(),
             }
         )

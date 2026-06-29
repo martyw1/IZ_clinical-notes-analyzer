@@ -489,6 +489,9 @@ class TreatmentPlanRecord(Base):
     detail_fetched: Mapped[bool] = mapped_column(Boolean, default=False)
     detail_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     content_source: Mapped[str] = mapped_column(String(40), default='collection')
+    content_items_json: Mapped[str] = mapped_column(Text, default='[]')
+    content_capture_status: Mapped[str] = mapped_column(String(40), default='counts_only')
+    content_capture_warnings: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     client: Mapped[TreatmentPlanClient] = relationship(back_populates='treatment_plans', foreign_keys=[client_id])

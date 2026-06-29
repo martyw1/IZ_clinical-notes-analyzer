@@ -23,6 +23,13 @@ from app.models.models import (
 from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
 from app.services.rules_engine import load_rules_config
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
+from app.services.treatment_plan_content_safety import (
+    content_items_json,
+    normalized_content_items,
+    safe_content_status,
+    safe_content_text,
+    safe_content_warning,
+)
 from app.services.timezone import localize_datetime
 
 STATUS_PRIORITY = [
@@ -214,7 +221,7 @@ def _selected_current_plan(client: TreatmentPlanClient, plans: list[TreatmentPla
         current = next((plan for plan in plans if plan.id == current_id), None)
         if current is not None:
             return current, True
-    fallback = _latest_plan(plans, TreatmentPlanKind.master) or _latest_plan(plans, TreatmentPlanKind.initial)
+    fallback = _latest_plan(plans, TreatmentPlanKind.master) or _latest_plan(plans, TreatmentPlanKind.initial) or _latest_review_plan(plans)
     return fallback, False
 
 
@@ -657,6 +664,18 @@ def _json_list_values(value: str | None) -> list[str]:
     if isinstance(payload, list):
         return [str(item) for item in payload if str(item).strip()]
     return []
+
+
+def _safe_content_scalar(value: Any, *, max_chars: int = 160) -> str:
+    return safe_content_text(value, max_chars=max_chars)
+
+
+def _normalized_content_items(value: Any) -> list[dict[str, Any]]:
+    return normalized_content_items(value)
+
+
+def _content_items_json(value: Any) -> str:
+    return content_items_json(value)
 
 
 def _status_for_presence(is_present: bool, *, missing_status: str = TimelinessStatus.missing_data.value) -> str:
@@ -1254,6 +1273,14 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
             source_note_set_id=source_note_set_id,
             is_valid=item.is_valid,
             conflict_note=item.conflict_note.strip(),
+            problem_count=max(0, int(item.problem_count or 0)),
+            diagnosis_count=max(0, int(item.diagnosis_count or 0)),
+            goal_count=max(0, int(item.goal_count or 0)),
+            objective_count=max(0, int(item.objective_count or 0)),
+            intervention_count=max(0, int(item.intervention_count or 0)),
+            content_items_json=_content_items_json(item.content_items),
+            content_capture_status=safe_content_status(item.content_capture_status),
+            content_capture_warnings=safe_content_warning(item.content_capture_warnings),
         )
         for item in payload.treatment_plans
     ]
@@ -1458,6 +1485,9 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
                 'detail_fetched': item.detail_fetched,
                 'detail_fetched_at': item.detail_fetched_at,
                 'content_source': item.content_source,
+                'content_items': _normalized_content_items(item.content_items_json),
+                'content_capture_status': safe_content_status(item.content_capture_status),
+                'content_capture_warnings': safe_content_warning(item.content_capture_warnings),
                 'is_current': item.id == client.current_plan_record_id,
             }
             for item in sorted(client.treatment_plans, key=lambda item: (_date(item.staff_signature_date) or _date(item.document_date) or date.min, item.id or 0), reverse=True)
@@ -1510,6 +1540,9 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_nam
             'detail_fetched': item.detail_fetched,
             'detail_fetched_at': item.detail_fetched_at,
             'content_source': item.content_source,
+            'content_items': _normalized_content_items(item.content_items_json),
+            'content_capture_status': safe_content_status(item.content_capture_status),
+            'content_capture_warnings': safe_content_warning(item.content_capture_warnings),
             'is_current': item.id == client.current_plan_record_id,
         }
 
@@ -1534,6 +1567,6 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_nam
         'data_quality_warnings': _json_list_values(client.data_quality_warnings),
         'discharge_conflict': client.discharge_conflict,
         'current_plan': plan_payload(current) if current is not None else None,
-        'historical_plans': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.initial, TreatmentPlanKind.master} and item.id != client.current_plan_record_id],
+        'historical_plans': [plan_payload(item) for item in plans if item.id != client.current_plan_record_id],
         'review_records': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}],
     }

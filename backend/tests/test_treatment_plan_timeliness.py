@@ -399,14 +399,26 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
                 return None
             return {
                 'id': 502,
+                'description': 'Jane Q Doe should not be stored as treatment-plan narrative text.',
                 'problems': [
                     {
-                        'diagnoses': [{'code': 'F10.20'}],
+                        'description': 'Jane Q Doe reports synthetic problem narrative.',
+                        'status': 'Alice Smith active problem should not persist',
+                        'diagnoses': [{'code': 'F10.20', 'description': 'Jane Q Doe diagnosis narrative'}],
                         'goals': [
                             {
+                                'description': 'Jane Q Doe goal narrative.',
                                 'objectives': [
                                     {
-                                        'interventions': [{'description': 'Synthetic intervention'}],
+                                        'description': 'Jane Q Doe objective narrative.',
+                                        'interventions': [
+                                            {
+                                                'description': 'Jane Q Doe intervention narrative.',
+                                                'frequency': 'Weekly',
+                                                'modality': 'Group',
+                                                'serviceType': 'Alice Smith service should not persist',
+                                            }
+                                        ],
                                     }
                                 ],
                             }
@@ -479,7 +491,19 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert current_plan.goal_count == 1
         assert current_plan.objective_count == 1
         assert current_plan.intervention_count == 1
+        content_items = json.loads(current_plan.content_items_json)
+        assert [item['kind'] for item in content_items] == ['problem', 'diagnosis', 'goal', 'objective', 'intervention']
+        assert content_items[-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert all('text' not in item for item in content_items)
+        assert all(item['text_present'] is True for item in content_items)
+        content_json = json.dumps(content_items)
+        assert 'Jane Q Doe' not in content_json
+        assert 'Alice Smith' not in content_json
+        assert 'intervention narrative' not in content_json
+        assert current_plan.content_capture_status == 'structured'
+        assert 'Narrative treatment-plan text is not stored' in current_plan.content_capture_warnings
         assert current_plan.has_guardian_signature is True
+        stored_client_id = stored_client.id
         evaluation = evaluate_client(stored_client, settings_row, evaluation_date=date(2026, 4, 1))
         assert evaluation.status == 'Compliant'
         assert evaluation.next_due_date == '2026-04-19'
@@ -487,6 +511,28 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert any(plan.source_section == 'Alleva REST treatment-reviews' for plan in stored_client.treatment_plans)
     finally:
         db.close()
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        detail = client.get(f'/api/timeliness/clients/{stored_client_id}', headers=headers)
+        assert detail.status_code == 200
+        detail_payload = detail.json()
+        serialized_detail = json.dumps(detail_payload)
+        assert 'Jane Q Doe' not in serialized_detail
+        assert 'Alice Smith' not in serialized_detail
+        assert 'intervention narrative' not in serialized_detail
+        current_payload_plan = next(plan for plan in detail_payload['treatment_plans'] if plan['source_document_id'] == '502')
+        assert current_payload_plan['content_capture_status'] == 'structured'
+        assert current_payload_plan['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert all('text' not in item for item in current_payload_plan['content_items'])
+
+        aggregate = client.get(f'/api/timeliness/clients/{stored_client_id}/treatment-plan', headers=headers)
+        assert aggregate.status_code == 200
+        aggregate_payload = aggregate.json()
+        assert aggregate_payload['current_plan']['content_capture_status'] == 'structured'
+        assert aggregate_payload['current_plan']['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert 'Jane Q Doe' not in json.dumps(aggregate_payload)
+        assert 'Alice Smith' not in json.dumps(aggregate_payload)
 
 
 def test_alleva_rest_sync_redacts_patient_names_by_default_and_requires_opt_in(app_with_sqlite):
@@ -543,6 +589,97 @@ def test_alleva_rest_sync_redacts_patient_names_by_default_and_requires_opt_in(a
         assert stored_client.permitted_name == 'Synthetic Import Name'
     finally:
         db.close()
+
+
+def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/timeliness/clients',
+            headers=headers,
+            json={
+                'patient_id': 'PAT-CONTENT-SAFE',
+                'permitted_name': 'Forbidden Display Name',
+                'is_active': True,
+                'current_level_of_care': 'IOP-5',
+                'admission_date': '2026-02-26',
+                'source_evidence': 'Synthetic manual content upsert',
+                'level_of_care_history': [
+                    {
+                        'level_of_care': 'IOP-5',
+                        'facility': 'Synthetic Facility',
+                        'effective_date': '2026-02-26',
+                        'source_evidence': 'Synthetic LOC',
+                    }
+                ],
+                'treatment_plans': [
+                    {
+                        'plan_kind': 'review',
+                        'document_date': '2026-04-02',
+                        'staff_signature_date': '2026-04-02',
+                        'source_evidence': 'Synthetic Treatment Plan Review',
+                        'source_section': 'Treatment Plan Reviews',
+                        'source_document_id': 'doc-safe-content',
+                        'is_valid': True,
+                        'problem_count': 1,
+                        'diagnosis_count': 1,
+                        'goal_count': 0,
+                        'objective_count': 0,
+                        'intervention_count': 1,
+                        'content_capture_status': 'manual',
+                        'content_capture_warnings': 'Alice Smith should not be returned in warnings.',
+                        'content_items': [
+                            {
+                                'kind': 'problem',
+                                'label': 'Forbidden Display Name should be replaced',
+                                'source_path': 'problems[1]',
+                                'text_present': True,
+                                'text': 'Forbidden Display Name raw narrative',
+                                'redacted_text_sha256': 'not-a-real-hash-with-Alice-Smith',
+                                'metadata': {
+                                    'status': 'Alice Smith active problem',
+                                    'severity': 'High',
+                                    'clientName': 'Forbidden Display Name',
+                                },
+                            },
+                            {
+                                'kind': 'diagnosis',
+                                'label': 'Diagnosis 1',
+                                'source_path': 'problems[1].diagnoses[1]',
+                                'text_present': True,
+                                'metadata': {'code': 'F10.20', 'description': 'Alice Smith diagnosis'},
+                            },
+                            {
+                                'kind': 'intervention',
+                                'label': 'Intervention 1',
+                                'source_path': 'problems[1].goals[1].objectives[1].interventions[1]',
+                                'text_present': True,
+                                'metadata': {'frequency': 'Weekly', 'modality': 'Group', 'authorName': 'Alice Smith'},
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+        assert created.status_code == 200
+        payload = created.json()
+        serialized = json.dumps(payload)
+        assert 'Forbidden Display Name' not in serialized
+        assert 'Alice Smith' not in serialized
+        assert 'raw narrative' not in serialized
+        assert 'not-a-real-hash' not in serialized
+        plan = payload['treatment_plans'][0]
+        assert plan['is_current'] is True
+        assert plan['content_capture_status'] == 'manual'
+        assert plan['content_capture_warnings'] == ''
+        assert [item['label'] for item in plan['content_items']] == ['Problem 1', 'Diagnosis 1', 'Intervention 1']
+        assert plan['content_items'][0]['metadata'] == {'severity': 'High'}
+        assert plan['content_items'][1]['metadata'] == {'code': 'F10.20'}
+        assert plan['content_items'][2]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert all('text' not in item for item in plan['content_items'])
+        assert all('redacted_text_sha256' not in item for item in plan['content_items'])
 
 
 def test_alleva_rest_sync_keeps_active_client_with_discharge_conflict_and_aggregate_detail(app_with_sqlite):
@@ -620,6 +757,9 @@ def test_alleva_rest_sync_keeps_active_client_with_discharge_conflict_and_aggreg
         assert payload['current_plan']['source_document_id'] == '801'
         assert payload['current_plan']['problem_count'] == 1
         assert payload['current_plan']['detail_fetched'] is True
+        assert payload['current_plan']['content_capture_status'] == 'structured'
+        assert payload['current_plan']['content_items']
+        assert all('text' not in item for item in payload['current_plan']['content_items'])
         assert 'active_status_discharge_field_conflict' in payload['data_quality_warnings']
 
 
@@ -653,8 +793,10 @@ def test_alleva_detail_sample_fetches_current_plan_content_counts(app_with_sqlit
             [
                 {
                     'id': 'TP 901',
+                    'description': 'Alice Smith detail narrative must not be returned.',
                     'problems': [
                         {
+                            'description': 'Alice Smith problem narrative.',
                             'diagnoses': [{'code': 'F10.20'}],
                             'goals': [{'objectives': [{'interventions': [{'description': 'Synthetic intervention'}]}]}],
                         }
@@ -729,6 +871,12 @@ def test_alleva_detail_sample_fetches_current_plan_content_counts(app_with_sqlit
             'objective_count': 1,
             'intervention_count': 1,
         }
+        assert 'detail' not in result
+        assert result['detail_summary']['raw_detail_returned'] is False
+        assert 'privacy_note' in result['detail_summary']
+        serialized = json.dumps(payload)
+        assert 'Alice Smith' not in serialized
+        assert 'detail narrative' not in serialized
         assert detail_calls[0]['path'] == '/treatment-plans/TP%20901'
 
 

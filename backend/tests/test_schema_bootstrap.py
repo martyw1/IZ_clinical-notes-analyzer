@@ -97,6 +97,32 @@ def test_ensure_schema_compatibility_adds_workflow_definition_columns(tmp_path):
     assert 'published_at' in version_columns
 
 
+def test_ensure_schema_compatibility_adds_treatment_plan_content_columns(tmp_path):
+    db_path = tmp_path / 'legacy-treatment-plans.db'
+    engine = create_engine(f'sqlite:///{db_path}')
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                'CREATE TABLE treatment_plan_records ('
+                'id INTEGER PRIMARY KEY, '
+                'client_id INTEGER NOT NULL, '
+                'plan_kind VARCHAR(40) NOT NULL, '
+                'document_date VARCHAR(40) NOT NULL DEFAULT "", '
+                'staff_signature_date VARCHAR(40) NOT NULL DEFAULT "", '
+                'client_signature_date VARCHAR(40) NOT NULL DEFAULT ""'
+                ')'
+            )
+        )
+
+    ensure_schema_compatibility(engine)
+
+    columns = {column['name'] for column in inspect(engine).get_columns('treatment_plan_records')}
+    assert 'content_items_json' in columns
+    assert 'content_capture_status' in columns
+    assert 'content_capture_warnings' in columns
+
+
 def test_ensure_schema_compatibility_repairs_retired_required_audit_columns(tmp_path):
     db_path = tmp_path / 'legacy-audit-fhir.db'
     engine = create_engine(f'sqlite:///{db_path}')

@@ -9,6 +9,7 @@ import {
 } from './components/feedback'
 import { DataQualityWarnings } from './components/DataQualityWarnings'
 import { TreatmentPlanContentSummary } from './components/TreatmentPlanContentSummary'
+import { contentItemMetadataSummary, safeContentItems, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -303,6 +304,9 @@ type TimelinessTreatmentPlan = {
   detail_fetched?: boolean
   detail_fetched_at?: string | null
   content_source?: string
+  content_items?: TreatmentPlanContentItem[]
+  content_capture_status?: string
+  content_capture_warnings?: string
   is_current?: boolean
 }
 
@@ -2807,6 +2811,102 @@ export function App() {
     })
   }
 
+  function safeTreatmentPlanForExport(plan: TimelinessTreatmentPlan) {
+    const contentItems = safeContentItems(plan.content_items)
+    return {
+      id: plan.id,
+      plan_kind: plan.plan_kind,
+      document_date: plan.document_date,
+      staff_signature_date: plan.staff_signature_date,
+      client_signature_date: plan.client_signature_date,
+      reviewer_signature_date: plan.reviewer_signature_date,
+      displayed_next_due_date: plan.displayed_next_due_date,
+      source_evidence: plan.source_evidence,
+      source_section: plan.source_section,
+      is_valid: plan.is_valid,
+      conflict_note: plan.conflict_note,
+      problem_count: plan.problem_count ?? 0,
+      diagnosis_count: plan.diagnosis_count ?? 0,
+      goal_count: plan.goal_count ?? 0,
+      objective_count: plan.objective_count ?? 0,
+      intervention_count: plan.intervention_count ?? 0,
+      has_guardian_signature: Boolean(plan.has_guardian_signature),
+      guardian_signature_date: plan.guardian_signature_date || '',
+      alleva_is_active: Boolean(plan.alleva_is_active),
+      alleva_is_complete: Boolean(plan.alleva_is_complete),
+      alleva_is_initial_tp: Boolean(plan.alleva_is_initial_tp),
+      alleva_start_date: plan.alleva_start_date || '',
+      alleva_end_date: plan.alleva_end_date || '',
+      alleva_last_modified: plan.alleva_last_modified || '',
+      detail_fetched: Boolean(plan.detail_fetched),
+      detail_fetched_at: plan.detail_fetched_at || null,
+      content_source: plan.content_source || '',
+      content_capture_status: plan.content_capture_status || '',
+      content_capture_warnings: plan.content_capture_warnings || '',
+      content_items: contentItems,
+      is_current: Boolean(plan.is_current),
+    }
+  }
+
+  function safeTimelinessClientForExport(client: TimelinessClientDetail) {
+    return {
+      id: client.id,
+      patient_id: client.patient_id,
+      is_active: client.is_active,
+      current_level_of_care: client.current_level_of_care,
+      counselor_name: client.counselor_name,
+      admission_date: client.admission_date,
+      last_valid_review_date: client.last_valid_review_date,
+      next_due_date: client.next_due_date,
+      days_until_due: client.days_until_due,
+      current_date: client.current_date,
+      status: client.status,
+      rule_used: client.rule_used,
+      evidence_summary: client.evidence_summary,
+      evidence_completeness_percent: client.evidence_completeness_percent,
+      missing_evidence_fields: client.missing_evidence_fields,
+      last_checked_at: client.last_checked_at,
+      last_imported_at: client.last_imported_at,
+      source_evidence: client.source_evidence,
+      checklist_id: client.checklist_id,
+      checklist_version: client.checklist_version,
+      evidence_comparison: client.evidence_comparison,
+      rule_results: client.rule_results,
+      checklist_results: client.checklist_results,
+      level_of_care_history: client.level_of_care_history,
+      treatment_plans: client.treatment_plans.map(safeTreatmentPlanForExport),
+    }
+  }
+
+  function treatmentPlanContentRowsForExport(client: TimelinessClientDetail) {
+    return client.treatment_plans.flatMap((plan) => {
+      const contentItems = safeContentItems(plan.content_items)
+      const planRows = [
+        [
+          'treatment_plan_content_summary',
+          String(plan.id),
+          planKindLabel(plan.plan_kind),
+          plan.content_capture_status || 'counts_only',
+          plan.displayed_next_due_date || '',
+          plan.source_section || plan.source_evidence || '',
+          `problems=${plan.problem_count ?? 0}; diagnoses=${plan.diagnosis_count ?? 0}; goals=${plan.goal_count ?? 0}; objectives=${plan.objective_count ?? 0}; interventions=${plan.intervention_count ?? 0}`,
+          plan.content_capture_warnings || '',
+        ],
+      ]
+      const itemRows = contentItems.map((item) => [
+        'treatment_plan_content_fact',
+        String(plan.id),
+        item.label || item.kind,
+        item.kind,
+        item.source_path || '',
+        plan.source_section || plan.source_evidence || '',
+        contentItemMetadataSummary(item),
+        item.text_present ? 'narrative text present, not displayed' : '',
+      ])
+      return [...planRows, ...itemRows]
+    })
+  }
+
   function exportSelectedChart(format: 'json' | 'csv') {
     if (!selectedChart) {
       setError('Select a review before exporting a report.')
@@ -2868,7 +2968,7 @@ export function App() {
             checklist_version: checklistVersion,
             generated_at: new Date().toISOString(),
             local_clock_at_export: localNow.toISOString(),
-            client: selectedTimelinessClient,
+            client: safeTimelinessClientForExport(selectedTimelinessClient),
             checklist_results: selectedTimelinessClient.checklist_results,
             workflow_steps: workflowSteps,
           },
@@ -2885,7 +2985,8 @@ export function App() {
       const workflowRows = workflowSteps.map((item) =>
         [item.row_type, item.step, item.label, item.status, item.key, item.source_evidence, item.finding_message, item.evaluated_values].map(csvCell).join(','),
       )
-      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows, ...workflowRows].join('\n'), 'text/csv')
+      const contentRows = treatmentPlanContentRowsForExport(selectedTimelinessClient).map((item) => item.map(csvCell).join(','))
+      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows, ...workflowRows, ...contentRows].join('\n'), 'text/csv')
     }
     setStatus(`Exported treatment-plan report for patient ${selectedTimelinessClient.patient_id}.`)
   }
@@ -2962,6 +3063,10 @@ export function App() {
       (plan.goal_count ?? 0) +
       (plan.objective_count ?? 0) +
       (plan.intervention_count ?? 0)
+    const capturedFacts = safeContentItems(plan.content_items)
+    const factPreview = capturedFacts
+      .map((item) => `${item.label}: ${contentItemMetadataSummary(item) || item.source_path}`)
+      .join(' | ')
     setEvidencePreview({
       title: `${planKindLabel(plan.plan_kind)} treatment-plan evidence`,
       subtitle: plan.source_section || plan.source_evidence || 'Treatment plan source',
@@ -2974,14 +3079,17 @@ export function App() {
         { label: 'Current plan selected', value: plan.is_current ? 'Yes' : 'No' },
         { label: 'Detail fetch status', value: plan.detail_fetched ? 'Loaded from detail endpoint' : 'Not loaded' },
         { label: 'Clinical content elements', value: String(contentTotal), emphasis: contentTotal > 0 },
+        { label: 'Structured content facts', value: `${capturedFacts.length}`, emphasis: capturedFacts.length > 0 },
+        { label: 'Content capture status', value: plan.content_capture_status || 'counts_only' },
         { label: 'Problems / diagnoses', value: `${plan.problem_count ?? 0} / ${plan.diagnosis_count ?? 0}` },
         { label: 'Goals / objectives / interventions', value: `${plan.goal_count ?? 0} / ${plan.objective_count ?? 0} / ${plan.intervention_count ?? 0}` },
         { label: 'Alleva lifecycle', value: plan.alleva_is_active ? 'Active' : plan.alleva_end_date ? `Ended ${plan.alleva_end_date}` : 'Not recorded' },
         { label: 'Guardian signature', value: plan.has_guardian_signature ? `Present${plan.guardian_signature_date ? ` (${plan.guardian_signature_date})` : ''}` : 'Not recorded' },
         { label: 'Source document ID', value: plan.source_document_id || 'Not recorded' },
         { label: 'Source evidence', value: plan.source_evidence || 'Not recorded' },
+        { label: 'Captured fact preview', value: factPreview || 'No structured facts captured' },
       ],
-      note: plan.conflict_note || 'Evidence preview shows aggregate metadata and clinical content counts; raw clinical document text is not displayed here.',
+      note: plan.conflict_note || plan.content_capture_warnings || 'Evidence preview shows aggregate metadata and structured content facts; narrative clinical text is not displayed here.',
     })
   }
 
@@ -4676,7 +4784,7 @@ export function App() {
 	                              <span>
 	                                <strong>{(plan.problem_count ?? 0) + (plan.diagnosis_count ?? 0) + (plan.goal_count ?? 0) + (plan.objective_count ?? 0) + (plan.intervention_count ?? 0)} items</strong>
 	                                <small>
-	                                  {plan.is_current ? 'Current' : 'Historical'} - {plan.detail_fetched ? 'Detail loaded' : 'Detail pending'}
+	                                  {plan.is_current ? 'Current' : 'Historical'} - {plan.detail_fetched ? 'Detail loaded' : 'Detail pending'} - {safeContentItems(plan.content_items).length} facts
 	                                </small>
 	                              </span>
 	                              <span>{plan.is_valid && !plan.conflict_note ? 'Valid' : plan.conflict_note || 'Needs review'}</span>

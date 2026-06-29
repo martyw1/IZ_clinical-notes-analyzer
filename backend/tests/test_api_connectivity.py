@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from pathlib import Path
 
@@ -92,7 +94,7 @@ class MockedHttpxClient:
                     {
                         'id': 101,
                         'client': {'clientId': 'PAT-ACTIVE-001'},
-                        'description': 'Current synthetic plan',
+                        'description': 'Current synthetic plan for Jane Q Doe must stay out of quick-pull output',
                         'startDate': '2026-01-01T00:00:00',
                         'endDate': '2099-12-31T00:00:00',
                         'isActive': True,
@@ -188,6 +190,16 @@ class TimeoutHttpxClient:
     @staticmethod
     def get(url: str, headers: dict[str, str] | None = None):
         raise httpx.TimeoutException('synthetic timeout', request=httpx.Request('GET', url))
+
+
+class QuickPullErrorHttpxClient(MockedHttpxClient):
+    @staticmethod
+    def _handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith('https://api.example.test/treatment-plans?'):
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(500, text='Alice Smith treatment plan narrative from upstream error body')
+        return MockedHttpxClient._handler(request)
 
 
 OPERATION_DEFINITION = {
@@ -754,6 +766,11 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert active_plan_row['objective_count'] == 1
         assert active_plan_row['intervention_count'] == 1
         assert active_plan_row['has_guardian_signature'] is True
+        assert active_plan_row['description_present'] is True
+        assert active_plan_row['description_length'] == len('Current synthetic plan for Jane Q Doe must stay out of quick-pull output')
+        assert 'description' not in active_plan_row
+        assert 'Jane Q Doe' not in json.dumps(active.json())
+        assert 'Current synthetic plan for Jane Q Doe' not in active.json()['tsv']
 
         overdue = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'overdue_treatment_plans'})
         assert overdue.status_code == 200
@@ -784,6 +801,54 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert 'saved-secret' not in serialized
     finally:
         db.close()
+
+
+def test_api_configuration_alleva_quick_pull_omits_upstream_error_body(app_with_sqlite, monkeypatch):
+    monkeypatch.setattr('app.services.api_connectivity.httpx.Client', QuickPullErrorHttpxClient)
+    monkeypatch.setattr('app.api.api_config_routes.httpx.Client', QuickPullErrorHttpxClient)
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': 'r3!@analyzer#123'})
+        assert login.status_code == 200
+        headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
+        saved = client.patch(
+            '/api/api-configuration',
+            headers=headers,
+            json={
+                'vendor_name': 'Mock Alleva API',
+                'api_base_url': 'https://api.example.test',
+                'client_id': 'saved-client',
+                'client_secret': 'saved-secret',
+                'token_url': 'https://authorization.example.test/connect/token',
+                'token_auth_style': 'body',
+            },
+        )
+        assert saved.status_code == 200
+
+        pulled = client.post(
+            '/api/api-configuration/alleva-quick-pull',
+            headers=headers,
+            json={
+                'swagger_ui_url': 'https://api.example.test/swagger/index.html',
+                'api_base_url': 'https://api.example.test',
+                'openapi_url': 'https://api.example.test/swagger/v1/swagger.json',
+                'auth_mode': 'client_credentials',
+                'use_saved_client_credentials': True,
+                'timeout_seconds': 5,
+                'max_pages': 2,
+                'report': 'active_treatment_plans',
+            },
+        )
+        assert pulled.status_code == 200
+        payload = pulled.json()
+        assert payload['status'] == 'fail'
+        assert payload['fetch_error']['status_code'] == 500
+        assert payload['fetch_error']['response_body_preview'] == '[omitted to avoid returning upstream patient data]'
+        serialized = json.dumps(payload)
+        assert 'Alice Smith' not in serialized
+        assert 'treatment plan narrative from upstream' not in serialized
 
 
 def test_review_source_daily_check_runs_saved_periodic_api_check(app_with_sqlite, monkeypatch):

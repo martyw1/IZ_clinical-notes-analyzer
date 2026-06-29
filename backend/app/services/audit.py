@@ -71,7 +71,7 @@ SENSITIVE_FIELDS: dict[str, set[str]] = {
     'TreatmentPlanClient': {'permitted_name', 'source_evidence'},
     'TreatmentPlanCriterionReview': {'comment'},
     'LevelOfCareHistory': {'source_evidence'},
-    'TreatmentPlanRecord': {'source_evidence', 'conflict_note'},
+    'TreatmentPlanRecord': {'source_evidence', 'source_section', 'source_document_id', 'conflict_note', 'content_items_json', 'content_capture_warnings'},
     'TreatmentPlanOverride': {'original_value', 'new_value', 'reason'},
 }
 _audit_context_var: ContextVar['AuditContext | None'] = ContextVar('audit_context', default=None)

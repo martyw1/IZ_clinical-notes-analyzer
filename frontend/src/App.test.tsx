@@ -660,10 +660,14 @@ function timelinessDashboardPayload() {
 function timelinessDetailPayload() {
   return {
     ...timelinessDashboardPayload().items[0],
+    patient_name: 'Forbidden Display Name',
+    client_name: 'Forbidden Display Name',
+    display_name: 'Forbidden Display Name',
     is_active: true,
     source_evidence: 'Synthetic spreadsheet row',
     checklist_id: 'treatment-plan-v1',
     checklist_version: '1.2.0',
+    current_plan_record_id: 41,
     evidence_comparison: {
       document_next_due_date: null,
       signature_anchor_due_date: '2026-06-01',
@@ -736,6 +740,79 @@ function timelinessDetailPayload() {
         source_document_id: 'doc-41',
         is_valid: true,
         conflict_note: '',
+        problem_count: 1,
+        diagnosis_count: 1,
+        goal_count: 1,
+        objective_count: 1,
+        intervention_count: 1,
+        has_guardian_signature: true,
+        guardian_signature_date: '2026-04-02',
+        alleva_is_active: true,
+        alleva_is_complete: true,
+        alleva_is_initial_tp: false,
+        alleva_start_date: '2026-04-02',
+        alleva_end_date: '',
+        alleva_last_modified: '2026-04-02',
+        detail_fetched: true,
+        detail_fetched_at: '2026-04-02T13:00:00Z',
+        content_source: 'detail',
+        content_capture_status: 'structured',
+        content_capture_warnings: 'Narrative treatment-plan text is not stored; only text presence, hash, structure, and non-name metadata are retained.',
+        content_items: [
+          {
+            kind: 'problem',
+            label: 'Forbidden Display Name should not display',
+            source_path: 'problems[1]',
+            text_present: true,
+            redacted_text_sha256: 'a'.repeat(64),
+            metadata: { status: 'Forbidden Display Name active', severity: 'High', clientName: 'Forbidden Display Name' },
+          },
+          {
+            kind: 'diagnosis',
+            label: 'Diagnosis 1',
+            source_path: 'problems[1].diagnoses[1]',
+            text_present: true,
+            redacted_text_sha256: 'b'.repeat(64),
+            metadata: { code: 'F10.20', description: 'Forbidden Display Name diagnosis' },
+          },
+          {
+            kind: 'goal',
+            label: 'Forbidden Display Name goal',
+            source_path: 'problems[1].goals[1]',
+            text_present: true,
+            metadata: { status: 'Active' },
+          },
+          {
+            kind: 'objective',
+            label: 'Objective 1',
+            source_path: 'problems[1].goals[1].objectives[1]',
+            text_present: true,
+            metadata: { targetDate: '2026-05-01' },
+          },
+          {
+            kind: 'intervention',
+            label: 'Intervention 1',
+            source_path: 'problems[1].goals[1].objectives[1].interventions[1]',
+            text_present: true,
+            redacted_text_sha256: 'c'.repeat(64),
+            metadata: { frequency: 'Weekly', modality: 'Group', authorName: 'Forbidden Display Name' },
+          },
+          {
+            kind: 'intervention',
+            label: 'Forbidden Display Name intervention',
+            source_path: 'problems[1].goals[1].objectives[1].interventions[2]',
+            text_present: true,
+            metadata: { frequency: 'Daily', serviceType: 'Counseling' },
+          },
+          {
+            kind: 'intervention',
+            label: 'Intervention 3',
+            source_path: 'problems[1].goals[1].objectives[1].interventions[3]',
+            text_present: true,
+            metadata: { duration: '30 minutes' },
+          },
+        ],
+        is_current: true,
       },
     ],
     overrides: [],
@@ -1028,6 +1105,11 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByText('PAT-TP-001').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Unvalidated by R3\/Marleigh/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
+    expect(screen.getByText('Structured facts captured')).toBeInTheDocument()
+    expect(screen.getByText('Problem 1')).toBeInTheDocument()
+    expect(screen.getByText('Intervention 3')).toBeInTheDocument()
+    expect(screen.getByText(/frequency: Weekly/)).toBeInTheDocument()
+    expect(screen.queryByText(/Forbidden Display Name/)).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Synthetic manager review.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save override' }))
@@ -1173,6 +1255,19 @@ describe('App turnkey workflow', () => {
     const exportedTexts = await Promise.all(createObjectUrl.mock.calls.map((call) => blobText(call[0] as Blob)))
     expect(exportedTexts.some((text) => text.includes('checklist_result') && text.includes('loc_change_deadline_unresolved'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('"checklist_results"') && text.includes('produce_final_checklist_result'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 1'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 3'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('frequency: Weekly') && text.includes('narrative text present, not displayed'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('Source-document Next Review Due') && text.includes('document_next_due_date'))).toBe(true)
+    const allExportedText = exportedTexts.join('\n')
+    expect(allExportedText).not.toContain('Synthetic Client')
+    expect(allExportedText).not.toContain('Forbidden Display Name')
+    expect(allExportedText).not.toContain('permitted_name')
+    expect(allExportedText).not.toContain('redacted_text_sha256')
+    const treatmentJsonText = exportedTexts.find((text) => text.includes('"client"') && text.includes('"checklist_results"')) || ''
+    expect(treatmentJsonText).not.toContain('patient_name')
+    expect(treatmentJsonText).not.toContain('client_name')
+    expect(treatmentJsonText).not.toContain('display_name')
   })
 
   it('runs the Alleva treatment-plan sync from the review queue and opens treatment plans', async () => {

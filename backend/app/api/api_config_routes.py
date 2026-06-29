@@ -22,7 +22,6 @@ from app.services.api_connectivity import (
     persist_api_connectivity_report,
     pull_api_definitions,
     redact_url,
-    redact_sensitive_text,
     request_client_credentials_token,
 )
 from app.services.app_settings import get_or_create_app_settings
@@ -32,6 +31,7 @@ from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix='/api')
 DEFAULT_API_KEY_HEADER_NAME = 'x-api-key'
+UPSTREAM_BODY_PREVIEW_OMITTED = '[omitted to avoid returning upstream patient data]'
 
 SAMPLE_OPENAPI_DEFINITION: dict[str, Any] = {
     'openapi': '3.0.3',
@@ -396,7 +396,8 @@ def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
     return {
         'treatment_plan_id': _first_text(payload, 'id'),
         'patient_id': _plan_client_id(payload),
-        'description': _first_text(payload, 'description'),
+        'description_present': bool(_text(payload.get('description'))),
+        'description_length': len(_text(payload.get('description'))),
         'start_date': start_date.isoformat() if start_date else _date_only(payload.get('startDate')),
         'end_date': end_date.isoformat() if end_date else _date_only(payload.get('endDate')),
         'is_active': is_active,
@@ -629,7 +630,7 @@ def _fetch_alleva_collection(
                     'category': category,
                     'status_code': response.status_code,
                     'message': message,
-                    'response_body_preview': redact_sensitive_text(response.text[:600]),
+                    'response_body_preview': UPSTREAM_BODY_PREVIEW_OMITTED,
                     'page_index': page_index,
                     'url': redact_url(str(response.url)),
                 }
@@ -640,7 +641,7 @@ def _fetch_alleva_collection(
                     'category': 'endpoint_non_json_response',
                     'status_code': response.status_code,
                     'message': f'Alleva GET {path} responded, but the response was not JSON. Confirm this endpoint path and API version {api_version}.',
-                    'response_body_preview': redact_sensitive_text(response.text[:600]),
+                    'response_body_preview': UPSTREAM_BODY_PREVIEW_OMITTED,
                     'page_index': page_index,
                     'url': redact_url(str(response.url)),
                 }

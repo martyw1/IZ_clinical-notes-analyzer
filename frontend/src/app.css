@@ -1204,6 +1204,38 @@ label {
   margin: 0;
 }
 
+.treatment-plan-content-summary__facts {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 28rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.treatment-plan-content-summary__facts > div {
+  display: grid;
+  gap: 0.18rem;
+  border: 1px solid #d4dde1;
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+}
+
+.treatment-plan-content-summary__facts strong,
+.treatment-plan-content-summary__facts span,
+.treatment-plan-content-summary__facts small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.treatment-plan-content-summary__facts strong {
+  color: #263940;
+}
+
+.treatment-plan-content-summary__facts small,
+.treatment-plan-content-summary__warning {
+  color: #62736b;
+}
+
 .evidence-meter {
   display: inline-flex;
   width: min(100%, 110px);

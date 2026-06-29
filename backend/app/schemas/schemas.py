@@ -647,6 +647,14 @@ class TimelinessTreatmentPlanInput(BaseModel):
     source_document_id: str = ''
     is_valid: bool = True
     conflict_note: str = ''
+    problem_count: int = 0
+    diagnosis_count: int = 0
+    goal_count: int = 0
+    objective_count: int = 0
+    intervention_count: int = 0
+    content_items: list[dict[str, Any]] = Field(default_factory=list)
+    content_capture_status: str = 'manual'
+    content_capture_warnings: str = ''
 
 
 class TimelinessClientUpsert(BaseModel):
@@ -709,6 +717,9 @@ class TimelinessTreatmentPlanOut(BaseModel):
     detail_fetched: bool = False
     detail_fetched_at: datetime | None = None
     content_source: str = 'collection'
+    content_items: list[dict[str, Any]] = Field(default_factory=list)
+    content_capture_status: str = 'counts_only'
+    content_capture_warnings: str = ''
     is_current: bool = False
 
 

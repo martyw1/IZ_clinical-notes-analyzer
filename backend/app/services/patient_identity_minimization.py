@@ -150,6 +150,34 @@ TOKEN_REDACTION_RE = re.compile(
     r'(["\']?\s*[:=]\s*["\']?)[^"\',\s}]+',
 )
 BEARER_RE = re.compile(r'(?i)(bearer\s+)[A-Za-z0-9._~+/\-=]+')
+TITLE_CASE_PHRASE_RE = re.compile(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b')
+SAFE_TITLE_CASE_WORDS = {
+    'active',
+    'admission',
+    'assessment',
+    'behavioral',
+    'case',
+    'complete',
+    'completed',
+    'counseling',
+    'daily',
+    'diagnosis',
+    'discharge',
+    'group',
+    'individual',
+    'intensive',
+    'monthly',
+    'outpatient',
+    'partial',
+    'plan',
+    'program',
+    'residential',
+    'review',
+    'service',
+    'therapy',
+    'treatment',
+    'weekly',
+}
 
 
 def _normalize_key(value: Any) -> str:
@@ -195,6 +223,24 @@ def redacted_text(value: str) -> str:
     for canary in PII_CANARIES:
         text = re.sub(re.escape(canary), REDACTED, text, flags=re.IGNORECASE)
     return text
+
+
+def text_looks_like_direct_patient_identifier(value: str) -> bool:
+    """Best-effort guard for short UI/API snippets that must not contain names."""
+    text = str(value or '').strip()
+    if not text:
+        return False
+    redacted = redacted_text(text)
+    if REDACTED in redacted or redacted != text:
+        return True
+    if text_has_direct_patient_identifier_label(text):
+        return True
+    for match in TITLE_CASE_PHRASE_RE.finditer(text):
+        words = [word.lower() for word in re.findall(r'[A-Z][a-z]+', match.group(0))]
+        if words and all(word in SAFE_TITLE_CASE_WORDS for word in words):
+            continue
+        return True
+    return False
 
 
 def sanitize_patient_payload(value: Any, *, aggressive: bool = True, omit_direct: bool = True, _path: tuple[str, ...] = ()) -> Any:
