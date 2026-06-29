@@ -23,6 +23,16 @@ The installer is per-user and installs under `%LOCALAPPDATA%\Programs\IZ Clinica
 4. Use the generated first local admin access value from the local app settings file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
 5. Change or protect that access value according to R3 policy.
 
+## Restart Cleanup
+
+If the app will not restart because a previous local service window did not close cleanly, double-click:
+
+```powershell
+.\scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+The cleanup window lists the app-specific processes it can stop, stops only those local launcher/server processes, and then asks `Do you want to restart the app?`. It does not close browser windows and does not clear patient data, uploads, users, settings, API credentials, or audit logs.
+
 ## Admin Access Reset
 
 When a working admin account can sign in, use `User management` to reset another user account and require a new credential at next sign-in when available.

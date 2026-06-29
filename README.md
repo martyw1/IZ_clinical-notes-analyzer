@@ -210,6 +210,14 @@ scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 
 The launcher calls `scripts\startup-windows-local.ps1`, which runs preflight, creates local AppData folders and `.env` when missing, checks Python and backend packages, validates rules/checklists, detects missing or stale frontend assets, prompts before installing or rebuilding when needed, starts the local FastAPI desktop app, and opens the browser unless `-NoBrowser` is used.
 
+If Windows says the app is already running, the local port is in use, or a previous console did not close cleanly, double-click:
+
+```text
+scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+The cleanup launcher stops only app-specific local launcher/server processes, shows what it is doing in the console, and asks `Do you want to restart the app?`. It does not close browser windows or clear patient data.
+
 The app should open automatically. If it does not, browse to:
 
 ```text
@@ -363,7 +371,9 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `frontend\package.json` | Frontend package version metadata |
 | `docs\release-notes.md` | Current release notes and version history |
 | `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
+| `scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows cleanup and restart prompt |
 | `scripts\startup-windows-local.ps1` | Main Windows local startup script |
+| `scripts\stop-windows-local.ps1` | App-specific Windows process cleanup script |
 | `scripts\preflight-windows.ps1` | Windows runtime/readiness preflight |
 | `scripts\build-windows-installer.ps1` | Release-folder and zip builder |
 | `scripts\update-local-admin.ps1` | Local authorized admin reset utility |
