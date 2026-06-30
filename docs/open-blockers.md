@@ -1,10 +1,10 @@
 # Open Blockers
 
-Date: 2026-06-25
+Date: 2026-06-30
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1`.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
 
-Current checked-in app metadata remains `1.4.5-beta.1` / build `2026.06.23.1` until the release-version files are advanced.
+Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -48,7 +48,7 @@ Status: in progress for Version 1.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
-Current implementation state: Beta 1.4.6-beta.1 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/diagnostics/uninstall commands, built frontend assets, Start Menu and desktop shortcut creation, AppData preflight reports, redacted diagnostics bundles, manual-upload delete-button usability fixes, selected-client 42-step checklist detail visibility, Status Dashboard branding, admin-only clear-patient-data controls, and legacy SQLite audit-log repair for retired FHIR-era audit columns. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
+Current implementation state: Beta 1.4.6-beta.1 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/diagnostics/backup/data-preserving uninstall/complete uninstall commands, built frontend assets, Start Menu and desktop shortcut creation, AppData preflight reports, redacted diagnostics bundles, backup zips, manual-upload delete-button usability fixes, selected-client 42-step checklist detail visibility, Status Dashboard branding, admin-only clear-patient-data controls, and legacy SQLite audit-log repair for retired FHIR-era audit columns. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
@@ -57,6 +57,9 @@ Required resolution evidence:
 - The `Treatment plans` tab shows the updated evidence queue, selected-client 42-step checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`, proving the date-clock/source-evidence workflow UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
+- The Backup shortcut creates a full local-data backup zip under the user's Documents folder and warns that it can contain clinical data and encryption material.
+- Normal uninstall removes app files and shortcuts while preserving `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+- Complete uninstall requires typing `REMOVE IZ DATA` and removes app files, shortcuts, and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
 ## Alleva Client-Credentials Token Request
@@ -87,7 +90,7 @@ Required resolution evidence:
 
 Status: resolved for Vitest on this Windows 11 laptop.
 
-Frontend Vitest and production build completed locally on 2026-06-25 for Beta 1.4.6-beta.1. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
+Frontend Vitest and production build completed locally on 2026-06-30 for Beta 1.4.6-beta.1. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
 
 Required resolution evidence:
 

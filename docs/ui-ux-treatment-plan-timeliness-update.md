@@ -1,7 +1,7 @@
 # Treatment Plan Timeliness UI/UX Update
 
-Date: 2026-06-25
-Current app beta: `1.4.6-beta.1` / build `2026.06.25.1`
+Date: 2026-06-30
+Current app beta: `1.4.6-beta.1` / build `2026.06.30.1`
 
 ## Source Artifacts
 

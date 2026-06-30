@@ -1,65 +1,159 @@
 # Windows Deployment and Test Guide Version 1
 
-Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
 ## Target
 
-Version 1 targets a normal Windows 10/11 Home or Pro laptop or desktop. Normal use should be double-click install/launch with no Docker, PostgreSQL, Git, Node.js, or command-line work.
+Version 1 targets a normal Windows 10/11 Home or Pro laptop. The prepared release folder should let a non-technical R3 user install, launch, back up, collect diagnostics, uninstall, and completely remove local data without administrator access and without Docker, PostgreSQL, Git, Node.js, or command-line work.
 
-Beta 1.4.6-beta.1 keeps the Version 1 startup reliability, stale-build safeguards, global and selected-client 42-step workflow coverage, selected-client manager notes/action export, redacted PDF handling, Patient-ID-only privacy hardening, treatment-plan date-clock behavior, workflow/checklist exports, admin-only clear-patient-data controls, redacted diagnostics, and API harness hardening while removing active FHIR/SMART-on-FHIR configuration, discovery, scopes, import-plan workflows, defaults, and validation requirements from Alleva workflows.
+The source-checkout path remains for development and support. It can prompt before installing Python packages or rebuilding `frontend\dist`; it is not the preferred non-technical install path.
 
-## Prerequisites for Source Build
+## Release Package
 
-- Python 3.11 or newer
-- Node.js/npm for frontend builds
-- PowerShell 5.1 or newer
-- Git only for development
+Build from a prepared source checkout:
 
-The release package includes built frontend assets. Ordinary source-checkout launch prompts before installing Python, backend packages, or rebuilding frontend assets. Support automation can still pass `-AssumeYes` to run unattended setup.
+```powershell
+scripts\build-windows-installer.ps1
+```
 
-## Setup
+The builder writes:
+
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
+
+The release folder contains these double-click commands:
+
+- `Install-IZ-Clinical-Notes-Analyzer.cmd`
+- `Launch-IZ-Clinical-Notes-Analyzer.cmd`
+- `Stop-IZ-Clinical-Notes-Analyzer.cmd`
+- `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`
+- `Backup-IZ-Clinical-Notes-Analyzer.cmd`
+- `Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
+- `Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
+- `release-manifest.json`
+- `app\` source/runtime files with built frontend assets
+
+## Installed Shortcuts
+
+The per-user installer copies app files to:
+
+```text
+%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer
+```
+
+It creates Start Menu shortcuts for:
+
+- `IZ Clinical Notes Analyzer`
+- `Stop IZ Clinical Notes Analyzer`
+- `IZ Clinical Notes Analyzer Diagnostics`
+- `Backup IZ Clinical Notes Analyzer`
+- `Uninstall IZ Clinical Notes Analyzer`
+- `Complete Uninstall IZ Clinical Notes Analyzer`
+
+It creates desktop shortcuts for:
+
+- `IZ Clinical Notes Analyzer`
+- `IZ Clinical Notes Analyzer Diagnostics`
+- `IZ Clinical Notes Analyzer Backup`
+
+The normal uninstall shortcut removes app files and shortcuts while preserving local runtime data. The complete uninstall shortcut requires typing `REMOVE IZ DATA` and removes app files, shortcuts, and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+
+## Local Data
+
+Local runtime data is outside the app folder:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer
+```
+
+Important contents:
+
+- `.env`: local configuration, generated bootstrap admin value, and encryption material.
+- `clinical-notes-analyzer.sqlite3`: local SQLite database.
+- `uploads`: encrypted uploaded source documents.
+- `logs`: startup logs and fallback audit logs.
+- `api-reports` and `api-connectivity-reports`: redacted readiness reports.
+- `diagnostics`: redacted support bundles.
+
+The `.env` file, SQLite database, and encrypted uploads must be backed up and restored together.
+
+## Backup Behavior
+
+`scripts\backup-local-data.ps1` and `Backup-IZ-Clinical-Notes-Analyzer.cmd` create a zip under:
+
+```text
+%USERPROFILE%\Documents\IZ Clinical Notes Analyzer Backups
+```
+
+The backup helper:
+
+- Prompts for `BACKUP` unless `-AssumeYes` is passed.
+- Stops app-specific local processes first unless `-NoStop` is passed.
+- Copies the whole `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` folder.
+- Adds `README-BACKUP.txt` explaining sensitivity and restore coupling.
+- Does not redact the backup because it is intended for full restore. Store it encrypted and access-controlled.
+
+## Uninstall Behavior
+
+Data-preserving uninstall:
+
+```powershell
+Uninstall-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+Removes:
+
+- `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`
+- Start Menu shortcuts
+- Desktop shortcuts created by the installer
+
+Preserves:
+
+- `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`
+
+Complete uninstall:
+
+```powershell
+Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd
+```
+
+Requires exact confirmation:
+
+```text
+REMOVE IZ DATA
+```
+
+Removes app files, installer-created shortcuts, and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+
+## Source Checkout Support Path
+
+Use this path only for development, validation, or support:
 
 ```powershell
 scripts\setup-windows.ps1 -AssumeYes
-```
-
-## Preflight
-
-```powershell
 scripts\preflight-windows.ps1 -AssumeYes
-```
-
-Preflight creates AppData folders, creates a local `.env` when missing, checks Python, repairs `backend\.venv`, validates the full Windows runtime dependency set, validates rules and the Treatment Plan Checklist, confirms frontend build assets, detects stale `frontend\dist` assets, checks the app port, and writes a JSON report.
-
-Startup readiness fails closed when a production-like/local-client run is missing a bootstrap admin password or still uses a known placeholder/test value. The Windows preflight/install path generates local values; do not ship a release folder with `BOOTSTRAP_ADMIN_PASSWORD=change-me`.
-
-## Local Launch
-
-```powershell
 scripts\start-windows-local.ps1 -AssumeYes
 ```
 
-The double-click launcher uses:
+The double-click source launcher is:
 
 ```cmd
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Expected Beta 1.4.6-beta.1 behavior: startup runs preflight once, prompts before dependency installation or frontend rebuilds unless `-AssumeYes` is supplied, detects missing or stale frontend build assets, repairs legacy local audit-log schemas that still contain retired required FHIR audit columns, then starts `app.desktop_main:app` through `backend\.venv\Scripts\python.exe` without calling the legacy dependency-check path that could falsely report failure after a successful package install.
+The cleanup launcher is:
 
-## Admin Access Reset
-
-When at least one admin can sign in, use the app's `User management` screen to reset another user account.
-
-When no admin can sign in on a local Windows desktop install, follow:
-
-```text
-docs\admin-access-reset.md
+```cmd
+scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Do not record credential values in Git, screenshots, email, support tickets, or chat.
+Preflight creates local AppData folders, creates `.env` when missing, checks Python, repairs `backend\.venv`, validates backend dependencies, validates rules/checklists, detects stale or missing `frontend\dist`, checks the app port, and writes:
 
-## Tests
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json
+```
+
+## Validation Commands
 
 Backend:
 
@@ -76,10 +170,12 @@ npm test -- --run
 npm run build
 ```
 
-Windows preflight:
+Windows smoke:
 
 ```powershell
 scripts\preflight-windows.ps1 -AssumeYes
+scripts\test-local-app-stack.ps1
+scripts\test-api-configuration-local.ps1
 ```
 
 Version checks after local launch:
@@ -90,41 +186,45 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Release package:
-
-```powershell
-scripts\build-windows-installer.ps1
-```
-
 Diagnostics bundle:
 
 ```powershell
 scripts\collect-diagnostics.ps1
 ```
 
-## Release Artifacts
+Script syntax checks:
 
-The release builder writes:
+```powershell
+$scripts = @(
+  'scripts\backup-local-data.ps1',
+  'scripts\complete-uninstall-local-data.ps1',
+  'scripts\build-windows-installer.ps1'
+)
+foreach ($script in $scripts) {
+  $null = [scriptblock]::Create((Get-Content -LiteralPath $script -Raw))
+}
+```
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
+Complete uninstall should be manually tested only on disposable synthetic data.
 
-The release folder contains:
+## Target-Laptop Acceptance
 
-- `Install-IZ-Clinical-Notes-Analyzer.cmd`
-- `Launch-IZ-Clinical-Notes-Analyzer.cmd`
-- `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`
-- `Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
-- `release-manifest.json`
-- `app\` source/runtime files with built frontend assets
+Before giving the release to a non-technical tester, verify on the target Windows laptop with synthetic data:
 
-The installer creates Start Menu and desktop shortcuts for Launch, Diagnostics, and Uninstall. The Diagnostics shortcut creates a redacted zip under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics` and excludes uploads, local databases, generated reports, and raw `.env` values.
-
-Note: the Beta 1.4.6-beta.1 source metadata, scripts, and frontend assets should be rebuilt into a fresh release folder before handing the package to non-technical testers.
+1. Install from the release folder using a normal non-admin Windows account.
+2. Launch from Start Menu and desktop shortcut.
+3. Confirm `/api/version` returns `1.4.6-beta.1` / `2026.06.30.1`.
+4. Confirm the UI footer shows `Beta v1.4.6-beta.1`.
+5. Create a synthetic upload/review/treatment-plan workflow.
+6. Run Diagnostics and confirm a zip appears under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`.
+7. Run Backup and confirm a zip appears under Documents.
+8. Run data-preserving uninstall and confirm local data remains.
+9. Reinstall and confirm the prior local data is still present.
+10. Run complete uninstall on disposable data and confirm both app files and local data are removed.
 
 ## Security Checks
 
-Before commit or push:
+Before commit or release packaging:
 
 ```powershell
 git status --short --branch
@@ -136,11 +236,10 @@ Review every result. Synthetic placeholder words in code and docs are allowed on
 
 ## Known Version 1 Limits
 
-- Live Alleva patient import is disabled.
+- Live Alleva patient import is disabled until approved by R3/Alleva with endpoint mapping and compliance signoff.
 - The LOC-change treatment-plan update window ships with a manager-editable 7-calendar-day preset, remains unvalidated, and must stay configurable.
 - Manual upload is an upload-time snapshot; monthly compliance checks are the documented fallback when API refresh is unavailable.
-- Admins and office managers can edit future checklist workflow versions through Workflow profiles, but published workflow history is preserved.
-- App settings, API/EMR setup, LLM setup, and forensic logs are admin-only.
+- App settings, API/EMR setup, optional LLM setup, and forensic logs are admin-only.
 - OCR quality depends on source document readability.
-- LLM assistance is optional and disabled by default.
-- The package is not yet a signed MSI/MSIX; a signed installer remains the recommended long-term endpoint for non-technical deployment.
+- Optional LLM assistance is disabled by default.
+- The package is not yet a signed MSI/MSIX with repair/modify support.

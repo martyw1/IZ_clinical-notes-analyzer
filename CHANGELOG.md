@@ -3,12 +3,14 @@
 ## Unreleased
 
 ### Changed
-- Converted current app metadata to beta `1.4.4-beta.1` / build `2026.06.21.1` on the `beta-local-desktop` channel.
+- Promoted current app metadata to beta `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
+- Added non-technical no-admin Windows install, backup, diagnostics, data-preserving uninstall, and complete-uninstall documentation.
+- Added packaged backup and complete-uninstall helper scripts and wired them into the Windows release-folder builder.
 - Added selected-client 42-step Treatment Plans checklist evaluation details and included those results in selected treatment-plan CSV/JSON exports.
 - Kept Treatment Plan Checklist content version separate at `1.2.0`.
 
 ### Verified
-- Pending final validation for this beta station.
+- Pending target-laptop packaged install, backup, and uninstall validation with synthetic data.
 
 ## 1.4.4 - 2026-06-19
 

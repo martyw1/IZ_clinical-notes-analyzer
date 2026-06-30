@@ -1,107 +1,171 @@
 # Windows User Guide Version 1
 
-This guide is for R3 staff using a normal Windows 11 laptop or desktop.
+This guide is for R3 staff using a normal Windows 10 or Windows 11 laptop.
 
-Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
-Beta 1.4.6-beta.1 keeps the Version 1 Windows startup reliability fixes, adds Patient-ID-only privacy hardening, suppresses patient names/addresses/direct identifiers from upload/import/display/export/log paths, adds redacted diagnostics, repairs legacy local audit-log startup errors, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, adds Status Dashboard R3 branding, and keeps Alleva integration as REST/OpenAPI/HL7-readiness only with gated treatment-plan sync controls.
+## What This App Is
+
+IZ Clinical Notes Analyzer runs on your own Windows user account. It opens in your web browser at `http://localhost:8000`, but the app and data stay on the laptop.
+
+Normal use from a prepared release folder does not require administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work.
+
+## Before You Start
+
+You need:
+
+- A Windows 10 or Windows 11 laptop.
+- The prepared release folder or zip from R3 support.
+- Your normal Windows user account.
+- Internet access for first setup if Windows needs to download the per-user Python runtime or Python packages.
+
+Do not install from OneDrive, Dropbox, iCloud Drive, Google Drive, or a network share. If you receive a zip, unzip it first to a normal folder such as Downloads or Desktop.
 
 ## Install
 
-1. Open the release folder `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
+1. Open the release folder named `IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
-3. Wait for the preflight window to finish.
-4. Use the Start Menu or desktop shortcut named `IZ Clinical Notes Analyzer`.
+3. If Windows asks whether to run the file, choose the option that lets it run only if it came from R3 support.
+4. Wait for the setup window to finish.
+5. When setup is complete, launch the app from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
 
-The installer is per-user and installs under `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`. It creates Launch, Diagnostics, and Uninstall shortcuts in the Start Menu and on the desktop.
+The app installs only for your Windows user account under:
+
+```text
+%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer
+```
+
+The app stores local data under:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer
+```
 
 ## First Launch
 
-1. Launch from the Start Menu shortcut.
-2. The app starts a local service and opens `http://localhost:8000`.
-3. Sign in as `admin`.
-4. Use the generated first local admin access value from the local app settings file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-5. Change or protect that access value according to R3 policy.
+1. Open the Start Menu.
+2. Select `IZ Clinical Notes Analyzer`.
+3. Your browser should open to `http://localhost:8000`.
+4. Sign in with the local admin access value provided by R3 support.
 
-## Restart Cleanup
+If R3 support asks you to find the first generated admin value:
 
-If the app will not restart because a previous local service window did not close cleanly, double-click:
+1. Press `Windows` + `R`.
+2. Paste `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+3. Press Enter.
+4. Open `.env` with Notepad.
+5. Look for `BOOTSTRAP_ADMIN_USERNAME=admin` and `BOOTSTRAP_ADMIN_PASSWORD=...`.
+6. Do not send the password in screenshots, chat, email, or tickets unless R3 has approved a secure channel.
 
-```powershell
-.\scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd
+## Daily Launch
+
+Use the Start Menu or desktop shortcut named `IZ Clinical Notes Analyzer`.
+
+If the app does not open automatically, open your browser and go to:
+
+```text
+http://localhost:8000
 ```
 
-The cleanup window lists the app-specific processes it can stop, stops only those local launcher/server processes, and then asks `Do you want to restart the app?`. It does not close browser windows and does not clear patient data, uploads, users, settings, API credentials, or audit logs.
+## Backup
 
-## Admin Access Reset
+Backups are important because the local settings file, database, and encrypted uploads must stay together.
 
-When a working admin account can sign in, use `User management` to reset another user account and require a new credential at next sign-in when available.
+1. Close the browser tab for the app.
+2. Open the Start Menu.
+3. Select `Backup IZ Clinical Notes Analyzer`.
+4. Read the warning.
+5. Type `BACKUP` when asked.
+6. The backup zip is created in Documents under `IZ Clinical Notes Analyzer Backups`.
 
-When no admin can sign in on a local Windows desktop install, follow `docs\admin-access-reset.md`.
-
-The Beta 1.4.6-beta.1 local recovery path is:
-
-```powershell
-.\scripts\update-local-admin.ps1
-.\scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
-```
-
-Run the utility from the repo root, save the generated value securely, restart the app, and sign in locally as `admin` using the generated value. Do not record real access values in Git, screenshots, email, support tickets, or chat.
-
-## Main Screens
-
-- Status Dashboard: R3-branded summary, source selection, current queue, checklist version, EMR/API readiness, manual upload entry point, `Retrieve Active Treatment Plans`, and admin-only `Clear All Patient Data`.
-- Treatment plans: admin/office-manager-only default landing screen, updated evidence queue banner, local date-clock status, source-document/date-clock/LOC-change due-date comparison, LOC-change blocker, rule results, overrides, saved manager status/comment notes for each 42-step criterion, counselor action export, and CSV/JSON export with workflow-step statuses.
-- Review queue: generated/manual uploaded-binder chart review workbench with detailed findings, evidence, reviewer notes, disposition, and CSV/JSON export.
-- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
-- Manual upload: upload exported clinical note or treatment plan files, inspect uploaded binder details, download stored documents when authorized, and delete an uploaded binder when it should be removed from the local app.
-- Help: role permissions, screen/button guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
-- User management: admins can manage admins, managers, and counselors; office managers can manage counselor accounts only; counselors manage only their own account.
-- Workflow profiles: admin/manager workflow logic screen, including `Seed draft from 42-step checklist`, draft creation, in-place draft editing, publish, archive, and unused-draft delete.
-- App settings: admin-only organization, access intelligence, LLM, readiness, periodic API-check, one active Alleva/API connection, optional API endpoint presets, Alleva REST/OpenAPI settings, LOC-change settings, and `Clear All Patient Data`.
-- Forensic logs: admin-only audit trail.
-
-## API Mode
-
-Version 1 includes a direct API readiness harness and mock source discovery. Live Alleva patient import is disabled until official credentials, endpoint mapping, scopes, pagination/rate limits, attachment handling, vendor documentation, and compliance approval exist.
-
-Admins can open the API connectivity test harness from App settings or directly at `http://localhost:8000/api-configuration`. When opened from the app, the harness uses the current admin session and does not require a second in-page admin login. App settings is the source of truth for the one active Alleva/API connection; the harness loads and tests that same connection.
-
-Use the harness in order: load or save the active settings, test authentication/connectivity, then run `ALL Patient Records` if the connection test result is understood. `ALL Patient Records` calls Alleva `GET /clients` with the visible `Limit`, `Cursor`, `fields`, `api-version`, and `X-Version` settings and returns tab-separated rows that can be pasted into Excel. Patient names and addresses returned by Alleva are ignored/redacted; operators should still treat patient IDs and treatment context as sensitive regulated data.
-
-For Alleva OAuth setup, it is normal to paste the client ID and client secret supplied by R3/Alleva. The client secret is encrypted locally and is never shown again after save. The browser only shows whether a secret is configured. App settings can also enable periodic safe API readiness checks after the REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, and token auth style are saved. These checks authenticate and verify readiness; they do not import live patient charts or treatment plans until the approval gate above is complete. Startup treatment-plan sync is off by default for beta; use manual retrieval only after R3/Alleva approval and mapping validation.
-
-Alleva confirmed it does not currently support FHIR. Stored API endpoint profiles are optional presets. Activating a preset copies its values into the active App settings connection used by readiness/API tests, periodic checks, and approved REST treatment-plan sync.
-
-When API monitoring is unavailable, manual upload is treated as an upload-time snapshot. Use the monthly compliance-check fallback for large chart sets instead of assuming weekly automatic monitoring.
-
-## Upload Mode
-
-Supported file types are shown in the upload screen. Use synthetic data for testing. Production use with PHI requires R3-approved controls and secure local handling.
-
-Manual upload intentionally uses Patient ID only. Do not type patient names or addresses into Patient ID, upload notes, filenames for support screenshots, or any testing artifacts. If a source document contains names/addresses, the app ignores those values for matching and does not use them as display labels.
-
-To delete a binder that was uploaded and analyzed, open `Manual upload`, select the binder, type the patient ID exactly in the delete confirmation field, and click `Delete uploaded binder`. If you click before the confirmation matches, the app shows exact guidance instead of leaving the button unavailable. This removes the local uploaded binder, its linked automated review, linked upload-derived timeliness records, and encrypted stored files from the computer. Forensic audit logs remain.
-
-## Clear All Patient Data
-
-Admins can clear local patient/chart/treatment-plan/manual-upload/review data from Status Dashboard Quick Actions or App Settings. The confirmation requires typing `CLEAR ALL PATIENT DATA`. This preserves user accounts, app settings, saved API credentials, forensic audit logs, rules, and documentation. Use this before handing a beta laptop between synthetic test rounds, not as an uninstall replacement.
+Keep the backup zip secure. It can contain clinical data, audit logs, app settings, saved API configuration, and local encryption material.
 
 ## Troubleshooting
 
-- Preflight report: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json`
-- Startup logs: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs`
-- Local settings: `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env`
-- Admin access reset guide: `docs\admin-access-reset.md`
-- App URL: `http://localhost:8000`
-- Health check: `http://localhost:8000/api/health`
-- Readiness check: `http://localhost:8000/api/readiness`
-- Version check: `http://localhost:8000/api/version`
-- Diagnostics shortcut: `IZ Clinical Notes Analyzer Diagnostics`
-- Diagnostics script: `scripts\collect-diagnostics.ps1`
+Try these steps first:
 
-Diagnostics bundles are written under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`. They exclude uploaded clinical documents, SQLite databases, generated reports, and raw `.env` values; included logs and configuration summaries are redacted before packaging.
+| Problem | What to do |
+| --- | --- |
+| The app does not open | Open `http://localhost:8000` in your browser. |
+| It says the app is already running or the port is in use | Open the Start Menu, select `Stop IZ Clinical Notes Analyzer` if available, then launch again. If that shortcut is not present, run `Stop-IZ-Clinical-Notes-Analyzer.cmd` from the installed app or release folder. |
+| The setup window says preflight failed | Run `IZ Clinical Notes Analyzer Diagnostics`, then send the created zip to R3 support through an approved secure channel. |
+| The browser shows an old version | Use the data-preserving uninstall, then install again from the newest release folder. |
+| You cannot sign in | Ask an admin to reset your account in User management. If no admin can sign in, follow `docs\admin-access-reset.md` with R3 support. |
+| A Windows security prompt appears | Only continue if the release came from R3 support. |
 
-## Uninstall
+Diagnostics are created under:
 
-Use the Start Menu uninstall shortcut or double-click `Uninstall-IZ-Clinical-Notes-Analyzer.cmd` from the release folder. Local data under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` is preserved unless R3 intentionally removes it.
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics
+```
+
+Diagnostics exclude uploaded clinical documents, SQLite databases, generated reports, and raw `.env` values. Logs and configuration summaries are redacted before packaging, but R3 should still treat diagnostics as sensitive.
+
+Useful local pages:
+
+| Page | Address |
+| --- | --- |
+| App home | `http://localhost:8000` |
+| Health check | `http://localhost:8000/api/health` |
+| Readiness check | `http://localhost:8000/api/readiness` |
+| Version check | `http://localhost:8000/api/version` |
+
+## Uninstall But Keep Local Data
+
+Use this when you are reinstalling or upgrading and want to keep users, settings, audit logs, uploads, and local records.
+
+1. Open the Start Menu.
+2. Select `Uninstall IZ Clinical Notes Analyzer`.
+3. Wait for the uninstall window to finish.
+
+This removes app files and shortcuts, but keeps:
+
+```text
+%LOCALAPPDATA%\IZ Clinical Notes Analyzer
+```
+
+## Complete Uninstall And Remove Local Data
+
+Use this only when R3 intentionally wants the laptop cleared for this Windows user.
+
+1. Create a backup first unless R3 says the data should be destroyed.
+2. Open the Start Menu.
+3. Select `Complete Uninstall IZ Clinical Notes Analyzer`.
+4. Read the warning.
+5. Type `REMOVE IZ DATA` when asked.
+
+Complete uninstall removes:
+
+- App files under `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`.
+- Start Menu and desktop shortcuts.
+- Local app data under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+
+After complete uninstall, the local database, encrypted uploads, settings, saved API configuration, audit logs, and local access material are removed for your Windows user account.
+
+## What Not To Do
+
+- Do not put real patient information in screenshots, support tickets, chat, or email.
+- Do not move the local data folder into OneDrive or another cloud-synced folder.
+- Do not delete only random files from `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`; use the app's delete, clear-data, backup, or uninstall flows.
+- Do not treat Docker, PostgreSQL, Git, Node.js, or command-line setup as normal user steps.
+
+## Main Screens
+
+- Status Dashboard: summary, source selection, current queue, checklist version, EMR/API readiness, manual upload entry point, gated `Retrieve Active Treatment Plans`, and admin-only `Clear All Patient Data`.
+- Treatment plans: admin/office-manager work queue, date-clock status, source evidence, LOC-change blocker, rule results, overrides, manager notes/actions, and CSV/JSON exports.
+- Review queue: generated/manual uploaded-binder chart review workbench.
+- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
+- Manual upload: upload files, inspect uploaded binders, download stored documents when authorized, and delete a local uploaded binder.
+- Help: role permissions, screen guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
+- User management: admins can manage all roles; office managers can manage counselor accounts only; counselors manage only their own account.
+- Workflow profiles: admin/manager workflow logic screen.
+- App settings: admin-only organization, API/EMR setup, optional LLM setup, LOC-change settings, and `Clear All Patient Data`.
+- Forensic logs: admin-only audit trail.
+
+## Important Safety Notes
+
+Live Alleva patient import remains disabled until R3/Alleva approve tenant credentials, endpoint mapping, auth requirements, pagination, rate limits, attachment behavior, vendor documentation, and compliance handling.
+
+Optional LLM behavior is disabled by default and is not required for compliance or timeliness decisions.
+
+The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh. The app keeps it configurable and visibly marked unresolved until R3 confirms the final rule.

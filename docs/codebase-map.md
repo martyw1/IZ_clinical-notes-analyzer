@@ -1,12 +1,12 @@
 # Codebase Map - Current Beta 1.4.6-beta.1
 
-Date: 2026-06-25
+Date: 2026-06-30
 
 Branch: `main`
 
-Version: `1.4.6-beta.1` / build `2026.06.25.1`
+Version: `1.4.6-beta.1` / build `2026.06.30.1`
 
-Current checked-in app metadata remains `1.4.5-beta.1` / build `2026.06.23.1` until the release-version files are advanced.
+Current checked-in app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
 ## Scope
 
@@ -72,7 +72,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/start-windows-local.ps1` | Active | Windows local startup wrapper used by release launch command. |
 | `scripts/test-local-app-stack.ps1` | Active | Windows local full-stack smoke test. |
 | `scripts/test-api-configuration-local.ps1` | Active | Windows API harness smoke test. |
-| `scripts/build-windows-installer.ps1` | Active | Builds release folder and zip with install/launch/uninstall commands. |
+| `scripts/build-windows-installer.ps1` | Active | Builds release folder and zip with install, launch, diagnostics, backup, data-preserving uninstall, and complete-uninstall commands. |
 | `scripts/update-local-admin.ps1` | Active | Authorized local admin reset utility. |
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
@@ -164,7 +164,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Packaging and installer status
 
-`scripts/build-windows-installer.ps1` creates a Beta 1.4.6-beta.1 release folder and zip with install, launch, uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, and data preservation are verified on the target laptop with synthetic data.
+`scripts/build-windows-installer.ps1` creates a Beta 1.4.6-beta.1 release folder and zip with install, launch, diagnostics, backup, data-preserving uninstall, complete uninstall, and manifest files. The package is still not a signed MSI/MSIX with repair/modify support. Windows Home validation remains a release blocker until ordinary-user install/launch, readiness, backup, prompted source-checkout setup, stale frontend build detection, repair/upgrade/uninstall, complete uninstall, and data preservation are verified on the target laptop with synthetic data.
 
 ## Current risks
 

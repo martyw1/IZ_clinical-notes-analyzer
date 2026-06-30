@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-06-25
+Date: 2026-06-30
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
 ## Health endpoints
 
@@ -95,6 +95,8 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 - Ordinary launch prompts before installing missing dependencies or rebuilding frontend assets.
 - Use `scripts\preflight-windows.ps1 -AssumeYes` only for unattended support validation.
 - Use `scripts\collect-diagnostics.ps1` or the `IZ Clinical Notes Analyzer Diagnostics` shortcut to collect a redacted support bundle. The bundle excludes uploads, local databases, generated reports, and raw `.env` values.
+- Use `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd` or the `Backup IZ Clinical Notes Analyzer` shortcut to create a full local-data backup zip.
+- Use normal uninstall to preserve local data for reinstall/upgrade; use complete uninstall only after backup or an explicit R3 data-destruction decision.
 - Do not move runtime data into the OneDrive-backed source repository.
 
 ## Recovery
@@ -109,9 +111,10 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 For ordinary Windows desktop installs:
 
 1. Stop the app.
-2. Back up the entire `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` directory according to R3 policy.
-3. Keep the backup encrypted and access-controlled because it can contain local SQLite data, encrypted uploads, audit logs, and configuration.
-4. Restore by stopping the local app, replacing the AppData directory from the approved backup, and restarting the app.
+2. Run `Backup IZ Clinical Notes Analyzer` from the Start Menu, or run `scripts\backup-local-data.ps1`.
+3. Confirm the backup zip is written under `%USERPROFILE%\Documents\IZ Clinical Notes Analyzer Backups`.
+4. Keep the backup encrypted and access-controlled because it can contain local SQLite data, encrypted uploads, audit logs, configuration, saved API configuration, and encryption material.
+5. Restore by stopping the local app, replacing the AppData directory from the approved backup, and restarting the app.
 
 The `.env` file, SQLite database, and encrypted uploads must stay together. If the `.env` file is lost, encrypted uploads and saved API configuration may not be recoverable.
 

@@ -2,7 +2,7 @@
 
 Use synthetic data only for this script.
 
-Current beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
+Current beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
 Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds Patient-ID-only privacy hardening, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, redacted diagnostics, and REST/OpenAPI/HL7-readiness-only Alleva setup.
 

@@ -1,37 +1,39 @@
 # Release Notes
 
-Current app version: `1.4.6-beta.1` / build `2026.06.25.1`.
+Current app version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
 Current release channel: `beta-local-desktop`.
 
-Current release date in version metadata: `2026-06-25`.
+Current release date in version metadata: `2026-06-30`.
 
-## Unreleased - 2026-06-28 remediation
+## 1.4.6-beta.1 - Windows no-admin install readiness
 
-- Adds a disabled-by-default `Import and display Alleva patient names` App settings control. Alleva treatment-plan sync stores generated redacted display labels by default and redacts existing Alleva-sourced names again when the setting is saved off.
-- Keeps validation-only name fallback separate from patient-name import/display and verifies both settings persist after save/readback.
-- Adds an admin-only `Pull / refresh treatment plans` button directly on the Treatment Plans tab.
-- Moves documented unused/legacy code files into `depricated/` with a manifest and excludes deprecated folders from Windows release packaging.
-- Validation evidence is recorded in `docs/validation/validation-report-2026-06-28-treatment-plan-redaction-cleanup.md`.
+Build: `2026.06.30.1`
 
-## 1.4.6-beta.1 - Patient-ID privacy hardening
-
-Build: `2026.06.25.1`
-
-Version metadata name: `Beta 1.4.6-beta.1 Patient-ID privacy hardening`
+Version metadata name: `Beta 1.4.6-beta.1 Windows no-admin install readiness`
 
 Summary:
 
+- Aligns version metadata and active docs to `1.4.6-beta.1` / build `2026.06.30.1`.
+- Adds packaged local-data backup helpers through `scripts\backup-local-data.ps1`, `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd`, the release-folder backup command, and installed Start Menu/Desktop backup shortcuts.
+- Adds a confirmed complete-uninstall path through `scripts\complete-uninstall-local-data.ps1`, `scripts\Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd`, the release-folder complete-uninstall command, and an installed Start Menu shortcut that requires typing `REMOVE IZ DATA`.
+- Keeps normal uninstall data-preserving: app files and shortcuts are removed, while `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` stays in place for reinstall/upgrade.
+- Rewrites the Windows User Guide for no-admin install, first launch, backup, troubleshooting, diagnostics, data-preserving uninstall, and complete uninstall.
+- Updates the Windows Deployment and Test Guide with release-folder contents, installed shortcuts, backup behavior, uninstall behavior, and target-laptop acceptance criteria.
 - Makes Patient ID the only patient identifier accepted for upload, Treatment Plans, chart labels, generated review records, exports, downloads, API summaries, and audit context.
 - Removes patient names, addresses, contact details, source filenames, source attachment URLs, author/custodian labels, and similar direct identifiers from new upload/import storage and browser payloads; existing local rows are neutralized by schema compatibility startup.
 - Rejects deprecated manual `client_name` uploads and chart creates when a patient name is supplied, while preserving compatibility fields by setting them to Patient ID.
 - Disables Alleva/API name matching for treatment-plan sync readiness; REST records must map by patient/client ID, and name-only records remain unmapped.
 - Tightens Treatment Plan Timeliness dashboard/detail/override access to administrators and office managers because counselor ownership is not explicit in that table.
 - Blocks unsafe bootstrap-admin defaults in production-like/local-client startup readiness and changes default reset-on-startup to off unless a recovery script explicitly enables it.
+- Adds a disabled-by-default `Import and display Alleva patient names` App settings control. Alleva treatment-plan sync stores generated redacted display labels by default and redacts existing Alleva-sourced names again when the setting is saved off.
+- Keeps validation-only name fallback separate from patient-name import/display and verifies both settings persist after save/readback.
+- Adds an admin-only `Pull / refresh treatment plans` button directly on the Treatment Plans tab.
+- Moves documented unused/legacy code files into `depricated/` with a manifest and excludes deprecated folders from Windows release packaging.
 - Adds redacted diagnostics collection through `scripts\collect-diagnostics.ps1`, `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`, and installer-created Start Menu/Desktop Diagnostics shortcuts.
 - Hardens the standalone API configuration page against OpenAPI/schema text injection by building generated operation fields with DOM APIs rather than markup strings.
 - Adds CSV formula injection protection and keeps saved API client credentials write-only in browser responses.
-- Validation evidence is recorded in `docs/validation/validation-report-2026-06-25-patient-id-privacy-hardening.md`.
+- Validation evidence for the redaction cleanup is recorded in `docs/validation/validation-report-2026-06-28-treatment-plan-redaction-cleanup.md`; target-laptop packaged install/backup/uninstall validation remains listed in `docs/Windows-Deployment-and-Test-Guide-Version-1.md`.
 
 ## 1.4.5-beta.1 - R3 beta-client readiness
 

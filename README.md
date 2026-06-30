@@ -1,14 +1,14 @@
 # IZ Clinical Notes Analyzer
 
-Current app version: `1.4.5-beta.1` / build `2026.06.23.1` on the `beta-local-desktop` channel.
+Current app version: `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
 
 IZ Clinical Notes Analyzer is a local-first clinical chart-review and Treatment Plan Timeliness Tracker app for Windows 10/11 desktop use. It helps R3 staff check clinical-note binders and treatment-plan tracking evidence before office-manager approval. The current app runs as one local FastAPI desktop service with a React/Vite browser interface at `http://localhost:8000`, SQLite under the user's local app-data folder, encrypted local uploaded-file storage, encrypted API configuration storage, role-based access control, deterministic treatment-plan rules, workflow profiles, readiness checks, optional LLM configuration disabled by default, and forensic audit logging.
 
-The normal R3 Windows user path does not require Docker, PostgreSQL, cloud hosting, Git, Node.js, or a database administrator when a prepared release folder with built frontend assets is used.
+The normal R3 Windows user path does not require Windows administrator access, Docker, PostgreSQL, cloud hosting, Git, Node.js, command-line work, or a database administrator when a prepared release folder with built frontend assets is used.
 
-## Current Beta 1.4.5-beta.1 State
+## Current Beta 1.4.6-beta.1 State
 
-Version 1.4.5-beta.1 is the current local Windows desktop beta. It includes:
+Version 1.4.6-beta.1 is the current local Windows desktop beta. It includes:
 
 - Treatment Plan Checklist Version 1 as the canonical source in `config\checklists\treatment-plan-v1.json`; its checklist content version remains `1.2.0` and is separate from the app version.
 - A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 42 PRD checklist steps.
@@ -26,9 +26,9 @@ Version 1.4.5-beta.1 is the current local Windows desktop beta. It includes:
 - Legacy local SQLite audit-log repair for databases that still contain retired FHIR-era required audit columns.
 - Admin-only App settings, API/EMR setup, LLM setup, and Forensic logs.
 - Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, stale-session handling, button-event audit logging, safe periodic source checks, bounded API operation responses, and API client-credentials testing.
-- Windows preflight, setup/start wrappers, release-folder packaging scripts, built frontend assets, and install/launch/uninstall commands for a prepared release folder.
+- Windows preflight, setup/start wrappers, release-folder packaging scripts, built frontend assets, and install/launch/diagnostics/backup/uninstall commands for a prepared release folder.
 
-Version 1.4.5-beta.1 still does not include ungated live Alleva patient import or a signed MSI/MSIX. The Alleva REST treatment-plan sync path is present and preserved, but disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete. Startup sync remains off by default. Alleva patient names stay redacted unless an admin explicitly enables and saves patient-name import/display in App settings. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
+Version 1.4.6-beta.1 still does not include ungated live Alleva patient import or a signed MSI/MSIX. The Alleva REST treatment-plan sync path is present and preserved, but disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete. Startup sync remains off by default. Alleva patient names stay redacted unless an admin explicitly enables and saves patient-name import/display in App settings. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
 ## Interactive Architecture Diagram
 
@@ -86,7 +86,7 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1"]
         Legacy["Legacy Docker/PostgreSQL notes<br/>docs/removal-log.md and legacy startup stubs"]
     end
 
@@ -169,19 +169,29 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by `scripts\build-windows-installer.ps1`. For Beta 1.4.5-beta.1 it writes:
+A release folder is created by `scripts\build-windows-installer.ps1`. For Beta 1.4.6-beta.1 it writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.5-beta.1`.
+1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
 
-The per-user install path is `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`. Local runtime data is preserved under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` when the app files are uninstalled.
+The per-user install path is `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`. Local runtime data is preserved under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` when the normal uninstall removes app files.
+
+The prepared release folder also includes double-click commands for diagnostics, backup, data-preserving uninstall, and complete uninstall:
+
+- `Stop-IZ-Clinical-Notes-Analyzer.cmd`
+- `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd`
+- `Backup-IZ-Clinical-Notes-Analyzer.cmd`
+- `Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
+- `Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd`
+
+Complete uninstall requires typing `REMOVE IZ DATA` and removes the local runtime data folder for the current Windows user. Create a backup first unless R3 intentionally wants the laptop cleared.
 
 ## Quick Start for a Source Checkout
 
@@ -266,8 +276,11 @@ Important local files and folders:
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-reports` | Redacted app API harness reports |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Reports from `scripts\test-alleva-api-connectivity.ps1` |
+| `%USERPROFILE%\Documents\IZ Clinical Notes Analyzer Backups` | Backup zips created by the backup helper |
 
 The local configuration, database, and uploads must be backed up together. If the local configuration is lost, encrypted uploads and saved API configuration may not be recoverable.
+
+Use `Backup-IZ-Clinical-Notes-Analyzer.cmd` or the Start Menu backup shortcut to create a full local-data backup zip. The backup is not redacted because it is intended for restore; store it encrypted and access-controlled.
 
 ## API Configuration and Alleva Readiness
 
@@ -306,11 +319,11 @@ Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API outp
 
 Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials.
 
-Beta `1.4.5-beta.1` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The REST sync path uses the active Alleva API base URL (`https://api.allevasoft.com` by default), OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run. Patient-name import/display and name-fallback matching are separate App settings controls and both remain off unless explicitly saved.
+Beta `1.4.6-beta.1` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The REST sync path uses the active Alleva API base URL (`https://api.allevasoft.com` by default), OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and validated endpoint mapping to pull active-client, treatment-plan, and treatment-review data into this app. Alleva does not perform the compliance decision; R3's deterministic local Treatment Plan Timeliness rules run after the REST payloads are normalized. Startup sync is disabled by default and requires explicit R3/Alleva live-sync approval plus validated active-client, treatment-plan, treatment-review, pagination, status, and signature/date field mapping before it can run. Patient-name import/display and name-fallback matching are separate App settings controls and both remain off unless explicitly saved.
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Beta `1.4.5-beta.1` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab includes a normal queue `Refresh` action and an admin-only `Pull / refresh treatment plans` button that runs the gated Alleva REST treatment-plan sync from the tab itself. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, recent audit history, selected-client 42-step checklist evaluation, manager status/comment notes per criterion, and counselor action export.
+The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Beta `1.4.6-beta.1` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab includes a normal queue `Refresh` action and an admin-only `Pull / refresh treatment plans` button that runs the gated Alleva REST treatment-plan sync from the tab itself. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, recent audit history, selected-client 42-step checklist evaluation, manager status/comment notes per criterion, and counselor action export.
 
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
@@ -372,8 +385,12 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `docs\release-notes.md` | Current release notes and version history |
 | `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
 | `scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows cleanup and restart prompt |
+| `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd` | Double-click local-data backup helper |
+| `scripts\Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd` | Double-click complete uninstall helper for app files plus local data |
 | `scripts\startup-windows-local.ps1` | Main Windows local startup script |
 | `scripts\stop-windows-local.ps1` | App-specific Windows process cleanup script |
+| `scripts\backup-local-data.ps1` | Backup zip creator for the local AppData folder |
+| `scripts\complete-uninstall-local-data.ps1` | Confirmed complete uninstall for installed app and local data |
 | `scripts\preflight-windows.ps1` | Windows runtime/readiness preflight |
 | `scripts\build-windows-installer.ps1` | Release-folder and zip builder |
 | `scripts\update-local-admin.ps1` | Local authorized admin reset utility |
@@ -396,7 +413,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 The current app version is:
 
 ```text
-1.4.5-beta.1
+1.4.6-beta.1
 ```
 
 Checklist content version is separate and remains:

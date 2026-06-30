@@ -1,8 +1,8 @@
 # API Configuration and Connectivity Test
 
-Date: 2026-06-25
+Date: 2026-06-30
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
 ## Where to open it
 

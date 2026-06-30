@@ -12,7 +12,7 @@ def test_beta_version_metadata_is_consistent_across_primary_surfaces(app_with_sq
     package_json = json.loads((REPO_ROOT / 'frontend' / 'package.json').read_text(encoding='utf-8'))
     package_lock = json.loads((REPO_ROOT / 'frontend' / 'package-lock.json').read_text(encoding='utf-8'))
 
-    assert version == '1.4.5-beta.1'
+    assert version == '1.4.6-beta.1'
     assert metadata['version'] == version
     assert metadata['release_channel'] == 'beta-local-desktop'
     assert metadata['stability'] == 'beta'

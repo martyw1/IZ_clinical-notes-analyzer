@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.4.5-beta.1",
-  "build": "2026.06.23.1",
+  "version": "1.4.6-beta.1",
+  "build": "2026.06.30.1",
   "release_channel": "beta-local-desktop",
-  "release_date": "2026-06-23",
+  "release_date": "2026-06-30",
   "git_branch": "main",
   "stability": "beta",
   "is_prerelease": true,
-  "version_name": "Beta 1.4.5-beta.1 R3 beta-client readiness",
-  "description": "Prepares the local Windows desktop beta for R3 client review with Status Dashboard branding, bundled R3 logo support, admin-only patient-data reset, Treatment Plan criterion manager notes/actions, gated manual Alleva treatment-plan retrieval, safer manual-upload failures, corrected due-date windows, and preserved Alleva live-sync approval gates."
+  "version_name": "Beta 1.4.6-beta.1 Windows no-admin install readiness",
+  "description": "Aligns the local Windows desktop beta for non-technical, no-admin installation with Patient-ID privacy hardening, redacted diagnostics, data-preserving and complete uninstall paths, local-data backup helpers, Treatment Plan criterion manager notes/actions, gated manual Alleva treatment-plan retrieval, corrected due-date windows, and preserved Alleva live-sync approval gates."
 }

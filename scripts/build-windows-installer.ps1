@@ -88,7 +88,11 @@ function Write-InstallerFiles {
     param([string]$TargetPackageDir)
     $installCmd = Join-Path $TargetPackageDir 'Install-IZ-Clinical-Notes-Analyzer.cmd'
     $launchCmd = Join-Path $TargetPackageDir 'Launch-IZ-Clinical-Notes-Analyzer.cmd'
+    $stopCmd = Join-Path $TargetPackageDir 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
+    $diagnosticsCmd = Join-Path $TargetPackageDir 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
+    $backupCmd = Join-Path $TargetPackageDir 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
     $uninstallCmd = Join-Path $TargetPackageDir 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
+    $completeUninstallCmd = Join-Path $TargetPackageDir 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
 
 @"
 @echo off
@@ -110,10 +114,42 @@ exit /b %ERRORLEVEL%
 @"
 @echo off
 setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\scripts\stop-windows-local.ps1"
+if not "%ERRORLEVEL%"=="0" pause
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $stopCmd -Encoding ASCII
+
+@"
+@echo off
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\scripts\collect-diagnostics.ps1"
+if not "%ERRORLEVEL%"=="0" pause
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $diagnosticsCmd -Encoding ASCII
+
+@"
+@echo off
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\scripts\backup-local-data.ps1"
+if not "%ERRORLEVEL%"=="0" pause
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $backupCmd -Encoding ASCII
+
+@"
+@echo off
+setlocal
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\uninstall-windows-release.ps1"
 if not "%ERRORLEVEL%"=="0" pause
 exit /b %ERRORLEVEL%
 "@ | Set-Content -Path $uninstallCmd -Encoding ASCII
+
+@"
+@echo off
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\scripts\complete-uninstall-local-data.ps1"
+if not "%ERRORLEVEL%"=="0" pause
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $completeUninstallCmd -Encoding ASCII
 
     $installerDir = Join-Path $TargetPackageDir 'installer'
     New-Item -ItemType Directory -Path $installerDir -Force | Out-Null
@@ -127,23 +163,36 @@ $PackageDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $SourceAppDir = Join-Path $PackageDir 'app'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer'
 $StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer'
+$DesktopDir = [Environment]::GetFolderPath('Desktop')
 $Launcher = Join-Path $InstallRoot 'scripts\Start-IZ-Clinical-Notes-Analyzer.cmd'
+$StopLauncher = Join-Path $InstallRoot 'scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd'
+$DiagnosticsLauncher = Join-Path $InstallRoot 'scripts\Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
+$BackupLauncher = Join-Path $InstallRoot 'scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd'
 $InstalledInstallerDir = Join-Path $InstallRoot 'installer'
 $StartShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer.lnk'
+$StopShortcut = Join-Path $StartMenuDir 'Stop IZ Clinical Notes Analyzer.lnk'
+$DiagnosticsShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer Diagnostics.lnk'
+$BackupShortcut = Join-Path $StartMenuDir 'Backup IZ Clinical Notes Analyzer.lnk'
 $UninstallShortcut = Join-Path $StartMenuDir 'Uninstall IZ Clinical Notes Analyzer.lnk'
+$CompleteUninstallShortcut = Join-Path $StartMenuDir 'Complete Uninstall IZ Clinical Notes Analyzer.lnk'
+$DesktopStartShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer.lnk'
+$DesktopDiagnosticsShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer Diagnostics.lnk'
+$DesktopBackupShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer Backup.lnk'
 $Uninstaller = Join-Path $InstallRoot 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
+$CompleteUninstaller = Join-Path $InstallRoot 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
 
 function New-Shortcut {
     param(
         [string]$ShortcutPath,
         [string]$TargetPath,
-        [string]$WorkingDirectory
+        [string]$WorkingDirectory,
+        [string]$IconLocation = ''
     )
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($ShortcutPath)
     $shortcut.TargetPath = $TargetPath
     $shortcut.WorkingDirectory = $WorkingDirectory
-    $shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,220"
+    $shortcut.IconLocation = if ($IconLocation) { $IconLocation } else { "$env:SystemRoot\System32\shell32.dll,220" }
     $shortcut.Save()
 }
 
@@ -161,8 +210,23 @@ if not "%ERRORLEVEL%"=="0" pause
 exit /b %ERRORLEVEL%
 "@ | Set-Content -Path $Uninstaller -Encoding ASCII
 
+@"
+@echo off
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\complete-uninstall-local-data.ps1" -InstalledAppRoot "%~dp0"
+if not "%ERRORLEVEL%"=="0" pause
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $CompleteUninstaller -Encoding ASCII
+
 New-Shortcut -ShortcutPath $StartShortcut -TargetPath $Launcher -WorkingDirectory $InstallRoot
+New-Shortcut -ShortcutPath $StopShortcut -TargetPath $StopLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,27"
+New-Shortcut -ShortcutPath $DiagnosticsShortcut -TargetPath $DiagnosticsLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,23"
+New-Shortcut -ShortcutPath $BackupShortcut -TargetPath $BackupLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,258"
 New-Shortcut -ShortcutPath $UninstallShortcut -TargetPath $Uninstaller -WorkingDirectory $InstallRoot
+New-Shortcut -ShortcutPath $CompleteUninstallShortcut -TargetPath $CompleteUninstaller -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,131"
+New-Shortcut -ShortcutPath $DesktopStartShortcut -TargetPath $Launcher -WorkingDirectory $InstallRoot
+New-Shortcut -ShortcutPath $DesktopDiagnosticsShortcut -TargetPath $DiagnosticsLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,23"
+New-Shortcut -ShortcutPath $DesktopBackupShortcut -TargetPath $BackupLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,258"
 
 Write-Host "Installed IZ Clinical Notes Analyzer to $InstallRoot"
 Write-Host "Start Menu shortcut: $StartShortcut"
@@ -181,6 +245,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $InstallRoot = if ($InstalledAppRoot) { $InstalledAppRoot } else { Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer' }
 $StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer'
+$DesktopDir = [Environment]::GetFolderPath('Desktop')
+$DesktopShortcuts = @(
+    'IZ Clinical Notes Analyzer.lnk',
+    'IZ Clinical Notes Analyzer Diagnostics.lnk',
+    'IZ Clinical Notes Analyzer Backup.lnk'
+) | ForEach-Object { Join-Path $DesktopDir $_ }
+
+foreach ($shortcut in $DesktopShortcuts) {
+    if (Test-Path -LiteralPath $shortcut) {
+        Remove-Item -LiteralPath $shortcut -Force
+    }
+}
 
 if (Test-Path $StartMenuDir) {
     Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
@@ -243,7 +319,11 @@ $manifest = [ordered]@{
     package_dir = $PackageDir
     install_command = 'Install-IZ-Clinical-Notes-Analyzer.cmd'
     launch_command = 'Launch-IZ-Clinical-Notes-Analyzer.cmd'
+    stop_command = 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
+    diagnostics_command = 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
+    backup_command = 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
     uninstall_command = 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
+    complete_uninstall_command = 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
     source_repo = $RootDir
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PackageDir 'release-manifest.json') -Encoding UTF8

@@ -1,8 +1,8 @@
 # Admin Access Reset Guide
 
-Date: 2026-06-25
+Date: 2026-06-30
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.25.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
 ## Purpose
 
@@ -87,4 +87,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected beta version: `1.4.6-beta.1` / build `2026.06.25.1`.
+Expected beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
