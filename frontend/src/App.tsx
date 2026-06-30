@@ -200,6 +200,8 @@ type TimelinessClientSummary = {
   discharge_conflict?: boolean
   data_quality_warnings?: string[]
   id_join_confidence?: string
+  source_confidence?: string
+  source_endpoint_count?: number
   current_plan_record_id?: number | null
 }
 
@@ -2916,6 +2918,10 @@ export function App() {
       evidence_summary: client.evidence_summary,
       evidence_completeness_percent: client.evidence_completeness_percent,
       missing_evidence_fields: client.missing_evidence_fields,
+      data_quality_warnings: client.data_quality_warnings || [],
+      id_join_confidence: client.id_join_confidence || 'unknown',
+      source_confidence: client.source_confidence || client.id_join_confidence || 'unknown',
+      source_endpoint_count: client.source_endpoint_count || 0,
       last_checked_at: client.last_checked_at,
       last_imported_at: client.last_imported_at,
       source_evidence: client.source_evidence,
@@ -3030,6 +3036,23 @@ export function App() {
       )
     } else {
       const header = ['row_type', 'id_or_step', 'label', 'status', 'due_date_or_key', 'evidence_summary_or_source', 'finding_or_rule', 'evaluated_values']
+      const sourceRows = [
+        [
+          'source_metadata',
+          selectedTimelinessClient.id,
+          'Alleva source confidence',
+          selectedTimelinessClient.source_confidence || selectedTimelinessClient.id_join_confidence || 'unknown',
+          'source_endpoint_count',
+          selectedTimelinessClient.source_evidence,
+          selectedTimelinessClient.rule_used,
+          JSON.stringify({
+            source_endpoint_count: selectedTimelinessClient.source_endpoint_count || 0,
+            data_quality_warnings: selectedTimelinessClient.data_quality_warnings || [],
+          }),
+        ]
+          .map(csvCell)
+          .join(','),
+      ]
       const rows = selectedTimelinessClient.rule_results.map((result) =>
         ['timeliness_rule', result.rule_id, result.label, result.status, result.due_date || '', result.evidence_summary, result.rule_id, ''].map(csvCell).join(','),
       )
@@ -3037,7 +3060,11 @@ export function App() {
         [item.row_type, item.step, item.label, item.status, item.key, item.source_evidence, item.finding_message, item.evaluated_values].map(csvCell).join(','),
       )
       const contentRows = treatmentPlanContentRowsForExport(selectedTimelinessClient).map((item) => item.map(csvCell).join(','))
-      downloadTextFile(`treatment-plan-report-${safePatientId}.csv`, [header.map(csvCell).join(','), ...rows, ...workflowRows, ...contentRows].join('\n'), 'text/csv')
+      downloadTextFile(
+        `treatment-plan-report-${safePatientId}.csv`,
+        [header.map(csvCell).join(','), ...sourceRows, ...rows, ...workflowRows, ...contentRows].join('\n'),
+        'text/csv',
+      )
     }
     setStatus(`Exported treatment-plan report for patient ${selectedTimelinessClient.patient_id}.`)
   }

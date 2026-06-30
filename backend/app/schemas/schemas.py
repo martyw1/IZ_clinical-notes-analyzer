@@ -815,6 +815,8 @@ class TimelinessClientSummaryOut(BaseModel):
     discharge_conflict: bool = False
     data_quality_warnings: list[str] = Field(default_factory=list)
     id_join_confidence: str = 'unknown'
+    source_confidence: str = 'unknown'
+    source_endpoint_count: int = 0
     current_plan_record_id: int | None = None
 
 

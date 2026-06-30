@@ -529,6 +529,13 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         aggregate = client.get(f'/api/timeliness/clients/{stored_client_id}/treatment-plan', headers=headers)
         assert aggregate.status_code == 200
         aggregate_payload = aggregate.json()
+        assert aggregate_payload['schema_version'] == 'patient-treatment-plan-aggregate-v1'
+        assert aggregate_payload['patient_key'] == 'client:1001'
+        assert aggregate_payload['current_treatment_plan']['source_record_id'] == '502'
+        assert aggregate_payload['treatment_reviews'][0]['source_document_id'] == '701'
+        assert aggregate_payload['computed_status']['rule_used']
+        assert aggregate_payload['raw_sources'][0]['payload_hash']
+        assert 'raw_payload' not in json.dumps(aggregate_payload)
         assert aggregate_payload['current_plan']['content_capture_status'] == 'structured'
         assert aggregate_payload['current_plan']['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
         assert 'Jane Q Doe' not in json.dumps(aggregate_payload)
@@ -587,6 +594,63 @@ def test_alleva_rest_sync_redacts_patient_names_by_default_and_requires_opt_in(a
         db.commit()
         stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-NAME-REDAC')).scalar_one()
         assert stored_client.permitted_name == 'Synthetic Import Name'
+    finally:
+        db.close()
+
+
+def test_alleva_rest_sync_matches_luin_only_clients_without_name_fallback(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    db = session_local()
+    try:
+        summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=[
+                {
+                    'id': '',
+                    'luin': 'LUIN-ONLY-001',
+                    'name': {'clientFullName': 'Synthetic LUIN Client'},
+                    'status': 'Active',
+                    'isClient': True,
+                    'levelOfCare': 'IOP',
+                    'admissionDateTime': '2026-06-01T09:00:00Z',
+                }
+            ],
+            treatment_plans_payload=[
+                {
+                    'id': 'LUIN-PLAN-001',
+                    'client': {'luin': 'LUIN-ONLY-001'},
+                    'isInitialTP': False,
+                    'isActive': True,
+                    'isComplete': True,
+                    'startDate': '2026-06-02T10:00:00Z',
+                    'staffSignatureDate': '2026-06-02',
+                    'clientSignatureDate': '2026-06-02',
+                    'problems': [{'diagnoses': [{'code': 'F10.20'}]}],
+                }
+            ],
+            treatment_reviews_payload=[
+                {
+                    'id': 'LUIN-REVIEW-001',
+                    'luin': 'LUIN-ONLY-001',
+                    'createdDate': '2026-06-15T12:00:00Z',
+                    'staffSignatureDate': '2026-06-15',
+                    'nextReviewDueDate': '2026-08-14',
+                }
+            ],
+        )
+        db.commit()
+
+        assert summary['upserted_client_count'] == 1
+        assert summary['unmapped_treatment_plan_count'] == 0
+        assert summary['unmapped_treatment_review_count'] == 0
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'LUIN-ONLY-001')).scalar_one()
+        assert stored_client.id_join_confidence == 'id_match'
+        assert len(stored_client.treatment_plans) == 2
+        assert any(plan.source_document_id == 'LUIN-PLAN-001' for plan in stored_client.treatment_plans)
+        assert any(plan.source_document_id == 'LUIN-REVIEW-001' for plan in stored_client.treatment_plans)
     finally:
         db.close()
 

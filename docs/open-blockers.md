@@ -22,6 +22,8 @@ Status: Open
 
 Current implementation state: Beta 1.4.6-beta.1 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping. Manual retrieval is available from the Status Dashboard EMR/API card and the App Settings sync controls, but both use the same approval and mapping gates. App settings now presents one active Alleva/API connection; saved endpoint profiles are presets that must be activated into the active connection before they affect readiness checks, periodic checks, API harness tests, or approved REST sync.
 
+The API harness also includes a `patient_treatment_plan_aggregates` dry-run report for combining `/clients`, `/treatment-plans`, and `/treatment-reviews` into PHI-minimized aggregate diagnostics. This remains readiness/testing evidence only. It does not remove the live sync approval, endpoint mapping, tenant credential, pagination/rate-limit, PHI handling, or LOC-change blocker requirements.
+
 Current diagnostic behavior: manual sync now reports the specific failing stage instead of surfacing generic exception text. If client credentials obtain a token but Alleva returns `401 Unauthorized` or `403 Forbidden` for `/clients`, `/treatment-plans`, or `/treatment-reviews`, the App Settings status identifies this as endpoint authorization/permission failure and asks R3/Alleva to confirm tenant access, token audience/scope, endpoint permission, and API version.
 
 Required before live startup sync:

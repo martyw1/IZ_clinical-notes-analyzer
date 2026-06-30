@@ -139,6 +139,21 @@ class MockedHttpxClient:
                     },
                 ],
             )
+        if url.startswith('https://api.example.test/treatment-reviews?'):
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        'id': 301,
+                        'client': {'clientId': 'PAT-ACTIVE-001'},
+                        'createdDate': '2026-01-15T00:00:00',
+                        'staffSignatureDate': '2026-01-15',
+                        'clientSignatureDate': '2026-01-15',
+                        'nextReviewDueDate': '2026-03-16',
+                    }
+                ],
+            )
         if url.startswith('https://api.example.test/clients?'):
             assert request.headers.get('authorization') == 'Bearer mock-access-token'
             return httpx.Response(
@@ -882,6 +897,26 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert patient_rows['PAT-ACTIVE-001']['first_admitted'] == '2026-02-03'
         assert patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['discharge_conflict'] is True
         assert 'status is Active' in patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['why_active']
+
+        aggregate = client.post(
+            '/api/api-configuration/alleva-quick-pull',
+            headers=headers,
+            json={**base_body, 'report': 'patient_treatment_plan_aggregates'},
+        )
+        assert aggregate.status_code == 200
+        aggregate_payload = aggregate.json()
+        assert aggregate_payload['status'] == 'ok'
+        assert aggregate_payload['source_operation'] == 'GET /clients + GET /treatment-plans + GET /treatment-reviews'
+        assert aggregate_payload['returned_count'] == 2
+        assert aggregate_payload['diagnostics']['aggregate_count'] == 2
+        active_aggregate = next(row for row in aggregate_payload['rows'] if row['patient_key'] == 'client:PAT-ACTIVE-001')
+        assert active_aggregate['current_treatment_plan']['source_record_id'] == '101'
+        assert active_aggregate['treatment_reviews'][0]['source_record_id'] == '301'
+        assert active_aggregate['patient']['display_name'] is None
+        assert active_aggregate['source_endpoint_count'] >= 3
+        assert 'raw_payload' not in json.dumps(active_aggregate)
+        assert 'Synthetic Active Client' not in json.dumps(aggregate_payload)
+        assert 'Jane Q Doe' not in json.dumps(aggregate_payload)
 
     db = session_local()
     try:

@@ -26,6 +26,7 @@ from app.services.api_connectivity import (
 )
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
+from app.services.alleva_treatment_plan_aggregate import AggregateBuildOptions, build_patient_treatment_plan_aggregate_result
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
 
 logger = logging.getLogger(__name__)
@@ -162,7 +163,14 @@ class ApiOperationTestInput(ApiDefinitionPullInput):
 
 
 class AllevaQuickPullInput(ApiDefinitionPullInput):
-    report: Literal['all_patient_records', 'active_treatment_plans', 'overdue_treatment_plans', 'inactive_treatment_plans', 'active_patients']
+    report: Literal[
+        'all_patient_records',
+        'active_treatment_plans',
+        'overdue_treatment_plans',
+        'inactive_treatment_plans',
+        'active_patients',
+        'patient_treatment_plan_aggregates',
+    ]
     operation_parameters: dict[str, Any] = Field(default_factory=dict)
     max_pages: int = Field(default=10, ge=1, le=50)
 
@@ -512,7 +520,7 @@ def _is_active_patient(payload: dict[str, Any]) -> bool:
 
 
 def _quick_pull_path(report: str) -> str:
-    return '/clients' if report in {'all_patient_records', 'active_patients'} else '/treatment-plans'
+    return '/clients' if report in {'all_patient_records', 'active_patients', 'patient_treatment_plan_aggregates'} else '/treatment-plans'
 
 
 def _http_status_label(status_code: int) -> str:
@@ -650,6 +658,72 @@ def _fetch_alleva_collection(
                 break
             cursor += limit
     return records, None
+
+
+def _run_alleva_aggregate_quick_pull(
+    *,
+    base_url: str,
+    operation_parameters: dict[str, Any],
+    auth_context: dict[str, Any],
+    payload: AllevaQuickPullInput,
+    timeout_seconds: int,
+    today: date,
+) -> dict[str, Any]:
+    collections: dict[str, list[dict[str, Any]]] = {}
+    fetch_errors: list[dict[str, Any]] = []
+    for label, path in (
+        ('clients', '/clients'),
+        ('treatment_plans', '/treatment-plans'),
+        ('treatment_reviews', '/treatment-reviews'),
+    ):
+        records, fetch_error = _fetch_alleva_collection(
+            base_url=base_url,
+            path=path,
+            operation_parameters=operation_parameters,
+            api_key=auth_context['api_key'],
+            bearer_token=auth_context['bearer_token'],
+            api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
+            timeout_seconds=timeout_seconds,
+            max_pages=payload.max_pages,
+        )
+        collections[label] = records
+        if fetch_error:
+            fetch_errors.append({'endpoint': path, **fetch_error})
+
+    aggregate_result = build_patient_treatment_plan_aggregate_result(
+        clients_payload=collections.get('clients', []),
+        treatment_plans_payload=collections.get('treatment_plans', []),
+        treatment_reviews_payload=collections.get('treatment_reviews', []),
+        options=AggregateBuildOptions(today=today, include_patient_name=False, allow_name_fallback=False),
+    )
+    rows = aggregate_result.aggregates
+    total_records_seen = sum(len(records) for records in collections.values())
+    status = 'ok'
+    if fetch_errors and not rows:
+        status = 'fail'
+    elif fetch_errors or not rows:
+        status = 'warn'
+    if status == 'ok':
+        message = f'Alleva aggregate pull built {len(rows)} patient treatment-plan aggregate(s) from {total_records_seen} fetched record(s).'
+    elif rows:
+        message = f'Alleva aggregate pull built {len(rows)} aggregate(s), but one or more source endpoints could not finish.'
+    else:
+        message = 'Alleva aggregate pull did not produce patient treatment-plan aggregates. Confirm endpoint permissions and source data.'
+    return {
+        'status': status,
+        'message': message,
+        'rows': rows,
+        'aggregates': rows,
+        'returned_count': len(rows),
+        'total_records_seen': total_records_seen,
+        'fetch_errors': fetch_errors,
+        'fetch_error': fetch_errors[0] if fetch_errors else None,
+        'diagnostics': aggregate_result.diagnostics,
+        'category': 'completed' if status == 'ok' else ('partial_source_failure' if rows else 'no_aggregates_returned'),
+        'columns': [],
+        'tsv': '',
+        'copy_format': 'json',
+    }
 
 
 @router.get('/api-configuration/sample-openapi.json', include_in_schema=False)
@@ -1006,7 +1080,11 @@ def run_alleva_quick_pull(
     operation_parameters.setdefault('api-version', '1.0')
     operation_parameters.setdefault('X-Version', '1.0')
     path = _quick_pull_path(payload.report)
-    source_operation = f'GET {path}'
+    source_operation = (
+        'GET /clients + GET /treatment-plans + GET /treatment-reviews'
+        if payload.report == 'patient_treatment_plan_aggregates'
+        else f'GET {path}'
+    )
     if payload.report == 'all_patient_records':
         operation_parameters.setdefault('fields', ALL_PATIENT_RECORD_FIELDS)
 
@@ -1051,6 +1129,53 @@ def run_alleva_quick_pull(
         return result
 
     base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url or 'https://api.allevasoft.com'
+    if payload.report == 'patient_treatment_plan_aggregates':
+        aggregate_result = _run_alleva_aggregate_quick_pull(
+            base_url=base_url,
+            operation_parameters=operation_parameters,
+            auth_context=auth_context,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+            today=_utc_now().date(),
+        )
+        result = {
+            'report': payload.report,
+            'source_operation': source_operation,
+            'operation_parameters': operation_parameters,
+            'max_pages': payload.max_pages,
+            'auth_mode': payload.auth_mode,
+            'api_key_used': bool(auth_context['api_key']),
+            'bearer_token_used': bool(auth_context['bearer_token']),
+            'credential_source': auth_context['credential_source'],
+            'token_result': auth_context['token_result'] if auth_context.get('token_result') else {},
+            **aggregate_result,
+        }
+        log_event(
+            db,
+            request,
+            'api_configuration.alleva_quick_pull',
+            actor=user,
+            event_category='api_connectivity',
+            target_entity=source_operation,
+            target_entity_type='external_api_operation',
+            details={
+                'status': result['status'],
+                'report': payload.report,
+                'auth_mode': payload.auth_mode,
+                'api_key_used': bool(auth_context['api_key']),
+                'bearer_token_used': bool(auth_context['bearer_token']),
+                'credential_source': auth_context['credential_source'],
+                'total_records_seen': result['total_records_seen'],
+                'returned_count': result['returned_count'],
+                'fetch_error_count': len(result['fetch_errors']),
+                'diagnostic_codes': result['diagnostics'].get('data_quality_codes', {}),
+            },
+            outcome_status='failure' if result['status'] == 'fail' else 'success',
+            severity='info' if result['status'] == 'ok' else 'warning',
+            message=f'Alleva quick pull completed for {payload.report} with status {result["status"]}.',
+        )
+        return result
+
     records, fetch_error = _fetch_alleva_collection(
         base_url=base_url,
         path=path,

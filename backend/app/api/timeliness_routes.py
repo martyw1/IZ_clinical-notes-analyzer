@@ -221,9 +221,11 @@ def get_timeliness_client_treatment_plan_aggregate(
     if client is None:
         raise HTTPException(status_code=404, detail='Treatment Plan Timeliness client not found')
     app_settings = get_or_create_app_settings(db)
+    evaluation = evaluate_client(client, app_settings)
     payload = treatment_plan_aggregate_payload(
         client,
         patient_name_display_enabled=app_settings.alleva_treatment_plan_patient_name_import_enabled,
+        evaluation=evaluation,
     )
     log_event(
         db,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
@@ -1419,6 +1420,8 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
         'discharge_conflict': client.discharge_conflict,
         'data_quality_warnings': _json_list_values(client.data_quality_warnings),
         'id_join_confidence': client.id_join_confidence,
+        'source_confidence': client.id_join_confidence or 'unknown',
+        'source_endpoint_count': len({item['endpoint'] for item in _aggregate_raw_sources(client, list(client.treatment_plans))}),
         'current_plan_record_id': client.current_plan_record_id,
     }
 
@@ -1509,7 +1512,12 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
     }
 
 
-def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_name_display_enabled: bool = False) -> dict[str, Any]:
+def treatment_plan_aggregate_payload(
+    client: TreatmentPlanClient,
+    *,
+    patient_name_display_enabled: bool = False,
+    evaluation: TimelinessEvaluation | None = None,
+) -> dict[str, Any]:
     def plan_payload(item: TreatmentPlanRecord) -> dict[str, Any]:
         return {
             'id': item.id,
@@ -1522,6 +1530,8 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_nam
             'source_evidence': item.source_evidence,
             'source_section': item.source_section,
             'source_document_id': item.source_document_id,
+            'source_record_id': item.source_document_id,
+            'source_endpoint': '/treatment-reviews' if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update} else '/treatment-plans',
             'is_valid': item.is_valid,
             'conflict_note': item.conflict_note,
             'problem_count': item.problem_count,
@@ -1548,7 +1558,53 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_nam
 
     plans = sorted(client.treatment_plans, key=lambda item: (_date(item.staff_signature_date) or _date(item.document_date) or date.min, item.id or 0), reverse=True)
     current = next((item for item in plans if item.id == client.current_plan_record_id), None)
-    return {
+    legacy_current_plan = plan_payload(current) if current is not None else None
+    legacy_historical_plans = [plan_payload(item) for item in plans if item.id != client.current_plan_record_id]
+    legacy_review_records = [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}]
+    structured_data_quality = _aggregate_data_quality(client, current=current, evaluation=evaluation)
+    raw_sources = _aggregate_raw_sources(client, plans)
+    payload = {
+        'schema_version': 'patient-treatment-plan-aggregate-v1',
+        'patient_key': _aggregate_patient_key(client),
+        'patient': {
+            'display_name': _client_display_label(client, patient_name_display_enabled=patient_name_display_enabled),
+            'identifiers': {
+                'patient_id': client.patient_id,
+                'lead_id': client.alleva_lead_id,
+                'client_id': client.alleva_client_id,
+                'unique_id': client.alleva_unique_id,
+                'mrn': client.alleva_mrn,
+                'source_id': client.alleva_source_id,
+            },
+            'is_active': client.is_active,
+            'source_system': 'Alleva REST API' if (client.source_evidence or '').startswith('Alleva REST') else 'Local Timeliness Tracker',
+        },
+        'episode': {
+            'admission_date': client.admission_date,
+            'level_of_care': client.current_level_of_care,
+            'primary_clinician': client.counselor_name,
+            'loc_history': [
+                {
+                    'level_of_care': item.level_of_care,
+                    'facility': item.facility,
+                    'effective_date': item.effective_date,
+                    'discharge_date': item.discharge_date,
+                    'source_evidence': item.source_evidence,
+                }
+                for item in sorted(client.level_of_care_history, key=lambda item: (_date(item.effective_date) or date.min, item.id or 0))
+            ],
+            'discharge_conflict': client.discharge_conflict,
+        },
+        'current_treatment_plan': legacy_current_plan,
+        'treatment_plans': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.initial, TreatmentPlanKind.master}],
+        'treatment_reviews': legacy_review_records,
+        'diagnoses': _aggregate_diagnoses(current),
+        'advanced_form_captures': [],
+        'computed_status': _aggregate_computed_status(evaluation, current=current),
+        'data_quality': structured_data_quality,
+        'raw_sources': raw_sources,
+        'source_confidence': client.id_join_confidence or 'unknown',
+        'source_endpoint_count': len({item['endpoint'] for item in raw_sources}),
         'patient_id': client.patient_id,
         'permitted_name': _client_display_label(client, patient_name_display_enabled=patient_name_display_enabled),
         'is_active': client.is_active,
@@ -1566,7 +1622,139 @@ def treatment_plan_aggregate_payload(client: TreatmentPlanClient, *, patient_nam
         'id_join_warnings': _json_list_values(client.id_join_warnings),
         'data_quality_warnings': _json_list_values(client.data_quality_warnings),
         'discharge_conflict': client.discharge_conflict,
-        'current_plan': plan_payload(current) if current is not None else None,
-        'historical_plans': [plan_payload(item) for item in plans if item.id != client.current_plan_record_id],
-        'review_records': [plan_payload(item) for item in plans if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update}],
+        'current_plan': legacy_current_plan,
+        'historical_plans': legacy_historical_plans,
+        'review_records': legacy_review_records,
+    }
+    return payload
+
+
+def _aggregate_patient_key(client: TreatmentPlanClient) -> str:
+    for prefix, value in (
+        ('lead', client.alleva_lead_id),
+        ('client', client.alleva_client_id),
+        ('unique', client.alleva_unique_id),
+        ('mrn', client.alleva_mrn),
+        ('source', client.alleva_source_id),
+        ('patient', client.patient_id),
+    ):
+        if value:
+            return f'{prefix}:{value}'
+    return f'client_row:{client.id}'
+
+
+def _aggregate_data_quality(
+    client: TreatmentPlanClient,
+    *,
+    current: TreatmentPlanRecord | None,
+    evaluation: TimelinessEvaluation | None,
+) -> list[dict[str, Any]]:
+    issues = [
+        {
+            'code': str(value),
+            'severity': 'medium',
+            'message': str(value).replace('_', ' '),
+            'source': 'timeliness_client',
+        }
+        for value in _json_list_values(client.data_quality_warnings)
+    ]
+    for value in _json_list_values(client.id_join_warnings):
+        issues.append({'code': str(value), 'severity': 'medium', 'message': str(value).replace('_', ' '), 'source': 'identity_match'})
+    if client.discharge_conflict:
+        issues.append(
+            {
+                'code': 'active_patient_discharge_conflict',
+                'severity': 'medium',
+                'message': 'Active patient record includes discharge evidence and needs review.',
+                'source': 'client',
+            }
+        )
+    if current is None:
+        issues.append(
+            {
+                'code': 'no_current_active_treatment_plan',
+                'severity': 'high',
+                'message': 'No current active treatment plan is selected for this patient.',
+                'source': 'treatment_plans',
+            }
+        )
+    elif current.conflict_note:
+        issues.append({'code': 'current_plan_conflict', 'severity': 'high', 'message': current.conflict_note, 'source': current.source_section})
+    if evaluation and evaluation.missing_evidence_fields:
+        issues.append(
+            {
+                'code': 'missing_required_timeliness_evidence',
+                'severity': 'high',
+                'message': 'Required timeliness evidence is missing or conflicting.',
+                'source': 'timeliness_rules',
+                'fields': evaluation.missing_evidence_fields,
+            }
+        )
+    return issues
+
+
+def _aggregate_raw_sources(client: TreatmentPlanClient, plans: list[TreatmentPlanRecord]) -> list[dict[str, Any]]:
+    sources = [_raw_source_ref('/clients', client.alleva_source_id or client.patient_id, client.source_evidence)]
+    for item in plans:
+        endpoint = '/treatment-reviews' if item.plan_kind in {TreatmentPlanKind.review, TreatmentPlanKind.loc_update} else '/treatment-plans'
+        sources.append(_raw_source_ref(endpoint, item.source_document_id or str(item.id), item.source_evidence))
+    seen: set[tuple[str, str]] = set()
+    deduped = []
+    for source in sources:
+        key = (source['endpoint'], source['payload_hash'])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(source)
+    return deduped
+
+
+def _raw_source_ref(endpoint: str, source_record_id: str, evidence: str) -> dict[str, Any]:
+    material = json.dumps({'endpoint': endpoint, 'source_record_id': source_record_id, 'evidence': evidence}, sort_keys=True)
+    return {
+        'endpoint': endpoint,
+        'method': 'GET',
+        'source_record_id': source_record_id,
+        'payload_hash': hashlib.sha256(material.encode('utf-8')).hexdigest(),
+        'source_record_count': 1,
+        'source_version': 'unknown',
+    }
+
+
+def _aggregate_diagnoses(current: TreatmentPlanRecord | None) -> list[dict[str, Any]]:
+    if current is None or current.diagnosis_count <= 0:
+        return []
+    return [
+        {
+            'source': 'current_treatment_plan',
+            'source_record_id': current.source_document_id,
+            'diagnosis_count': current.diagnosis_count,
+            'present_in_current_plan': True,
+        }
+    ]
+
+
+def _aggregate_computed_status(evaluation: TimelinessEvaluation | None, *, current: TreatmentPlanRecord | None) -> dict[str, Any]:
+    if evaluation is None:
+        return {
+            'status': 'Unable to Evaluate',
+            'next_review_due_selected': None,
+            'next_review_due_api': current.displayed_next_due_date if current is not None else None,
+            'next_review_due_computed': None,
+            'missing_items': ['timeliness_evaluation'],
+        }
+    return {
+        'status': evaluation.status,
+        'as_of_date': evaluation.current_date,
+        'next_review_due_selected': evaluation.next_due_date,
+        'next_review_due_api': evaluation.evidence_comparison.document_next_due_date,
+        'next_review_due_computed': evaluation.evidence_comparison.date_clock_due_date,
+        'api_computed_due_date_disagreement': bool(evaluation.evidence_comparison.document_next_due_date and evaluation.evidence_comparison.conflict_explanation),
+        'anchor_date': evaluation.evidence_comparison.date_clock_anchor_date,
+        'interval_days': evaluation.evidence_comparison.interval_days,
+        'completion_api': current.alleva_is_complete if current is not None else None,
+        'completion_computed': current.is_valid if current is not None else None,
+        'rule_used': evaluation.rule_used,
+        'evidence_completeness_percent': evaluation.evidence_completeness_percent,
+        'missing_items': evaluation.missing_evidence_fields,
     }

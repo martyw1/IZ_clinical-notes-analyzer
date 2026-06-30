@@ -146,7 +146,7 @@ def _client_name(payload: dict[str, Any]) -> str:
 
 def _client_aliases(payload: dict[str, Any]) -> list[str]:
     aliases = []
-    for key in ('clientId', 'id', 'leadId', 'luin', 'uniqueId', 'mrn'):
+    for key in ('clientId', 'id', 'leadId', 'chartId', 'chartNumber', 'luin', 'uniqueId', 'mrn'):
         value = _strip(payload.get(key))
         if value:
             aliases.append(value)
@@ -154,7 +154,7 @@ def _client_aliases(payload: dict[str, Any]) -> list[str]:
 
 
 def _patient_id_from_client(payload: dict[str, Any]) -> str:
-    for key in ('clientId', 'id', 'leadId', 'uniqueId', 'mrn'):
+    for key in ('clientId', 'id', 'leadId', 'chartId', 'chartNumber', 'luin', 'uniqueId', 'mrn'):
         value = _strip(payload.get(key))
         if value:
             return value
@@ -163,7 +163,7 @@ def _patient_id_from_client(payload: dict[str, Any]) -> str:
 
 def _nested_client_aliases(payload: dict[str, Any]) -> list[str]:
     aliases = []
-    for key in ('clientId', 'leadId', 'patientId'):
+    for key in ('clientId', 'leadId', 'patientId', 'chartId', 'chartNumber', 'luin', 'uniqueId', 'mrn'):
         value = _strip(payload.get(key))
         if value:
             aliases.append(value)
@@ -175,7 +175,16 @@ def _nested_client_aliases(payload: dict[str, Any]) -> list[str]:
 
 def _join_candidates(payload: dict[str, Any]) -> list[tuple[str, str]]:
     candidates: list[tuple[str, str]] = []
-    for key, confidence in (('clientId', 'clientId_match'), ('leadId', 'leadId_match'), ('patientId', 'id_match')):
+    for key, confidence in (
+        ('clientId', 'clientId_match'),
+        ('leadId', 'leadId_match'),
+        ('patientId', 'id_match'),
+        ('chartId', 'id_match'),
+        ('chartNumber', 'id_match'),
+        ('luin', 'id_match'),
+        ('uniqueId', 'id_match'),
+        ('mrn', 'id_match'),
+    ):
         value = _strip(payload.get(key))
         if value:
             candidates.append((value, confidence))
@@ -185,6 +194,9 @@ def _join_candidates(payload: dict[str, Any]) -> list[tuple[str, str]]:
             ('clientId', 'clientId_match'),
             ('leadId', 'leadId_match'),
             ('id', 'id_match'),
+            ('chartId', 'id_match'),
+            ('chartNumber', 'id_match'),
+            ('luin', 'id_match'),
             ('uniqueId', 'id_match'),
             ('mrn', 'id_match'),
         ):
