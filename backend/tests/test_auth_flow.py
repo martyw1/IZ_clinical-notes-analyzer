@@ -146,6 +146,32 @@ def test_startup_restores_locked_bootstrap_admin(tmp_path: Path, monkeypatch):
         db.close()
 
 
+def test_bootstrap_admin_correct_password_unlocks_live_lockout(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app) as client:
+        db = session_local()
+        try:
+            admin = db.execute(select(User).where(User.username == 'admin')).scalar_one()
+            admin.failed_login_attempts = 5
+            admin.is_locked = True
+            db.commit()
+        finally:
+            db.close()
+
+        login = client.post('/api/auth/login', json={'username': 'admin', 'password': BOOTSTRAP_ADMIN_PASSWORD})
+        assert login.status_code == 200
+        assert login.json()['must_reset_password'] is False
+
+        db = session_local()
+        try:
+            admin = db.execute(select(User).where(User.username == 'admin')).scalar_one()
+            assert admin.failed_login_attempts == 0
+            assert admin.is_locked is False
+            assert admin.must_reset_password is False
+        finally:
+            db.close()
+
+
 def test_bootstrap_admin_password_is_static_in_app(app_with_sqlite):
     app, _ = app_with_sqlite
     with TestClient(app) as client:

@@ -173,6 +173,22 @@ def login(payload: LoginInput, request: Request, db: Session = Depends(get_db)):
         )
         raise HTTPException(status_code=403, detail='Account inactive')
 
+    if _is_bootstrap_admin(user) and user.is_locked:
+        user.is_locked = False
+        user.failed_login_attempts = 0
+        log_event(
+            db,
+            request,
+            'auth.bootstrap_admin.unlock',
+            actor=user,
+            event_category='authentication',
+            target_entity='user',
+            target_entity_type='user',
+            target_entity_id=str(user.id),
+            details={'username': user.username, 'reason': 'correct_static_bootstrap_password'},
+            message='Bootstrap admin account unlocked after correct static password entry.',
+        )
+
     if user.is_locked:
         log_event(
             db,
