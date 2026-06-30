@@ -993,7 +993,8 @@ def sync_alleva_rest_payloads(
         client.alleva_mrn = _first_text(raw_client, 'mrn')
         plan_confidence = plans_group.confidence_by_client.get(patient_id, '')
         review_confidence = reviews_group.confidence_by_client.get(patient_id, '')
-        client.id_join_confidence = max([plan_confidence, review_confidence, 'unknown'], key=_confidence_rank)
+        join_confidences = [value for value in (plan_confidence, review_confidence) if value]
+        client.id_join_confidence = max(join_confidences or ['unknown'], key=_confidence_rank)
         client.id_join_warnings = _json_list(['name_join_fallback_used'] if client.id_join_confidence == 'name_fallback' else [])
         client.discharge_conflict = discharge_conflict
         client.last_imported_at = _utc_now()

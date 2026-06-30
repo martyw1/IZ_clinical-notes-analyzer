@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.models import AppSetting, AuditLog, Role, TreatmentPlanClient, TreatmentPlanCriterionReview, User
-from app.services.alleva_treatment_plan_sync import sync_alleva_rest_payloads
+from app.services.alleva_treatment_plan_sync import AllevaSyncExternalError, sync_alleva_rest_payloads
 from app.services.timeliness import evaluate_client
 from app.services.secure_storage import text_secret_is_encrypted
 
@@ -591,6 +591,169 @@ def test_alleva_rest_sync_redacts_patient_names_by_default_and_requires_opt_in(a
         db.close()
 
 
+def test_alleva_rest_sync_requires_explicit_name_join_fallback(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    clients_payload = [
+        {
+            'id': 1201,
+            'clientId': 'PAT-NAME-FALLBACK',
+            'name': {'clientFullName': 'Synthetic Name Match'},
+            'status': 'Active',
+            'isClient': True,
+            'admissionDateTime': '2026-04-01T09:00:00Z',
+            'levelOfCare': 'PHP',
+        }
+    ]
+    name_only_plan = {
+        'id': 'TP-NAME-ONLY',
+        'clientName': 'Synthetic Name Match',
+        'isInitialTP': False,
+        'isActive': True,
+        'isComplete': True,
+        'startDate': '2026-05-01T10:00:00Z',
+        'staffSignatureDate': '2026-05-01',
+        'clientSignature': {'signatureDateTime': '2026-05-01T11:00:00Z'},
+    }
+
+    db = session_local()
+    try:
+        blocked_summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=clients_payload,
+            treatment_plans_payload=[name_only_plan],
+            treatment_reviews_payload=[],
+        )
+        db.commit()
+
+        assert blocked_summary['active_client_count'] == 1
+        assert blocked_summary['upserted_client_count'] == 1
+        assert blocked_summary['unmapped_treatment_plan_count'] == 1
+        assert blocked_summary['name_join_fallback_count'] == 0
+        assert blocked_summary['current_plan_selected_count'] == 0
+        assert blocked_summary['current_plan_missing_count'] == 1
+        assert blocked_summary['unmapped_plan_ids'][0]['record_id'] == 'TP-NAME-ONLY'
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-NAME-FALLBACK')).scalar_one()
+        assert stored_client.current_plan_record_id is None
+        assert stored_client.id_join_confidence == 'unknown'
+        assert json.loads(stored_client.id_join_warnings) == []
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
+
+        allowed_summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=clients_payload,
+            treatment_plans_payload=[name_only_plan],
+            treatment_reviews_payload=[],
+            name_join_fallback_enabled=True,
+        )
+        db.commit()
+
+        assert allowed_summary['unmapped_treatment_plan_count'] == 0
+        assert allowed_summary['name_join_fallback_count'] == 1
+        assert allowed_summary['current_plan_selected_count'] == 1
+        assert allowed_summary['current_plan_missing_count'] == 0
+        stored_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-NAME-FALLBACK')).scalar_one()
+        assert stored_client.current_plan_record_id is not None
+        assert stored_client.id_join_confidence == 'name_fallback'
+        assert json.loads(stored_client.id_join_warnings) == ['name_join_fallback_used']
+        assert re.fullmatch(r'no-name-found_\d{4}-\d{2}-\d{2}_\d{6}', stored_client.permitted_name)
+    finally:
+        db.close()
+
+
+def test_alleva_rest_sync_reports_detail_fetch_failure_and_cap_skips(app_with_sqlite):
+    app, session_local = app_with_sqlite
+    with TestClient(app):
+        pass
+
+    clients_payload = [
+        {
+            'id': 1301,
+            'clientId': 'PAT-DETAIL-FAIL',
+            'status': 'Active',
+            'isClient': True,
+            'admissionDateTime': '2026-04-01T09:00:00Z',
+            'levelOfCare': 'PHP',
+        },
+        {
+            'id': 1302,
+            'clientId': 'PAT-DETAIL-SKIP',
+            'status': 'Active',
+            'isClient': True,
+            'admissionDateTime': '2026-04-02T09:00:00Z',
+            'levelOfCare': 'PHP',
+        },
+    ]
+    plans_payload = [
+        {
+            'id': 'TP-DETAIL-FAIL',
+            'client': {'id': 1301, 'clientId': 'PAT-DETAIL-FAIL'},
+            'isInitialTP': False,
+            'isActive': True,
+            'isComplete': True,
+            'startDate': '2026-05-01T10:00:00Z',
+            'staffSignatureDate': '2026-05-01',
+            'clientSignature': {'signatureDateTime': '2026-05-01T11:00:00Z'},
+        },
+        {
+            'id': 'TP-DETAIL-SKIP',
+            'client': {'id': 1302, 'clientId': 'PAT-DETAIL-SKIP'},
+            'isInitialTP': False,
+            'isActive': True,
+            'isComplete': True,
+            'startDate': '2026-05-02T10:00:00Z',
+            'staffSignatureDate': '2026-05-02',
+            'clientSignature': {'signatureDateTime': '2026-05-02T11:00:00Z'},
+        },
+    ]
+    detail_calls: list[str] = []
+
+    def failing_detail_fetcher(raw_plan):
+        detail_calls.append(str(raw_plan['id']))
+        raise AllevaSyncExternalError(
+            'Synthetic detail fetch failure.',
+            stage='treatment_plan_detail',
+            category='http_status',
+            endpoint=f"/treatment-plans/{raw_plan['id']}",
+            status_code=502,
+        )
+
+    db = session_local()
+    try:
+        summary = sync_alleva_rest_payloads(
+            db,
+            clients_payload=clients_payload,
+            treatment_plans_payload=plans_payload,
+            treatment_reviews_payload=[],
+            plan_detail_fetcher=failing_detail_fetcher,
+            detail_fetch_limit=1,
+        )
+        db.commit()
+
+        assert detail_calls == ['TP-DETAIL-FAIL']
+        assert summary['detail_fetch_enabled'] is True
+        assert summary['current_plan_selected_count'] == 2
+        assert summary['detail_fetch_attempt_count'] == 1
+        assert summary['detail_fetch_success_count'] == 0
+        assert summary['detail_fetch_failed_count'] == 1
+        assert summary['detail_fetch_skipped_count'] == 1
+
+        failed_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-DETAIL-FAIL')).scalar_one()
+        skipped_client = db.execute(select(TreatmentPlanClient).where(TreatmentPlanClient.patient_id == 'PAT-DETAIL-SKIP')).scalar_one()
+        assert failed_client.current_plan_record_id is not None
+        assert skipped_client.current_plan_record_id is not None
+        assert 'current_plan_detail_fetch_failed' in json.loads(failed_client.data_quality_warnings)
+        assert 'current_plan_detail_fetch_failed' not in json.loads(skipped_client.data_quality_warnings)
+        failed_plan = next(plan for plan in failed_client.treatment_plans if plan.id == failed_client.current_plan_record_id)
+        skipped_plan = next(plan for plan in skipped_client.treatment_plans if plan.id == skipped_client.current_plan_record_id)
+        assert failed_plan.detail_fetched is False
+        assert skipped_plan.detail_fetched is False
+    finally:
+        db.close()
+
+
 def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_sqlite):
     app, _ = app_with_sqlite
 
@@ -867,6 +1030,9 @@ def test_alleva_detail_sample_fetches_current_plan_content_counts(app_with_sqlit
         assert result['content_counts'] == {
             'problem_count': 1,
             'diagnosis_count': 1,
+            'active_diagnosis_count': 1,
+            'primary_diagnosis': 'F10.20',
+            'behavioral_definition_count': 0,
             'goal_count': 1,
             'objective_count': 1,
             'intervention_count': 1,

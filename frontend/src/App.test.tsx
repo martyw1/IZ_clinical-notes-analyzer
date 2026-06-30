@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
-type RouteHandler = (path: string, init?: RequestInit) => { status?: number; body?: unknown }
+type RouteHandler = (path: string, init?: RequestInit) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>
 
 function jsonResponse(status: number, body: unknown) {
   return {
@@ -44,7 +44,7 @@ function installFetchMock(routes: Record<string, unknown | RouteHandler>) {
     }
 
     if (typeof route === 'function') {
-      const result = route(url.pathname, init)
+      const result = await route(url.pathname, init)
       return jsonResponse(result.status ?? 200, result.body)
     }
 
@@ -968,6 +968,88 @@ describe('App turnkey workflow', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
+  it('stores a verified login token and restores it after a same-browser reload', async () => {
+    window.history.replaceState(null, '', '/?view=dashboard')
+    const loginProfileHeaders: string[] = []
+    installFetchMock({
+      'POST /api/auth/login': { access_token: 'verified-session-token', must_reset_password: false },
+      'GET /api/users/me': (_path: string, init?: RequestInit) => {
+        loginProfileHeaders.push(new Headers(init?.headers).get('Authorization') || '')
+        return { body: userPayload('admin') }
+      },
+      'GET /api/charts': [],
+      'GET /api/patient-note-sets': [],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    const { unmount } = render(<App />)
+    signIn()
+
+    await waitFor(() => expect(window.sessionStorage.getItem('iz-cna-session-token')).toBe('verified-session-token'))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
+    expect(loginProfileHeaders).toContain('Bearer verified-session-token')
+
+    unmount()
+
+    const reloadProfileHeaders: string[] = []
+    const reloadFetchMock = installFetchMock({
+      'GET /api/users/me': (_path: string, init?: RequestInit) => {
+        reloadProfileHeaders.push(new Headers(init?.headers).get('Authorization') || '')
+        return { body: userPayload('admin') }
+      },
+      'GET /api/charts': [],
+      'GET /api/patient-note-sets': [],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
+    expect(reloadFetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/login'))).toBe(false)
+    expect(reloadProfileHeaders).toContain('Bearer verified-session-token')
+  })
+
+  it('keeps protected deep links hidden until a stored session is verified', async () => {
+    window.history.replaceState(null, '', '/?view=timeliness')
+    window.sessionStorage.setItem('iz-cna-session-token', 'stored-admin-token')
+    let releaseProfile!: () => void
+    const profileGate = new Promise<void>((resolve) => {
+      releaseProfile = resolve
+    })
+    installFetchMock({
+      'GET /api/users/me': async () => {
+        await profileGate
+        return { body: userPayload('admin') }
+      },
+      'GET /api/charts': [],
+      'GET /api/patient-note-sets': [],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+    })
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Checking session' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Treatment plan timeliness' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
+
+    releaseProfile()
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
   it('renders the summary dashboard and admin tools for administrators', async () => {
     window.history.replaceState(null, '', '/?view=dashboard')
     installFetchMock({
@@ -1343,6 +1425,16 @@ describe('App turnkey workflow', () => {
               active_client_count: 1,
               treatment_plan_count: 1,
               treatment_review_count: 0,
+              unmapped_treatment_plan_count: 2,
+              unmapped_treatment_review_count: 1,
+              name_join_fallback_count: 1,
+              current_plan_selected_count: 1,
+              current_plan_missing_count: 0,
+              detail_fetch_enabled: true,
+              detail_fetch_attempt_count: 1,
+              detail_fetch_success_count: 0,
+              detail_fetch_failed_count: 1,
+              detail_fetch_skipped_count: 0,
             },
             settings: appSettingsPayload(),
           },
@@ -1360,6 +1452,12 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
     expect(screen.getByText(/1 active client\(s\) loaded/)).toBeInTheDocument()
+    const diagnostics = screen.getByLabelText('Alleva treatment-plan sync diagnostics')
+    expect(diagnostics).toHaveTextContent(/Unmapped plans\s*2/)
+    expect(diagnostics).toHaveTextContent(/Unmapped reviews\s*1/)
+    expect(diagnostics).toHaveTextContent(/Name fallback joins\s*1/)
+    expect(diagnostics).toHaveTextContent(/Detail fetch\s*Enabled/)
+    expect(diagnostics).toHaveTextContent(/Detail failures\s*1/)
     expect(syncRequested).toBe(true)
   })
 

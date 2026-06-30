@@ -12,8 +12,21 @@ from app.services.api_connectivity import redact_sensitive_text, redact_url
 from app.services.patient_identity_minimization import redacted_text, sanitize_patient_payload
 
 ALLEVA_CLIENTS_PATH = '/clients'
+ALLEVA_CLIENTS_LIST_PATH = '/clients/list'
 ALLEVA_TREATMENT_PLANS_PATH = '/treatment-plans'
+ALLEVA_TREATMENT_PLAN_DETAIL_PATH = '/treatment-plans/{id}'
+ALLEVA_TREATMENT_PLAN_DIAGNOSIS_PATH = '/treatment-plans/{id}/diagnosis'
 ALLEVA_TREATMENT_REVIEWS_PATH = '/treatment-reviews'
+ALLEVA_TREATMENT_REVIEW_DETAIL_PATH = '/treatment-reviews/{id}'
+ALLEVA_AGGREGATE_ENDPOINTS = {
+    'clients': ALLEVA_CLIENTS_PATH,
+    'clients_list': ALLEVA_CLIENTS_LIST_PATH,
+    'treatment_plans': ALLEVA_TREATMENT_PLANS_PATH,
+    'treatment_plan_detail': ALLEVA_TREATMENT_PLAN_DETAIL_PATH,
+    'treatment_plan_diagnosis': ALLEVA_TREATMENT_PLAN_DIAGNOSIS_PATH,
+    'treatment_reviews': ALLEVA_TREATMENT_REVIEWS_PATH,
+    'treatment_review_detail': ALLEVA_TREATMENT_REVIEW_DETAIL_PATH,
+}
 DEFAULT_API_VERSION = '1.0'
 
 CLIENT_FIELD_REQUEST = [
@@ -113,18 +126,91 @@ def parse_date(value: Any) -> date | None:
         return None
 
 
-def content_counts(payload: dict[str, Any]) -> dict[str, int]:
+def sanitized_mapping(payload: dict[str, Any]) -> dict[str, Any]:
     safe = sanitize_patient_payload(payload)
+    return safe if isinstance(safe, dict) else {}
+
+
+def diagnosis_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    safe = sanitized_mapping(payload)
     problems = [item for item in list_records(safe.get('problems')) if isinstance(item, dict)]
-    diagnosis_count = sum(len(list_records(problem.get('diagnoses'))) for problem in problems)
-    if not diagnosis_count:
-        diagnosis_count = len(list_records(safe.get('diagnoses'))) or len(list_records(safe.get('diagnosis'))) or len(list_records(safe.get('items')))
+    nested = [diagnosis for problem in problems for diagnosis in list_records(problem.get('diagnoses')) if isinstance(diagnosis, dict)]
+    top_level = [
+        diagnosis
+        for diagnosis in (
+            list_records(safe.get('diagnoses'))
+            or list_records(safe.get('diagnosis'))
+            or list_records(safe.get('items'))
+        )
+        if isinstance(diagnosis, dict)
+    ]
+    return nested or top_level
+
+
+def diagnosis_is_active(payload: dict[str, Any]) -> bool:
+    status = first_text(payload, 'status', 'diagnosisStatus').lower()
+    if any(word in status for word in ('inactive', 'resolved', 'deleted', 'discharge', 'closed')):
+        return False
+    return bool_value(payload.get('isActive'), default=True)
+
+
+def primary_diagnosis_label(payload: dict[str, Any]) -> str:
+    diagnoses = diagnosis_records(payload)
+    preferred = next(
+        (
+            diagnosis
+            for diagnosis in diagnoses
+            if bool_value(
+                diagnosis.get('isPrimary') or diagnosis.get('primary') or diagnosis.get('isPrimaryDiagnosis'),
+                default=False,
+            )
+        ),
+        diagnoses[0] if diagnoses else None,
+    )
+    if not preferred:
+        return ''
+    return first_text(preferred, 'code', 'diagnosisCode', 'icd10Code', 'icdCode')
+
+
+def behavioral_definition_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    safe = sanitized_mapping(payload)
+    problems = [item for item in list_records(safe.get('problems')) if isinstance(item, dict)]
+    nested = [
+        definition
+        for problem in problems
+        for definition in (
+            list_records(problem.get('behavioralDefinitions'))
+            or list_records(problem.get('behavioral_definitions'))
+            or list_records(problem.get('behaviors'))
+        )
+        if isinstance(definition, dict)
+    ]
+    top_level = [
+        definition
+        for definition in (
+            list_records(safe.get('behavioralDefinitions'))
+            or list_records(safe.get('behavioral_definitions'))
+            or list_records(safe.get('behaviors'))
+        )
+        if isinstance(definition, dict)
+    ]
+    return nested or top_level
+
+
+def content_counts(payload: dict[str, Any]) -> dict[str, Any]:
+    safe = sanitized_mapping(payload)
+    problems = [item for item in list_records(safe.get('problems')) if isinstance(item, dict)]
+    diagnoses = diagnosis_records(safe)
     goals = [goal for problem in problems for goal in list_records(problem.get('goals')) if isinstance(goal, dict)]
+    goals.extend([goal for goal in list_records(safe.get('goals')) if isinstance(goal, dict)])
     objectives = [objective for goal in goals for objective in list_records(goal.get('objectives')) if isinstance(objective, dict)]
     interventions = [intervention for objective in objectives for intervention in list_records(objective.get('interventions')) if isinstance(intervention, dict)]
     return {
         'problem_count': len(problems),
-        'diagnosis_count': diagnosis_count,
+        'diagnosis_count': len(diagnoses),
+        'active_diagnosis_count': sum(1 for diagnosis in diagnoses if diagnosis_is_active(diagnosis)),
+        'primary_diagnosis': primary_diagnosis_label(safe),
+        'behavioral_definition_count': len(behavioral_definition_records(safe)),
         'goal_count': len(goals),
         'objective_count': len(objectives),
         'intervention_count': len(interventions),
@@ -529,6 +615,22 @@ def normalize_treatment_plan_row(payload: dict[str, Any], *, today: date) -> dic
         reasons.append(f'endDate {end_date.isoformat()} is not overdue as of {today.isoformat()}')
     if not is_complete:
         reasons.append('isComplete is false or missing')
+    detail_fetch_status = first_text(safe, '_detail_fetch_status')
+    if not detail_fetch_status:
+        detail_fetch_status = 'detail_fetch_success' if bool_value(safe.get('_detail_fetched'), default=False) else 'detail_fetch_not_attempted_no_plan'
+    client_signature_date = date_text(nested_first_text(safe, 'clientSignature.signatureDateTime') or safe.get('clientSignatureDate'))
+    guardian_signature_date = date_text(nested_first_text(safe, 'guardianSignature.signatureDateTime') or safe.get('guardianSignatureDate'))
+    staff_or_creator_signature_date = date_text(
+        nested_first_text(
+            safe,
+            'staffSignature.signatureDateTime',
+            'creatorSignature.signatureDateTime',
+            'therapistSignature.signatureDateTime',
+        )
+        or safe.get('staffSignatureDate')
+        or safe.get('creatorSignatureDate')
+        or safe.get('therapistSignatureDate')
+    )
     return {
         'treatment_plan_id': ids['treatment_plan_id'],
         'patient_id': ids['app_patient_id'],
@@ -542,9 +644,13 @@ def normalize_treatment_plan_row(payload: dict[str, Any], *, today: date) -> dic
         'is_complete': is_complete,
         'last_modified': date_text(safe.get('lastModified')),
         'is_initial_tp': bool_value(safe.get('isInitialTP'), default=False),
-        'client_signature_date': date_text(nested_first_text(safe, 'clientSignature.signatureDateTime') or safe.get('clientSignatureDate')),
-        'guardian_signature_date': date_text(nested_first_text(safe, 'guardianSignature.signatureDateTime') or safe.get('guardianSignatureDate')),
+        'client_signature_date': client_signature_date,
+        'staff_or_creator_signature_date': staff_or_creator_signature_date,
+        'guardian_signature_date': guardian_signature_date,
+        'has_client_signature': bool(client_signature_date or safe.get('clientSignature')),
+        'has_staff_or_creator_signature': bool(staff_or_creator_signature_date or safe.get('staffSignature') or safe.get('creatorSignature') or safe.get('therapistSignature')),
         'has_guardian_signature': bool(nested_first_text(safe, 'guardianSignature.signatureDateTime') or safe.get('guardianSignatureDate') or safe.get('guardianSignature')),
+        'detail_fetch_status': detail_fetch_status,
         **content_counts(safe),
         'why': '; '.join(reasons),
     }
@@ -669,20 +775,58 @@ def source_coverage_summary(patient_records: list[dict[str, Any]], plan_records:
     normalized_patients = [normalize_patient_row(item) for item in patient_records]
     normalized_plans = [normalize_treatment_plan_row(item, today=date.today()) for item in plan_records]
     reviews = [review_identifier_summary(item) for item in (review_records or [])]
+    safe_plans = [sanitized_mapping(record) for record in plan_records]
+    safe_reviews = [sanitized_mapping(record) for record in (review_records or [])]
+    mapping = id_mapping_summary(patient_records, plan_records, review_records)
+    plan_ids = {
+        plan.get('treatment_plan_id')
+        for plan in [treatment_plan_identifier_summary(record) for record in plan_records]
+        if plan.get('treatment_plan_id')
+    }
+    review_to_plan_verified = any(review.get('treatment_plan_id') in plan_ids for review in reviews if review.get('treatment_plan_id'))
+    plan_collection_retrieved = bool(plan_records)
+    review_collection_retrieved = bool(review_records)
+    plan_detail_retrieved = any(bool_value(record.get('_detail_fetched'), default=False) for record in safe_plans)
+    review_detail_retrieved = any(bool_value(record.get('_detail_fetched'), default=False) for record in safe_reviews)
+    nested_content_retrieved = any(
+        row.get('problem_count', 0) > 0
+        or row.get('goal_count', 0) > 0
+        or row.get('objective_count', 0) > 0
+        or row.get('intervention_count', 0) > 0
+        for row in normalized_plans
+    )
+    diagnosis_content_retrieved = any(
+        row.get('diagnosis_count', 0) > 0
+        or bool_value(safe_plans[index].get('_diagnosis_detail_fetched'), default=False)
+        for index, row in enumerate(normalized_plans)
+    )
+    client_signature_retrieved = any(row.get('has_client_signature') for row in normalized_plans)
+    staff_or_creator_signature_retrieved = any(row.get('has_staff_or_creator_signature') for row in normalized_plans)
     required = {
         'active_patient_list_retrieved': bool(patient_records) and complete,
         'patient_status': any(row.get('status') or row.get('discharge_date') for row in normalized_patients),
         'admission_date': any(row.get('admission_date') for row in normalized_patients),
         'current_level_of_care': any(row.get('level_of_care') for row in normalized_patients),
-        'treatment_plan_summary': bool(plan_records),
-        'treatment_plan_detail_or_nested_content': any(item.get('problems') or normalize_treatment_plan_row(item, today=date.today()).get('problem_count', 0) > 0 for item in [sanitize_patient_payload(record) for record in plan_records]),
-        'treatment_plan_signatures': any(nested_first_text(sanitize_patient_payload(record), 'clientSignature.signatureDateTime', 'staffSignature.signatureDateTime', 'creatorSignature.signatureDateTime') for record in plan_records),
-        'guardian_signature_retrieved': any(normalize_treatment_plan_row(record, today=date.today()).get('has_guardian_signature') for record in plan_records),
-        'is_initial_tp_classified': any('isInitialTP' in sanitize_patient_payload(record) for record in plan_records),
-        'id_join_verified': bool(id_mapping_summary(patient_records, plan_records, review_records).get('mapped_treatment_plan_count')),
-        'treatment_review_to_patient_join_verified': bool(review_records and id_mapping_summary(patient_records, plan_records, review_records).get('mapped_treatment_review_count')),
-        'treatment_review_dates': any(date_text(sanitize_patient_payload(record).get('createdDated') or sanitize_patient_payload(record).get('createdDate') or sanitize_patient_payload(record).get('generatedDate')) for record in (review_records or [])),
-        'next_review_due': any(date_text(sanitize_patient_payload(record).get('nextReviewDue') or sanitize_patient_payload(record).get('nextReviewDueDate')) for record in (review_records or [])),
+        'treatment_plan_collection_retrieved': plan_collection_retrieved,
+        'treatment_plan_detail_retrieved': plan_detail_retrieved,
+        'treatment_plan_nested_content_retrieved': nested_content_retrieved,
+        'diagnosis_content_retrieved': diagnosis_content_retrieved,
+        'client_signature_retrieved': client_signature_retrieved,
+        'guardian_signature_retrieved': any(row.get('has_guardian_signature') for row in normalized_plans),
+        'staff_or_creator_signature_retrieved': staff_or_creator_signature_retrieved,
+        'is_initial_tp_classified': any('isInitialTP' in record for record in safe_plans),
+        'treatment_review_collection_retrieved': review_collection_retrieved,
+        'treatment_review_detail_retrieved': review_detail_retrieved,
+        'next_review_due': any(date_text(record.get('nextReviewDue') or record.get('nextReviewDueDate')) for record in safe_reviews),
+        'client_to_plan_join_verified': bool(mapping.get('mapped_treatment_plan_count')),
+        'review_to_patient_join_verified': bool(review_records and mapping.get('mapped_treatment_review_count')),
+        'review_to_plan_join_verified': review_to_plan_verified,
+        'treatment_plan_summary': plan_collection_retrieved,
+        'treatment_plan_detail_or_nested_content': plan_detail_retrieved or nested_content_retrieved,
+        'treatment_plan_signatures': client_signature_retrieved or staff_or_creator_signature_retrieved,
+        'id_join_verified': bool(mapping.get('mapped_treatment_plan_count')),
+        'treatment_review_to_patient_join_verified': bool(review_records and mapping.get('mapped_treatment_review_count')),
+        'treatment_review_dates': any(date_text(record.get('createdDated') or record.get('createdDate') or record.get('generatedDate')) for record in safe_reviews),
     }
     unavailable = [
         'Swagger does not document counselor/manager content update markers for treatment-plan content.',
@@ -696,6 +840,19 @@ def source_coverage_summary(patient_records: list[dict[str, Any]], plan_records:
         'normalized_patient_sample': normalized_patients[:3],
         'normalized_treatment_plan_sample': normalized_plans[:3],
         'normalized_review_id_sample': reviews[:3],
+        'endpoint_coverage_summary': {
+            'configured_endpoint_paths': ALLEVA_AGGREGATE_ENDPOINTS,
+            'collection_endpoints_retrieved': {
+                ALLEVA_CLIENTS_PATH: bool(patient_records),
+                ALLEVA_TREATMENT_PLANS_PATH: plan_collection_retrieved,
+                ALLEVA_TREATMENT_REVIEWS_PATH: review_collection_retrieved,
+            },
+            'detail_endpoints_retrieved': {
+                ALLEVA_TREATMENT_PLAN_DETAIL_PATH: plan_detail_retrieved,
+                ALLEVA_TREATMENT_PLAN_DIAGNOSIS_PATH: diagnosis_content_retrieved,
+                ALLEVA_TREATMENT_REVIEW_DETAIL_PATH: review_detail_retrieved,
+            },
+        },
     }
 
 

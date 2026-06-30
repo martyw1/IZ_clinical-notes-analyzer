@@ -1,7 +1,8 @@
 import json
+from datetime import date
+from pathlib import Path
 
 import httpx
-from pathlib import Path
 
 from app.services.api_connectivity import (
     REDACTED,
@@ -13,6 +14,7 @@ from app.services.api_connectivity import (
     pull_api_definitions,
     request_client_credentials_token,
 )
+from app.services.alleva_retrieval import normalize_treatment_plan_row, source_coverage_summary
 
 OriginalHttpxClient = httpx.Client
 
@@ -246,6 +248,95 @@ OPERATION_DEFINITION = {
         },
     },
 }
+
+
+def test_alleva_retrieval_summarizes_aggregate_endpoint_coverage_without_patient_names():
+    # Given: deidentified fixtures shaped like the separate Alleva aggregate endpoints.
+    patients = [
+        {
+            'id': 'lead-001',
+            'clientId': 'client-001',
+            'uniqueId': 'unique-001',
+            'mrn': 'mrn-001',
+            'name': {'clientFullName': 'Jane Q Doe'},
+            'status': 'Active',
+            'admissionDateTime': '2026-01-01T09:00:00',
+            'levelOfCare': 'IOP',
+        }
+    ]
+    plans = [
+        {
+            '_detail_fetched': True,
+            '_diagnosis_detail_fetched': True,
+            'id': 'plan-001',
+            'client': {'id': 'lead-001', 'clientId': 'client-001'},
+            'isActive': True,
+            'isComplete': True,
+            'isInitialTP': False,
+            'startDate': '2026-01-02T09:00:00',
+            'endDate': '2099-12-31T00:00:00',
+            'lastModified': '2026-01-03T09:00:00',
+            'problems': [
+                {
+                    'diagnoses': [{'description': 'Martha Lane diagnosis narrative', 'status': 'Active', 'isPrimary': True}],
+                    'behavioralDefinitions': [{'description': 'Synthetic behavior definition'}],
+                    'goals': [
+                        {
+                            'objectives': [
+                                {'interventions': [{'description': 'Synthetic intervention'}]},
+                            ],
+                        },
+                    ],
+                },
+            ],
+            'clientSignature': {'signatureDateTime': '2026-01-03T10:00:00'},
+            'staffSignature': {'signatureDateTime': '2026-01-03T10:15:00'},
+            'guardianSignature': {'signatureDateTime': '2026-01-03T10:30:00'},
+        }
+    ]
+    reviews = [
+        {
+            '_detail_fetched': True,
+            'id': 'review-001',
+            'treatmentPlanId': 'plan-001',
+            'client': {'id': 'lead-001', 'clientId': 'client-001'},
+            'createdDate': '2026-02-01T09:00:00',
+            'nextReviewDue': '2026-03-01T09:00:00',
+        }
+    ]
+
+    # When: the harness normalizes the plan row and summarizes aggregate coverage.
+    row = normalize_treatment_plan_row(plans[0], today=date(2026, 6, 1))
+    coverage = source_coverage_summary(patients, plans, reviews)
+
+    # Then: endpoint provenance, nested content, signatures, and joins are explicit.
+    assert row['active_diagnosis_count'] == 1
+    assert row['primary_diagnosis'] == ''
+    assert row['behavioral_definition_count'] == 1
+    assert row['has_client_signature'] is True
+    assert row['has_staff_or_creator_signature'] is True
+    assert row['detail_fetch_status'] == 'detail_fetch_success'
+    required = coverage['required_field_coverage']
+    assert required['treatment_plan_collection_retrieved'] is True
+    assert required['treatment_plan_detail_retrieved'] is True
+    assert required['treatment_plan_nested_content_retrieved'] is True
+    assert required['diagnosis_content_retrieved'] is True
+    assert required['client_signature_retrieved'] is True
+    assert required['guardian_signature_retrieved'] is True
+    assert required['staff_or_creator_signature_retrieved'] is True
+    assert required['treatment_review_collection_retrieved'] is True
+    assert required['treatment_review_detail_retrieved'] is True
+    assert required['next_review_due'] is True
+    assert required['client_to_plan_join_verified'] is True
+    assert required['review_to_patient_join_verified'] is True
+    assert required['review_to_plan_join_verified'] is True
+    endpoint_paths = coverage['endpoint_coverage_summary']['configured_endpoint_paths']
+    assert endpoint_paths['clients_list'] == '/clients/list'
+    assert endpoint_paths['treatment_plan_detail'] == '/treatment-plans/{id}'
+    assert endpoint_paths['treatment_plan_diagnosis'] == '/treatment-plans/{id}/diagnosis'
+    assert endpoint_paths['treatment_review_detail'] == '/treatment-reviews/{id}'
+    assert 'Jane Q Doe' not in json.dumps(coverage)
+    assert 'Martha Lane' not in json.dumps(coverage)
 
 
 def test_candidate_definition_urls_includes_common_swagger_and_openapi_locations():

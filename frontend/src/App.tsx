@@ -466,27 +466,35 @@ type AppSettingsForm = {
   treatment_plan_loc_change_window_validated: boolean
 }
 
+type AllevaTreatmentPlanSyncResult = {
+  status: string
+  message: string
+  warnings?: string[]
+  failure_stage?: string
+  category?: string
+  endpoint?: string
+  status_code?: number
+  upserted_client_count?: number
+  active_client_count?: number
+  treatment_plan_count?: number
+  treatment_review_count?: number
+  unmapped_treatment_plan_count?: number
+  unmapped_treatment_review_count?: number
+  unmapped_plan_ids?: Record<string, string>[]
+  unmapped_review_ids?: Record<string, string>[]
+  name_join_fallback_count?: number
+  current_plan_selected_count?: number
+  current_plan_missing_count?: number
+  detail_fetch_enabled?: boolean
+  detail_fetch_attempt_count?: number
+  detail_fetch_success_count?: number
+  detail_fetch_failed_count?: number
+  detail_fetch_skipped_count?: number
+  missing_fields?: string[]
+}
+
 type AllevaTreatmentPlanSyncResponse = {
-  sync_result: {
-    status: string
-    message: string
-    warnings?: string[]
-    failure_stage?: string
-    category?: string
-    endpoint?: string
-    status_code?: number
-    upserted_client_count?: number
-    active_client_count?: number
-    treatment_plan_count?: number
-    treatment_review_count?: number
-    current_plan_selected_count?: number
-    current_plan_missing_count?: number
-    detail_fetch_attempt_count?: number
-    detail_fetch_success_count?: number
-    detail_fetch_failed_count?: number
-    detail_fetch_skipped_count?: number
-    missing_fields?: string[]
-  }
+  sync_result: AllevaTreatmentPlanSyncResult
   settings: AppSettings
 }
 
@@ -1511,6 +1519,29 @@ function userStatusTone(candidate: Pick<User, 'is_active' | 'is_locked'>) {
   return 'success'
 }
 
+function syncCount(value: number | undefined) {
+  return String(value ?? 0)
+}
+
+function allevaSyncDiagnostics(result: AllevaTreatmentPlanSyncResult) {
+  return [
+    { label: 'Active clients', value: syncCount(result.active_client_count) },
+    { label: 'Loaded clients', value: syncCount(result.upserted_client_count) },
+    { label: 'Plan records', value: syncCount(result.treatment_plan_count) },
+    { label: 'Review records', value: syncCount(result.treatment_review_count) },
+    { label: 'Current plans', value: syncCount(result.current_plan_selected_count) },
+    { label: 'Missing current plans', value: syncCount(result.current_plan_missing_count) },
+    { label: 'Unmapped plans', value: syncCount(result.unmapped_treatment_plan_count) },
+    { label: 'Unmapped reviews', value: syncCount(result.unmapped_treatment_review_count) },
+    { label: 'Name fallback joins', value: syncCount(result.name_join_fallback_count) },
+    { label: 'Detail fetch', value: result.detail_fetch_enabled ? 'Enabled' : 'Off' },
+    { label: 'Detail attempts', value: syncCount(result.detail_fetch_attempt_count) },
+    { label: 'Detail successes', value: syncCount(result.detail_fetch_success_count) },
+    { label: 'Detail failures', value: syncCount(result.detail_fetch_failed_count) },
+    { label: 'Detail skipped', value: syncCount(result.detail_fetch_skipped_count) },
+  ]
+}
+
 function validateCreateUserForm(form: CreateUserForm) {
   if (!form.username.trim()) return 'Username is required.'
   if (form.password.trim().length < 12) return 'Temporary password must be at least 12 characters.'
@@ -1640,6 +1671,7 @@ export function App() {
   const [logFilters, setLogFilters] = useState<LogFilters>({ patient_id: '', action: '', event_category: '' })
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
   const [settingsForm, setSettingsForm] = useState<AppSettingsForm | null>(null)
+  const [lastAllevaSyncResult, setLastAllevaSyncResult] = useState<AllevaTreatmentPlanSyncResult | null>(null)
   const [readiness, setReadiness] = useState<RuntimeReadiness | null>(null)
   const [emrProfile, setEmrProfile] = useState<EmrProfile | null>(null)
   const [emrEndpointProfiles, setEmrEndpointProfiles] = useState<EmrEndpointProfile[]>([])
@@ -1736,6 +1768,10 @@ export function App() {
     ? `${versionPrefix(versionInfo)}${versionInfo.version}${versionInfo.environment ? ` · ${versionInfo.environment}` : ''}${versionInfo.git_commit && versionInfo.git_commit !== 'unknown' ? ` · ${versionInfo.git_commit}` : ''}`
     : 'Version unavailable'
   const timelinessBuildLabel = versionInfo?.version ? `${versionPrefix(versionInfo)}${versionInfo.version}` : 'current build'
+  const lastAllevaSyncDiagnostics = useMemo(
+    () => (lastAllevaSyncResult ? allevaSyncDiagnostics(lastAllevaSyncResult) : []),
+    [lastAllevaSyncResult],
+  )
   const localClockLabel = localNow.toLocaleString(undefined, {
     weekday: 'short',
     year: 'numeric',
@@ -1989,6 +2025,7 @@ export function App() {
     setLogs([])
     setAppSettings(null)
     setSettingsForm(null)
+    setLastAllevaSyncResult(null)
     setEmrProfile(null)
     setEmrEndpointProfiles([])
     setSelectedEmrEndpointProfileId(null)
@@ -2006,6 +2043,9 @@ export function App() {
     storeSessionToken('')
     setToken('')
     setMustResetPassword(false)
+    initialRoleViewAppliedRef.current = false
+    explicitInitialViewRef.current = false
+    setActiveView('dashboard')
     clearWorkspaceState()
     setStatus('Session expired. Sign in again to continue.')
     setError('')
@@ -2127,6 +2167,7 @@ export function App() {
     appendSettingsActivity('Started manual Alleva treatment-plan sync.')
     try {
       const payload = await apiRequest<AllevaTreatmentPlanSyncResponse>('/alleva/treatment-plan-sync/run', { method: 'POST' })
+      setLastAllevaSyncResult(payload.sync_result)
       setAppSettings(payload.settings)
       setSettingsForm(createSettingsForm(payload.settings))
       await loadTimelinessDashboard()
@@ -2544,6 +2585,7 @@ export function App() {
         false,
       )
       const profile = await apiRequest<User>('/users/me', { headers: { Authorization: `Bearer ${login.access_token}` } }, false)
+      storeSessionToken(login.access_token)
       setToken(login.access_token)
       setMustResetPassword(login.must_reset_password)
       setUser(profile)
@@ -3800,6 +3842,8 @@ export function App() {
     setToken('')
     setMustResetPassword(false)
     initialRoleViewAppliedRef.current = false
+    explicitInitialViewRef.current = false
+    setActiveView('dashboard')
     clearWorkspaceState()
     setStatus('Signed out. Sign in to continue.')
     setError('')
@@ -3873,6 +3917,20 @@ export function App() {
             <span>Local clock</span>
             <span>{localClockLabel}</span>
           </div>
+          {lastAllevaSyncResult ? (
+            <dl className='status-diagnostics' aria-label='Alleva treatment-plan sync diagnostics'>
+              <div>
+                <dt>Last sync</dt>
+                <dd>{lastAllevaSyncResult.status}</dd>
+              </div>
+              {lastAllevaSyncDiagnostics.map((item) => (
+                <div key={item.label}>
+                  <dt>{item.label}</dt>
+                  <dd>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
       </section>
 
@@ -3913,6 +3971,11 @@ export function App() {
               <li>Every read, write, approval, and change is written to the forensic log.</li>
             </ol>
           </div>
+        </section>
+      ) : !user ? (
+        <section className='panel form-panel narrow' aria-live='polite'>
+          <h2>Checking session</h2>
+          <p>Validating this browser session before loading the workspace.</p>
         </section>
       ) : mustResetPassword ? (
         <section className='panel form-panel narrow'>

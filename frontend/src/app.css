@@ -146,6 +146,30 @@ label {
   font-size: 0.92rem;
 }
 
+.status-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.65rem 0.9rem;
+  margin: 1rem 0 0;
+  color: #4f6258;
+  font-size: 0.86rem;
+}
+
+.status-diagnostics div {
+  min-width: 0;
+}
+
+.status-diagnostics dt {
+  color: #6a7a72;
+  font-size: 0.76rem;
+}
+
+.status-diagnostics dd {
+  margin: 0.12rem 0 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .error-text {
   color: #8c2431;
   font-weight: 700;
