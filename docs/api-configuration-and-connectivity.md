@@ -75,11 +75,15 @@ The backend returns a bounded operational table with patient/client ID, source I
 
 The same backend quick-pull endpoint also supports the admin-only dry-run report `patient_treatment_plan_aggregates`. That report reads `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews` into the local `PatientTreatmentPlanAggregate` shape without arming live sync. It returns JSON aggregates plus diagnostics for endpoint coverage, identifier matching, unmatched plans/reviews, diagnosis reconciliation, completeness, and due-date status. It does not return raw upstream payloads, patient names, filenames, client secrets, bearer tokens, or treatment-plan narrative text. See [`docs/alleva-patient-treatment-plan-aggregate.md`](alleva-patient-treatment-plan-aggregate.md).
 
+For the end-to-end implementation map from API source rows into local treatment-plan tables, deterministic status, selected-client aggregate payloads, and the Treatment Plans UI, see [`docs/patient-treatment-plan-handling.md`](patient-treatment-plan-handling.md).
+
 ## Alleva REST treatment-plan sync
 
 Beta `1.4.6-beta.1` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
+
+When optional current-plan detail fetch is enabled, the app captures content counts and PHI-minimized structured content facts. It does not store raw treatment-plan narrative text; content facts retain source paths, text-present flags, redacted hashes, and non-name metadata needed for source coverage review.
 
 Treatment-plan sync readiness maps records by patient/client ID by default. Name-only matches are intentionally disabled; records without an approved ID mapping remain unmapped instead of being guessed from patient names. App settings includes a separate validation-only name-fallback control for approved mapping investigations, but it stays off by default.
 

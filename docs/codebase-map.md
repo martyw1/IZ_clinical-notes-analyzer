@@ -2,7 +2,7 @@
 
 Date: 2026-06-30
 
-Branch: `main`
+Branch: `codex/alleva-treatment-plan-aggregate`
 
 Version: `1.4.6-beta.1` / build `2026.06.30.1`
 
@@ -42,9 +42,9 @@ Docker, PostgreSQL, and nginx container serving are not ordinary Windows 10/11 r
 | Security | `backend/app/core/security.py`, `backend/app/api/deps.py` | JWT auth, role checks, and reset gate. |
 | Upload storage | `backend/app/services/patient_notes.py`, `backend/app/services/secure_storage.py` | File validation, patient ID detection, encrypted file writes, path traversal prevention, and protected text helper. |
 | Evaluation | `backend/app/services/evaluation.py` | Deterministic chart-audit item generation from uploaded note metadata/text, with optional LLM hooks. |
-| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, selected-client 42-step checklist result generation with saved manager status/comments, upload/API-style re-evaluation, Patient-ID-only display, workflow-version audit context, and manual override audit records. |
+| Timeliness | `backend/app/services/timeliness.py` | Treatment-plan date-clock evaluation, local current-date handling, PHP 30-day and non-PHP 60-day recurrence, configurable unvalidated 7-day LOC-change review, LOC alias mapping, source-evidence locations, missing/conflict handling, selected-client aggregate payload, selected-client 42-step checklist result generation with saved manager status/comments, upload/API-style re-evaluation, Patient-ID-only display, workflow-version audit context, and manual override audit records. |
 | Rules engine | `backend/app/services/rules_engine.py` | YAML-driven deterministic rules. |
-| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py` | OpenAPI/Swagger discovery, operation testing, REST/OpenAPI/HL7 readiness, API endpoint profiles, and gated Alleva REST treatment-plan sync into the R3 timeliness engine. Ungated live import is disabled. |
+| API connectivity | `backend/app/services/api_connectivity.py`, `backend/app/services/api_monitor.py`, `backend/app/services/alleva_treatment_plan_sync.py`, `backend/app/services/alleva_treatment_plan_aggregate.py`, `backend/app/services/alleva_retrieval.py`, `backend/app/services/alleva_patient_linkage.py` | OpenAPI/Swagger discovery, operation testing, REST/OpenAPI/HL7 readiness, API endpoint profiles, gated Alleva REST treatment-plan sync into the R3 timeliness engine, PHI-minimized current-plan content facts, ID mapping diagnostics, and patient treatment-plan aggregate dry-runs. Ungated live import is disabled. |
 | Audit | `backend/app/services/audit.py` | Request/data-event audit records, hash chaining, CEF-style payloads, fallback JSONL log. |
 | Runtime/version | `backend/app/services/runtime_checks.py`, `backend/app/services/version.py` | Readiness checks and `/api/version` payload from version files plus git values. |
 
@@ -124,6 +124,16 @@ The active non-technical deployment target is Windows.
 2. Rules config is loaded and validated.
 3. The timeliness service models initial/master signature rules, ongoing review recurrences, unvalidated LOC-change review, status priority, source conflicts, missing data, Patient-ID-only display, and manual override audit records.
 4. Workflow profile CRUD/versioning exists as admin/manager-managed definitions with draft/published/archived versions, transition rules, default Treatment Plan Timeliness seeding, validation, and draft-only delete limits.
+
+### Patient treatment-plan handling flow
+
+1. Manual uploads call `sync_from_note_set` in `backend/app/services/timeliness.py`; approved Alleva sync calls `sync_alleva_rest_payloads` in `backend/app/services/alleva_treatment_plan_sync.py`.
+2. Both paths upsert `TreatmentPlanClient`, `LevelOfCareHistory`, and `TreatmentPlanRecord` rows while retaining manual overrides and manager checklist reviews.
+3. Alleva records match by approved client/source ID aliases. Name fallback and patient-name import/display are separate disabled-by-default App settings.
+4. Optional current-plan detail fetch captures counts, structured item facts, redacted text hashes, and non-name metadata. It does not store raw treatment-plan narrative text.
+5. `evaluate_client` calculates deterministic status, `detail_payload` builds selected-client evidence/checklist output, and `treatment_plan_aggregate_payload` backs `GET /api/timeliness/clients/{client_id}/treatment-plan`.
+6. `frontend/src/App.tsx` renders the Treatment Plans queue/detail surface and `frontend/src/components/TreatmentPlanContentSummary.tsx` renders current treatment-plan content facts.
+7. Current implementation details and exact code locations are kept in `docs/patient-treatment-plan-handling.md`.
 
 ## Test commands
 

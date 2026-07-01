@@ -16,6 +16,8 @@ Documentation last reviewed: `2026-06-30`
 
 This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `1.4.6-beta.1` is tracked separately in `VERSION` and `VERSION.json`.
 
+The current implementation map for how patient treatment-plan evidence reaches this checklist is `docs/patient-treatment-plan-handling.md`. That reference names the manual-upload sync, gated Alleva REST sync, local database tables, aggregate payloads, timeliness evaluator, and Treatment Plans UI files.
+
 It is deliberately deterministic. Missing or conflicting admission dates, LOC evidence, treatment-plan dates, signatures, or source documents must produce `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` instead of guessed compliance.
 
 ## Acronym Definitions

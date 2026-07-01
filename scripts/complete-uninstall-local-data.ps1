@@ -1,10 +1,15 @@
 [CmdletBinding()]
 param(
     [string]$InstalledAppRoot = '',
-    [switch]$AssumeYes
+    [switch]$AssumeYes,
+    [switch]$NoPause,
+    [int]$DelaySeconds = 0
 )
 
 $ErrorActionPreference = 'Stop'
+if ($DelaySeconds -gt 0) {
+    Start-Sleep -Seconds $DelaySeconds
+}
 $InstallRoot = if ($InstalledAppRoot) { $InstalledAppRoot } else { Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer' }
 $ExpectedInstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer'
 $LocalDataDir = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
@@ -50,11 +55,26 @@ if (-not (Confirm-Removal)) {
     exit 1
 }
 
+$normalizedInstallRoot = Get-NormalizedPath -Path $InstallRoot
+if ($PSCommandPath) {
+    $normalizedScriptPath = Get-NormalizedPath -Path $PSCommandPath
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    if ($normalizedScriptPath.StartsWith("$normalizedInstallRoot$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $helperPath = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-complete-uninstall-$([System.Guid]::NewGuid().ToString('N')).ps1"
+        Copy-Item -LiteralPath $PSCommandPath -Destination $helperPath -Force
+        $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -InstalledAppRoot `"$InstallRoot`" -AssumeYes -NoPause -DelaySeconds 2"
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -WindowStyle Hidden
+        Write-Host 'Complete uninstall cleanup started. App files and local app data will be removed in a few seconds.'
+        exit 0
+    }
+}
+
 $stopScript = Join-Path $InstallRoot 'scripts\stop-windows-local.ps1'
 if (Test-Path -LiteralPath $stopScript) {
     Write-Host 'Stopping any running local app process...'
     & $stopScript -NoRestartPrompt -NoPause
 }
+Set-Location ([System.IO.Path]::GetTempPath())
 
 $desktopShortcuts = @(
     'IZ Clinical Notes Analyzer.lnk',

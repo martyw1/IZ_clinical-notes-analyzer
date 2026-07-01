@@ -3,6 +3,7 @@ param(
     [int]$Port = 8000,
     [switch]$AssumeYes,
     [switch]$SkipFrontendBuild,
+    [switch]$SkipFrontendCheck,
     [string]$ReportPath = ''
 )
 
@@ -284,36 +285,64 @@ function Invoke-FrontendBuild {
     $indexFile = Join-Path $RootDir 'frontend\dist\index.html'
     Push-Location (Join-Path $RootDir 'frontend')
     try {
-        & $Npm install
-        if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit $LASTEXITCODE" }
+        if (Test-Path -LiteralPath (Join-Path $RootDir 'frontend\package-lock.json')) {
+            & $Npm ci
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit $LASTEXITCODE" }
+        } else {
+            & $Npm install
+            if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit $LASTEXITCODE" }
+        }
         & $Npm run build
         if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit $LASTEXITCODE" }
-        Add-Check 'frontend_build' 'ok' 'Frontend build completed.' $indexFile
+        if (Test-FrontendBuildValid) {
+            Add-Check 'frontend_build' 'ok' 'Frontend build completed.' $indexFile
+        } else {
+            Add-Check 'frontend_build' 'fail' 'Frontend build completed, but frontend\dist is missing expected files.' 'Expected index.html plus built JS and CSS assets.'
+        }
     } catch {
         Add-Check 'frontend_build' 'fail' 'Frontend build failed.' $_.Exception.Message
     } finally { Pop-Location }
 }
 
+function Test-FrontendBuildValid {
+    $distDir = Join-Path $RootDir 'frontend\dist'
+    $indexFile = Join-Path $distDir 'index.html'
+    $assetsDir = Join-Path $distDir 'assets'
+    if (-not (Test-Path -LiteralPath $indexFile)) { return $false }
+    if (-not (Test-Path -LiteralPath $assetsDir)) { return $false }
+    $assetFiles = @(Get-ChildItem -LiteralPath $assetsDir -Recurse -File -ErrorAction SilentlyContinue)
+    $jsAssets = @($assetFiles | Where-Object { $_.Extension -eq '.js' -and $_.Length -gt 0 })
+    $cssAssets = @($assetFiles | Where-Object { $_.Extension -eq '.css' -and $_.Length -gt 0 })
+    if ($jsAssets.Count -eq 0 -or $cssAssets.Count -eq 0) { return $false }
+    $indexText = Get-Content -LiteralPath $indexFile -Raw
+    return ($indexText -match '/assets/.+\.js')
+}
+
 function Ensure-Frontend {
     if ($SkipFrontendBuild) {
-        Add-Check 'frontend_build' 'warn' 'Frontend build check skipped.' ''
+        if (Test-FrontendBuildValid) {
+            Add-Check 'frontend_build' 'ok' 'Existing built browser UI is present.' (Join-Path $RootDir 'frontend\dist\index.html')
+        } else {
+            Add-Check 'frontend_build' 'fail' 'Frontend build is missing or incomplete.' 'Run Build-IZ-Windows-Installer.cmd without -SkipFrontendBuild, or install Node.js LTS and rerun setup.'
+        }
         return
     }
     $indexFile = Join-Path $RootDir 'frontend\dist\index.html'
     $sourceLatest = Get-LatestFrontendSourceWriteTime
     $buildOldest = Get-OldestFrontendBuildWriteTime
     $buildExists = Test-Path -LiteralPath $indexFile
-    $buildIsStale = $buildExists -and $buildOldest -and ($sourceLatest -gt $buildOldest)
-    if ($buildExists -and -not $buildIsStale) {
+    $buildValid = Test-FrontendBuildValid
+    $buildIsStale = $buildValid -and $buildOldest -and ($sourceLatest -gt $buildOldest)
+    if ($buildValid -and -not $buildIsStale) {
         Add-Check 'frontend_build' 'ok' 'Built browser UI is present and current.' $indexFile
         return
     }
     $npm = Find-Npm
     if (-not $npm) {
-        if ($buildExists) {
+        if ($buildValid) {
             Add-Check 'frontend_build' 'warn' 'Frontend build may be stale and npm is not available to refresh it.' 'Install Node.js/npm or use a packaged release with rebuilt frontend assets.'
         } else {
-            Add-Check 'frontend_build' 'warn' 'Frontend build missing and npm is not available.' 'Packaged releases should include frontend\dist.'
+            Add-Check 'frontend_build' 'fail' 'Frontend build is missing and npm is not available.' 'Install Node.js LTS from https://nodejs.org/ or run: winget install OpenJS.NodeJS.LTS --scope user'
         }
         return
     }
@@ -323,7 +352,7 @@ function Ensure-Frontend {
         Add-Check 'frontend_build' 'warn' 'Building frontend because frontend\dist is missing.' ''
     }
     if (-not (Confirm-SetupAction -Action 'The browser UI needs a frontend build. The launcher can run npm install and npm run build in the frontend folder.' -Detail (Join-Path $RootDir 'frontend'))) {
-        if ($buildExists) {
+        if ($buildValid) {
             Add-Check 'frontend_build' 'warn' 'Frontend rebuild was declined; using the existing built browser UI.' $indexFile
             return
         }
@@ -380,7 +409,11 @@ Add-Check 'appdata' 'ok' 'Local AppData folders are writable.' $AppDataRoot
 Ensure-EnvFile
 $python = Ensure-Python
 Ensure-Venv -PythonExe $python
-Ensure-Frontend
+if ($SkipFrontendCheck) {
+    Add-Check 'frontend_build' 'ok' 'Frontend build check deferred to the installer build script.' ''
+} else {
+    Ensure-Frontend
+}
 Test-BackendConfig
 Test-Port
 

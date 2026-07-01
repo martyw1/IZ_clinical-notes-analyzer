@@ -2,7 +2,8 @@
 param(
     [string]$OutputRoot = '',
     [switch]$NoStop,
-    [switch]$AssumeYes
+    [switch]$AssumeYes,
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,3 +113,4 @@ finally {
 Write-Host ''
 Write-Host "Backup created: $zipPath" -ForegroundColor Green
 Write-Host 'Store this file securely. It may contain regulated clinical data and local access material.'
+exit 0

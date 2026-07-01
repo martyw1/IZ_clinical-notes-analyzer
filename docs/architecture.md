@@ -54,10 +54,14 @@ The deprecated Docker/nginx archive and unused Compose overlay were removed on 2
 ## Treatment-plan timeliness model
 
 - The Treatment Plans view is the default landing work queue for admins and office managers when no explicit view is requested.
+- `docs/patient-treatment-plan-handling.md` is the current implementation reference for treatment-plan storage, sync, aggregate, timeliness, checklist, and UI code locations.
+- Local treatment-plan state is stored in `TreatmentPlanClient`, `LevelOfCareHistory`, `TreatmentPlanRecord`, `TreatmentPlanOverride`, and `TreatmentPlanCriterionReview` rows in the local SQLite database.
 - The timeliness evaluator uses the local/facility current date, admission date, latest valid treatment-plan review/update date, current LOC, and LOC history to calculate status.
 - PHP levels use a 30-calendar-day recurring update interval; other configured treatment levels use 60 calendar days.
 - LOC changes use a separate manager-editable 7-calendar-day preset that remains unvalidated until R3/Marleigh confirms the final rule.
 - Treatment Plans records display Patient ID only. Name-only API records remain unmapped rather than being guessed from patient names.
+- Alleva current-plan detail capture stores counts, structured content facts, text-present flags, redacted text hashes, and non-name metadata only; treatment-plan narrative text and direct patient identifiers are not stored as content facts.
+- The stored selected-client aggregate route preserves current UI/export compatibility while exposing source confidence, current-plan selection, content capture state, data-quality warnings, and PHI-minimized provenance.
 - Timeliness analysis results are audited with workflow definition key/version/checklist context, and CSV/JSON exports include both checklist/domain rows and active workflow-step statuses.
 
 ## EMR/API integration boundary

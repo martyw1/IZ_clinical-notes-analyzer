@@ -128,4 +128,4 @@ App settings remains admin-only. Workflow profile changes are intentionally sepa
 - Historical Treatment Plan Timeliness dashboard evaluations are calculated deterministically and are not yet persisted as immutable workflow-version-bound evaluation records.
 - Workflow profiles do not run arbitrary rules by themselves.
 - Structured import templates remain future work.
-- Actual Windows installer/repair/uninstall packaging remains future work.
+- A release-folder installer/launch/backup/diagnostics/uninstall workflow exists for Beta 1.4.6-beta.1; a signed MSI/MSIX with repair/modify support remains future work.

@@ -36,8 +36,10 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
+- Use `docs\patient-treatment-plan-handling.md` as the implementation map for treatment-plan storage, sync, aggregate, deterministic evaluation, selected-client checklist results, and UI code locations.
 - The queue uses deterministic rules and current Beta 1.4.6-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
+- The selected-client detail also shows current treatment-plan content counts/facts, data-quality warnings, source confidence, current-plan selection, LOC history, treatment-plan evidence, rule results, 42-step checklist rows, manager notes, and manual overrides.
 - Managers can save status/comments on each selected-client 42-step checklist criterion and export a counselor action CSV for that client.
 - Review Queue remains the generated/manual uploaded-binder chart-review workbench. Treatment Plans remains the active due-date/timeliness work queue.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
@@ -62,11 +64,13 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 - `Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
 - App startup sync uses the same REST concept. It is disabled by default.
 - Manual retrieval is available from the Status Dashboard EMR/API card and from App Settings, but it uses the same approval and mapping gates as startup sync.
+- Admins can run the API-harness `patient_treatment_plan_aggregates` dry-run to compare `/clients`, `/treatment-plans`, and `/treatment-reviews` coverage without enabling live sync.
 - To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
 - Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
 - Patient-name import/display is off by default. When it is off, Alleva-sourced Treatment Plan clients keep generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels; saving App settings with the control off redacts existing Alleva-sourced names again.
 - Name-fallback matching is a separate validation-only setting. Keep it off unless R3 is actively validating endpoint ID mapping.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
+- Current-plan detail fetch is optional and capped. When enabled it stores counts and PHI-minimized content facts, not raw narrative text.
 - If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.
 
 ## Treatment-plan date clock

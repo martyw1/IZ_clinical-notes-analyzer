@@ -15,6 +15,8 @@ Version metadata name: `Beta 1.4.6-beta.1 Windows no-admin install readiness`
 Summary:
 
 - Aligns version metadata and active docs to `1.4.6-beta.1` / build `2026.06.30.1`.
+- Adds `docs\patient-treatment-plan-handling.md` as the current implementation map for manual-upload treatment plans, gated Alleva REST sync, patient treatment-plan aggregates, local tables, deterministic timeliness evaluation, selected-client checklist results, content-fact privacy handling, API routes, and Treatment Plans UI code locations.
+- Updates the Windows release builder to require that the treatment-plan handling reference is included in the release folder and records it in `release-manifest.json`.
 - Adds packaged local-data backup helpers through `scripts\backup-local-data.ps1`, `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd`, the release-folder backup command, and installed Start Menu/Desktop backup shortcuts.
 - Adds a confirmed complete-uninstall path through `scripts\complete-uninstall-local-data.ps1`, `scripts\Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd`, the release-folder complete-uninstall command, and an installed Start Menu shortcut that requires typing `REMOVE IZ DATA`.
 - Keeps normal uninstall data-preserving: app files and shortcuts are removed, while `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` stays in place for reinstall/upgrade.

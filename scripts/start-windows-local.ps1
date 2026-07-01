@@ -2,7 +2,8 @@
 param(
     [switch]$NoBrowser,
     [switch]$SkipFrontendBuild,
-    [switch]$AssumeYes
+    [switch]$AssumeYes,
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = 'Stop'

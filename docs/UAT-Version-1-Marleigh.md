@@ -19,7 +19,7 @@ Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app versio
 11. Confirm the app footer also shows `Beta v1.4.6-beta.1`.
 12. Confirm the Review source section shows EMR/API access, Manual upload, and `Retrieve Active Treatment Plans`.
 13. Open Treatment plans.
-14. Confirm the updated evidence queue banner is visible, the selected-client 42-step checklist evaluation opens in Treatment Plans, and the footer shows `Beta v1.4.6-beta.1`.
+14. Confirm the updated evidence queue banner is visible, the selected-client current treatment-plan content summary and 42-step checklist evaluation open in Treatment Plans, and the footer shows `Beta v1.4.6-beta.1`.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
 17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison.

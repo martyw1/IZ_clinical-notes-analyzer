@@ -1,5 +1,11 @@
 # Codex completion log - 2026-05-14
 
+## 2026-07-01 treatment-plan handling docs and installer sync
+- Added `docs/patient-treatment-plan-handling.md` as the current implementation reference for manual-upload treatment plans, gated Alleva REST treatment-plan sync, patient-level aggregate diagnostics, local treatment-plan tables, deterministic timeliness evaluation, selected-client 42-step checklist output, content-fact privacy handling, API routes, and Treatment Plans UI files.
+- Updated README, architecture, runbook, codebase map, API connectivity docs, Windows user/deployment/install guides, release notes, blocker notes, UAT, checklist, workflow, and PRD notes to point to the current treatment-plan handling path and preserve the gated Alleva/live-import boundaries.
+- Updated Windows release-builder/install surfaces so packaged releases validate and advertise `app\docs\patient-treatment-plan-handling.md` and record the local deterministic treatment-plan compliance engine in `release-manifest.json`.
+- Kept PHI, uploaded documents, runtime databases, logs, `.env`, API tokens, and local credential material out of the documented package scope.
+
 ## 2026-06-28 treatment-plan redaction and cleanup remediation
 - Added disabled-by-default Alleva patient-name import/display setting and kept validation-only name fallback as a separate saved setting.
 - Changed Alleva treatment-plan sync to store generated redacted labels by default and to redact existing Alleva-sourced treatment-plan names when App settings is saved with patient-name import off.

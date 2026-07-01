@@ -10,11 +10,20 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 
 The model is additive. Existing Treatment Plan Timeliness dashboard behavior, deterministic checklist evaluation, manager review state, manual overrides, local SQLite storage, and sync approval gates remain unchanged.
 
+For the complete patient treatment-plan handling map, including local tables, manual-upload sync, gated Alleva sync, selected-client aggregate route, current-plan content capture, and frontend surfaces, see `docs/patient-treatment-plan-handling.md`.
+
 ## Current Entry Points
 
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` runs a bounded admin-only dry-run over `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews`.
 - `GET /api/timeliness/clients/{client_id}/treatment-plan` returns the enriched aggregate for a locally stored timeliness client while preserving the previous `current_plan`, `historical_plans`, and `review_records` keys.
 - `POST /api/alleva/treatment-plan-sync/run` remains gated by App settings approval and validated endpoint mapping before live sync can import anything.
+
+Code entry points:
+
+- `backend/app/services/alleva_treatment_plan_aggregate.py`: raw Alleva payload aggregate builder for API-harness dry-runs.
+- `backend/app/services/timeliness.py::treatment_plan_aggregate_payload`: aggregate payload for a stored local treatment-plan client.
+- `backend/app/api/timeliness_routes.py::get_timeliness_client_treatment_plan_aggregate`: selected-client aggregate route.
+- `backend/app/api/api_config_routes.py::run_alleva_quick_pull`: API-harness aggregate dry-run route.
 
 ## Aggregate Shape
 

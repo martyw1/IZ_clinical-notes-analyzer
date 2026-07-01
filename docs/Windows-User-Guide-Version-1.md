@@ -166,6 +166,8 @@ After complete uninstall, the local database, encrypted uploads, settings, saved
 
 Live Alleva patient import remains disabled until R3/Alleva approve tenant credentials, endpoint mapping, auth requirements, pagination, rate limits, attachment behavior, vendor documentation, and compliance handling.
 
+The detailed current handling reference for patient treatment plans is `docs\patient-treatment-plan-handling.md`. R3 support can use it to identify where manual uploads, approved Alleva sync, local storage, deterministic status, aggregate diagnostics, and the Treatment Plans screen are implemented.
+
 Optional LLM behavior is disabled by default and is not required for compliance or timeliness decisions.
 
 The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh. The app keeps it configurable and visibly marked unresolved until R3 confirms the final rule.

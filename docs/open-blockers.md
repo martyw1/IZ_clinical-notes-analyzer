@@ -6,6 +6,8 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
+Current patient treatment-plan handling is documented in `docs\patient-treatment-plan-handling.md`, including the local tables, approved ID matching, gated Alleva REST sync, aggregate diagnostics, deterministic evaluator, selected-client checklist output, and Treatment Plans UI files. The blockers below remain active boundaries for that implementation.
+
 ## LOC-Change Treatment-Plan Update Window
 
 Status: unvalidated.

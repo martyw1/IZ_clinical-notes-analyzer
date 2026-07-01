@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
+    [Alias('OutputRoot')]
     [string]$OutputDir = '',
-    [string]$AppUrl = 'http://127.0.0.1:8000'
+    [string]$AppUrl = 'http://127.0.0.1:8000',
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,7 +51,22 @@ function New-SafeBundleName {
     $safe = $safe -replace '%LOCALAPPDATA%', 'LOCALAPPDATA'
     $safe = $safe -replace '%APPDATA%', 'APPDATA'
     $safe = $safe -replace '[^A-Za-z0-9_.-]+', '_'
-    return $safe.Trim('_')
+    $safe = $safe.Trim('_')
+    if ([string]::IsNullOrWhiteSpace($safe)) { $safe = 'item' }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($redactedPath)
+        $hash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').Substring(0, 12).ToLowerInvariant()
+    }
+    finally {
+        $sha.Dispose()
+    }
+
+    if ($safe.Length -gt 72) {
+        $safe = $safe.Substring(0, 72).Trim('_', '.', '-')
+    }
+    return "$safe-$hash"
 }
 
 function Invoke-LocalJson {

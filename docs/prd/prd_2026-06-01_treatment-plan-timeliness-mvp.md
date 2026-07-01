@@ -18,6 +18,8 @@ Implementation note 2026-06-17: Version `1.4.0` updates the timeliness model to 
 
 Implementation note 2026-06-18: Version `1.4.1` adds a gated Alleva REST treatment-plan sync path. Alleva remains the source system for active-client, treatment-plan, and treatment-review data; R3's local deterministic rules remain the compliance decision engine. Startup sync is disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete.
 
+Implementation note 2026-07-01: Beta `1.4.6-beta.1` adds the current treatment-plan handling reference at `docs/patient-treatment-plan-handling.md`. The implementation now documents where manual uploads, gated Alleva REST sync, patient-level aggregate diagnostics, local treatment-plan tables, deterministic status calculation, selected-client 42-step checklist results, content-fact privacy handling, and Treatment Plans UI rendering live in code.
+
 ## 2. MVP Positioning
 
 Use the product label **Treatment Plan Timeliness Tracker** in screens and planning. The broader repo can remain IZ Clinical Notes Analyzer, but this MVP should not imply broad clinical-note content scoring or AI judgment.

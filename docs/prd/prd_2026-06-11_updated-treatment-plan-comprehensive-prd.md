@@ -35,6 +35,8 @@ This PRD consolidates:
 
 Codex must inspect the full repo, not only this document, before implementing changes.
 
+Current implementation note 2026-07-01: Beta `1.4.6-beta.1` documents the actual patient treatment-plan handling path in `docs/patient-treatment-plan-handling.md`. The current code stores local `TreatmentPlanClient`, `LevelOfCareHistory`, `TreatmentPlanRecord`, `TreatmentPlanOverride`, and `TreatmentPlanCriterionReview` rows; gates Alleva REST sync behind App settings approval and endpoint mapping; supports a `patient_treatment_plan_aggregates` API-harness dry-run; captures current-plan content counts/facts without raw narrative text; and keeps deterministic local timeliness/checklist logic as the compliance decision engine.
+
 ---
 
 ## 3. Confirmed Stakeholder Requirements From Marleigh

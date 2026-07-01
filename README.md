@@ -156,6 +156,7 @@ Diagram boundaries:
 - `docs\Windows-User-Guide-Version-1.md`
 - `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
 - `docs\UAT-Version-1-Marleigh.md`
+- `docs\patient-treatment-plan-handling.md`
 - `docs\treatment-plan-checklist-v1.md`
 - `docs\open-blockers.md`
 - `docs\validation\validation-report-2026-06-16-production-readiness.md`
@@ -169,7 +170,7 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by `scripts\build-windows-installer.ps1`. For Beta 1.4.6-beta.1 it writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For Beta 1.4.6-beta.1 it writes:
 
 - `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
 - `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
@@ -325,6 +326,8 @@ Beta `1.4.6-beta.1` removes active FHIR/SMART-on-FHIR configuration, discovery, 
 
 The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Beta `1.4.6-beta.1` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab includes a normal queue `Refresh` action and an admin-only `Pull / refresh treatment plans` button that runs the gated Alleva REST treatment-plan sync from the tab itself. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, recent audit history, selected-client 42-step checklist evaluation, manager status/comment notes per criterion, and counselor action export.
 
+The current implementation reference is `docs\patient-treatment-plan-handling.md`. It maps the manual-upload path, gated Alleva REST sync, patient-level aggregate, local treatment-plan tables, deterministic timeliness evaluator, 42-step selected-client checklist output, content-fact privacy boundary, and exact backend/frontend code locations.
+
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
 If an uploaded or API-style pulled plan has no permitted patient name, the app creates a safe fallback display name:
@@ -399,6 +402,9 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `backend\app\services\secure_storage.py` | Encrypted file and configuration helpers |
 | `backend\app\services\patient_notes.py` | Patient-note upload storage and detection helpers |
 | `backend\app\services\timeliness.py` | Treatment Plan Timeliness service |
+| `backend\app\services\alleva_treatment_plan_sync.py` | Gated Alleva REST treatment-plan sync and current-plan content capture |
+| `backend\app\services\alleva_treatment_plan_aggregate.py` | Patient treatment-plan aggregate dry-run builder |
+| `backend\app\api\timeliness_routes.py` | Treatment Plan Timeliness dashboard/detail/aggregate/override routes |
 | `backend\app\services\rules_engine.py` | Deterministic YAML rules engine |
 | `backend\app\api\api_config_routes.py` | API configuration JSON routes |
 | `backend\app\api\workflow_routes.py` | Workflow profile CRUD/versioning routes |
@@ -406,6 +412,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `frontend\dist` | Built frontend assets after `npm run build` |
 | `config\rules\alleva_treatment_plan_completeness_rules.yaml` | Treatment Plan Tracking completeness rules |
 | `config\checklists\treatment-plan-v1.json` | Canonical 42-step checklist |
+| `docs\patient-treatment-plan-handling.md` | Current treatment-plan handling and code-location reference |
 | `docs\sample-clinical-notes` | Synthetic, non-PHI sample clinical notes |
 
 ## Version Metadata

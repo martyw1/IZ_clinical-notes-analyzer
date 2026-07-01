@@ -19,9 +19,11 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - `config/rules/` - deterministic completeness rules.
 - `config/checklists/` - canonical Treatment Plan Checklist Version 1 JSON source.
 - `docs/` - operator/developer docs, release notes, validation notes, PRD history, and synthetic examples.
+- `docs/patient-treatment-plan-handling.md` - current implementation map for patient treatment-plan storage, manual upload sync, gated Alleva sync, aggregates, timeliness, checklist output, privacy boundaries, and UI/API code locations.
 
 ## How to run checks
-- Backend: `python -m venv backend/.venv && backend/.venv/bin/python -m pip install -r backend/requirements.txt && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests -q`
+- Windows release build: double-click `Build-IZ-Windows-Installer.cmd` from the repo root. The script must install backend runtime requirements plus `backend/requirements-build.txt`, run backend tests, run frontend tests/build, validate `frontend/dist`, create `dist/windows-release`, and scan the release folder and zip.
+- Backend: `python -m venv backend/.venv && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-windows-local.txt && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-build.txt && set PYTHONPATH=backend && backend/.venv/Scripts/python.exe -m pytest backend/tests -q`
 - Frontend: `cd frontend && npm install && npm run test -- --run && npm run build`
 - Windows launcher: inspect or run `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts\startup-windows-local.ps1`, `scripts\test-api-configuration-local.ps1`, `scripts\test-alleva-api-connectivity.ps1`, and `scripts\test-local-app-stack.ps1` on Windows PowerShell.
 - Before commits: check `git status --short --branch` and verify generated runtime data, local configuration files, uploads, logs, and databases are not staged.
@@ -35,6 +37,8 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - Keep direct API probes and OpenAPI discovery limited to configuration/testing/future-readiness unless official production import approval exists.
 - Do not fake Alleva live patient import. Live patient import remains disabled until official tenant credentials, endpoint mapping, auth requirements, pagination, rate limits, attachment behavior, vendor documentation, and compliance approval exist.
 - Do not add Docker or PostgreSQL as Windows desktop requirements.
+- Do not package `.env`, `.env.*`, databases, uploads, exports, reports, logs, virtual environments, node_modules, pytest/coverage caches, raw vendor credentials, API tokens, local API reports, or PHI-like generated files.
+- Validate generated release folders and zips before declaring Windows packaging work complete.
 
 ## Treatment Plan Timeliness Tracker blockers
 - The level-of-care change treatment-plan update window is not confirmed by R3/Marleigh. Keep it configurable, visibly marked unvalidated in admin/settings UI and documentation, and do not hard-code a final value.

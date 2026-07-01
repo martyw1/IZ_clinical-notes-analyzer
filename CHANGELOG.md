@@ -7,6 +7,8 @@
 - Added non-technical no-admin Windows install, backup, diagnostics, data-preserving uninstall, and complete-uninstall documentation.
 - Added packaged backup and complete-uninstall helper scripts and wired them into the Windows release-folder builder.
 - Added selected-client 42-step Treatment Plans checklist evaluation details and included those results in selected treatment-plan CSV/JSON exports.
+- Added `docs/patient-treatment-plan-handling.md` as the current map for manual-upload treatment plans, gated Alleva REST sync, patient treatment-plan aggregates, local tables, deterministic evaluation, checklist output, content-fact privacy handling, API routes, and Treatment Plans UI locations.
+- Updated Windows installer/package documentation and release manifest metadata so packaged releases carry and validate the current treatment-plan handling reference.
 - Kept Treatment Plan Checklist content version separate at `1.2.0`.
 
 ### Verified

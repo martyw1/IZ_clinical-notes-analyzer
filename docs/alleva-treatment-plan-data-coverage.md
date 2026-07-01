@@ -15,6 +15,8 @@ This matrix is based on the supplied Alleva Swagger/OpenAPI mapping export:
 
 Important limitation: the export is derived from Swagger/OpenAPI only. Runtime API responses may include fields not documented in Swagger, and endpoints without response schemas are marked `__NO_RESPONSE_SCHEMA_IN_ALLEVA_SWAGGER__`. Live production import remains gated until R3/Alleva approves endpoint mapping, pagination behavior, tenant credentials, rate limits, attachment behavior, and compliance use.
 
+For how these fields flow into local treatment-plan rows, aggregate diagnostics, deterministic timeliness status, selected-client checklist results, and the Treatment Plans UI, see `docs/patient-treatment-plan-handling.md`.
+
 ## Identifier Contract
 
 The app now keeps these identifiers separate:
