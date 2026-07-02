@@ -1,4 +1,5 @@
 from __future__ import annotations
+# noqa: SIZE_OK - pre-existing centralized admin API harness route; new treatment-plan logic is extracted to services.
 
 import logging
 from datetime import date, datetime, timezone
@@ -27,6 +28,12 @@ from app.services.api_connectivity import (
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
 from app.services.alleva_treatment_plan_aggregate import AggregateBuildOptions, build_patient_treatment_plan_aggregate_result
+from app.services.alleva_treatment_plan_harness import (
+    TREATMENT_PLAN_HARNESS_REPORTS,
+    TreatmentPlanHarnessRequest,
+    run_treatment_plan_harness_pull,
+    treatment_plan_default_parameters,
+)
 from app.services.secure_storage import decrypt_text_secret, encrypt_text_secret
 
 logger = logging.getLogger(__name__)
@@ -170,9 +177,12 @@ class AllevaQuickPullInput(ApiDefinitionPullInput):
         'inactive_treatment_plans',
         'active_patients',
         'patient_treatment_plan_aggregates',
+        'all_treatment_plans',
+        'single_treatment_plan',
     ]
     operation_parameters: dict[str, Any] = Field(default_factory=dict)
     max_pages: int = Field(default=10, ge=1, le=50)
+    patient_id: str | None = Field(default=None, max_length=100)
 
 
 def _utc_now() -> datetime:
@@ -1075,18 +1085,41 @@ def run_alleva_quick_pull(
     timeout_seconds = payload.timeout_seconds or settings_row.emr_api_timeout_seconds
     auth_context = _auth_context(payload, settings_row, timeout_seconds=timeout_seconds)
     operation_parameters = dict(payload.operation_parameters or {})
-    operation_parameters.setdefault('Limit', 500)
-    operation_parameters.setdefault('Cursor', 0)
-    operation_parameters.setdefault('api-version', '1.0')
-    operation_parameters.setdefault('X-Version', '1.0')
+    if payload.report in TREATMENT_PLAN_HARNESS_REPORTS:
+        operation_parameters = treatment_plan_default_parameters(operation_parameters)
+    else:
+        operation_parameters.setdefault('Limit', 500)
+        operation_parameters.setdefault('Cursor', 0)
+        operation_parameters.setdefault('api-version', '1.0')
+        operation_parameters.setdefault('X-Version', '1.0')
     path = _quick_pull_path(payload.report)
     source_operation = (
         'GET /clients + GET /treatment-plans + GET /treatment-reviews'
         if payload.report == 'patient_treatment_plan_aggregates'
         else f'GET {path}'
     )
-    if payload.report == 'all_patient_records':
+    if payload.report == 'all_patient_records':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
         operation_parameters.setdefault('fields', ALL_PATIENT_RECORD_FIELDS)
+    base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url or 'https://api.allevasoft.com'
+    quick_pull_request_payload = {
+        'report': payload.report,
+        'swagger_ui_url': _strip(payload.swagger_ui_url),
+        'api_base_url': base_url,
+        'openapi_url': _strip(payload.openapi_url) or _default_openapi_url(settings_row),
+        'api_key': auth_context['api_key'],
+        'api_key_source': auth_context['api_key_source'],
+        'auth_mode': auth_context['auth_mode'],
+        'token_url': auth_context['token_url'],
+        'token_auth_style': auth_context['token_auth_style'],
+        'client_id_configured': bool(_strip(payload.client_id) or settings_row.api_client_id),
+        'client_secret_configured': bool(_strip(payload.client_secret) or (settings_row.api_client_secret if payload.use_saved_client_credentials else '')),
+        'credential_source': auth_context['credential_source'],
+        'scope': auth_context['scope'],
+        'bearer_token': auth_context['bearer_token'],
+        'timeout_seconds': timeout_seconds,
+        'operation_parameters': operation_parameters,
+        'patient_id': payload.patient_id,
+    }
 
     if payload.auth_mode == 'client_credentials' and not auth_context['bearer_token']:
         token_result = auth_context.get('token_result') if isinstance(auth_context.get('token_result'), dict) else {}
@@ -1106,6 +1139,13 @@ def run_alleva_quick_pull(
             'returned_count': 0,
             'token_result': token_result,
         }
+        if payload.report in TREATMENT_PLAN_HARNESS_REPORTS:
+            result['report'] = build_api_connectivity_report(
+                report_type=f'alleva_{payload.report}',
+                request=quick_pull_request_payload,
+                result=result,
+            )
+            result['report_path'] = persist_api_connectivity_report(result['report'])
         log_event(
             db,
             request,
@@ -1128,7 +1168,63 @@ def run_alleva_quick_pull(
         )
         return result
 
-    base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url or 'https://api.allevasoft.com'
+    if payload.report in TREATMENT_PLAN_HARNESS_REPORTS:
+        harness_result = run_treatment_plan_harness_pull(
+            TreatmentPlanHarnessRequest(
+                report=payload.report,
+                base_url=base_url,
+                operation_parameters=operation_parameters,
+                api_key=auth_context['api_key'],
+                bearer_token=auth_context['bearer_token'],
+                api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
+                timeout_seconds=timeout_seconds,
+                patient_id=payload.patient_id or '',
+            )
+        )
+        result = {
+            'report': payload.report,
+            'source_operation': source_operation,
+            'operation_parameters': operation_parameters,
+            'max_pages': payload.max_pages,
+            'auth_mode': payload.auth_mode,
+            'api_key_used': bool(auth_context['api_key']),
+            'bearer_token_used': bool(auth_context['bearer_token']),
+            'credential_source': auth_context['credential_source'],
+            'token_result': auth_context['token_result'] if auth_context.get('token_result') else {},
+            **harness_result,
+        }
+        result['report'] = build_api_connectivity_report(
+            report_type=f'alleva_{payload.report}',
+            request=quick_pull_request_payload,
+            result=result,
+        )
+        result['report_path'] = persist_api_connectivity_report(result['report'])
+        log_event(
+            db,
+            request,
+            'api_configuration.alleva_quick_pull',
+            actor=user,
+            event_category='api_connectivity',
+            target_entity=source_operation,
+            target_entity_type='external_api_operation',
+            details={
+                'status': result['status'],
+                'report': payload.report,
+                'auth_mode': payload.auth_mode,
+                'api_key_used': bool(auth_context['api_key']),
+                'bearer_token_used': bool(auth_context['bearer_token']),
+                'credential_source': auth_context['credential_source'],
+                'http_status': result.get('status_code'),
+                'response_truncated': result.get('response_truncated'),
+                'total_records_seen': result['total_records_seen'],
+                'returned_count': result['returned_count'],
+            },
+            outcome_status='failure' if result['status'] == 'fail' else 'success',
+            severity='info' if result['status'] == 'ok' else 'warning',
+            message=f'Alleva quick pull completed for {payload.report} with status {result["status"]}.',
+        )
+        return result
+
     if payload.report == 'patient_treatment_plan_aggregates':
         aggregate_result = _run_alleva_aggregate_quick_pull(
             base_url=base_url,
@@ -1191,7 +1287,7 @@ def run_alleva_quick_pull(
     columns: list[str] = []
     tsv = ''
     copy_format = ''
-    if payload.report == 'all_patient_records':
+    if payload.report == 'all_patient_records':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
         rows = [_all_patient_record_summary(item) for item in records]
         columns = ALL_PATIENT_RECORD_COLUMNS
         tsv = _rows_to_tsv(rows, columns)
@@ -1202,7 +1298,7 @@ def run_alleva_quick_pull(
         message_subject = 'active patient(s)'
     else:
         plan_rows = [_plan_summary(item, today=today) for item in records]
-        if payload.report == 'active_treatment_plans':
+        if payload.report == 'active_treatment_plans':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
             rows = [item for item in plan_rows if item['is_active']]
             message_subject = 'active treatment plan(s)'
         elif payload.report == 'overdue_treatment_plans':

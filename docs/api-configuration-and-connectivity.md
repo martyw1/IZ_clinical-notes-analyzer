@@ -30,8 +30,9 @@ The API configuration page lets an admin:
 8. Pick an operation found in the loaded API definition and test that specific API call.
 9. Fill a generated test form based on the selected operation's required path, query, header, and JSON body fields.
 10. Run the Alleva `ALL Patient Records` pull after authentication/connectivity is understood.
-11. Copy tab-separated `ALL Patient Records` output into Excel when needed.
-12. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, patient-record pull status, and redacted JSON report payloads.
+11. Run the Alleva treatment-plan harness pulls for all treatment plans or one patient/client ID.
+12. Copy tab-separated `ALL Patient Records` output into Excel when needed.
+13. Review non-secret test results, including probed URLs, HTTP status codes, discovered OpenAPI title/version, path counts, schema counts, security scheme names, sample paths, token-request status, operation-test responses, patient-record pull status, treatment-plan pull status, response file paths, and redacted JSON report payloads.
 
 The app also writes a redacted copy of pull-definition and selected-operation test reports under local app data so admins can retain test evidence without exposing API keys, client secrets, or bearer tokens in browser payloads.
 
@@ -76,6 +77,14 @@ The backend returns a bounded operational table with patient/client ID, source I
 The same backend quick-pull endpoint also supports the admin-only dry-run report `patient_treatment_plan_aggregates`. That report reads `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews` into the local `PatientTreatmentPlanAggregate` shape without arming live sync. It returns JSON aggregates plus diagnostics for endpoint coverage, identifier matching, unmatched plans/reviews, diagnosis reconciliation, completeness, and due-date status. It does not return raw upstream payloads, patient names, filenames, client secrets, bearer tokens, or treatment-plan narrative text. See [`docs/alleva-patient-treatment-plan-aggregate.md`](alleva-patient-treatment-plan-aggregate.md).
 
 For the end-to-end implementation map from API source rows into local treatment-plan tables, deterministic status, selected-client aggregate payloads, and the Treatment Plans UI, see [`docs/patient-treatment-plan-handling.md`](patient-treatment-plan-handling.md).
+
+## Alleva treatment-plan harness pulls
+
+The standalone harness includes `Pull All Patient Treatment Plans` and `Pull Single Treatment Plan` directly after `Pull ALL Patient Records`. Both actions call the documented `GET /treatment-plans` collection endpoint with OAuth client-credentials support preserved. The broad default query is `Limit=100`, `Cursor=0`, `StartDate=2000-01-01T16:03`, `api-version=1.0`, and `X-Version=1.0`; admins can optionally supply `EndDate`.
+
+`Pull Single Treatment Plan` asks for a `Patient / Client ID` rather than URL syntax. The local Swagger/OpenAPI mapping documents `GET /treatment-plans` and treatment-plan detail by treatment-plan ID, but not a direct patient-filtered treatment-plan endpoint. For a patient/client ID lookup, the harness therefore calls `GET /treatment-plans`, filters returned records by client references such as `/clients/{patientId}`, and marks the result as client-side fallback filtering.
+
+Treatment-plan harness responses show HTTP status, elapsed time, called URL, response size, truncation status, JSON parse status, report path, and full response body file path. Browser and report previews stay bounded and show treatment-plan IDs, dates, booleans, presence flags, and nested content counts rather than clinical narrative fields such as descriptions, admission reasons, needs, goals, objectives, or interventions. The backend streams the full upstream response into the existing local app-data `api-reports` folder and parses JSON from that saved full body, so a large response is not lost just because the UI preview is truncated. Operators should treat saved response body files as sensitive API evidence and keep them out of source control, exports, screenshots, and support messages unless R3 has approved the contents for sharing.
 
 ## Alleva REST treatment-plan sync
 

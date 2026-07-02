@@ -1,4 +1,5 @@
 from __future__ import annotations
+# noqa: SIZE_OK - pre-existing standalone admin harness page; treatment-plan controls remain consistent with this local UI.
 
 from fastapi import APIRouter
 from starlette.responses import HTMLResponse
@@ -27,6 +28,7 @@ def _api_configuration_page() -> HTMLResponse:
       button { margin-top: 0.8rem; margin-right: 0.5rem; padding: 0.65rem 0.9rem; border: 0; border-radius: 10px; background: #1d4ed8; color: white; font-weight: 700; cursor: pointer; }
       button.secondary { background: #475569; }
       button.danger { background: #b91c1c; }
+      button:disabled { background: #94a3b8; cursor: not-allowed; }
       pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 10px; }
       .hint { color: #475569; }
       .ok { color: #047857; font-weight: 700; }
@@ -145,7 +147,34 @@ def _api_configuration_page() -> HTMLResponse:
       </section>
 
       <section>
-        <h2>5. Advanced: test a specific API call</h2>
+        <h2>5. Pull Patient Treatment Plans</h2>
+        <p class="hint">Use this after Step 3 succeeds. The broad pull sends GET /treatment-plans using the same active Alleva REST connection. The single-patient pull uses the entered patient/client ID and falls back to client-side filtering by client href, such as /clients/{patientId}, because the checked local mapping does not expose a direct patient-filtered treatment-plan endpoint.</p>
+        <ul class="parameter-list">
+          <li>Endpoint: GET /treatment-plans</li>
+          <li>Default parameters: Limit=100, Cursor=0, StartDate=2000-01-01T16:03, api-version, X-Version</li>
+          <li>Optional parameter: EndDate</li>
+          <li>Output: HTTP status, elapsed time, URL, response size, truncation flag, report path, full response file path, parse status, and compact treatment-plan rows.</li>
+        </ul>
+        <div class="grid">
+          <label>Limit <input id="treatmentPlanLimit" type="number" min="1" max="5000" value="100" onchange="prepareTreatmentPlanPull('all_treatment_plans')" /></label>
+          <label>StartDate <input id="treatmentPlanStartDate" value="2000-01-01T16:03" onchange="prepareTreatmentPlanPull('all_treatment_plans')" /></label>
+          <label>EndDate (optional) <input id="treatmentPlanEndDate" placeholder="Optional ISO date/time" onchange="prepareTreatmentPlanPull('all_treatment_plans')" /></label>
+          <label>Patient / Client ID <input id="treatmentPlanPatientId" placeholder="Required for single-patient pull" oninput="updateTreatmentPlanSingleButtonState()" onchange="prepareTreatmentPlanPull('single_treatment_plan')" /></label>
+        </div>
+        <button id="pullAllTreatmentPlansButton" onclick="runTreatmentPlanPull('all_treatment_plans')" class="primary-action">Pull All Patient Treatment Plans</button>
+        <button id="pullSingleTreatmentPlanButton" onclick="runTreatmentPlanPull('single_treatment_plan')" class="primary-action" disabled>Pull Single Treatment Plan</button>
+        <label>Treatment-plan request details that will be sent
+          <textarea id="treatmentPlanPullPayload" spellcheck="false"></textarea>
+        </label>
+        <div class="status-frame" role="status" aria-live="polite">
+          <strong>Patient Treatment Plans status</strong>
+          <pre id="treatmentPlanPullStatus">The treatment-plan request is prepared after settings load.</pre>
+        </div>
+        <pre id="treatmentPlanPullResult">Treatment-plan pull result metadata and compact preview will appear here.</pre>
+      </section>
+
+      <section>
+        <h2>6. Advanced: test a specific API call</h2>
         <p class="hint">After pulling an OpenAPI/Swagger definition, choose an operation. The form below is generated from that operation's path, query, header, and request body requirements.</p>
         <label>API call / operation
           <select id="operationSelect" onchange="renderOperationForm()">
@@ -215,13 +244,29 @@ def _api_configuration_page() -> HTMLResponse:
         return common;
       }
 
+      function treatmentPlanOperationParameters() {
+        const version = allevaVersion();
+        const parameters = {
+          Limit: Number(getValue('treatmentPlanLimit') || '100'),
+          Cursor: 0,
+          StartDate: getValue('treatmentPlanStartDate') || '2000-01-01T16:03',
+          'api-version': version,
+          'X-Version': version
+        };
+        const endDate = getValue('treatmentPlanEndDate');
+        if (endDate) parameters.EndDate = endDate;
+        return parameters;
+      }
+
       function quickPullLabel(report) {
         return {
           all_patient_records: 'ALL Patient Records',
           active_treatment_plans: 'all active treatment plans',
           overdue_treatment_plans: 'overdue treatment plans with computed reasons',
           inactive_treatment_plans: 'inactive treatment plans with computed reasons',
-          active_patients: 'active patients with patient ID and first admission'
+          active_patients: 'active patients with patient ID and first admission',
+          all_treatment_plans: 'all patient treatment plans',
+          single_treatment_plan: 'single patient treatment plan'
         }[report] || report;
       }
 
@@ -295,6 +340,8 @@ def _api_configuration_page() -> HTMLResponse:
         byId('tokenAuthStyle').value = config.token_auth_style || 'body';
         byId('authMode').value = config.recommended_auth_mode || (config.client_secret_configured && config.client_id_configured ? 'client_credentials' : 'api_key');
         if (!getValue('quickPullPayload')) prepareAllevaQuickPull('all_patient_records');
+        if (!getValue('treatmentPlanPullPayload')) prepareTreatmentPlanPull('all_treatment_plans');
+        updateTreatmentPlanSingleButtonState();
         displayResult('result', config);
       }
 
@@ -416,6 +463,75 @@ def _api_configuration_page() -> HTMLResponse:
         };
         byId('quickPullPayload').value = JSON.stringify(payload, null, 2);
         appendStatus('quickPullStatus', `Prepared ${quickPullLabel(report)} using GET /clients with Limit, Cursor, fields, api-version, and X-Version.`);
+      }
+
+      function treatmentPlanPullPayload(report) {
+        byId('authMode').value = 'client_credentials';
+        return {
+          report,
+          patient_id: report === 'single_treatment_plan' ? getValue('treatmentPlanPatientId') : null,
+          swagger_ui_url: getValue('swaggerUiUrl') || 'https://api.allevasoft.com/swagger/index.html',
+          api_base_url: getValue('apiBaseUrl') || 'https://api.allevasoft.com',
+          openapi_url: getValue('openApiUrl') || 'https://api.allevasoft.com/swagger/v1/swagger.json',
+          auth_mode: 'client_credentials',
+          token_url: getValue('tokenUrl') || 'https://authorization.allevasoft.com/connect/token',
+          token_auth_style: getValue('tokenAuthStyle') || 'body',
+          client_id: getValue('clientId') || null,
+          client_secret: null,
+          use_saved_client_credentials: true,
+          api_key: null,
+          use_saved_api_key: true,
+          api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
+          scope: getValue('scope') || null,
+          timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
+          max_pages: 1,
+          operation_parameters: treatmentPlanOperationParameters()
+        };
+      }
+
+      function updateTreatmentPlanSingleButtonState() {
+        const button = byId('pullSingleTreatmentPlanButton');
+        if (button) button.disabled = !getValue('treatmentPlanPatientId');
+      }
+
+      function prepareTreatmentPlanPull(report) {
+        const payload = treatmentPlanPullPayload(report);
+        byId('treatmentPlanPullPayload').value = JSON.stringify(payload, null, 2);
+        appendStatus('treatmentPlanPullStatus', `Prepared ${quickPullLabel(report)} using GET /treatment-plans.`);
+        updateTreatmentPlanSingleButtonState();
+        return payload;
+      }
+
+      async function runTreatmentPlanPull(report) {
+        if (!token) {
+          setText('loginStatus', 'Sign in first.');
+          appendStatus('treatmentPlanPullStatus', 'Sign in with the admin account before running a treatment-plan pull.');
+          return;
+        }
+        if (report === 'single_treatment_plan' && !getValue('treatmentPlanPatientId')) {
+          appendStatus('treatmentPlanPullStatus', 'Patient / Client ID is required before pulling a single treatment plan.');
+          return;
+        }
+        const allButton = byId('pullAllTreatmentPlansButton');
+        const singleButton = byId('pullSingleTreatmentPlanButton');
+        const body = prepareTreatmentPlanPull(report);
+        allButton.disabled = true;
+        singleButton.disabled = true;
+        appendStatus('treatmentPlanPullStatus', `Running ${quickPullLabel(report)}...`);
+        try {
+          const result = await readJson(await fetch(`${api}/api-configuration/alleva-quick-pull`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(body)
+          }));
+          appendStatus('treatmentPlanPullStatus', `${result.status}: ${result.message}`);
+          displayResult('treatmentPlanPullResult', result);
+        } catch (error) {
+          appendStatus('treatmentPlanPullStatus', `Treatment-plan pull failed: ${error.message}`);
+        } finally {
+          allButton.disabled = false;
+          updateTreatmentPlanSingleButtonState();
+        }
       }
 
       async function runAllevaQuickPull() {
