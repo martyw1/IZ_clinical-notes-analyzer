@@ -138,6 +138,7 @@ def _synthetic_treatment_plans() -> list[dict[str, Any]]:
             'problems': [
                 {
                     'description': 'synthetic substance use problem',
+                    'behavioralDefinitions': [{'description': 'synthetic cravings and isolation pattern'}],
                     'goals': [{'description': 'sustain recovery goals', 'objectives': [{'description': 'complete weekly objectives', 'interventions': [{'description': 'Synthetic intervention'}]}]}],
                 }
             ],

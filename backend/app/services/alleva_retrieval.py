@@ -10,6 +10,7 @@ import httpx
 
 from app.services.api_connectivity import redact_sensitive_text, redact_url
 from app.services.patient_identity_minimization import redacted_text, sanitize_patient_payload
+from app.services.treatment_plan_content_safety import structured_content_items
 
 ALLEVA_CLIENTS_PATH = '/clients'
 ALLEVA_CLIENTS_LIST_PATH = '/clients/list'
@@ -199,6 +200,7 @@ def behavioral_definition_records(payload: dict[str, Any]) -> list[dict[str, Any
 
 def content_counts(payload: dict[str, Any]) -> dict[str, Any]:
     safe = sanitized_mapping(payload)
+    content_items = structured_content_items(safe)
     problems = [item for item in list_records(safe.get('problems')) if isinstance(item, dict)]
     diagnoses = diagnosis_records(safe)
     goals = [goal for problem in problems for goal in list_records(problem.get('goals')) if isinstance(goal, dict)]
@@ -206,6 +208,7 @@ def content_counts(payload: dict[str, Any]) -> dict[str, Any]:
     objectives = [objective for goal in goals for objective in list_records(goal.get('objectives')) if isinstance(objective, dict)]
     interventions = [intervention for objective in objectives for intervention in list_records(objective.get('interventions')) if isinstance(intervention, dict)]
     return {
+        'plan_field_count': sum(1 for item in content_items if item.get('kind') == 'plan_field'),
         'problem_count': len(problems),
         'diagnosis_count': len(diagnoses),
         'active_diagnosis_count': sum(1 for diagnosis in diagnoses if diagnosis_is_active(diagnosis)),

@@ -1239,7 +1239,43 @@ label {
   padding-right: 0.25rem;
 }
 
-.treatment-plan-content-summary__facts > div {
+.treatment-plan-content-summary__tree,
+.treatment-plan-content-summary__branch,
+.treatment-plan-content-summary__leaf-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.treatment-plan-content-summary__tree-node {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.treatment-plan-content-summary__tree-node--problem {
+  border: 1px solid #c4d5dc;
+  border-left: 3px solid #0b6f86;
+  padding: 0.65rem;
+}
+
+.treatment-plan-content-summary__tree-node--goal,
+.treatment-plan-content-summary__tree-node--objective,
+.treatment-plan-content-summary__leaf-group {
+  border-left: 1px solid #c4d5dc;
+  margin-left: 0.45rem;
+  padding-left: 0.75rem;
+}
+
+.treatment-plan-content-summary__branch > span,
+.treatment-plan-content-summary__leaf-group > span {
+  color: #62736b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.treatment-plan-content-summary__fact {
   display: grid;
   gap: 0.18rem;
   border: 1px solid #d4dde1;
@@ -1247,25 +1283,25 @@ label {
   padding: 0.6rem 0.7rem;
 }
 
-.treatment-plan-content-summary__facts strong,
-.treatment-plan-content-summary__facts p,
-.treatment-plan-content-summary__facts span,
-.treatment-plan-content-summary__facts small {
+.treatment-plan-content-summary__fact strong,
+.treatment-plan-content-summary__fact p,
+.treatment-plan-content-summary__fact span,
+.treatment-plan-content-summary__fact small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.treatment-plan-content-summary__facts strong {
+.treatment-plan-content-summary__fact strong {
   color: #263940;
 }
 
-.treatment-plan-content-summary__facts p {
+.treatment-plan-content-summary__fact p {
   color: #263940;
   font-size: 0.92rem;
   line-height: 1.45;
 }
 
-.treatment-plan-content-summary__facts small,
+.treatment-plan-content-summary__fact small,
 .treatment-plan-content-summary__warning {
   color: #62736b;
 }

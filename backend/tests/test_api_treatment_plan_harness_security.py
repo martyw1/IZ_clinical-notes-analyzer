@@ -31,7 +31,7 @@ def test_api_configuration_treatment_plan_harness_supports_api_key_without_secre
         # When: the treatment-plan harness uses the saved API key.
         pulled = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**api_key_body(), 'report': 'all_treatment_plans'})
 
-        # Then: API-key auth works and successful clinical narratives stay out of screen/report/audit metadata.
+        # Then: API-key auth works, treatment-plan fields are visible, and secrets stay out of screen/report/audit metadata.
         payload = pulled.json()
         report_text = Path(payload['report_path']).read_text(encoding='utf-8')
         assert pulled.status_code == 200
@@ -39,7 +39,11 @@ def test_api_configuration_treatment_plan_harness_supports_api_key_without_secre
         assert payload['api_key_used'] is True
         assert payload['bearer_token_used'] is False
         assert payload['report']['request']['api_key'] == '[redacted]'
-        for secret in ('saved-api-key-secret', 'API key synthetic treatment narrative', 'API key synthetic admission reason'):
+        assert 'API key synthetic treatment narrative' in pulled.text
+        assert 'API key synthetic admission reason' in pulled.text
+        assert 'API key synthetic treatment narrative' in report_text
+        assert 'API key synthetic admission reason' in report_text
+        for secret in ('saved-api-key-secret',):
             assert secret not in pulled.text
             assert secret not in report_text
 
@@ -65,7 +69,7 @@ def test_api_configuration_treatment_plan_harness_parses_large_full_body_from_fi
         # When: the all-treatment-plans harness pull runs.
         pulled = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body(), 'report': 'all_treatment_plans'})
 
-        # Then: the preview is marked truncated, but the full file is parsed and retained.
+        # Then: the preview is marked truncated, but the full file is parsed and structured plan fields remain visible in the response.
         payload = pulled.json()
         body_file = Path(payload['response_body_file'])
         assert pulled.status_code == 200
@@ -74,7 +78,7 @@ def test_api_configuration_treatment_plan_harness_parses_large_full_body_from_fi
         assert payload['response_json_parse_status'] == 'ok'
         assert payload['returned_count'] == 260
         assert 'KEEP-FULL-BODY-MARKER-259' in body_file.read_text(encoding='utf-8')
-        assert 'KEEP-FULL-BODY-MARKER-259' not in pulled.text
+        assert 'KEEP-FULL-BODY-MARKER-259' in pulled.text
         assert 'KEEP-FULL-BODY-MARKER-259' not in Path(payload['report_path']).read_text(encoding='utf-8')
 
 

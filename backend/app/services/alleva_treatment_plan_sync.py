@@ -592,17 +592,27 @@ def _list_value(value: Any) -> list[Any]:
 
 
 def _content_counts(raw: dict[str, Any]) -> dict[str, int]:
+    content_items = structured_content_items(raw, max_items=MAX_CONTENT_ITEMS_PER_PLAN)
+    plan_field_count = sum(1 for item in content_items if item.get('kind') == 'plan_field')
     problems = [item for item in _list_value(raw.get('problems')) if isinstance(item, dict)]
     problem_count = len(problems)
     diagnosis_count = sum(len(_list_value(problem.get('diagnoses'))) for problem in problems)
+    behavioral_definition_count = sum(
+        len(_list_value(problem.get('behavioralDefinitions')) or _list_value(problem.get('behavioral_definitions')) or _list_value(problem.get('definitions')))
+        for problem in problems
+    )
+    if not behavioral_definition_count:
+        behavioral_definition_count = len(_list_value(raw.get('behavioralDefinitions')) or _list_value(raw.get('behavioral_definitions')))
     if not diagnosis_count:
         diagnosis_count = len(_list_value(raw.get('diagnoses'))) or len(_list_value(raw.get('diagnosis'))) or len(_list_value(raw.get('items')))
     goals = [goal for problem in problems for goal in _list_value(problem.get('goals')) if isinstance(goal, dict)]
     objectives = [objective for goal in goals for objective in _list_value(goal.get('objectives')) if isinstance(objective, dict)]
     interventions = [intervention for objective in objectives for intervention in _list_value(objective.get('interventions')) if isinstance(intervention, dict)]
     return {
+        'plan_field_count': plan_field_count,
         'problem_count': problem_count,
         'diagnosis_count': diagnosis_count,
+        'behavioral_definition_count': behavioral_definition_count,
         'goal_count': len(goals),
         'objective_count': len(objectives),
         'intervention_count': len(interventions),
@@ -716,6 +726,7 @@ def _plan_record_from_treatment_plan(raw: dict[str, Any]) -> TreatmentPlanRecord
         conflict_note=conflict,
         problem_count=counts['problem_count'],
         diagnosis_count=counts['diagnosis_count'],
+        behavioral_definition_count=counts['behavioral_definition_count'],
         goal_count=counts['goal_count'],
         objective_count=counts['objective_count'],
         intervention_count=counts['intervention_count'],
@@ -762,6 +773,7 @@ def _plan_record_from_treatment_review(raw: dict[str, Any]) -> TreatmentPlanReco
         conflict_note='' if staff_signature_date else 'Alleva REST treatment review is missing creator/staff/reviewer signature date.',
         problem_count=counts['problem_count'],
         diagnosis_count=counts['diagnosis_count'],
+        behavioral_definition_count=counts['behavioral_definition_count'],
         goal_count=counts['goal_count'],
         objective_count=counts['objective_count'],
         intervention_count=counts['intervention_count'],

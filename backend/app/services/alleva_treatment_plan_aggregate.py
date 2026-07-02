@@ -10,6 +10,7 @@ from typing import Any
 from app.services.alleva_retrieval import bool_value, content_counts, date_text, diagnosis_records, first_text, list_records, parse_date
 from app.services.patient_identity_minimization import sanitize_patient_payload
 from app.services.treatment_plan_content_safety import content_value_assessment, structured_content_items
+from app.services.treatment_plan_content_tree import structured_content_tree
 
 JsonObject = dict[str, Any]
 
@@ -317,6 +318,7 @@ def _episode_payload(state: _PatientState) -> JsonObject:
 def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
     counts = content_counts(raw)
     content_items = structured_content_items(raw)
+    content_tree = structured_content_tree(raw)
     plan_id = first_text(raw, 'id', 'treatmentPlanId', 'href')
     is_initial = bool_value(raw.get('isInitialTP') or raw.get('isInitialTreatmentPlan'), default=False)
     is_complete = bool_value(raw.get('isComplete') or raw.get('complete'), default=False)
@@ -344,7 +346,8 @@ def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
         'client_signature_date': date_text(raw.get('clientSignatureDate') or _dict_text(client_signature, 'signatureDateTime')),
         'guardian_signature_date': date_text(raw.get('guardianSignatureDate') or _dict_text(guardian_signature, 'signatureDateTime')),
         'content_summary': counts,
-        'content_structure': _content_structure(raw),
+        'content_structure': content_tree,
+        'content_tree': content_tree,
         'content_items': content_items,
         **content_value_assessment(content_items),
         'diagnosis_codes': _diagnosis_codes(raw),
@@ -357,6 +360,7 @@ def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
 def _treatment_review_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
     counts = content_counts(raw)
     content_items = structured_content_items(raw)
+    content_tree = structured_content_tree(raw)
     return {
         'source_record_id': first_text(raw, 'id', 'treatmentPlanReviewId', 'href'),
         'join_confidence': confidence,
@@ -372,7 +376,8 @@ def _treatment_review_payload(raw: JsonObject, *, confidence: str) -> JsonObject
         'reviewer_signature_date': date_text(raw.get('reviewerSignatureDate') or raw.get('creatorSignatureDate') or raw.get('ceratorSignatureDate')),
         'next_review_due_api': date_text(raw.get('nextReviewDue') or raw.get('nextReviewDueDate') or raw.get('displayedNextReviewDueDate')),
         'content_summary': counts,
-        'content_structure': _content_structure(raw),
+        'content_structure': content_tree,
+        'content_tree': content_tree,
         'content_items': content_items,
         **content_value_assessment(content_items),
         'source_endpoint': '/treatment-reviews',
@@ -620,29 +625,7 @@ def _dict_text(raw: JsonObject, key: str) -> str:
 
 
 def _content_structure(raw: JsonObject) -> JsonObject:
-    safe = _safe_mapping(raw)
-    problems = list_records(safe.get('problems'))
-    structure = []
-    for index, problem in enumerate(problems, start=1):
-        diagnoses = list_records(problem.get('diagnoses'))
-        goals = list_records(problem.get('goals'))
-        structure.append(
-            {
-                'problem_index': index,
-                'text_present': bool(first_text(problem, 'description', 'status', 'name', 'problem')),
-                'diagnosis_count': len(diagnoses),
-                'goal_count': len(goals),
-                'goal_summaries': [
-                    {
-                        'goal_index': goal_index,
-                        'text_present': bool(first_text(goal, 'description', 'name', 'goal')),
-                        'objective_count': len(list_records(goal.get('objectives'))),
-                    }
-                    for goal_index, goal in enumerate(goals, start=1)
-                ],
-            }
-        )
-    return {'problems': structure}
+    return structured_content_tree(raw)
 
 
 def _diagnosis_codes(raw: JsonObject) -> list[str]:

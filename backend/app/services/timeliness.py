@@ -32,6 +32,7 @@ from app.services.treatment_plan_content_safety import (
     safe_content_text,
     safe_content_warning,
 )
+from app.services.treatment_plan_content_tree import content_tree_from_items
 from app.services.timezone import localize_datetime
 
 STATUS_PRIORITY = [
@@ -1287,6 +1288,7 @@ def upsert_client(db: Session, payload: Any, *, source_note_set_id: int | None =
             conflict_note=item.conflict_note.strip(),
             problem_count=max(0, int(item.problem_count or 0)),
             diagnosis_count=max(0, int(item.diagnosis_count or 0)),
+            behavioral_definition_count=max(0, int(item.behavioral_definition_count or 0)),
             goal_count=max(0, int(item.goal_count or 0)),
             objective_count=max(0, int(item.objective_count or 0)),
             intervention_count=max(0, int(item.intervention_count or 0)),
@@ -1485,6 +1487,7 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
                 'conflict_note': item.conflict_note,
                 'problem_count': item.problem_count,
                 'diagnosis_count': item.diagnosis_count,
+                'behavioral_definition_count': item.behavioral_definition_count,
                 'goal_count': item.goal_count,
                 'objective_count': item.objective_count,
                 'intervention_count': item.intervention_count,
@@ -1500,6 +1503,7 @@ def detail_payload(evaluation: TimelinessEvaluation, audit_history: list[Any]) -
                 'detail_fetched_at': item.detail_fetched_at,
                 'content_source': item.content_source,
                 'content_items': _normalized_content_items(item.content_items_json),
+                'content_tree': content_tree_from_items(item.content_items_json),
                 'content_capture_status': safe_content_status(item.content_capture_status),
                 'content_capture_warnings': safe_content_warning(item.content_capture_warnings),
                 'is_current': item.id == client.current_plan_record_id,
@@ -1547,6 +1551,7 @@ def treatment_plan_aggregate_payload(
             'conflict_note': item.conflict_note,
             'problem_count': item.problem_count,
             'diagnosis_count': item.diagnosis_count,
+            'behavioral_definition_count': item.behavioral_definition_count,
             'goal_count': item.goal_count,
             'objective_count': item.objective_count,
             'intervention_count': item.intervention_count,
@@ -1562,6 +1567,7 @@ def treatment_plan_aggregate_payload(
             'detail_fetched_at': item.detail_fetched_at,
             'content_source': item.content_source,
             'content_items': _normalized_content_items(item.content_items_json),
+            'content_tree': content_tree_from_items(item.content_items_json),
             'content_capture_status': safe_content_status(item.content_capture_status),
             'content_capture_warnings': safe_content_warning(item.content_capture_warnings),
             'is_current': item.id == client.current_plan_record_id,

@@ -740,8 +740,10 @@ function timelinessDetailPayload() {
         source_document_id: 'doc-41',
         is_valid: true,
         conflict_note: '',
+        plan_field_count: 1,
         problem_count: 1,
         diagnosis_count: 1,
+        behavioral_definition_count: 1,
         goal_count: 1,
         objective_count: 1,
         intervention_count: 1,
@@ -760,6 +762,14 @@ function timelinessDetailPayload() {
         content_capture_warnings: 'Narrative treatment-plan text is not stored; only text presence, hash, structure, and non-name metadata are retained.',
         content_items: [
           {
+            kind: 'plan_field',
+            label: 'Reason For Admission',
+            source_path: 'reasonForAdmission',
+            text_present: true,
+            text: 'requires structured treatment plan review',
+            redacted_text_sha256: 'd'.repeat(64),
+          },
+          {
             kind: 'problem',
             label: 'Forbidden Display Name should not display',
             source_path: 'problems[1]',
@@ -767,6 +777,14 @@ function timelinessDetailPayload() {
             text: 'substance use needs and relapse risk',
             redacted_text_sha256: 'a'.repeat(64),
             metadata: { status: 'Forbidden Display Name active', severity: 'High', clientName: 'Forbidden Display Name' },
+          },
+          {
+            kind: 'behavioral_definition',
+            label: 'Behavioral Definition 1',
+            source_path: 'problems[1].behavioralDefinitions[1]',
+            text_present: true,
+            text: 'weekly cravings and isolation warning signs',
+            metadata: { severity: 'Moderate' },
           },
           {
             kind: 'diagnosis',
@@ -1241,11 +1259,17 @@ describe('App turnkey workflow', () => {
     expect(screen.getAllByText(/Unvalidated by R3\/Marleigh/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Rule results' })).toBeInTheDocument()
     expect(screen.getByText('Structured facts captured')).toBeInTheDocument()
-    expect(screen.getByText('Problem 1')).toBeInTheDocument()
-    expect(screen.getByText('Intervention 3')).toBeInTheDocument()
-    expect(screen.getByText('substance use needs and relapse risk')).toBeInTheDocument()
-    expect(screen.getByText('practice weekly refusal skills')).toBeInTheDocument()
-    expect(screen.getByText(/frequency: Weekly/)).toBeInTheDocument()
+    expect(screen.getAllByText('Plan fields').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Reason For Admission').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('requires structured treatment plan review').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Problem 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Behavioral Definition 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Behavioral definitions').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Intervention 3').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('substance use needs and relapse risk').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('weekly cravings and isolation warning signs').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('practice weekly refusal skills').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/frequency: Weekly/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Forbidden Display Name/)).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Synthetic manager review.' } })
@@ -1393,7 +1417,10 @@ describe('App turnkey workflow', () => {
     expect(exportedTexts.some((text) => text.includes('checklist_result') && text.includes('loc_change_deadline_unresolved'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('"checklist_results"') && text.includes('produce_final_checklist_result'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 1'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('Behavioral Definition 1') && text.includes('weekly cravings and isolation warning signs'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('Plan fields') || (text.includes('Reason For Admission') && text.includes('requires structured treatment plan review')))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 3'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('\"content_tree\"') && text.includes('weekly cravings and isolation warning signs'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('frequency: Weekly') && text.includes('practice weekly refusal skills'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('Source-document Next Review Due') && text.includes('document_next_due_date'))).toBe(true)
     const allExportedText = exportedTexts.join('\n')

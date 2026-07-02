@@ -1,12 +1,23 @@
-import { contentItemMetadataSummary, contentStatusLabel, safeContentItems } from '../treatmentPlanContentSafety'
+import {
+  contentItemMetadataSummary,
+  contentStatusLabel,
+  safeContentItems,
+  safeContentTree,
+  type SafeTreatmentPlanContentItem,
+  type TreatmentPlanGoalNode,
+  type TreatmentPlanObjectiveNode,
+  type TreatmentPlanProblemNode,
+} from '../treatmentPlanContentSafety'
 
 type TreatmentPlanContent = {
   id: number
   plan_kind: string
   document_date?: string | null
   source_section?: string | null
+  plan_field_count?: number | null
   problem_count?: number | null
   diagnosis_count?: number | null
+  behavioral_definition_count?: number | null
   goal_count?: number | null
   objective_count?: number | null
   intervention_count?: number | null
@@ -55,9 +66,77 @@ function contentTotal(plan?: TreatmentPlanContent) {
   return (
     countValue(plan.problem_count) +
     countValue(plan.diagnosis_count) +
+    countValue(plan.behavioral_definition_count) +
     countValue(plan.goal_count) +
     countValue(plan.objective_count) +
     countValue(plan.intervention_count)
+  )
+}
+
+function ContentFact({ item }: { item: SafeTreatmentPlanContentItem }) {
+  const metadata = contentItemMetadataSummary(item)
+  return (
+    <div className='treatment-plan-content-summary__fact'>
+      <strong>{item.label}</strong>
+      {item.text ? <p>{item.text}</p> : null}
+      <span>{metadata}</span>
+      <small>{item.source_path}</small>
+    </div>
+  )
+}
+
+function ContentLeafGroup({ title, items }: { title: string; items: SafeTreatmentPlanContentItem[] }) {
+  if (!items.length) return null
+  return (
+    <div className='treatment-plan-content-summary__leaf-group'>
+      <span>{title}</span>
+      {items.map((item) => (
+        <ContentFact key={`${item.kind}-${item.source_path}-${item.label}`} item={item} />
+      ))}
+    </div>
+  )
+}
+
+function ObjectiveNode({ objective }: { objective: TreatmentPlanObjectiveNode }) {
+  return (
+    <div className='treatment-plan-content-summary__tree-node treatment-plan-content-summary__tree-node--objective'>
+      <ContentFact item={objective} />
+      <ContentLeafGroup title='Interventions' items={objective.interventions} />
+    </div>
+  )
+}
+
+function GoalNode({ goal }: { goal: TreatmentPlanGoalNode }) {
+  return (
+    <div className='treatment-plan-content-summary__tree-node treatment-plan-content-summary__tree-node--goal'>
+      <ContentFact item={goal} />
+      {goal.objectives.length ? (
+        <div className='treatment-plan-content-summary__branch'>
+          <span>Objectives</span>
+          {goal.objectives.map((objective) => (
+            <ObjectiveNode key={`${objective.kind}-${objective.source_path}-${objective.label}`} objective={objective} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProblemNode({ problem }: { problem: TreatmentPlanProblemNode }) {
+  return (
+    <article className='treatment-plan-content-summary__tree-node treatment-plan-content-summary__tree-node--problem'>
+      <ContentFact item={problem} />
+      <ContentLeafGroup title='Behavioral definitions' items={problem.behavioral_definitions} />
+      <ContentLeafGroup title='Diagnoses' items={problem.diagnoses} />
+      {problem.goals.length ? (
+        <div className='treatment-plan-content-summary__branch'>
+          <span>Goals</span>
+          {problem.goals.map((goal) => (
+            <GoalNode key={`${goal.kind}-${goal.source_path}-${goal.label}`} goal={goal} />
+          ))}
+        </div>
+      ) : null}
+    </article>
   )
 }
 
@@ -65,14 +144,17 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
   const currentPlan = plans.find((plan) => plan.is_current) || plans.find((plan) => currentPlanRecordId != null && plan.id === currentPlanRecordId)
   const detailStatus = currentPlan?.detail_fetched ? 'Detail loaded' : currentPlan ? 'Detail pending' : 'Not selected'
   const detailTone = currentPlan?.detail_fetched ? 'success' : currentPlan ? 'warning' : 'missing-data'
+  const contentItems = safeContentItems(currentPlan?.content_items)
+  const contentTree = safeContentTree(currentPlan?.content_items)
   const contentCounts: Array<[string, number | null | undefined]> = [
+    ['Plan fields', currentPlan?.plan_field_count ?? contentTree.plan_fields.length],
     ['Problems', currentPlan?.problem_count],
     ['Diagnoses', currentPlan?.diagnosis_count],
+    ['Behavioral definitions', currentPlan?.behavioral_definition_count],
     ['Goals', currentPlan?.goal_count],
     ['Objectives', currentPlan?.objective_count],
     ['Interventions', currentPlan?.intervention_count],
   ]
-  const contentItems = safeContentItems(currentPlan?.content_items)
 
   return (
     <section className='treatment-plan-content-summary' aria-label='Current treatment-plan content summary'>
@@ -85,8 +167,8 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
       </div>
       <div className='treatment-plan-content-summary__grid'>
         <div className='treatment-plan-content-summary__primary'>
-          <span>Clinical content elements</span>
-          <strong>{contentTotal(currentPlan)}</strong>
+          <span>Treatment-plan elements</span>
+          <strong>{contentItems.length || contentTotal(currentPlan)}</strong>
           <small>{currentPlan?.alleva_is_complete === false ? 'Alleva marks plan incomplete' : currentPlan?.alleva_is_complete ? 'Alleva marks plan complete' : 'Completeness flag not loaded'}</small>
           <small>{contentStatusLabel(currentPlan?.content_capture_status)}</small>
         </div>
@@ -111,15 +193,24 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
           </div>
         </dl>
       </div>
+      <ContentLeafGroup title='Plan fields' items={contentTree.plan_fields} />
+      {contentTree.problems.length ? (
+        <div className='treatment-plan-content-summary__tree'>
+          {contentTree.problems.map((problem) => (
+            <ProblemNode key={`${problem.kind}-${problem.source_path}-${problem.label}`} problem={problem} />
+          ))}
+        </div>
+      ) : null}
+      <ContentLeafGroup title='Top-level behavioral definitions' items={contentTree.top_level_behavioral_definitions} />
+      <ContentLeafGroup title='Top-level diagnoses' items={contentTree.top_level_diagnoses} />
+      <ContentLeafGroup title='Top-level goals' items={contentTree.top_level_goals} />
+      <ContentLeafGroup title='Top-level objectives' items={contentTree.top_level_objectives} />
+      <ContentLeafGroup title='Top-level interventions' items={contentTree.top_level_interventions} />
+      <ContentLeafGroup title='Unattached content' items={contentTree.unattached_items} />
       {contentItems.length ? (
         <div className='treatment-plan-content-summary__facts'>
           {contentItems.map((item) => (
-            <div key={`${item.kind}-${item.source_path}-${item.label}`}>
-              <strong>{item.label}</strong>
-              {item.text ? <p>{item.text}</p> : null}
-              <span>{contentItemMetadataSummary(item)}</span>
-              <small>{item.source_path}</small>
-            </div>
+            <ContentFact key={`${item.kind}-${item.source_path}-${item.label}`} item={item} />
           ))}
         </div>
       ) : null}

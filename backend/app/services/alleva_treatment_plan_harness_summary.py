@@ -14,6 +14,7 @@ from app.services.alleva_retrieval import (
     treatment_plan_status_scope,
 )
 from app.services.treatment_plan_content_safety import content_value_assessment, structured_content_items
+from app.services.treatment_plan_content_tree import content_tree_from_items
 
 
 def _client_reference_values(record: dict[str, Any]) -> list[str]:
@@ -59,6 +60,7 @@ def filtered_records(records: list[dict[str, Any]], patient_id: str) -> tuple[li
 def _safe_content_counts(record: dict[str, Any]) -> dict[str, Any]:
     counts = content_counts(record)
     return {
+        'plan_field_count': counts.get('plan_field_count', 0),
         'problem_count': counts.get('problem_count', 0),
         'diagnosis_count': counts.get('diagnosis_count', 0),
         'active_diagnosis_count': counts.get('active_diagnosis_count', 0),
@@ -82,6 +84,7 @@ def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str,
     is_complete = bool_value(record.get('isComplete'), default=False)
     content_items = structured_content_items(record)
     value_assessment = content_value_assessment(content_items)
+    content_tree = content_tree_from_items(content_items)
     reasons = [reason]
     if end_date is None:
         reasons.append('endDate missing; due status needs review')
@@ -112,6 +115,7 @@ def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str,
         'content_value_preview': _content_value_preview(content_items),
         **_safe_content_counts(record),
         'content_items': content_items,
+        'content_tree': content_tree,
         **value_assessment,
         'why': '; '.join(reasons),
     }

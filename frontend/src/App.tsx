@@ -9,7 +9,7 @@ import {
 } from './components/feedback'
 import { DataQualityWarnings } from './components/DataQualityWarnings'
 import { TreatmentPlanContentSummary } from './components/TreatmentPlanContentSummary'
-import { contentItemMetadataSummary, safeContentItems, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
+import { contentItemMetadataSummary, safeContentItems, safeContentTree, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -290,8 +290,10 @@ type TimelinessTreatmentPlan = {
   source_document_id: string
   is_valid: boolean
   conflict_note: string
+  plan_field_count?: number
   problem_count?: number
   diagnosis_count?: number
+  behavioral_definition_count?: number
   goal_count?: number
   objective_count?: number
   intervention_count?: number
@@ -307,6 +309,7 @@ type TimelinessTreatmentPlan = {
   detail_fetched_at?: string | null
   content_source?: string
   content_items?: TreatmentPlanContentItem[]
+  content_tree?: Record<string, unknown>
   content_capture_status?: string
   content_capture_warnings?: string
   is_current?: boolean
@@ -2878,8 +2881,10 @@ export function App() {
       source_section: plan.source_section,
       is_valid: plan.is_valid,
       conflict_note: plan.conflict_note,
+      plan_field_count: plan.plan_field_count ?? contentItems.filter((item) => item.kind === 'plan_field').length,
       problem_count: plan.problem_count ?? 0,
       diagnosis_count: plan.diagnosis_count ?? 0,
+      behavioral_definition_count: plan.behavioral_definition_count ?? 0,
       goal_count: plan.goal_count ?? 0,
       objective_count: plan.objective_count ?? 0,
       intervention_count: plan.intervention_count ?? 0,
@@ -2897,6 +2902,7 @@ export function App() {
       content_capture_status: plan.content_capture_status || '',
       content_capture_warnings: plan.content_capture_warnings || '',
       content_items: contentItems,
+      content_tree: safeContentTree(plan.content_items),
       is_current: Boolean(plan.is_current),
     }
   }
@@ -2946,7 +2952,7 @@ export function App() {
           plan.content_capture_status || 'counts_only',
           plan.displayed_next_due_date || '',
           plan.source_section || plan.source_evidence || '',
-          `problems=${plan.problem_count ?? 0}; diagnoses=${plan.diagnosis_count ?? 0}; goals=${plan.goal_count ?? 0}; objectives=${plan.objective_count ?? 0}; interventions=${plan.intervention_count ?? 0}`,
+          `plan_fields=${plan.plan_field_count ?? contentItems.filter((item) => item.kind === 'plan_field').length}; problems=${plan.problem_count ?? 0}; behavioral_definitions=${plan.behavioral_definition_count ?? 0}; diagnoses=${plan.diagnosis_count ?? 0}; goals=${plan.goal_count ?? 0}; objectives=${plan.objective_count ?? 0}; interventions=${plan.intervention_count ?? 0}`,
           plan.content_capture_warnings || '',
         ],
       ]
@@ -3135,13 +3141,18 @@ export function App() {
   }
 
   function openPlanEvidence(plan: TimelinessTreatmentPlan) {
+    const capturedFacts = safeContentItems(plan.content_items)
+    const capturedTree = safeContentTree(plan.content_items)
+    const planFieldCount = plan.plan_field_count ?? capturedTree.plan_fields.length
     const contentTotal =
+      planFieldCount +
       (plan.problem_count ?? 0) +
+      (plan.behavioral_definition_count ?? 0) +
       (plan.diagnosis_count ?? 0) +
       (plan.goal_count ?? 0) +
       (plan.objective_count ?? 0) +
       (plan.intervention_count ?? 0)
-    const capturedFacts = safeContentItems(plan.content_items)
+    const nestedProblemCount = capturedTree.problems.length
     const factPreview = capturedFacts
       .map((item) => {
         const metadata = contentItemMetadataSummary(item)
@@ -3160,10 +3171,12 @@ export function App() {
         { label: 'Displayed Next Review Due', value: displayDate(plan.displayed_next_due_date), emphasis: Boolean(plan.displayed_next_due_date) },
         { label: 'Current plan selected', value: plan.is_current ? 'Yes' : 'No' },
         { label: 'Detail fetch status', value: plan.detail_fetched ? 'Loaded from detail endpoint' : 'Not loaded' },
-        { label: 'Clinical content elements', value: String(contentTotal), emphasis: contentTotal > 0 },
+        { label: 'Treatment-plan elements', value: String(contentTotal), emphasis: contentTotal > 0 },
         { label: 'Structured content facts', value: `${capturedFacts.length}`, emphasis: capturedFacts.length > 0 },
+        { label: 'Plan fields', value: `${planFieldCount}`, emphasis: planFieldCount > 0 },
+        { label: 'Plan tree problems', value: `${nestedProblemCount}`, emphasis: nestedProblemCount > 0 },
         { label: 'Content capture status', value: plan.content_capture_status || 'counts_only' },
-        { label: 'Problems / diagnoses', value: `${plan.problem_count ?? 0} / ${plan.diagnosis_count ?? 0}` },
+        { label: 'Problems / definitions / diagnoses', value: `${plan.problem_count ?? 0} / ${plan.behavioral_definition_count ?? 0} / ${plan.diagnosis_count ?? 0}` },
         { label: 'Goals / objectives / interventions', value: `${plan.goal_count ?? 0} / ${plan.objective_count ?? 0} / ${plan.intervention_count ?? 0}` },
         { label: 'Alleva lifecycle', value: plan.alleva_is_active ? 'Active' : plan.alleva_end_date ? `Ended ${plan.alleva_end_date}` : 'Not recorded' },
         { label: 'Guardian signature', value: plan.has_guardian_signature ? `Present${plan.guardian_signature_date ? ` (${plan.guardian_signature_date})` : ''}` : 'Not recorded' },
@@ -4885,7 +4898,16 @@ export function App() {
 	                              <span>{plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional' : 'Missing')}</span>
 	                              <span>{plan.displayed_next_due_date || 'Not recorded'}</span>
 	                              <span>
-	                                <strong>{(plan.problem_count ?? 0) + (plan.diagnosis_count ?? 0) + (plan.goal_count ?? 0) + (plan.objective_count ?? 0) + (plan.intervention_count ?? 0)} items</strong>
+                                <strong>
+                                  {(plan.plan_field_count ?? safeContentItems(plan.content_items).filter((item) => item.kind === 'plan_field').length) +
+                                    (plan.problem_count ?? 0) +
+                                    (plan.behavioral_definition_count ?? 0) +
+                                    (plan.diagnosis_count ?? 0) +
+                                    (plan.goal_count ?? 0) +
+                                    (plan.objective_count ?? 0) +
+                                    (plan.intervention_count ?? 0)}{' '}
+                                  items
+                                </strong>
 	                                <small>
 	                                  {plan.is_current ? 'Current' : 'Historical'} - {plan.detail_fetched ? 'Detail loaded' : 'Detail pending'} - {safeContentItems(plan.content_items).length} facts
 	                                </small>

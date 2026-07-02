@@ -31,8 +31,8 @@ SAFE_CONTENT_METADATA_KEYS = {
     'duration',
     'serviceType',
 }
-SAFE_CONTENT_KINDS = {'problem', 'diagnosis', 'behavioral_definition', 'goal', 'objective', 'intervention'}
-REQUIRED_COMPLETENESS_CONTENT_KINDS = ('problem', 'diagnosis', 'goal', 'objective', 'intervention')
+SAFE_CONTENT_KINDS = {'plan_field', 'problem', 'diagnosis', 'behavioral_definition', 'goal', 'objective', 'intervention'}
+REQUIRED_COMPLETENESS_CONTENT_KINDS = ('problem', 'behavioral_definition', 'diagnosis', 'goal', 'objective', 'intervention')
 SAFE_CONTENT_STATUSES = {
     'active',
     'addressed',
@@ -96,30 +96,42 @@ DEFAULT_MAX_CONTENT_ITEMS = 250
 SAFE_CONTENT_TITLE_CASE_WORDS = {
     'abstinence',
     'active',
+    'admission',
     'addiction',
     'alcohol',
     'anxiety',
     'assessment',
     'behavioral',
     'case',
+    'client',
     'complete',
     'completed',
     'coping',
+    'created',
     'counseling',
     'daily',
+    'date',
     'definition',
     'definitions',
     'depression',
     'diagnosis',
     'discharge',
     'disorder',
+    'education',
+    'end',
     'family',
+    'flag',
+    'for',
     'goal',
     'goals',
     'group',
+    'guardian',
     'individual',
+    'initial',
     'intervention',
     'interventions',
+    'modified',
+    'needs',
     'objective',
     'objectives',
     'outpatient',
@@ -128,15 +140,57 @@ SAFE_CONTENT_TITLE_CASE_WORDS = {
     'program',
     'recovery',
     'relapse',
+    'reason',
     'review',
+    'signature',
     'skills',
+    'staff',
+    'start',
     'substance',
     'therapy',
     'trauma',
     'treatment',
     'use',
     'weekly',
+    'wiley',
 }
+
+PLAN_FIELD_PATHS = (
+    (('description',), 'Plan Description'),
+    (('startDate',), 'Plan Start Date'),
+    (('endDate',), 'Plan End Date'),
+    (('reasonForAdmission',), 'Reason For Admission'),
+    (('initialClientNeeds',), 'Initial Client Needs'),
+    (('familyEducationNeeds',), 'Family Education Needs'),
+    (('isInitialTP',), 'Initial Treatment Plan Flag'),
+    (('isWiley',), 'Wiley Plan Flag'),
+    (('isActive',), 'Active Plan Flag'),
+    (('isComplete',), 'Complete Plan Flag'),
+    (('createdDate',), 'Created Date'),
+    (('lastModified',), 'Last Modified Date'),
+    (('completedDate',), 'Completed Date'),
+    (('signedDate',), 'Signed Date'),
+    (('staffSignedDate',), 'Staff Signed Date'),
+    (('clientSignedDate',), 'Client Signed Date'),
+    (('clientSignature', 'signedDate'), 'Client Signature Date'),
+    (('clientSignature', 'date'), 'Client Signature Date'),
+    (('clientSignature', 'signatureDate'), 'Client Signature Date'),
+    (('clientSignature', 'isSigned'), 'Client Signature Flag'),
+    (('clientSignature', 'signed'), 'Client Signature Flag'),
+    (('clientSignature', 'status'), 'Client Signature Status'),
+    (('guardianSignature', 'signedDate'), 'Guardian Signature Date'),
+    (('guardianSignature', 'date'), 'Guardian Signature Date'),
+    (('guardianSignature', 'signatureDate'), 'Guardian Signature Date'),
+    (('guardianSignature', 'isSigned'), 'Guardian Signature Flag'),
+    (('guardianSignature', 'signed'), 'Guardian Signature Flag'),
+    (('guardianSignature', 'status'), 'Guardian Signature Status'),
+    (('staffSignature', 'signedDate'), 'Staff Signature Date'),
+    (('staffSignature', 'date'), 'Staff Signature Date'),
+    (('staffSignature', 'signatureDate'), 'Staff Signature Date'),
+    (('staffSignature', 'isSigned'), 'Staff Signature Flag'),
+    (('staffSignature', 'signed'), 'Staff Signature Flag'),
+    (('staffSignature', 'status'), 'Staff Signature Status'),
+)
 
 
 def _compact_scalar(value: Any, *, max_chars: int) -> str:
@@ -268,6 +322,19 @@ def _content_metadata(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[st
     return metadata
 
 
+def _field_path_value(payload: dict[str, Any], path: tuple[str, ...]) -> Any:
+    value: Any = payload
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _field_path_text(path: tuple[str, ...]) -> str:
+    return '.'.join(path)
+
+
 def _append_content_item(
     items: list[dict[str, Any]],
     *,
@@ -276,6 +343,7 @@ def _append_content_item(
     source_path: str,
     text_keys: tuple[str, ...],
     metadata_keys: tuple[str, ...] = (),
+    label: str | None = None,
     max_items: int = DEFAULT_MAX_CONTENT_ITEMS,
 ) -> None:
     if len(items) >= max_items:
@@ -286,7 +354,7 @@ def _append_content_item(
     kind_count = sum(1 for item in items if item.get('kind') == kind) + 1
     item: dict[str, Any] = {
         'kind': kind,
-        'label': f'{kind.replace("_", " ").title()} {kind_count}',
+        'label': label or f'{kind.replace("_", " ").title()} {kind_count}',
         'source_path': source_path,
         'text_present': bool(narrative_present),
     }
@@ -298,11 +366,35 @@ def _append_content_item(
     items.append(item)
 
 
+def _append_plan_field_items(items: list[dict[str, Any]], raw: dict[str, Any], *, max_items: int) -> None:
+    seen_paths: set[str] = set()
+    for path, label in PLAN_FIELD_PATHS:
+        if len(items) >= max_items:
+            return
+        source_path = _field_path_text(path)
+        if source_path in seen_paths:
+            continue
+        seen_paths.add(source_path)
+        value = _field_path_value(raw, path)
+        if value is None or isinstance(value, (dict, list, tuple, set)):
+            continue
+        _append_content_item(
+            items,
+            kind='plan_field',
+            payload={source_path: value},
+            source_path=source_path,
+            text_keys=(source_path,),
+            label=label,
+            max_items=max_items,
+        )
+
+
 def structured_content_items(raw: dict[str, Any], *, max_items: int = DEFAULT_MAX_CONTENT_ITEMS) -> list[dict[str, Any]]:
     sanitized = sanitize_patient_payload(raw, aggressive=True, omit_direct=True)
     if not isinstance(sanitized, dict):
         return []
     items: list[dict[str, Any]] = []
+    _append_plan_field_items(items, sanitized, max_items=max_items)
     problems = [item for item in _list_value(sanitized.get('problems')) if isinstance(item, dict)]
     top_level_diagnoses = [item for item in _list_value(sanitized.get('diagnoses')) if isinstance(item, dict)]
     top_level_goals = [item for item in _list_value(sanitized.get('goals')) if isinstance(item, dict)]
@@ -495,10 +587,11 @@ def normalized_content_items(value: Any) -> list[dict[str, Any]]:
         raw_kind = _compact_scalar(raw_item.get('kind'), max_chars=40).lower()
         kind = raw_kind if raw_kind in SAFE_CONTENT_KINDS else 'content'
         kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        raw_label = safe_content_display_text(raw_item.get('label'), max_chars=120)
         source_path = _compact_scalar(raw_item.get('source_path'), max_chars=120)
         item: dict[str, Any] = {
             'kind': kind,
-            'label': f'{kind.replace("_", " ").title()} {kind_counts[kind]}',
+            'label': raw_label or f'{kind.replace("_", " ").title()} {kind_counts[kind]}',
             'source_path': source_path,
             'text_present': bool(raw_item.get('text_present')),
         }

@@ -404,6 +404,7 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
                     {
                         'description': 'substance use symptoms and relapse risk',
                         'status': 'Alice Smith active problem should not persist',
+                        'behavioralDefinitions': [{'description': 'weekly cravings and isolation before relapse'}],
                         'diagnoses': [{'code': 'F10.20', 'description': 'alcohol use disorder in sustained remission'}],
                         'goals': [
                             {
@@ -488,14 +489,18 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert current_plan.detail_fetched is True
         assert current_plan.problem_count == 1
         assert current_plan.diagnosis_count == 1
+        assert current_plan.behavioral_definition_count == 1
         assert current_plan.goal_count == 1
         assert current_plan.objective_count == 1
         assert current_plan.intervention_count == 1
         content_items = json.loads(current_plan.content_items_json)
-        assert [item['kind'] for item in content_items] == ['problem', 'diagnosis', 'goal', 'objective', 'intervention']
-        assert content_items[-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
-        assert [item['text'] for item in content_items] == [
+        assert any(item['kind'] == 'plan_field' and item['source_path'] == 'startDate' for item in content_items)
+        clinical_items = [item for item in content_items if item['kind'] != 'plan_field']
+        assert [item['kind'] for item in clinical_items] == ['problem', 'behavioral_definition', 'diagnosis', 'goal', 'objective', 'intervention']
+        assert clinical_items[-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert [item['text'] for item in clinical_items] == [
             'substance use symptoms and relapse risk',
+            'weekly cravings and isolation before relapse',
             'alcohol use disorder in sustained remission',
             'maintain abstinence and recovery routines',
             'describe triggers and relapse prevention steps',
@@ -530,6 +535,8 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert detail_payload['evidence_completeness_percent'] == 100
         current_payload_plan = next(plan for plan in detail_payload['treatment_plans'] if plan['source_document_id'] == '502')
         assert current_payload_plan['content_capture_status'] == 'structured'
+        assert current_payload_plan['behavioral_definition_count'] == 1
+        assert current_payload_plan['content_tree']['problems'][0]['behavioral_definitions'][0]['text'] == 'weekly cravings and isolation before relapse'
         assert current_payload_plan['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
         assert current_payload_plan['content_items'][-1]['text'] == 'practice refusal skills in group'
 
@@ -537,6 +544,7 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert aggregate.status_code == 200
         aggregate_payload = aggregate.json()
         assert aggregate_payload['schema_version'] == 'patient-treatment-plan-aggregate-v1'
+        assert aggregate_payload['current_plan']['content_tree']['problems'][0]['goals'][0]['objectives'][0]['interventions'][0]['text'] == 'practice refusal skills in group'
         assert aggregate_payload['patient_key'] == 'client:1001'
         assert aggregate_payload['current_treatment_plan']['source_record_id'] == '502'
         assert aggregate_payload['treatment_reviews'][0]['source_document_id'] == '701'
@@ -1102,6 +1110,7 @@ def test_alleva_detail_sample_fetches_current_plan_content_counts(app_with_sqlit
         assert result['treatment_plan_id'] == 'TP 901'
         assert result['endpoint'] == '/treatment-plans/TP%20901'
         assert result['content_counts'] == {
+            'plan_field_count': 1,
             'problem_count': 1,
             'diagnosis_count': 1,
             'active_diagnosis_count': 1,

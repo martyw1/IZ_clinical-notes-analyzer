@@ -119,6 +119,7 @@ def test_ensure_schema_compatibility_adds_treatment_plan_content_columns(tmp_pat
 
     columns = {column['name'] for column in inspect(engine).get_columns('treatment_plan_records')}
     assert 'content_items_json' in columns
+    assert 'behavioral_definition_count' in columns
     assert 'content_capture_status' in columns
     assert 'content_capture_warnings' in columns
 

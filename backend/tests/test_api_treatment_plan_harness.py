@@ -44,7 +44,14 @@ def test_api_configuration_treatment_plan_harness_saves_all_response_metadata(ap
         assert payload['returned_count'] == 2
         assert payload['rows'][0]['description_present'] is True
         assert 'description' not in payload['rows'][0]
-        assert payload['rows'][0]['content_items'][0]['text'] == 'synthetic substance use problem'
+        assert payload['rows'][0]['content_items'][0]['kind'] == 'plan_field'
+        assert any(item['kind'] == 'problem' and item.get('text') == 'synthetic substance use problem' for item in payload['rows'][0]['content_items'])
+        assert payload['rows'][0]['behavioral_definition_count'] == 1
+        assert payload['rows'][0]['content_tree']['problems'][0]['behavioral_definitions'][0]['text'] == 'synthetic cravings and isolation pattern'
+        assert (
+            payload['rows'][0]['content_tree']['problems'][0]['goals'][0]['objectives'][0]['interventions'][0]['text']
+            == 'Synthetic intervention'
+        )
         assert payload['rows'][0]['content_items'][-1]['text'] == 'Synthetic intervention'
         assert payload['rows'][0]['content_value_status'] == 'incomplete'
         assert payload['rows'][0]['missing_content_values'] == ['diagnosis']
@@ -55,7 +62,7 @@ def test_api_configuration_treatment_plan_harness_saves_all_response_metadata(ap
         assert 'Synthetic treatment plan content' in body_text
         assert 'Synthetic intervention' in pulled.text
         assert 'Synthetic intervention' in report_text
-        for secret in ('Synthetic treatment plan content', 'Synthetic reason', 'Synthetic need', 'saved-secret', 'mock-access-token'):
+        for secret in ('saved-secret', 'mock-access-token'):
             assert secret not in pulled.text
             assert secret not in report_text
 
@@ -96,7 +103,11 @@ def test_api_configuration_treatment_plan_harness_filters_single_patient_by_clie
         assert payload['returned_count'] == 1
         assert payload['rows'][0]['treatment_plan_id'] == 'tp-101'
         assert 'description' not in payload['rows'][0]
+        assert payload['rows'][0]['plan_field_count'] >= 6
+        assert payload['rows'][0]['content_items'][0]['kind'] == 'plan_field'
+        assert payload['rows'][0]['content_tree']['plan_fields'][0]['text'] == 'Synthetic treatment plan content'
         assert payload['rows'][0]['content_items'][-1]['text'] == 'Synthetic intervention'
+        assert payload['rows'][0]['content_tree']['problems'][0]['goals'][0]['text'] == 'sustain recovery goals'
         assert payload['matched_client_references'] == ['/clients/PAT-HREF-001']
         report_text = Path(payload['report_path']).read_text(encoding='utf-8')
         assert 'Other synthetic treatment plan content' not in pulled.text

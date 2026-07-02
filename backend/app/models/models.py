@@ -475,6 +475,7 @@ class TreatmentPlanRecord(Base):
     conflict_note: Mapped[str] = mapped_column(Text, default='')
     problem_count: Mapped[int] = mapped_column(Integer, default=0)
     diagnosis_count: Mapped[int] = mapped_column(Integer, default=0)
+    behavioral_definition_count: Mapped[int] = mapped_column(Integer, default=0)
     goal_count: Mapped[int] = mapped_column(Integer, default=0)
     objective_count: Mapped[int] = mapped_column(Integer, default=0)
     intervention_count: Mapped[int] = mapped_column(Integer, default=0)

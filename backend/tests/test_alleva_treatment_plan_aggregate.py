@@ -47,9 +47,11 @@ def test_aggregate_builder_links_aliases_and_flags_quality_without_phi():
                 'startDate': '2026-05-10T10:00:00Z',
                 'staffSignatureDate': '2026-05-10',
                 'clientSignatureDate': '2026-05-10',
+                'reasonForAdmission': 'Synthetic admission reason requiring treatment planning',
                 'problems': [
                     {
                         'description': 'Jane Q Doe synthetic narrative should not be returned.',
+                        'behavioralDefinitions': [{'description': 'withdrawal cravings and isolation increase relapse risk'}],
                         'diagnoses': [{'code': 'F10.20', 'description': 'Jane Q Doe diagnosis text'}],
                         'goals': [
                             {
@@ -104,14 +106,21 @@ def test_aggregate_builder_links_aliases_and_flags_quality_without_phi():
     assert aggregate['patient_key'] == 'lead:lead-001'
     assert aggregate['patient']['display_name'] is None
     assert aggregate['current_treatment_plan']['source_record_id'] == 'tp-current'
+    assert aggregate['current_treatment_plan']['content_summary']['plan_field_count'] >= 3
     assert aggregate['current_treatment_plan']['content_summary']['problem_count'] == 1
     assert aggregate['current_treatment_plan']['content_summary']['diagnosis_count'] == 1
+    assert aggregate['current_treatment_plan']['content_summary']['behavioral_definition_count'] == 1
     assert aggregate['current_treatment_plan']['content_summary']['goal_count'] == 1
     assert aggregate['current_treatment_plan']['content_summary']['objective_count'] == 1
     assert aggregate['current_treatment_plan']['content_summary']['intervention_count'] == 1
     assert aggregate['computed_status']['next_review_due_api'] == '2026-07-01'
     assert aggregate['computed_status']['next_review_due_computed'] == '2026-07-09'
     assert aggregate['computed_status']['status'] == 'Needs Review'
+    plan_tree = aggregate['current_treatment_plan']['content_tree']
+    assert any(field['source_path'] == 'reasonForAdmission' for field in plan_tree['plan_fields'])
+    assert plan_tree['problems'][0]['behavioral_definitions'][0]['text'] == 'withdrawal cravings and isolation increase relapse risk'
+    assert plan_tree['problems'][0]['goals'][0]['objectives'][0]['interventions'][0]['text'] == 'Synthetic intervention text'
+    assert aggregate['current_treatment_plan']['content_structure'] == plan_tree
     assert {issue['code'] for issue in aggregate['data_quality']} >= {
         'active_client_diagnosis_missing_from_current_plan',
         'next_review_due_disagreement',
