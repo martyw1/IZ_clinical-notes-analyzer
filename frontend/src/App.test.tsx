@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+import type { AllevaTreatmentPlanAggregate } from './types/allevaTreatmentPlan'
 
 type RouteHandler = (path: string, init?: RequestInit) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>
 
@@ -476,6 +477,185 @@ function versionPayload() {
     git_commit: 'abcdef123456',
     git_branch: 'main',
     git_dirty: false,
+  }
+}
+
+function apiConfigurationPayload() {
+  return {
+    vendor_name: 'Alleva REST API',
+    api_base_url: 'https://api.allevasoft.com',
+    swagger_ui_url: 'https://api.allevasoft.com/swagger/index.html',
+    openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
+    api_key_configured: false,
+    client_id: 'synthetic-client',
+    client_id_configured: true,
+    client_secret_configured: true,
+    token_url: 'https://authorization.allevasoft.com/connect/token',
+    token_auth_style: 'body',
+    api_key_header_name: 'x-api-key',
+    timeout_seconds: 10,
+    api_enabled: true,
+    recommended_auth_mode: 'client_credentials',
+  }
+}
+
+function allevaAggregatePayload(): AllevaTreatmentPlanAggregate {
+  const baseContentTree = {
+    counts: {
+      plan_fields: 1,
+      problems: 1,
+      diagnoses: 1,
+      behavioral_definitions: 1,
+      goals: 1,
+      objectives: 1,
+      interventions: 1,
+    },
+    plan_fields: [
+      {
+        kind: 'plan_field',
+        label: 'Reason For Admission',
+        source_path: '$.reasonForAdmission',
+        text_present: true,
+        redacted_text_sha256: 'a'.repeat(64),
+      },
+    ],
+    problems: [
+      {
+        kind: 'problem' as const,
+        label: 'Problem 1',
+        source_path: '$.problems[0]',
+        text_present: true,
+        redacted_text_sha256: 'b'.repeat(64),
+        diagnoses: [
+          {
+            kind: 'diagnosis' as const,
+            label: 'Diagnosis 1',
+            source_path: '$.problems[0].diagnoses[0]',
+            text_present: true,
+            redacted_text_sha256: 'c'.repeat(64),
+          },
+        ],
+        behavioral_definitions: [
+          {
+            kind: 'behavioral_definition' as const,
+            label: 'Behavioral Definition 1',
+            source_path: '$.problems[0].behavioralDefinitions[0]',
+            text_present: true,
+            redacted_text_sha256: 'd'.repeat(64),
+          },
+        ],
+        goals: [
+          {
+            kind: 'goal' as const,
+            label: 'Goal 1',
+            source_path: '$.problems[0].goals[0]',
+            text_present: true,
+            redacted_text_sha256: 'e'.repeat(64),
+            objectives: [
+              {
+                kind: 'objective' as const,
+                label: 'Objective 1',
+                source_path: '$.problems[0].goals[0].objectives[0]',
+                text_present: true,
+                redacted_text_sha256: 'f'.repeat(64),
+                interventions: [
+                  {
+                    kind: 'intervention' as const,
+                    label: 'Intervention 1',
+                    source_path: '$.problems[0].goals[0].objectives[0].interventions[0]',
+                    text_present: true,
+                    redacted_text_sha256: '1'.repeat(64),
+                    metadata: { frequency: 'Weekly' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    top_level_diagnoses: [],
+    top_level_behavioral_definitions: [],
+    top_level_goals: [],
+    top_level_objectives: [],
+    top_level_interventions: [],
+    unattached_items: [],
+  }
+  const firstPlan = {
+    treatment_plan_id: 'TP-307-1',
+    patient_id: '307',
+    raw_client_ref: '/clients/307',
+    extracted_patient_id: '307',
+    plan_client_id: '307',
+    join_validated: true,
+    join_warning: '',
+    endpoint_url: 'https://api.allevasoft.com/treatment-plans?ClientId=307',
+    start_date: '2026-06-01',
+    end_date: '',
+    created_date: '2026-06-01T12:00:00Z',
+    last_modified: '2026-06-02T12:00:00Z',
+    is_active: true,
+    is_complete: true,
+    is_initial_tp: true,
+    is_wiley: false,
+    has_reason_for_admission: true,
+    has_initial_client_needs: true,
+    has_family_education_needs: false,
+    plan_field_count: 1,
+    problem_count: 1,
+    diagnosis_count: 1,
+    active_diagnosis_count: 1,
+    behavioral_definition_count: 1,
+    goal_count: 1,
+    objective_count: 1,
+    intervention_count: 1,
+    content_tree: baseContentTree,
+    content_value_status: 'redacted_values_present',
+    missing_content_values: [],
+    warnings: [],
+  }
+  const latestPlan = {
+    ...firstPlan,
+    treatment_plan_id: 'TP-307-2',
+    is_initial_tp: false,
+    created_date: '2026-06-15T12:00:00Z',
+    last_modified: '2026-06-16T12:00:00Z',
+  }
+  return {
+    patient_id: '307',
+    status_id: '1049',
+    status_label: 'Active',
+    status_scope: 'active',
+    patient: {
+      patient_id: '307',
+      source_id: '307',
+      status_id: '1049',
+      status_label: 'Active',
+      status_scope: 'active',
+      admission_date: '2026-02-26',
+      planned_discharge_date: '2026-09-10',
+      level_of_care: 'IOP-5',
+      facility: 'R3 Recovery Services',
+      primary_clinician: 'Synthetic Clinician',
+      first_contact_date: '2026-02-24',
+    },
+    total_plan_count: 2,
+    active_plan_count: 2,
+    has_multiple_active_plans: true,
+    treatment_plan_ids: ['TP-307-1', 'TP-307-2'],
+    active_treatment_plan_ids: ['TP-307-1', 'TP-307-2'],
+    latest_created_active_plan_id: 'TP-307-2',
+    latest_created_active_plan: latestPlan,
+    treatment_plans: [firstPlan, latestPlan],
+    active_treatment_plans: [firstPlan, latestPlan],
+    review_data_status: 'unavailable_via_rest_without_known_review_id',
+    next_review_due_source: 'unavailable',
+    review_availability: {
+      review_data_status: 'unavailable_via_rest_without_known_review_id',
+      next_review_due_source: 'unavailable',
+      message: 'Treatment review due date unavailable through REST without a known treatmentPlanReviewId',
+    },
+    warnings: [],
   }
 }
 
@@ -1279,6 +1459,98 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText(/Synthetic manager review/i)).toBeInTheDocument()
   })
 
+  it('loads a patient-centered Alleva aggregate from the Treatment Plan tab route', async () => {
+    window.history.replaceState(null, '', '/?view=timeliness&allevaPatientId=307')
+    window.sessionStorage.setItem('iz-cna-session-token', 'stored-admin-token')
+    const postedQuickPullBodies: Record<string, unknown>[] = []
+    installFetchMock({
+      'GET /api/users/me': userPayload('admin'),
+      'GET /api/charts': [chartSummary()],
+      'GET /api/patient-note-sets': [noteSetSummary()],
+      'GET /api/charts/8': chartDetail(),
+      'GET /api/patient-note-sets/5': noteSetDetail(),
+      'GET /api/users': [userPayload('admin')],
+      'GET /api/settings': appSettingsPayload(),
+      'GET /api/emr/profile': emrProfilePayload(),
+      'GET /api/system/readiness': readinessPayload(),
+      'GET /api/workflow-definitions': workflowDefinitionsPayload(),
+      'GET /api/timeliness/dashboard': timelinessDashboardPayload(),
+      'GET /api/timeliness/clients/21': timelinessDetailPayload(),
+      'GET /api/api-configuration': apiConfigurationPayload(),
+      'POST /api/api-configuration/alleva-quick-pull': (_path: string, init?: RequestInit) => {
+        postedQuickPullBodies.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>)
+        return {
+          body: {
+            status: 'ok',
+            message: 'Alleva single-patient treatment-plan pull built 1 aggregate(s) from 3 fetched record(s) using ClientId.',
+            report: 'single_patient_treatment_plans',
+            source_operation: 'GET /clients + GET /treatment-plans?ClientId={patient_id}',
+            returned_count: 1,
+            total_records_seen: 3,
+            patient_selection: 'single',
+            client_query_parameter: 'ClientId',
+            lowercase_clientId_used: false,
+            rows: [allevaAggregatePayload()],
+          },
+        }
+      },
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
+    await waitFor(() => expect(postedQuickPullBodies.length).toBe(1))
+    const postedQuickPullBody = postedQuickPullBodies[0]
+    if (!postedQuickPullBody) throw new Error('Alleva quick-pull request was not posted.')
+    const operationParameters = postedQuickPullBody.operation_parameters as Record<string, unknown>
+    expect(postedQuickPullBody).toMatchObject({
+      report: 'single_patient_treatment_plans',
+      patient_id: '307',
+      auth_mode: 'client_credentials',
+      max_pages: 1,
+    })
+    expect(operationParameters).toMatchObject({
+      Limit: 100,
+      Cursor: 0,
+      StartDate: '2000-01-01T16:03',
+      'api-version': '1.0',
+      'X-Version': '1.0',
+    })
+    expect(operationParameters).not.toHaveProperty('clientId')
+
+    const aggregate = await screen.findByTestId('alleva-patient-aggregate-307')
+    expect(within(aggregate).getByText('patient_id 307')).toBeInTheDocument()
+    expect(within(aggregate).getByText('status_label Active - status_scope active')).toBeInTheDocument()
+    expect(within(aggregate).getByText('patient.status_id')).toBeInTheDocument()
+    expect(within(aggregate).getByText('1049')).toBeInTheDocument()
+    expect(within(aggregate).getByText('patient.planned_discharge_date (planned/scheduled)')).toBeInTheDocument()
+    expect(within(aggregate).getByText('2026-09-10')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Multiple active treatment plans')).toBeInTheDocument()
+    expect(within(aggregate).getByText('latest_created_active_plan_id')).toBeInTheDocument()
+    expect(within(aggregate).getByText('TP-307-2')).toBeInTheDocument()
+    expect(within(aggregate).getByText('review_data_status')).toBeInTheDocument()
+    expect(within(aggregate).getByText('unavailable_via_rest_without_known_review_id')).toBeInTheDocument()
+    expect(within(aggregate).getAllByText('Treatment review due date unavailable through REST without a known treatmentPlanReviewId').length).toBeGreaterThan(0)
+
+    const latestPlan = await screen.findByTestId('alleva-treatment-plan-TP-307-2')
+    expect(within(latestPlan).getByText('treatment_plan_id TP-307-2')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Latest-created active plan - active')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('join_validated true')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('raw_client_ref')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('/clients/307')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('extracted_patient_id')).toBeInTheDocument()
+    expect(within(latestPlan).getAllByText('307').length).toBeGreaterThan(0)
+    expect(within(latestPlan).getByText('is_active')).toBeInTheDocument()
+    expect(within(latestPlan).getAllByText('true').length).toBeGreaterThan(0)
+    expect(within(latestPlan).getByText('has_reason_for_admission')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('problem_count')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('diagnosis_count')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Behavioral Definition 1')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Goal 1')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Objective 1')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Intervention 1')).toBeInTheDocument()
+  })
+
   it('filters the timeliness queue and opens date-conflict evidence', async () => {
     const dashboard = {
       ...timelinessDashboardPayload(),
@@ -1330,7 +1602,7 @@ describe('App turnkey workflow', () => {
   })
 
   it('copies an Asana-ready timeliness task list', async () => {
-    const writeText = vi.fn(async () => undefined)
+    const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
@@ -1361,9 +1633,10 @@ describe('App turnkey workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy task list' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
-    expect(writeText.mock.calls[0][0]).toContain('patient_id')
-    expect(writeText.mock.calls[0][0]).toContain('PAT-TP-001')
-    expect(writeText.mock.calls[0][0]).not.toContain('Synthetic Client')
+    const copiedTaskList = writeText.mock.calls[0]?.[0] || ''
+    expect(copiedTaskList).toContain('patient_id')
+    expect(copiedTaskList).toContain('PAT-TP-001')
+    expect(copiedTaskList).not.toContain('Synthetic Client')
   })
 
   it('exports selected review and treatment plan reports as CSV and JSON', async () => {

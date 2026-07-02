@@ -33,13 +33,13 @@ export function DataQualityWarnings({ warnings = [], idJoinWarnings = [], discha
       ...idJoinWarnings,
     ].filter(Boolean)),
   )
-  const idRows: Array<[string, string | null | undefined]> = [
+  const idRows: Array<[string, string | null | undefined]> = ([
     ['Source', identifiers?.sourceId],
     ['Lead', identifiers?.leadId],
     ['Client', identifiers?.clientId],
     ['Unique', identifiers?.uniqueId],
     ['MRN', identifiers?.mrn],
-  ].filter(([, value]) => Boolean(value))
+  ] satisfies Array<[string, string | null | undefined]>).filter(([, value]) => Boolean(value))
 
   if (!combinedWarnings.length && !idJoinConfidence && !idRows.length) return null
 

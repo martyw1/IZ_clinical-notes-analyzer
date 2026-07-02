@@ -9,8 +9,13 @@ import {
 } from './components/feedback'
 import { DataQualityWarnings } from './components/DataQualityWarnings'
 import { TreatmentPlanContentSummary } from './components/TreatmentPlanContentSummary'
+import {
+  AllevaPatientTreatmentPlanPanel,
+  type AllevaPatientCenteredTreatmentPlanHarnessResult,
+  type AllevaPatientCenteredTreatmentPlanReport,
+  type AllevaPatientPlanPullState,
+} from './components/AllevaPatientTreatmentPlanPanel'
 import { contentItemMetadataSummary, safeContentItems, safeContentTree, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
-import type { AllevaTreatmentPlanAggregate } from './types/allevaTreatmentPlan'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -583,8 +588,42 @@ type ApiError = {
   raw?: string
 }
 
-type AllevaPatientCenteredTreatmentPlanHarnessResult = {
-  rows?: AllevaTreatmentPlanAggregate[]
+type ApiConfigurationOut = {
+  vendor_name: string
+  api_base_url: string
+  swagger_ui_url: string
+  openapi_url: string
+  api_key_configured: boolean
+  client_id: string
+  client_id_configured: boolean
+  client_secret_configured: boolean
+  token_url: string
+  token_auth_style: string
+  api_key_header_name: string
+  timeout_seconds: number
+  api_enabled: boolean
+  recommended_auth_mode: 'api_key' | 'client_credentials' | 'none'
+}
+
+type AllevaPatientCenteredTreatmentPlanPullPayload = {
+  report: AllevaPatientCenteredTreatmentPlanReport
+  patient_id: string | null
+  swagger_ui_url: string
+  api_base_url: string
+  openapi_url: string
+  auth_mode: 'client_credentials'
+  token_url: string
+  token_auth_style: string
+  client_id: string | null
+  client_secret: null
+  use_saved_client_credentials: true
+  api_key: null
+  use_saved_api_key: true
+  api_key_header_name: string
+  scope: null
+  timeout_seconds: number
+  max_pages: number
+  operation_parameters: Record<string, string | number>
 }
 
 type UploadFormState = {
@@ -1077,6 +1116,11 @@ function requestedViewFromUrl(): AppView | null {
   return APP_VIEWS.includes(requested as AppView) ? (requested as AppView) : null
 }
 
+function allevaPatientIdFromUrl() {
+  if (typeof window === 'undefined') return ''
+  return new URLSearchParams(window.location.search).get('allevaPatientId')?.trim() || ''
+}
+
 function viewFromUrl(): AppView {
   return requestedViewFromUrl() || 'dashboard'
 }
@@ -1096,6 +1140,52 @@ function storeSessionToken(token: string) {
     window.sessionStorage.setItem(SESSION_TOKEN_KEY, token)
   } else {
     window.sessionStorage.removeItem(SESSION_TOKEN_KEY)
+  }
+}
+
+function createAllevaPatientPlanPullState(patientId = allevaPatientIdFromUrl()): AllevaPatientPlanPullState {
+  return {
+    status: 'idle',
+    message: patientId ? `Ready to load Alleva patient_id ${patientId}.` : 'Enter an Alleva patient ID or load active patient-centered records.',
+    result: null,
+    selectedPatientId: patientId,
+  }
+}
+
+function allevaTreatmentPlanOperationParameters(apiVersion = '1.0') {
+  return {
+    Limit: 100,
+    Cursor: 0,
+    StartDate: '2000-01-01T16:03',
+    'api-version': apiVersion,
+    'X-Version': apiVersion,
+  }
+}
+
+function allevaPatientCenteredTreatmentPlanPullPayload(
+  config: ApiConfigurationOut,
+  report: AllevaPatientCenteredTreatmentPlanReport,
+  patientId: string,
+): AllevaPatientCenteredTreatmentPlanPullPayload {
+  return {
+    report,
+    patient_id: report === 'single_patient_treatment_plans' ? patientId : null,
+    swagger_ui_url: config.swagger_ui_url || 'https://api.allevasoft.com/swagger/index.html',
+    api_base_url: config.api_base_url || 'https://api.allevasoft.com',
+    openapi_url: config.openapi_url || 'https://api.allevasoft.com/swagger/v1/swagger.json',
+    auth_mode: 'client_credentials',
+    token_url: config.token_url || 'https://authorization.allevasoft.com/connect/token',
+    token_auth_style: config.token_auth_style || 'body',
+    client_id: config.client_id || null,
+    client_secret: null,
+    use_saved_client_credentials: true,
+    api_key: null,
+    use_saved_api_key: true,
+    api_key_header_name: config.api_key_header_name || 'x-api-key',
+    scope: null,
+    timeout_seconds: config.timeout_seconds || 10,
+    max_pages: 1,
+    operation_parameters: allevaTreatmentPlanOperationParameters('1.0'),
   }
 }
 
@@ -1327,7 +1417,7 @@ function csvCell(value: unknown) {
   return `"${raw.replace(/"/g, '""')}"`
 }
 
-function formatEvaluatedValue(value: unknown) {
+function formatEvaluatedValue(value: unknown): string {
   if (value == null || value === '') return 'Not recorded'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (Array.isArray(value)) return value.length ? value.map(formatEvaluatedValue).join('; ') : 'None'
@@ -1649,6 +1739,8 @@ export function App() {
   const [timelinessSearch, setTimelinessSearch] = useState('')
   const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
   const [timelinessCriterionDirty, setTimelinessCriterionDirty] = useState(false)
+  const [allevaPatientPlanPull, setAllevaPatientPlanPull] = useState<AllevaPatientPlanPullState>(() => createAllevaPatientPlanPullState())
+  const [allevaPatientPlanInput, setAllevaPatientPlanInput] = useState(() => allevaPatientIdFromUrl())
   const [evidencePreview, setEvidencePreview] = useState<EvidencePreview | null>(null)
   const [appDialog, setAppDialog] = useState<AppDialogState | null>(null)
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
@@ -1663,6 +1755,7 @@ export function App() {
   const patientIdTouchedRef = useRef(false)
   const lastAutoFilledPatientIdRef = useRef('')
   const criterionWorkbenchRef = useRef<HTMLDivElement | null>(null)
+  const allevaPatientPlanDeepLinkLoadedRef = useRef('')
 
   const [users, setUsers] = useState<User[]>([])
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<number | null>(null)
@@ -2269,6 +2362,54 @@ export function App() {
     }
   }
 
+  async function loadAllevaPatientCenteredTreatmentPlans(report: AllevaPatientCenteredTreatmentPlanReport, patientId = allevaPatientPlanInput) {
+    const requestedPatientId = patientId.trim()
+    if (report === 'single_patient_treatment_plans' && !requestedPatientId) {
+      const message = 'patient_id is required before pulling single-patient production treatment plans.'
+      setAllevaPatientPlanPull({ status: 'error', message, result: null, selectedPatientId: '' })
+      setError(message)
+      return
+    }
+    setIsBusy(true)
+    setError('')
+    setStatus('Loading Alleva patient-centered treatment-plan aggregate...')
+    setAllevaPatientPlanPull({
+      status: 'loading',
+      message:
+        report === 'single_patient_treatment_plans'
+          ? `Loading single_patient_treatment_plans for patient_id ${requestedPatientId}...`
+          : 'Loading active_patient_centered_treatment_plans...',
+      result: null,
+      selectedPatientId: requestedPatientId,
+    })
+    appendSettingsActivity(`Started ${report} quick pull.`)
+    try {
+      const config = await apiRequest<ApiConfigurationOut>('/api-configuration')
+      const result = await apiRequest<AllevaPatientCenteredTreatmentPlanHarnessResult>('/api-configuration/alleva-quick-pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allevaPatientCenteredTreatmentPlanPullPayload(config, report, requestedPatientId)),
+      })
+      const isError = result.status === 'fail'
+      setAllevaPatientPlanPull({
+        status: isError ? 'error' : 'ready',
+        message: result.message || `${report} returned ${result.returned_count ?? result.rows?.length ?? 0} row(s).`,
+        result,
+        selectedPatientId: requestedPatientId,
+      })
+      setStatus(result.message || 'Alleva patient-centered treatment-plan pull completed.')
+      if (isError) setError(result.message || 'Alleva patient-centered treatment-plan pull failed.')
+      appendSettingsActivity(`${report} ${result.status}: ${result.message || 'completed'}`)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Failed to load Alleva patient-centered treatment-plan aggregate'
+      setAllevaPatientPlanPull({ status: 'error', message, result: null, selectedPatientId: requestedPatientId })
+      setError(message)
+      appendSettingsActivity(`${report} failed: ${message}`)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function loadUsers(preferredId?: number | null) {
     if (user?.role !== 'admin' && user?.role !== 'manager') return
     const nextUsers = await apiRequest<User[]>('/users')
@@ -2453,6 +2594,15 @@ export function App() {
     if (activeView === 'timeliness' && token && user && !mustResetPassword) {
       void loadTimelinessDashboard()
     }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if (activeView !== 'timeliness' || !token || user?.role !== 'admin' || mustResetPassword) return
+    const patientId = allevaPatientIdFromUrl()
+    if (!patientId || allevaPatientPlanDeepLinkLoadedRef.current === patientId) return
+    allevaPatientPlanDeepLinkLoadedRef.current = patientId
+    setAllevaPatientPlanInput(patientId)
+    void loadAllevaPatientCenteredTreatmentPlans('single_patient_treatment_plans', patientId)
   }, [activeView, token, user, mustResetPassword])
 
   useEffect(() => {
@@ -3851,7 +4001,7 @@ export function App() {
 
   function openApiConnectivityHarness() {
     const harnessWindow = window.open('/api-configuration', '_blank')
-    const currentToken = readStoredSessionToken()
+    const currentToken = getStoredSessionToken()
     if (!harnessWindow || !currentToken) return
     const sendSession = () => {
       try {
@@ -4626,15 +4776,26 @@ export function App() {
 	                      }}
 	                    />
 
-	                    <TreatmentPlanContentSummary
-	                      plans={selectedTimelinessClient.treatment_plans}
-	                      currentPlanRecordId={selectedTimelinessClient.current_plan_record_id}
-	                    />
+                    <TreatmentPlanContentSummary
+                      plans={selectedTimelinessClient.treatment_plans}
+                      currentPlanRecordId={selectedTimelinessClient.current_plan_record_id}
+                    />
 
-	                    <section className='panel-subsection evidence-comparison-panel'>
-	                      <div className='panel-heading'>
-	                        <div>
-	                          <h3>Evidence comparison</h3>
+                    {user?.role === 'admin' ? (
+                      <AllevaPatientTreatmentPlanPanel
+                        pullState={allevaPatientPlanPull}
+                        patientId={allevaPatientPlanInput}
+                        onPatientIdChange={(nextPatientId) => setAllevaPatientPlanInput(nextPatientId)}
+                        onLoadPatient={() => void loadAllevaPatientCenteredTreatmentPlans('single_patient_treatment_plans')}
+                        onLoadActivePatients={() => void loadAllevaPatientCenteredTreatmentPlans('active_patient_centered_treatment_plans')}
+                        isBusy={isBusy || allevaPatientPlanPull.status === 'loading'}
+                      />
+                    ) : null}
+
+                    <section className='panel-subsection evidence-comparison-panel'>
+                      <div className='panel-heading'>
+                        <div>
+                          <h3>Evidence comparison</h3>
 	                          <p>Document due date, date-clock calculation, and LOC-change calculation are shown together.</p>
 	                        </div>
 	                        <button type='button' className='ghost-button' onClick={openComparisonEvidence}>
