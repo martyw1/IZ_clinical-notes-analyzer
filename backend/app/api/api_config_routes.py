@@ -1193,10 +1193,24 @@ def run_alleva_quick_pull(
             'token_result': auth_context['token_result'] if auth_context.get('token_result') else {},
             **harness_result,
         }
+        report_result = {
+            'status': result['status'],
+            'message': result['message'],
+            'report': payload.report,
+            'source_operation': source_operation,
+            'rows': result.get('rows', []),
+            'response_json_preview': result.get('response_json_preview'),
+            'response_body_file': result.get('response_body_file'),
+            'response_json_parse_status': result.get('response_json_parse_status'),
+            'total_records_seen': result.get('total_records_seen'),
+            'returned_count': result.get('returned_count'),
+            'category': result.get('category'),
+            'url': result.get('url'),
+        }
         result['report'] = build_api_connectivity_report(
             report_type=f'alleva_{payload.report}',
             request=quick_pull_request_payload,
-            result=result,
+            result=report_result,
         )
         result['report_path'] = persist_api_connectivity_report(result['report'])
         log_event(

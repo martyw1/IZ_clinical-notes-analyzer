@@ -68,7 +68,7 @@ Name-only joins are disabled by default and are for validation only when explici
 
 Patient-name import/display is also disabled by default. When disabled, Alleva-sourced clients store a generated `no-name-found_YYYY-MM-DD_HHMMSS` display label even if `/clients` returns a name. Saving App settings with name import/display off redacts existing Alleva-sourced treatment-plan display names again.
 
-Treatment-plan narrative text is not stored. Detail capture stores counts, structured item kinds/labels, source paths, text-present flags, redacted text hashes, and non-name metadata. Direct patient identifier fields are omitted before content snapshot storage.
+Treatment-plan element values are stored only after direct-identifier redaction and patient identifier fields are omitted before content snapshot storage. Detail capture stores counts, structured item kinds/labels, source paths, redacted text values, text-present flags, redacted text hashes, and non-name metadata.
 
 ## Deterministic Timeliness Rules
 
@@ -109,7 +109,7 @@ There are two aggregate-related paths:
 
 The stored selected-client aggregate preserves legacy fields for the current UI/export contract and adds source-confidence, endpoint-count, current treatment plan, treatment plans, reviews, diagnoses, content facts, computed status, data-quality warnings, and PHI-minimized source provenance.
 
-Raw upstream payloads, treatment-plan narrative text, filenames, API keys, bearer tokens, client secrets, and patient direct identifiers are not returned as aggregate provenance.
+Raw upstream payloads, filenames, API keys, bearer tokens, client secrets, and patient direct identifiers are not returned as aggregate provenance. Redacted structured treatment-plan element values are returned so the app and completeness checker can inspect the actual plan contents.
 
 ## User-Facing Surfaces
 

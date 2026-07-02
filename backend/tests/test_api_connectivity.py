@@ -3,6 +3,7 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+from fastapi.testclient import TestClient
 
 from app.services.api_connectivity import (
     REDACTED,

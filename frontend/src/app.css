@@ -1188,9 +1188,12 @@ label {
 .identifier-grid dt,
 .treatment-plan-content-summary dt,
 .treatment-plan-content-summary__primary span {
+  min-width: 0;
   color: #62736b;
   font-size: 0.74rem;
   font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
@@ -1224,7 +1227,7 @@ label {
 }
 
 .treatment-plan-content-summary dl {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
   margin: 0;
 }
 
@@ -1245,6 +1248,7 @@ label {
 }
 
 .treatment-plan-content-summary__facts strong,
+.treatment-plan-content-summary__facts p,
 .treatment-plan-content-summary__facts span,
 .treatment-plan-content-summary__facts small {
   min-width: 0;
@@ -1253,6 +1257,12 @@ label {
 
 .treatment-plan-content-summary__facts strong {
   color: #263940;
+}
+
+.treatment-plan-content-summary__facts p {
+  color: #263940;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .treatment-plan-content-summary__facts small,

@@ -764,6 +764,7 @@ function timelinessDetailPayload() {
             label: 'Forbidden Display Name should not display',
             source_path: 'problems[1]',
             text_present: true,
+            text: 'substance use needs and relapse risk',
             redacted_text_sha256: 'a'.repeat(64),
             metadata: { status: 'Forbidden Display Name active', severity: 'High', clientName: 'Forbidden Display Name' },
           },
@@ -772,6 +773,7 @@ function timelinessDetailPayload() {
             label: 'Diagnosis 1',
             source_path: 'problems[1].diagnoses[1]',
             text_present: true,
+            text: 'alcohol use disorder in remission',
             redacted_text_sha256: 'b'.repeat(64),
             metadata: { code: 'F10.20', description: 'Forbidden Display Name diagnosis' },
           },
@@ -780,6 +782,7 @@ function timelinessDetailPayload() {
             label: 'Forbidden Display Name goal',
             source_path: 'problems[1].goals[1]',
             text_present: true,
+            text: 'maintain abstinence and recovery routines',
             metadata: { status: 'Active' },
           },
           {
@@ -787,6 +790,7 @@ function timelinessDetailPayload() {
             label: 'Objective 1',
             source_path: 'problems[1].goals[1].objectives[1]',
             text_present: true,
+            text: 'describe relapse prevention steps',
             metadata: { targetDate: '2026-05-01' },
           },
           {
@@ -794,6 +798,7 @@ function timelinessDetailPayload() {
             label: 'Intervention 1',
             source_path: 'problems[1].goals[1].objectives[1].interventions[1]',
             text_present: true,
+            text: 'practice weekly refusal skills',
             redacted_text_sha256: 'c'.repeat(64),
             metadata: { frequency: 'Weekly', modality: 'Group', authorName: 'Forbidden Display Name' },
           },
@@ -802,6 +807,7 @@ function timelinessDetailPayload() {
             label: 'Forbidden Display Name intervention',
             source_path: 'problems[1].goals[1].objectives[1].interventions[2]',
             text_present: true,
+            text: 'attend daily counseling group',
             metadata: { frequency: 'Daily', serviceType: 'Counseling' },
           },
           {
@@ -809,6 +815,7 @@ function timelinessDetailPayload() {
             label: 'Intervention 3',
             source_path: 'problems[1].goals[1].objectives[1].interventions[3]',
             text_present: true,
+            text: 'review progress for thirty minutes',
             metadata: { duration: '30 minutes' },
           },
         ],
@@ -1236,6 +1243,8 @@ describe('App turnkey workflow', () => {
     expect(screen.getByText('Structured facts captured')).toBeInTheDocument()
     expect(screen.getByText('Problem 1')).toBeInTheDocument()
     expect(screen.getByText('Intervention 3')).toBeInTheDocument()
+    expect(screen.getByText('substance use needs and relapse risk')).toBeInTheDocument()
+    expect(screen.getByText('practice weekly refusal skills')).toBeInTheDocument()
     expect(screen.getByText(/frequency: Weekly/)).toBeInTheDocument()
     expect(screen.queryByText(/Forbidden Display Name/)).not.toBeInTheDocument()
 
@@ -1385,7 +1394,7 @@ describe('App turnkey workflow', () => {
     expect(exportedTexts.some((text) => text.includes('"checklist_results"') && text.includes('produce_final_checklist_result'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 1'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('treatment_plan_content_fact') && text.includes('Intervention 3'))).toBe(true)
-    expect(exportedTexts.some((text) => text.includes('frequency: Weekly') && text.includes('narrative text present, not displayed'))).toBe(true)
+    expect(exportedTexts.some((text) => text.includes('frequency: Weekly') && text.includes('practice weekly refusal skills'))).toBe(true)
     expect(exportedTexts.some((text) => text.includes('Source-document Next Review Due') && text.includes('document_next_due_date'))).toBe(true)
     const allExportedText = exportedTexts.join('\n')
     expect(allExportedText).not.toContain('Synthetic Client')

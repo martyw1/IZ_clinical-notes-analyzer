@@ -9,6 +9,7 @@ from typing import Any
 
 from app.services.alleva_retrieval import bool_value, content_counts, date_text, diagnosis_records, first_text, list_records, parse_date
 from app.services.patient_identity_minimization import sanitize_patient_payload
+from app.services.treatment_plan_content_safety import content_value_assessment, structured_content_items
 
 JsonObject = dict[str, Any]
 
@@ -315,6 +316,7 @@ def _episode_payload(state: _PatientState) -> JsonObject:
 
 def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
     counts = content_counts(raw)
+    content_items = structured_content_items(raw)
     plan_id = first_text(raw, 'id', 'treatmentPlanId', 'href')
     is_initial = bool_value(raw.get('isInitialTP') or raw.get('isInitialTreatmentPlan'), default=False)
     is_complete = bool_value(raw.get('isComplete') or raw.get('complete'), default=False)
@@ -343,6 +345,8 @@ def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
         'guardian_signature_date': date_text(raw.get('guardianSignatureDate') or _dict_text(guardian_signature, 'signatureDateTime')),
         'content_summary': counts,
         'content_structure': _content_structure(raw),
+        'content_items': content_items,
+        **content_value_assessment(content_items),
         'diagnosis_codes': _diagnosis_codes(raw),
         'source_endpoint': '/treatment-plans',
         'raw_source_hash': _payload_hash(raw),
@@ -352,6 +356,7 @@ def _treatment_plan_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
 
 def _treatment_review_payload(raw: JsonObject, *, confidence: str) -> JsonObject:
     counts = content_counts(raw)
+    content_items = structured_content_items(raw)
     return {
         'source_record_id': first_text(raw, 'id', 'treatmentPlanReviewId', 'href'),
         'join_confidence': confidence,
@@ -368,6 +373,8 @@ def _treatment_review_payload(raw: JsonObject, *, confidence: str) -> JsonObject
         'next_review_due_api': date_text(raw.get('nextReviewDue') or raw.get('nextReviewDueDate') or raw.get('displayedNextReviewDueDate')),
         'content_summary': counts,
         'content_structure': _content_structure(raw),
+        'content_items': content_items,
+        **content_value_assessment(content_items),
         'source_endpoint': '/treatment-reviews',
         'raw_source_hash': _payload_hash(raw),
         'data_quality': [] if first_text(raw, 'staffSignatureDate', 'creatorSignatureDate', 'reviewerSignatureDate') else [

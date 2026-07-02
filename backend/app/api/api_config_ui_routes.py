@@ -153,7 +153,7 @@ def _api_configuration_page() -> HTMLResponse:
           <li>Endpoint: GET /treatment-plans</li>
           <li>Default parameters: Limit=100, Cursor=0, StartDate=2000-01-01T16:03, api-version, X-Version</li>
           <li>Optional parameter: EndDate</li>
-          <li>Output: HTTP status, elapsed time, URL, response size, truncation flag, report path, full response file path, parse status, and compact treatment-plan rows.</li>
+          <li>Output: HTTP status, elapsed time, URL, response size, truncation flag, report path, full response file path, parse status, compact treatment-plan rows, and structured redacted plan element values.</li>
         </ul>
         <div class="grid">
           <label>Limit <input id="treatmentPlanLimit" type="number" min="1" max="5000" value="100" onchange="prepareTreatmentPlanPull('all_treatment_plans')" /></label>

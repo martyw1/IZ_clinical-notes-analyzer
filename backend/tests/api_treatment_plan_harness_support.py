@@ -135,7 +135,12 @@ def _synthetic_treatment_plans() -> list[dict[str, Any]]:
             'reasonForAdmission': 'Synthetic reason',
             'initialClientNeeds': 'Synthetic need',
             'familyEducationNeeds': 'Synthetic family education',
-            'problems': [{'goals': [{'objectives': [{'interventions': [{'description': 'Synthetic intervention'}]}]}]}],
+            'problems': [
+                {
+                    'description': 'synthetic substance use problem',
+                    'goals': [{'description': 'sustain recovery goals', 'objectives': [{'description': 'complete weekly objectives', 'interventions': [{'description': 'Synthetic intervention'}]}]}],
+                }
+            ],
         },
         {'id': 'tp-102', 'client': {'href': '/clients/PAT-OTHER-002', 'id': 'source-client-002'}, 'description': 'Other synthetic treatment plan content', 'startDate': '2026-02-01T00:00:00', 'isActive': True},
     ]

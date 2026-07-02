@@ -25,6 +25,7 @@ from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_p
 from app.services.rules_engine import load_rules_config
 from app.services.treatment_plan_checklist import load_treatment_plan_checklist
 from app.services.treatment_plan_content_safety import (
+    content_item_has_value,
     content_items_json,
     normalized_content_items,
     safe_content_status,
@@ -351,6 +352,14 @@ def _comparison_source_evidence(latest_review: TreatmentPlanRecord | None, activ
     return '; '.join(sources)
 
 
+def _plan_content_items(plan: TreatmentPlanRecord | None) -> list[dict[str, Any]]:
+    return normalized_content_items(plan.content_items_json) if plan else []
+
+
+def _plan_has_content_value(plan: TreatmentPlanRecord | None, kind: str) -> bool:
+    return any(item.get('kind') == kind and content_item_has_value(item) for item in _plan_content_items(plan))
+
+
 def _evidence_completeness(
     client: TreatmentPlanClient,
     *,
@@ -363,6 +372,7 @@ def _evidence_completeness(
     document_due: date | None,
 ) -> tuple[int, list[str]]:
     current_plan_is_alleva = bool(current_plan and ('Alleva REST' in current_plan.source_evidence or 'Alleva REST' in current_plan.source_section))
+    current_plan_items = _plan_content_items(current_plan)
     checks = [
         ('Admission date', _date(client.admission_date) is not None),
         ('Current level of care', bool(mapped_loc and interval_days is not None)),
@@ -373,20 +383,21 @@ def _evidence_completeness(
     ]
     if current_plan_is_alleva:
         checks.append(('Current treatment plan selected', current_plan_selected))
-    if current_plan and (current_plan.detail_fetched or current_plan_is_alleva):
-        if current_plan.detail_fetched:
-            checks.extend(
-                [
-                    ('Treatment plan has diagnoses', current_plan.diagnosis_count > 0),
-                    ('Treatment plan has problems', current_plan.problem_count > 0),
-                    ('Treatment plan has goals', current_plan.goal_count > 0),
-                    ('Treatment plan has objectives', current_plan.objective_count > 0),
-                    ('Treatment plan has interventions', current_plan.intervention_count > 0),
-                    ('Treatment plan marked complete in Alleva', current_plan.alleva_is_complete),
-                ]
-            )
-        else:
-            checks.append(('Treatment plan clinical detail fetched', False))
+    if current_plan and (current_plan.detail_fetched or current_plan_is_alleva or current_plan_items):
+        checks.extend(
+            [
+                ('Treatment plan clinical content values captured', bool(current_plan_items)),
+                ('Treatment plan has problem values', _plan_has_content_value(current_plan, 'problem')),
+                ('Treatment plan has diagnosis values', _plan_has_content_value(current_plan, 'diagnosis')),
+                ('Treatment plan has goal values', _plan_has_content_value(current_plan, 'goal')),
+                ('Treatment plan has objective values', _plan_has_content_value(current_plan, 'objective')),
+                ('Treatment plan has intervention values', _plan_has_content_value(current_plan, 'intervention')),
+            ]
+        )
+        if current_plan.detail_fetched or current_plan_is_alleva:
+            checks.append(('Treatment plan marked complete in Alleva', current_plan.alleva_is_complete))
+    elif current_plan:
+        checks.append(('Treatment plan clinical detail fetched', False))
     complete = sum(1 for _label, is_complete in checks if is_complete)
     score = round((complete / len(checks)) * 100) if checks else 0
     missing = [label for label, is_complete in checks if not is_complete]

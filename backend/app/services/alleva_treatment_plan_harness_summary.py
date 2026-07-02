@@ -13,6 +13,7 @@ from app.services.alleva_retrieval import (
     treatment_plan_identifier_summary,
     treatment_plan_status_scope,
 )
+from app.services.treatment_plan_content_safety import content_value_assessment, structured_content_items
 
 
 def _client_reference_values(record: dict[str, Any]) -> list[str]:
@@ -68,12 +69,19 @@ def _safe_content_counts(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _content_value_preview(items: list[dict[str, Any]]) -> str:
+    values = [text_value(item.get('text')) for item in items if text_value(item.get('text'))]
+    return ' | '.join(values)[:2000]
+
+
 def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str, Any]:
     ids = treatment_plan_identifier_summary(record)
     scope, reason = treatment_plan_status_scope(record)
     end_date = parse_date(record.get('endDate'))
     start_date = parse_date(record.get('startDate'))
     is_complete = bool_value(record.get('isComplete'), default=False)
+    content_items = structured_content_items(record)
+    value_assessment = content_value_assessment(content_items)
     reasons = [reason]
     if end_date is None:
         reasons.append('endDate missing; due status needs review')
@@ -101,7 +109,10 @@ def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str,
         'has_reason_for_admission': bool(text_value(record.get('reasonForAdmission'))),
         'has_initial_client_needs': bool(text_value(record.get('initialClientNeeds'))),
         'has_family_education_needs': bool(text_value(record.get('familyEducationNeeds'))),
+        'content_value_preview': _content_value_preview(content_items),
         **_safe_content_counts(record),
+        'content_items': content_items,
+        **value_assessment,
         'why': '; '.join(reasons),
     }
 
@@ -124,7 +135,7 @@ def safe_response_json_preview(
     single_patient_filter: bool,
 ) -> dict[str, Any]:
     return {
-        'preview_omitted_reason': 'clinical treatment-plan content is omitted from browser/report preview; use response_body_file for the intentionally saved full API response.',
+        'preview_omitted_reason': 'raw upstream treatment-plan payload is omitted from browser/report preview; structured redacted treatment-plan element values are included in sample_rows and the full raw response is saved to response_body_file.',
         'json_shape': _json_shape(parsed_json),
         'total_records_seen': total_records_seen,
         'selected_record_count': len(selected_rows),

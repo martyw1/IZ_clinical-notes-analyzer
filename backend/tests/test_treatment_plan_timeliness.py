@@ -399,21 +399,21 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
                 return None
             return {
                 'id': 502,
-                'description': 'Jane Q Doe should not be stored as treatment-plan narrative text.',
+                'description': 'Jane Q Doe should be redacted from treatment-plan narrative text.',
                 'problems': [
                     {
-                        'description': 'Jane Q Doe reports synthetic problem narrative.',
+                        'description': 'substance use symptoms and relapse risk',
                         'status': 'Alice Smith active problem should not persist',
-                        'diagnoses': [{'code': 'F10.20', 'description': 'Jane Q Doe diagnosis narrative'}],
+                        'diagnoses': [{'code': 'F10.20', 'description': 'alcohol use disorder in sustained remission'}],
                         'goals': [
                             {
-                                'description': 'Jane Q Doe goal narrative.',
+                                'description': 'maintain abstinence and recovery routines',
                                 'objectives': [
                                     {
-                                        'description': 'Jane Q Doe objective narrative.',
+                                        'description': 'describe triggers and relapse prevention steps',
                                         'interventions': [
                                             {
-                                                'description': 'Jane Q Doe intervention narrative.',
+                                                'description': 'practice refusal skills in group',
                                                 'frequency': 'Weekly',
                                                 'modality': 'Group',
                                                 'serviceType': 'Alice Smith service should not persist',
@@ -494,14 +494,20 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         content_items = json.loads(current_plan.content_items_json)
         assert [item['kind'] for item in content_items] == ['problem', 'diagnosis', 'goal', 'objective', 'intervention']
         assert content_items[-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
-        assert all('text' not in item for item in content_items)
+        assert [item['text'] for item in content_items] == [
+            'substance use symptoms and relapse risk',
+            'alcohol use disorder in sustained remission',
+            'maintain abstinence and recovery routines',
+            'describe triggers and relapse prevention steps',
+            'practice refusal skills in group',
+        ]
         assert all(item['text_present'] is True for item in content_items)
         content_json = json.dumps(content_items)
         assert 'Jane Q Doe' not in content_json
         assert 'Alice Smith' not in content_json
-        assert 'intervention narrative' not in content_json
+        assert 'practice refusal skills in group' in content_json
         assert current_plan.content_capture_status == 'structured'
-        assert 'Narrative treatment-plan text is not stored' in current_plan.content_capture_warnings
+        assert 'Treatment-plan text values are redacted for direct identifiers before storage' in current_plan.content_capture_warnings
         assert current_plan.has_guardian_signature is True
         stored_client_id = stored_client.id
         evaluation = evaluate_client(stored_client, settings_row, evaluation_date=date(2026, 4, 1))
@@ -520,11 +526,12 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         serialized_detail = json.dumps(detail_payload)
         assert 'Jane Q Doe' not in serialized_detail
         assert 'Alice Smith' not in serialized_detail
-        assert 'intervention narrative' not in serialized_detail
+        assert 'practice refusal skills in group' in serialized_detail
+        assert detail_payload['evidence_completeness_percent'] == 100
         current_payload_plan = next(plan for plan in detail_payload['treatment_plans'] if plan['source_document_id'] == '502')
         assert current_payload_plan['content_capture_status'] == 'structured'
         assert current_payload_plan['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
-        assert all('text' not in item for item in current_payload_plan['content_items'])
+        assert current_payload_plan['content_items'][-1]['text'] == 'practice refusal skills in group'
 
         aggregate = client.get(f'/api/timeliness/clients/{stored_client_id}/treatment-plan', headers=headers)
         assert aggregate.status_code == 200
@@ -538,6 +545,7 @@ def test_alleva_rest_payloads_sync_into_r3_timeliness_engine(app_with_sqlite):
         assert 'raw_payload' not in json.dumps(aggregate_payload)
         assert aggregate_payload['current_plan']['content_capture_status'] == 'structured'
         assert aggregate_payload['current_plan']['content_items'][-1]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
+        assert aggregate_payload['current_plan']['content_items'][-1]['text'] == 'practice refusal skills in group'
         assert 'Jane Q Doe' not in json.dumps(aggregate_payload)
         assert 'Alice Smith' not in json.dumps(aggregate_payload)
 
@@ -863,7 +871,7 @@ def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_
                                 'label': 'Forbidden Display Name should be replaced',
                                 'source_path': 'problems[1]',
                                 'text_present': True,
-                                'text': 'Forbidden Display Name raw narrative',
+                                'text': 'daily cravings and recovery barriers',
                                 'redacted_text_sha256': 'not-a-real-hash-with-Alice-Smith',
                                 'metadata': {
                                     'status': 'Alice Smith active problem',
@@ -875,6 +883,7 @@ def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_
                                 'kind': 'diagnosis',
                                 'label': 'Diagnosis 1',
                                 'source_path': 'problems[1].diagnoses[1]',
+                                'text': 'alcohol use disorder',
                                 'text_present': True,
                                 'metadata': {'code': 'F10.20', 'description': 'Alice Smith diagnosis'},
                             },
@@ -882,6 +891,7 @@ def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_
                                 'kind': 'intervention',
                                 'label': 'Intervention 1',
                                 'source_path': 'problems[1].goals[1].objectives[1].interventions[1]',
+                                'text': 'attend weekly group counseling',
                                 'text_present': True,
                                 'metadata': {'frequency': 'Weekly', 'modality': 'Group', 'authorName': 'Alice Smith'},
                             },
@@ -902,10 +912,10 @@ def test_manual_timeliness_content_items_are_allowlisted_and_name_free(app_with_
         assert plan['content_capture_status'] == 'manual'
         assert plan['content_capture_warnings'] == ''
         assert [item['label'] for item in plan['content_items']] == ['Problem 1', 'Diagnosis 1', 'Intervention 1']
+        assert [item['text'] for item in plan['content_items']] == ['daily cravings and recovery barriers', 'alcohol use disorder', 'attend weekly group counseling']
         assert plan['content_items'][0]['metadata'] == {'severity': 'High'}
         assert plan['content_items'][1]['metadata'] == {'code': 'F10.20'}
         assert plan['content_items'][2]['metadata'] == {'frequency': 'Weekly', 'modality': 'Group'}
-        assert all('text' not in item for item in plan['content_items'])
         assert all('redacted_text_sha256' not in item for item in plan['content_items'])
 
 
@@ -986,7 +996,7 @@ def test_alleva_rest_sync_keeps_active_client_with_discharge_conflict_and_aggreg
         assert payload['current_plan']['detail_fetched'] is True
         assert payload['current_plan']['content_capture_status'] == 'structured'
         assert payload['current_plan']['content_items']
-        assert all('text' not in item for item in payload['current_plan']['content_items'])
+        assert payload['current_plan']['content_items'][-1]['text']
         assert 'active_status_discharge_field_conflict' in payload['data_quality_warnings']
 
 

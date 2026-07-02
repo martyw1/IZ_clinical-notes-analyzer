@@ -2,6 +2,7 @@ export type TreatmentPlanContentItem = {
   kind: string
   label: string
   source_path: string
+  text?: string
   text_present?: boolean
   redacted_text_sha256?: string
   metadata?: Record<string, unknown>
@@ -60,30 +61,53 @@ const SAFE_MODALITIES = new Set([
 ])
 const SAFE_SERVICES = new Set([...SAFE_MODALITIES, 'counseling', 'iop', 'iop-5', 'outpatient', 'php', 'residential', 'treatment planning'])
 const SAFE_TITLE_WORDS = new Set([
+  'abstinence',
   'active',
   'admission',
+  'addiction',
+  'alcohol',
+  'anxiety',
   'assessment',
   'behavioral',
   'case',
   'complete',
   'completed',
   'counseling',
+  'coping',
   'daily',
+  'definition',
+  'definitions',
+  'depression',
   'diagnosis',
   'discharge',
+  'disorder',
+  'family',
+  'goal',
+  'goals',
   'group',
   'individual',
   'intensive',
+  'intervention',
+  'interventions',
   'monthly',
+  'objective',
+  'objectives',
   'outpatient',
   'partial',
   'plan',
+  'prevention',
   'program',
   'residential',
+  'recovery',
+  'relapse',
   'review',
   'service',
+  'skills',
+  'substance',
   'therapy',
+  'trauma',
   'treatment',
+  'use',
   'weekly',
 ])
 const CODE_RE = /^[A-Z0-9][A-Z0-9.-]{1,39}$/i
@@ -93,11 +117,20 @@ const DURATION_RE = /^(?:\d+\s*(?:minutes?|mins?|hours?|hrs?|days?|weeks?|months
 const TITLE_CASE_PHRASE_RE = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/g
 const UNSAFE_KEY_RE = /(name|client|patient|person|member|lead|author|custodian|address|phone|email|dob|birth|ssn|filename|secret|token|password|api[-_]?key)/i
 const CANARY_RE = /(Jane Q Doe|John Public|Mary Patient|Forbidden Display Name|Alice Smith)/i
+const REDACTED_TOKEN_RE = /\[redacted\]/i
+const DIRECT_IDENTIFIER_LABEL_RE = /\b(?:name|client|patient|member|lead|address|phone|email|dob|birth|ssn|mrn|chart)\b\s*[:=]/i
 
 function scalar(value: unknown, maxChars: number) {
   if (value == null || typeof value === 'object') return ''
   const text = String(value).replace(/\s+/g, ' ').trim().slice(0, maxChars)
   if (!text || CANARY_RE.test(text) || looksNameLike(text)) return ''
+  return text
+}
+
+function narrativeText(value: unknown, maxChars: number) {
+  if (value == null || typeof value === 'object') return ''
+  const text = String(value).replace(/\s+/g, ' ').trim().slice(0, maxChars)
+  if (!text || CANARY_RE.test(text) || REDACTED_TOKEN_RE.test(text) || DIRECT_IDENTIFIER_LABEL_RE.test(text) || looksNameLike(text)) return ''
   return text
 }
 
@@ -141,6 +174,7 @@ export function safeContentItems(items?: TreatmentPlanContentItem[] | null) {
         kind,
         label: `${kind.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())} ${counts[kind]}`,
         source_path: scalar(item.source_path, 120),
+        text: narrativeText(item.text, 2000),
         text_present: Boolean(item.text_present),
         metadata,
       }
@@ -149,7 +183,7 @@ export function safeContentItems(items?: TreatmentPlanContentItem[] | null) {
 
 export function contentItemMetadataSummary(item: ReturnType<typeof safeContentItems>[number]) {
   const entries = Object.entries(item.metadata || {})
-  if (!entries.length) return item.text_present ? 'Narrative text present, not displayed' : 'No metadata'
+  if (!entries.length) return item.text_present && !item.text ? 'Text value redacted or unavailable' : 'No metadata'
   return entries.map(([key, value]) => `${key}: ${value}`).join(' | ')
 }
 

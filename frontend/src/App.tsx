@@ -2958,7 +2958,7 @@ export function App() {
         item.source_path || '',
         plan.source_section || plan.source_evidence || '',
         contentItemMetadataSummary(item),
-        item.text_present ? 'narrative text present, not displayed' : '',
+        item.text || (item.text_present ? 'text value redacted or unavailable' : ''),
       ])
       return [...planRows, ...itemRows]
     })
@@ -3143,7 +3143,11 @@ export function App() {
       (plan.intervention_count ?? 0)
     const capturedFacts = safeContentItems(plan.content_items)
     const factPreview = capturedFacts
-      .map((item) => `${item.label}: ${contentItemMetadataSummary(item) || item.source_path}`)
+      .map((item) => {
+        const metadata = contentItemMetadataSummary(item)
+        const details = [item.text, metadata !== 'No metadata' ? metadata : '', item.source_path].filter(Boolean).join(' | ')
+        return `${item.label}: ${details || item.source_path}`
+      })
       .join(' | ')
     setEvidencePreview({
       title: `${planKindLabel(plan.plan_kind)} treatment-plan evidence`,
@@ -3167,7 +3171,7 @@ export function App() {
         { label: 'Source evidence', value: plan.source_evidence || 'Not recorded' },
         { label: 'Captured fact preview', value: factPreview || 'No structured facts captured' },
       ],
-      note: plan.conflict_note || plan.content_capture_warnings || 'Evidence preview shows aggregate metadata and structured content facts; narrative clinical text is not displayed here.',
+      note: plan.conflict_note || plan.content_capture_warnings || 'Evidence preview shows structured treatment-plan values after direct-identifier redaction.',
     })
   }
 

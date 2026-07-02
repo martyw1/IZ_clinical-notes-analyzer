@@ -24,6 +24,7 @@ type TreatmentPlanContent = {
     kind: string
     label: string
     source_path: string
+    text?: string
     text_present?: boolean
     metadata?: Record<string, unknown>
   }> | null
@@ -115,6 +116,7 @@ export function TreatmentPlanContentSummary({ plans, currentPlanRecordId }: Trea
           {contentItems.map((item) => (
             <div key={`${item.kind}-${item.source_path}-${item.label}`}>
               <strong>{item.label}</strong>
+              {item.text ? <p>{item.text}</p> : null}
               <span>{contentItemMetadataSummary(item)}</span>
               <small>{item.source_path}</small>
             </div>

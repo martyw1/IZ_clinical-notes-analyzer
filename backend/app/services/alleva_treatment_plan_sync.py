@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import json
 from collections import defaultdict
@@ -18,9 +17,8 @@ from app.models.models import AppSetting, LevelOfCareHistory, TreatmentPlanClien
 from app.services.api_connectivity import request_client_credentials_token, redact_url
 from app.services.audit import log_event
 from app.services.patient_notes import NAME_NOT_FOUND_STATUS, display_name_for_patient_name_status
-from app.services.patient_identity_minimization import is_direct_patient_identifier_key, sanitize_patient_payload
 from app.services.secure_storage import decrypt_text_secret
-from app.services.treatment_plan_content_safety import content_items_json, safe_content_metadata_value, safe_content_text
+from app.services.treatment_plan_content_safety import content_items_json, structured_content_items
 from app.services.timeliness import evaluate_client
 from app.services.workflow_definitions import current_treatment_plan_workflow_context
 
@@ -29,7 +27,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_ALLEVA_API_BASE_URL = 'https://api.allevasoft.com'
 DEFAULT_ALLEVA_OPENAPI_URL = 'https://api.allevasoft.com/swagger/v1/swagger.json'
 ALLEVA_REST_SOURCE = 'Alleva REST'
-MAX_CONTENT_ITEM_TEXT_CHARS = 280
 MAX_CONTENT_ITEMS_PER_PLAN = 250
 SYNC_ENDPOINTS = {
     'clients': '/clients',
@@ -612,159 +609,13 @@ def _content_counts(raw: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _safe_content_text(value: Any, *, max_chars: int = MAX_CONTENT_ITEM_TEXT_CHARS) -> str:
-    return safe_content_text(value, max_chars=max_chars)
-
-
-def _content_value(payload: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        if is_direct_patient_identifier_key(key, (), aggressive=True):
-            continue
-        text = _safe_content_text(payload.get(key))
-        if text:
-            return text
-    return ''
-
-
-def _content_value_present(payload: dict[str, Any], *keys: str) -> bool:
-    for key in keys:
-        if is_direct_patient_identifier_key(key, (), aggressive=True):
-            continue
-        value = payload.get(key)
-        if value is not None and not isinstance(value, (dict, list, tuple, set)) and str(value).strip():
-            return True
-    return False
-
-
-def _content_text_hash(value: str) -> str:
-    return hashlib.sha256(value.encode('utf-8')).hexdigest() if value else ''
-
-
-def _content_metadata(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[str, str]:
-    metadata: dict[str, str] = {}
-    for key in keys:
-        if is_direct_patient_identifier_key(key, (), aggressive=True):
-            continue
-        value = safe_content_metadata_value(key, payload.get(key), max_chars=120)
-        if value:
-            metadata[key] = value
-    return metadata
-
-
-def _append_content_item(
-    items: list[dict[str, Any]],
-    *,
-    kind: str,
-    payload: dict[str, Any],
-    source_path: str,
-    text_keys: tuple[str, ...],
-    metadata_keys: tuple[str, ...] = (),
-) -> None:
-    if len(items) >= MAX_CONTENT_ITEMS_PER_PLAN:
-        return
-    narrative_present = _content_value_present(payload, *text_keys)
-    narrative_text = _content_value(payload, *text_keys)
-    metadata = _content_metadata(payload, metadata_keys)
-    kind_count = sum(1 for item in items if item.get('kind') == kind) + 1
-    item: dict[str, Any] = {
-        'kind': kind,
-        'label': f'{kind.replace("_", " ").title()} {kind_count}',
-        'source_path': source_path,
-        'text_present': bool(narrative_present),
-    }
-    if narrative_text:
-        item['redacted_text_sha256'] = _content_text_hash(narrative_text)
-    if metadata:
-        item['metadata'] = metadata
-    items.append(item)
-
-
-def _content_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
-    sanitized = sanitize_patient_payload(raw, aggressive=True, omit_direct=True)
-    if not isinstance(sanitized, dict):
-        return []
-    items: list[dict[str, Any]] = []
-    problems = [item for item in _list_value(sanitized.get('problems')) if isinstance(item, dict)]
-    top_level_diagnoses = [item for item in _list_value(sanitized.get('diagnoses')) if isinstance(item, dict)]
-    top_level_goals = [item for item in _list_value(sanitized.get('goals')) if isinstance(item, dict)]
-
-    for problem_index, problem in enumerate(problems, start=1):
-        problem_path = f'problems[{problem_index}]'
-        _append_content_item(
-            items,
-            kind='problem',
-            payload=problem,
-            source_path=problem_path,
-            text_keys=('description', 'problem', 'problemText', 'title', 'summary', 'displayText'),
-            metadata_keys=('status', 'severity', 'onsetDate', 'targetDate'),
-        )
-        for diagnosis_index, diagnosis in enumerate([item for item in _list_value(problem.get('diagnoses')) if isinstance(item, dict)], start=1):
-            _append_content_item(
-                items,
-                kind='diagnosis',
-                payload=diagnosis,
-                source_path=f'{problem_path}.diagnoses[{diagnosis_index}]',
-                text_keys=('description', 'diagnosis', 'diagnosisDescription', 'displayText', 'summary'),
-                metadata_keys=('code', 'diagnosisCode', 'icd10Code', 'icdCode', 'status'),
-            )
-        for goal_index, goal in enumerate([item for item in _list_value(problem.get('goals')) if isinstance(item, dict)], start=1):
-            goal_path = f'{problem_path}.goals[{goal_index}]'
-            _append_content_item(
-                items,
-                kind='goal',
-                payload=goal,
-                source_path=goal_path,
-                text_keys=('description', 'goal', 'goalText', 'title', 'summary', 'displayText'),
-                metadata_keys=('status', 'targetDate', 'startDate', 'dueDate'),
-            )
-            for objective_index, objective in enumerate([item for item in _list_value(goal.get('objectives')) if isinstance(item, dict)], start=1):
-                objective_path = f'{goal_path}.objectives[{objective_index}]'
-                _append_content_item(
-                    items,
-                    kind='objective',
-                    payload=objective,
-                    source_path=objective_path,
-                    text_keys=('description', 'objective', 'objectiveText', 'title', 'summary', 'displayText'),
-                    metadata_keys=('status', 'targetDate', 'startDate', 'dueDate'),
-                )
-                for intervention_index, intervention in enumerate([item for item in _list_value(objective.get('interventions')) if isinstance(item, dict)], start=1):
-                    _append_content_item(
-                        items,
-                        kind='intervention',
-                        payload=intervention,
-                        source_path=f'{objective_path}.interventions[{intervention_index}]',
-                        text_keys=('description', 'intervention', 'interventionText', 'service', 'title', 'summary', 'displayText'),
-                        metadata_keys=('frequency', 'modality', 'duration', 'status', 'serviceType'),
-                    )
-
-    for diagnosis_index, diagnosis in enumerate(top_level_diagnoses, start=1):
-        _append_content_item(
-            items,
-            kind='diagnosis',
-            payload=diagnosis,
-            source_path=f'diagnoses[{diagnosis_index}]',
-            text_keys=('description', 'diagnosis', 'diagnosisDescription', 'displayText', 'summary'),
-            metadata_keys=('code', 'diagnosisCode', 'icd10Code', 'icdCode', 'status'),
-        )
-    for goal_index, goal in enumerate(top_level_goals, start=1):
-        _append_content_item(
-            items,
-            kind='goal',
-            payload=goal,
-            source_path=f'goals[{goal_index}]',
-            text_keys=('description', 'goal', 'goalText', 'title', 'summary', 'displayText'),
-            metadata_keys=('status', 'targetDate', 'startDate', 'dueDate'),
-        )
-    return items
-
-
 def _content_snapshot(raw: dict[str, Any], counts: dict[str, int]) -> tuple[str, str, str]:
-    items = _content_items(raw)
+    items = structured_content_items(raw, max_items=MAX_CONTENT_ITEMS_PER_PLAN)
     warnings: list[str] = []
     if items:
         status = 'structured'
         warnings.append('Direct patient identifier fields omitted before content snapshot storage.')
-        warnings.append('Narrative treatment-plan text is not stored; only text presence, hash, structure, and non-name metadata are retained.')
+        warnings.append('Treatment-plan text values are redacted for direct identifiers before storage and display.')
     elif any(counts.values()):
         status = 'counts_only'
         warnings.append('Content counts were present but structured item labels were not exposed by the mapped payload.')
