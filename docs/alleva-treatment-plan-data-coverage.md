@@ -21,6 +21,7 @@ For how these fields flow into local treatment-plan rows, aggregate diagnostics,
 
 The app now keeps these identifiers separate:
 
+- Current patient-centered API harness contract: `patient_id` is `GET /clients.id`; treatment plans are pulled with `GET /treatment-plans?ClientId={patient_id}` and joined only by parsing treatment-plan `client: "/clients/{id}"`. See `docs/alleva-patient-treatment-plan-data-contract.md`.
 - `app_patient_id`: the local Treatment Plan Timeliness patient key. For Alleva client records this prefers `clientId`, then falls back to `id`, `leadId`, `chartId` / `chartNumber`, `luin`, `uniqueId`, or `mrn`.
 - `source_id` / `internal_client_id`: the Alleva source/internal client identifier, commonly `id`.
 - `source_client_id`: endpoint-specific nested client identifier, commonly `client.id` under treatment-plan records.
@@ -53,6 +54,7 @@ Example canary covered by tests: a patient may appear with `uniqueId = RM340328`
 ## Current App Behavior
 
 - API harness quick pulls and treatment-plan sync use the shared retrieval normalizer for pagination, status scope, ID mapping, and redacted samples.
+- The patient-centered API harness reports (`patient_centered_treatment_plans`, `active_patient_centered_treatment_plans`, and `single_patient_treatment_plans`) use `ClientId` per patient and expose `review_data_status = "unavailable_via_rest_without_known_review_id"` because treatment reviews cannot be listed/joined by patient through REST alone.
 - The API harness can run a `patient_treatment_plan_aggregates` dry-run that combines active clients, treatment plans, and treatment reviews into JSON aggregates with endpoint coverage, identifier matching, diagnosis reconciliation, completeness, due-date, and PHI-minimized source diagnostics.
 - Quick-pull responses show endpoint, method, query parameters, page count, returned/excluded record counts, raw redacted sample, normalized sample, ID mapping, and warnings.
 - Deep inspection lets an admin enter a patient/source/client/treatment-plan identifier and compare `/clients`, `/treatment-plans`, and optionally `/treatment-reviews` data with a merged normalized model.
@@ -64,8 +66,8 @@ Example canary covered by tests: a patient may appear with `uniqueId = RM340328`
 
 The Swagger mapping does not prove production runtime payloads. Before any live import is treated as reliable for compliance decisions, R3/Alleva still needs to verify:
 
-- Whether `GET /treatment-reviews` returns a stable client ID field in production, not only `clientName`.
-- Whether production treatment-plan and review payloads consistently expose one of the approved aliases: `clientId`, `leadId`, `chartId`, `chartNumber`, `luin`, `uniqueId`, `mrn`, or source `id`.
+- Whether a trusted source can provide `treatmentPlanReviewId` values for `GET /treatment-reviews/{id}`. Do not rely on a review list endpoint or `clientName` join.
+- Whether production treatment-plan payloads consistently expose the documented `client` string shape `/clients/{id}`.
 - Whether staff/creator/therapist signature date fields are present and authoritative for every required treatment-plan document type.
 - Whether treatment-plan content update timestamps by counselor or manager are exposed by any endpoint.
 - Whether `/treatment-plans/{id}` adds fields beyond summary `/treatment-plans`.

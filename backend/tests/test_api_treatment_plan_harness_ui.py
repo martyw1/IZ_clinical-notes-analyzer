@@ -16,8 +16,11 @@ def test_api_configuration_page_places_treatment_plan_section_after_all_patient_
     html = page.body.decode('utf-8')
     assert html.index('4. Pull ALL Patient Records') < html.index('5. Pull Patient Treatment Plans')
     assert html.index('5. Pull Patient Treatment Plans') < html.index('6. Advanced: test a specific API call')
-    assert 'Pull All Patient Treatment Plans' in html
-    assert 'Pull Single Treatment Plan' in html
+    assert 'Pull Patient-Centered Treatment Plans' in html
+    assert 'Pull Active Patient-Centered Treatment Plans' in html
+    assert 'Pull Single Patient Treatment Plans' in html
+    assert 'Diagnostic: Pull All Treatment Plans' in html
+    assert 'GET /treatment-plans?ClientId={patient_id}' in html
     assert 'Patient / Client ID' in html
 
 

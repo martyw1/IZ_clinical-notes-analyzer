@@ -2,6 +2,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from api_treatment_plan_harness_support import (
+    PatientCenteredTreatmentPlanHarnessHttpxClient,
     TreatmentPlanHarnessHttpxClient,
     base_body,
     patch_outbound_httpx,
@@ -132,3 +133,173 @@ def test_api_configuration_treatment_plan_harness_requires_patient_id_for_single
         assert payload['status'] == 'fail'
         assert payload['category'] == 'missing_patient_id'
         assert 'Patient / Client ID' in payload['message']
+
+
+def test_patient_plan_contract_extracts_clients_ref_and_flags_bad_joins():
+    # Given: one canonical Alleva /clients.id and treatment plans with missing, malformed, and mismatched client refs.
+    from datetime import date
+
+    from app.services.alleva_patient_plan_contract import aggregate_patient_treatment_plans, extract_patient_id_from_client_ref
+
+    assert extract_patient_id_from_client_ref('/clients/307') == '307'
+    assert extract_patient_id_from_client_ref('https://api.example.test/clients/307') == '307'
+
+    # When: the aggregate is built from patient context rather than fabricated plan IDs.
+    aggregate = aggregate_patient_treatment_plans(
+        patient={'id': 307, 'status': {'id': 1049, 'name': 'Active'}},
+        treatment_plans=[
+            {'id': 1, 'client': '', 'isActive': True, 'isComplete': True},
+            {'id': 2, 'client': '/not-clients/307', 'isActive': True, 'isComplete': True},
+            {'id': 3, 'client': '/clients/999', 'isActive': True, 'isComplete': True},
+        ],
+        endpoint_urls=['https://api.example.test/treatment-plans?ClientId=307'],
+        today=date(2026, 7, 2),
+    )
+
+    # Then: every plan is preserved, but none is treated as a successful joined plan.
+    assert aggregate['patient_id'] == '307'
+    assert aggregate['total_plan_count'] == 3
+    assert all(not plan['join_validated'] for plan in aggregate['treatment_plans'])
+    assert {warning['code'] for warning in aggregate['warnings']} >= {'join_not_validated', 'review_data_unavailable'}
+    assert all(plan['patient_id'] == '307' for plan in aggregate['treatment_plans'])
+
+
+def test_patient_status_uses_status_id_not_discharge_fields():
+    # Given: Alleva client records with status IDs and misleading planned discharge fields.
+    from datetime import date
+
+    from app.services.alleva_patient_plan_contract import aggregate_patient_treatment_plans, is_active_patient, patient_record
+
+    active_with_planned_discharge = {'id': 307, 'status': {'id': 1049, 'name': 'Active'}, 'dischargeDate': '2026-08-01'}
+    discharged_without_discharge_date = {'id': 308, 'status': {'id': 1356, 'name': 'Discharged'}}
+    inactive_text = {'id': 309, 'status': 'InActive'}
+    active_label_without_id = {'id': 310, 'status': 'Active'}
+
+    # When/Then: status.id drives active/discharged classification, not dischargeDate/isDischarge.
+    assert is_active_patient(active_with_planned_discharge) is True
+    assert is_active_patient(discharged_without_discharge_date) is False
+    assert patient_record(active_with_planned_discharge)['planned_discharge_date'] == '2026-08-01'
+    assert patient_record(discharged_without_discharge_date)['status_scope'] == 'discharged'
+    assert patient_record(inactive_text)['status_scope'] == 'other'
+
+    aggregate = aggregate_patient_treatment_plans(patient=active_label_without_id, treatment_plans=[], endpoint_urls=[], today=date(2026, 7, 2))
+    assert aggregate['status_scope'] == 'active'
+    assert aggregate['status_id'] == ''
+    assert any(warning['code'] == 'missing_patient_status_id' for warning in aggregate['warnings'])
+
+
+def test_api_configuration_patient_centered_treatment_plan_harness_uses_ClientId(app_with_sqlite, monkeypatch):
+    # Given: saved OAuth settings and vendor-shaped client/treatment-plan payloads.
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        patch_outbound_httpx(monkeypatch, PatientCenteredTreatmentPlanHarnessHttpxClient)
+        headers = saved_client_credentials_headers(client)
+
+        # When: the admin runs the active patient-centered production harness pull.
+        body = base_body()
+        body['operation_parameters'] = {**body['operation_parameters'], 'clientId': 'SHOULD-NOT-BE-USED'}
+        pulled = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**body, 'report': 'active_patient_centered_treatment_plans'})
+
+        # Then: the backend calls /clients first, uses ClientId per patient, and exposes joined evidence.
+        assert pulled.status_code == 200
+        payload = pulled.json()
+        assert payload['status'] == 'ok'
+        assert payload['source_operation'] == 'GET /clients + GET /treatment-plans?ClientId={patient_id}'
+        assert payload['client_query_parameter'] == 'ClientId'
+        assert payload['lowercase_clientId_used'] is False
+        assert payload['ignored_lowercase_clientId_parameter'] is True
+        assert payload['returned_count'] == 1
+        aggregate = payload['rows'][0]
+        assert aggregate['patient_id'] == '307'
+        assert aggregate['status_id'] == '1049'
+        assert aggregate['status_label'] == 'Active'
+        assert aggregate['patient']['source_id'] == 'CHART-307'
+        assert aggregate['patient']['planned_discharge_date'] == '2026-08-01'
+        assert aggregate['total_plan_count'] == 3
+        assert aggregate['active_plan_count'] == 2
+        assert aggregate['has_multiple_active_plans'] is True
+        assert aggregate['latest_created_active_plan_id'] == '12'
+        assert aggregate['review_data_status'] == 'unavailable_via_rest_without_known_review_id'
+        assert aggregate['next_review_due_source'] == 'unavailable'
+        first_plan = aggregate['treatment_plans'][0]
+        parsed_endpoint = urlparse(first_plan['endpoint_url'])
+        query = parse_qs(parsed_endpoint.query)
+        assert parsed_endpoint.path.endswith('/treatment-plans')
+        assert query['ClientId'] == ['307']
+        assert 'clientId' not in query
+        assert first_plan['raw_client_ref'] == '/clients/307'
+        assert first_plan['extracted_patient_id'] == '307'
+        assert first_plan['join_validated'] is True
+        assert first_plan['is_active'] is True
+        assert first_plan['is_complete'] is True
+        assert first_plan['is_initial_tp'] is True
+        assert first_plan['problem_count'] == 1
+        assert first_plan['diagnosis_count'] == 1
+        assert first_plan['goal_count'] == 1
+        assert first_plan['objective_count'] == 1
+        assert first_plan['intervention_count'] == 1
+        warning_codes = {warning['code'] for warning in aggregate['warnings']}
+        assert {'active_plan_with_past_end_date', 'incomplete_active_plan', 'review_data_unavailable'} <= warning_codes
+
+
+def test_api_configuration_single_patient_production_pull_requires_and_uses_patient_id(app_with_sqlite, monkeypatch):
+    # Given: the single-patient production report is requested through the API harness.
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        patch_outbound_httpx(monkeypatch, PatientCenteredTreatmentPlanHarnessHttpxClient)
+        headers = saved_client_credentials_headers(client)
+
+        # When: no patient ID is supplied.
+        missing = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body(), 'report': 'single_patient_treatment_plans', 'patient_id': ' '})
+
+        # Then: the guard fails before any patient-plan query.
+        assert missing.status_code == 200
+        assert missing.json()['status'] == 'fail'
+        assert missing.json()['category'] == 'missing_patient_id'
+
+        # When: patient_id 307 is supplied.
+        pulled = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body(), 'report': 'single_patient_treatment_plans', 'patient_id': '307'})
+
+        # Then: the result is a single aggregate joined by /clients/307.
+        assert pulled.status_code == 200
+        payload = pulled.json()
+        assert payload['status'] == 'ok'
+        assert payload['patient_selection'] == 'single'
+        assert payload['returned_count'] == 1
+        assert payload['rows'][0]['patient_id'] == '307'
+        assert payload['rows'][0]['treatment_plans'][0]['raw_client_ref'] == '/clients/307'
+        assert payload['rows'][0]['treatment_plans'][0]['join_validated'] is True
+
+
+def test_alleva_patient_treatment_plan_data_contract_artifacts_exist():
+    # Given: Goal 1 requires explicit reviewed data-contract artifacts.
+    repo_root = Path(__file__).resolve().parents[2]
+    type_contract = repo_root / 'frontend' / 'src' / 'types' / 'allevaTreatmentPlan.ts'
+    markdown_contract = repo_root / 'docs' / 'alleva-patient-treatment-plan-data-contract.md'
+
+    # When: the artifacts are read by backend test coverage.
+    type_text = type_contract.read_text(encoding='utf-8')
+    markdown_text = markdown_contract.read_text(encoding='utf-8')
+
+    # Then: the required interfaces and clarified contract rules are present.
+    for interface_name in (
+        'AllevaPatientRecord',
+        'AllevaPatientStatus',
+        'AllevaTreatmentPlanAggregate',
+        'AllevaTreatmentPlan',
+        'AllevaTreatmentPlanProblem',
+        'AllevaTreatmentPlanDiagnosis',
+        'AllevaTreatmentPlanBehavioralDefinition',
+        'AllevaTreatmentPlanGoal',
+        'AllevaTreatmentPlanObjective',
+        'AllevaTreatmentPlanIntervention',
+        'AllevaTreatmentReviewAvailability',
+        'AllevaPatientPlanSyncWarning',
+    ):
+        assert f'interface {interface_name}' in type_text
+    assert 'GET /treatment-plans?ClientId={patient_id}' in markdown_text
+    assert 'unavailable_via_rest_without_known_review_id' in markdown_text

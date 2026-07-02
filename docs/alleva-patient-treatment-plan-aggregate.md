@@ -15,6 +15,7 @@ For the complete patient treatment-plan handling map, including local tables, ma
 ## Current Entry Points
 
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` runs a bounded admin-only dry-run over `GET /clients`, `GET /treatment-plans`, and `GET /treatment-reviews`.
+- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` runs the clarified production-style API harness flow: `GET /clients`, then `GET /treatment-plans?ClientId={patient_id}`.
 - `GET /api/timeliness/clients/{client_id}/treatment-plan` returns the enriched aggregate for a locally stored timeliness client while preserving the previous `current_plan`, `historical_plans`, and `review_records` keys.
 - `POST /api/alleva/treatment-plan-sync/run` remains gated by App settings approval and validated endpoint mapping before live sync can import anything.
 
@@ -48,7 +49,7 @@ The stored timeliness route also keeps the legacy fields so current UI and expor
 
 ## Identifier Resolver
 
-Matching uses approved identifier aliases before any fallback:
+The older aggregate dry-run used approved identifier aliases before any fallback:
 
 1. `leadId`
 2. `clientId`
@@ -59,6 +60,15 @@ Matching uses approved identifier aliases before any fallback:
 7. source `id` / `href`
 
 Treatment-plan and review records can match by top-level aliases or nested `client` aliases. Name-only fallback remains disabled by default. When explicitly enabled for validation, it must be unique; ambiguous name matches are rejected and counted as unmatched instead of guessed.
+
+For production patient-plan alignment after the July 2, 2026 Alleva clarification, use the patient-centered contract instead:
+
+- canonical `patient_id` is `GET /clients` field `id`
+- treatment plans are pulled per patient with `GET /treatment-plans?ClientId={patient_id}`
+- treatment-plan ownership is validated by parsing `client: "/clients/{id}"`
+- `chartId`, `externalId`, `mrn`, `clientName`, `clientId`, and `uniqueId` are not treatment-plan join keys
+
+See `docs/alleva-patient-treatment-plan-data-contract.md`.
 
 ## Data Quality Rules
 

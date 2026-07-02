@@ -12,6 +12,8 @@ const ids = [
   "treatmentPlanStartDate",
   "treatmentPlanEndDate",
   "treatmentPlanPatientId",
+  "pullPatientCenteredTreatmentPlansButton",
+  "pullActivePatientCenteredTreatmentPlansButton",
   "pullAllTreatmentPlansButton",
   "pullSingleTreatmentPlanButton",
   "treatmentPlanPullPayload",
@@ -75,18 +77,19 @@ vm.runInContext(match[1], context);
 
 context.updateTreatmentPlanSingleButtonState();
 assert.strictEqual(elements.pullSingleTreatmentPlanButton.disabled, true);
-context.prepareTreatmentPlanPull("all_treatment_plans");
+context.prepareTreatmentPlanPull("patient_centered_treatment_plans");
 const prepared = JSON.parse(elements.treatmentPlanPullPayload.value);
-assert.strictEqual(prepared.report, "all_treatment_plans");
+assert.strictEqual(prepared.report, "patient_centered_treatment_plans");
 assert.strictEqual(prepared.operation_parameters.Limit, 100);
 assert.strictEqual(prepared.operation_parameters.StartDate, "2000-01-01T16:03");
 assert.strictEqual(prepared.operation_parameters["api-version"], "1.0");
+assert(elements.treatmentPlanPullStatus.textContent.includes("ClientId"));
 
 let captured = null;
 vm.runInContext("token = 'admin-session';", context);
 elements.treatmentPlanPatientId.value = "";
 context
-  .runTreatmentPlanPull("single_treatment_plan")
+  .runTreatmentPlanPull("single_patient_treatment_plans")
   .then(async () => {
     assert.strictEqual(captured, null);
     assert(elements.treatmentPlanPullStatus.textContent.includes("Patient / Client ID is required"));
@@ -98,16 +101,20 @@ context
         url,
         body: JSON.parse(options.body),
         allDisabled: elements.pullAllTreatmentPlansButton.disabled,
+        patientCenteredDisabled: elements.pullPatientCenteredTreatmentPlansButton.disabled,
+        activePatientCenteredDisabled: elements.pullActivePatientCenteredTreatmentPlansButton.disabled,
         singleDisabled: elements.pullSingleTreatmentPlanButton.disabled,
       };
       return { ok: true, text: async () => JSON.stringify({ status: "ok", message: "done", returned_count: 1 }) };
     };
-    await context.runTreatmentPlanPull("single_treatment_plan");
+    await context.runTreatmentPlanPull("single_patient_treatment_plans");
     assert.strictEqual(captured.url, "/api/api-configuration/alleva-quick-pull");
-    assert.strictEqual(captured.body.report, "single_treatment_plan");
+    assert.strictEqual(captured.body.report, "single_patient_treatment_plans");
     assert.strictEqual(captured.body.patient_id, "PAT-HREF-001");
     assert.strictEqual(captured.body.operation_parameters.StartDate, "2000-01-01T16:03");
     assert.strictEqual(captured.allDisabled, true);
+    assert.strictEqual(captured.patientCenteredDisabled, true);
+    assert.strictEqual(captured.activePatientCenteredDisabled, true);
     assert.strictEqual(captured.singleDisabled, true);
     assert(elements.treatmentPlanPullResult.textContent.includes('"returned_count": 1'));
     process.stdout.write(JSON.stringify({ patient_id: captured.body.patient_id }));

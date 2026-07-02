@@ -36,6 +36,7 @@ Alleva REST readiness and sync:
 
 API harness aggregate dry-run:
 
+- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` runs the clarified patient-centered flow: `GET /clients`, then `GET /treatment-plans?ClientId={patient_id}` using canonical `/clients.id`.
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` builds patient-level aggregate diagnostics from `/clients`, `/treatment-plans`, and `/treatment-reviews` without arming live sync.
 - This is readiness evidence only. It does not bypass live-sync approval, endpoint mapping, or PHI handling requirements.
 
@@ -55,6 +56,7 @@ Runtime SQLite, uploads, logs, reports, and `.env` stay under `%LOCALAPPDATA%\IZ
 
 Patient matching uses approved ID aliases before any fallback:
 
+- For the patient-centered API harness contract, treatment-plan joins use only `GET /clients.id` and treatment-plan `client: "/clients/{id}"`. The alias list below remains historical/local-sync readiness context, not the production patient-centered treatment-plan join rule.
 - `clientId`
 - `leadId`
 - `patientId`

@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -38,6 +39,28 @@ class ApiKeyTreatmentPlanHarnessHttpxClient(TreatmentPlanHarnessHttpxClient):
         if url.startswith('https://api.example.test/treatment-plans?'):
             assert request.headers.get('x-api-key') == 'saved-api-key-secret'
             return httpx.Response(200, json=[_api_key_treatment_plan()])
+        return httpx.Response(404, text='not found')
+
+
+class PatientCenteredTreatmentPlanHarnessHttpxClient(TreatmentPlanHarnessHttpxClient):
+    @staticmethod
+    def _handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query)
+        if url == 'https://authorization.example.test/connect/token':
+            return httpx.Response(200, json={'access_token': 'mock-access-token', 'token_type': 'Bearer', 'expires_in': 3600})
+        if parsed.scheme == 'https' and parsed.netloc == 'api.example.test' and parsed.path == '/clients':
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(200, json=_patient_centered_clients())
+        if parsed.scheme == 'https' and parsed.netloc == 'api.example.test' and parsed.path == '/clients/307':
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            return httpx.Response(200, json=_patient_centered_clients()[0])
+        if parsed.scheme == 'https' and parsed.netloc == 'api.example.test' and parsed.path == '/treatment-plans':
+            assert request.headers.get('authorization') == 'Bearer mock-access-token'
+            assert 'ClientId' in query
+            assert 'clientId' not in query
+            return httpx.Response(200, json=_patient_centered_plans(query['ClientId'][0]))
         return httpx.Response(404, text='not found')
 
 
@@ -144,6 +167,85 @@ def _synthetic_treatment_plans() -> list[dict[str, Any]]:
             ],
         },
         {'id': 'tp-102', 'client': {'href': '/clients/PAT-OTHER-002', 'id': 'source-client-002'}, 'description': 'Other synthetic treatment plan content', 'startDate': '2026-02-01T00:00:00', 'isActive': True},
+    ]
+
+
+def _patient_centered_clients() -> list[dict[str, Any]]:
+    return [
+        {
+            'id': 307,
+            'clientId': 'legacy-client-307',
+            'chartId': 'CHART-307',
+            'externalId': 'EXT-307',
+            'mrn': 'MRN-307',
+            'status': {'id': 1049, 'name': 'Active'},
+            'admissionDate': '2026-01-02',
+            'dischargeDate': '2026-08-01',
+            'levelOfCare': 'IOP',
+            'facilityName': 'Synthetic Facility',
+            'primaryClinician': 'Synthetic Counselor',
+            'firstContactDate': '2025-12-20',
+        },
+        {
+            'id': 308,
+            'clientId': 'legacy-client-308',
+            'status': {'id': 1356, 'name': 'Discharged'},
+            'admissionDate': '2025-01-02',
+        },
+        {
+            'id': 309,
+            'clientId': 'legacy-client-309',
+            'status': 'InActive',
+            'admissionDate': '2025-02-02',
+        },
+    ]
+
+
+def _patient_centered_plans(patient_id: str) -> list[dict[str, Any]]:
+    if patient_id != '307':
+        return []
+    return [
+        {
+            'id': 10,
+            'client': '/clients/307',
+            'startDate': '2026-01-02T00:00:00',
+            'endDate': '2099-12-31T00:00:00',
+            'createdDate': '2026-01-02T01:00:00',
+            'lastModified': '2026-01-03T00:00:00',
+            'isActive': True,
+            'isComplete': True,
+            'isInitialTP': True,
+            'isWiley': False,
+            'reasonForAdmission': 'Synthetic reason',
+            'initialClientNeeds': 'Synthetic need',
+            'familyEducationNeeds': 'Synthetic family education',
+            'problems': [
+                {
+                    'diagnoses': [{'code': 'F10.20', 'status': 'Active'}],
+                    'behavioralDefinitions': [{'description': 'synthetic behavioral definition'}],
+                    'goals': [{'description': 'synthetic goal', 'objectives': [{'description': 'synthetic objective', 'interventions': [{'description': 'Synthetic intervention'}]}]}],
+                }
+            ],
+        },
+        {
+            'id': 12,
+            'client': '/clients/307',
+            'startDate': '2026-02-02T00:00:00',
+            'endDate': '2000-01-01T00:00:00',
+            'createdDate': '2026-02-02T01:00:00',
+            'isActive': True,
+            'isComplete': False,
+            'isInitialTP': False,
+            'problems': [],
+        },
+        {
+            'id': 20,
+            'client': '/clients/307',
+            'startDate': '2026-03-02T00:00:00',
+            'isActive': False,
+            'isComplete': True,
+            'isInitialTP': False,
+        },
     ]
 
 

@@ -10,6 +10,7 @@ import {
 import { DataQualityWarnings } from './components/DataQualityWarnings'
 import { TreatmentPlanContentSummary } from './components/TreatmentPlanContentSummary'
 import { contentItemMetadataSummary, safeContentItems, safeContentTree, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
+import type { AllevaTreatmentPlanAggregate } from './types/allevaTreatmentPlan'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || '/api'
@@ -580,6 +581,10 @@ type TransitionAction = {
 type ApiError = {
   detail?: string | { msg?: string } | { msg?: string }[]
   raw?: string
+}
+
+type AllevaPatientCenteredTreatmentPlanHarnessResult = {
+  rows?: AllevaTreatmentPlanAggregate[]
 }
 
 type UploadFormState = {

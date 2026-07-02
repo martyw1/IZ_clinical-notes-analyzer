@@ -27,6 +27,11 @@ from app.services.api_connectivity import (
 )
 from app.services.app_settings import get_or_create_app_settings
 from app.services.audit import log_event
+from app.services.alleva_patient_plan_harness import (
+    PATIENT_CENTERED_SOURCE_OPERATION,
+    PATIENT_CENTERED_TREATMENT_PLAN_REPORTS,
+    run_patient_centered_treatment_plan_harness_pull,
+)
 from app.services.alleva_treatment_plan_aggregate import AggregateBuildOptions, build_patient_treatment_plan_aggregate_result
 from app.services.alleva_treatment_plan_harness import (
     TREATMENT_PLAN_HARNESS_REPORTS,
@@ -179,6 +184,9 @@ class AllevaQuickPullInput(ApiDefinitionPullInput):
         'patient_treatment_plan_aggregates',
         'all_treatment_plans',
         'single_treatment_plan',
+        'patient_centered_treatment_plans',
+        'active_patient_centered_treatment_plans',
+        'single_patient_treatment_plans',
     ]
     operation_parameters: dict[str, Any] = Field(default_factory=dict)
     max_pages: int = Field(default=10, ge=1, le=50)
@@ -368,13 +376,35 @@ def _bool_value(value: Any, *, default: bool = False) -> bool:
     return default
 
 
+def _scalar_text(value: Any) -> str:
+    if isinstance(value, dict | list):
+        return ''
+    return _text(value)
+
+
+def _patient_status(payload: dict[str, Any]) -> dict[str, str]:
+    status_value = payload.get('status')
+    status_id = _first_text(status_value, 'id') if isinstance(status_value, dict) else _scalar_text(payload.get('statusId') or payload.get('status_id'))
+    status_label = (
+        _first_text(status_value, 'name', 'label', 'statusName', 'description', 'value')
+        if isinstance(status_value, dict)
+        else (_scalar_text(status_value) or _scalar_text(payload.get('statusName')))
+    )
+    normalized_id = status_id.strip()
+    normalized_label = status_label.strip().lower().replace('-', '').replace('_', '').replace(' ', '')
+    if normalized_id == '1049' or normalized_label == 'active':
+        status_scope = 'active'
+    elif normalized_id == '1356' or 'discharg' in normalized_label or normalized_label in {'closed', 'deceased'}:
+        status_scope = 'discharged'
+    elif normalized_label:
+        status_scope = 'other'
+    else:
+        status_scope = 'unknown'
+    return {'status_id': status_id, 'status_label': status_label, 'status_scope': status_scope}
+
+
 def _patient_id(payload: dict[str, Any]) -> str:
-    client = payload.get('client')
-    if isinstance(client, dict):
-        nested = _first_text(client, 'clientId', 'id', 'uniqueId', 'mrn')
-        if nested:
-            return nested
-    return _first_text(payload, 'clientId', 'id', 'uniqueId', 'mrn')
+    return _scalar_text(payload.get('id'))
 
 
 def _plan_client_id(payload: dict[str, Any]) -> str:
@@ -434,22 +464,22 @@ def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
 
 
 def _active_patient_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    discharge_date = _date_only(payload.get('dischargeDateTime') or payload.get('actualSysDischargeDateTime'))
-    status = _first_text(payload, 'status')
+    status = _patient_status(payload)
     reasons = []
-    if status and 'active' in status.lower() and discharge_date:
-        reasons.append('status is Active; discharge date retained as data-quality warning')
-    elif not discharge_date:
-        reasons.append('no actual discharge date returned')
-    if not status or not any(word in status.lower() for word in ('inactive', 'discharge', 'closed', 'deceased')):
-        reasons.append('status is active-compatible')
+    if status['status_scope'] == 'active':
+        reasons.append('status.id is 1049 or status label is Active')
+    elif status['status_scope'] == 'unknown':
+        reasons.append('status is missing or unknown')
+    else:
+        reasons.append(f"status scope is {status['status_scope']}")
     return {
         'patient_id': _patient_id(payload),
-        'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
+        'source_id': _first_text(payload, 'chartId', 'externalId', 'clientId', 'uniqueId', 'mrn'),
         'first_admitted': _date_only(payload.get('admissionDateTime') or payload.get('firstContactDate')),
-        'status': status,
-        'discharge_date': discharge_date,
-        'discharge_conflict': bool(status and 'active' in status.lower() and (discharge_date or _bool_value(payload.get('isDischarge'), default=False))),
+        'status_id': status['status_id'],
+        'status_label': status['status_label'],
+        'status_scope': status['status_scope'],
+        'planned_discharge_date': _date_only(payload.get('dischargeDate') or payload.get('dischargeDateTime')),
         'level_of_care': _first_text(payload, 'levelOfCare'),
         'facility': _first_text(payload, 'facilityName'),
         'why_active': '; '.join(reasons) or 'active-compatible fields returned',
@@ -460,11 +490,10 @@ ALL_PATIENT_RECORD_COLUMNS = [
     'patient_id',
     'source_id',
     'admission_date',
-    'status',
+    'status_id',
+    'status_label',
     'is_client',
-    'discharge_date',
-    'actual_sys_discharge_date',
-    'is_discharge',
+    'planned_discharge_date',
     'level_of_care',
     'facility',
     'primary_clinician',
@@ -474,15 +503,16 @@ ALL_PATIENT_RECORD_COLUMNS = [
 ALL_PATIENT_RECORD_FIELDS = [
     'id',
     'clientId',
+    'chartId',
+    'externalId',
     'uniqueId',
     'mrn',
     'status',
     'isClient',
     'admissionDateTime',
+    'admissionDate',
     'firstContactDate',
-    'dischargeDateTime',
-    'actualSysDischargeDateTime',
-    'isDischarge',
+    'dischargeDate',
     'facilityName',
     'levelOfCare',
     'primaryClinician',
@@ -491,15 +521,15 @@ ALL_PATIENT_RECORD_FIELDS = [
 
 
 def _all_patient_record_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    status = _patient_status(payload)
     return {
         'patient_id': _patient_id(payload),
-        'source_id': _first_text(payload, 'id', 'uniqueId', 'mrn'),
+        'source_id': _first_text(payload, 'chartId', 'externalId', 'clientId', 'uniqueId', 'mrn'),
         'admission_date': _date_only(payload.get('admissionDateTime') or payload.get('admissionDate')),
-        'status': _first_text(payload, 'status'),
+        'status_id': status['status_id'],
+        'status_label': status['status_label'],
         'is_client': _bool_value(payload.get('isClient'), default=True),
-        'discharge_date': _date_only(payload.get('dischargeDateTime')),
-        'actual_sys_discharge_date': _date_only(payload.get('actualSysDischargeDateTime')),
-        'is_discharge': _bool_value(payload.get('isDischarge'), default=False),
+        'planned_discharge_date': _date_only(payload.get('dischargeDate') or payload.get('dischargeDateTime')),
         'level_of_care': _first_text(payload, 'levelOfCare'),
         'facility': _first_text(payload, 'facilityName'),
         'primary_clinician': _first_text(payload, 'primaryClinician', 'primaryClinicians'),
@@ -516,21 +546,11 @@ def _rows_to_tsv(rows: list[dict[str, Any]], columns: list[str]) -> str:
 
 
 def _is_active_patient(payload: dict[str, Any]) -> bool:
-    status = _first_text(payload, 'status').lower()
-    if status and any(word in status for word in ('inactive', 'discharge', 'closed', 'deceased')):
-        return False
-    status_is_active = bool(status and 'active' in status)
-    if _bool_value(payload.get('isDischarge'), default=False) and not status_is_active:
-        return False
-    if not status and _text(payload.get('dischargeDateTime') or payload.get('actualSysDischargeDateTime')):
-        return False
-    if payload.get('isClient') is not None and not _bool_value(payload.get('isClient'), default=True):
-        return False
-    return True
+    return _patient_status(payload)['status_scope'] == 'active'
 
 
 def _quick_pull_path(report: str) -> str:
-    return '/clients' if report in {'all_patient_records', 'active_patients', 'patient_treatment_plan_aggregates'} else '/treatment-plans'
+    return '/clients' if report in {'all_patient_records', 'active_patients', 'patient_treatment_plan_aggregates', *PATIENT_CENTERED_TREATMENT_PLAN_REPORTS} else '/treatment-plans'
 
 
 def _http_status_label(status_code: int) -> str:
@@ -1085,7 +1105,7 @@ def run_alleva_quick_pull(
     timeout_seconds = payload.timeout_seconds or settings_row.emr_api_timeout_seconds
     auth_context = _auth_context(payload, settings_row, timeout_seconds=timeout_seconds)
     operation_parameters = dict(payload.operation_parameters or {})
-    if payload.report in TREATMENT_PLAN_HARNESS_REPORTS:
+    if payload.report in TREATMENT_PLAN_HARNESS_REPORTS or payload.report in PATIENT_CENTERED_TREATMENT_PLAN_REPORTS:
         operation_parameters = treatment_plan_default_parameters(operation_parameters)
     else:
         operation_parameters.setdefault('Limit', 500)
@@ -1094,11 +1114,15 @@ def run_alleva_quick_pull(
         operation_parameters.setdefault('X-Version', '1.0')
     path = _quick_pull_path(payload.report)
     source_operation = (
+        PATIENT_CENTERED_SOURCE_OPERATION
+        if payload.report in PATIENT_CENTERED_TREATMENT_PLAN_REPORTS
+        else (
         'GET /clients + GET /treatment-plans + GET /treatment-reviews'
         if payload.report == 'patient_treatment_plan_aggregates'
         else f'GET {path}'
+        )
     )
-    if payload.report == 'all_patient_records':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
+    if payload.report == 'all_patient_records' or payload.report in PATIENT_CENTERED_TREATMENT_PLAN_REPORTS:  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
         operation_parameters.setdefault('fields', ALL_PATIENT_RECORD_FIELDS)
     base_url = _strip(payload.api_base_url) or settings_row.alleva_api_base_url or 'https://api.allevasoft.com'
     quick_pull_request_payload = {
@@ -1139,7 +1163,7 @@ def run_alleva_quick_pull(
             'returned_count': 0,
             'token_result': token_result,
         }
-        if payload.report in TREATMENT_PLAN_HARNESS_REPORTS:
+        if payload.report in TREATMENT_PLAN_HARNESS_REPORTS or payload.report in PATIENT_CENTERED_TREATMENT_PLAN_REPORTS:
             result['report'] = build_api_connectivity_report(
                 report_type=f'alleva_{payload.report}',
                 request=quick_pull_request_payload,
@@ -1179,6 +1203,7 @@ def run_alleva_quick_pull(
                 api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
                 timeout_seconds=timeout_seconds,
                 patient_id=payload.patient_id or '',
+                max_pages=payload.max_pages,
             )
         )
         result = {
@@ -1232,6 +1257,78 @@ def run_alleva_quick_pull(
                 'response_truncated': result.get('response_truncated'),
                 'total_records_seen': result['total_records_seen'],
                 'returned_count': result['returned_count'],
+            },
+            outcome_status='failure' if result['status'] == 'fail' else 'success',
+            severity='info' if result['status'] == 'ok' else 'warning',
+            message=f'Alleva quick pull completed for {payload.report} with status {result["status"]}.',
+        )
+        return result
+
+    if payload.report in PATIENT_CENTERED_TREATMENT_PLAN_REPORTS:
+        patient_centered_result = run_patient_centered_treatment_plan_harness_pull(
+            TreatmentPlanHarnessRequest(
+                report=payload.report,
+                base_url=base_url,
+                operation_parameters=operation_parameters,
+                api_key=auth_context['api_key'],
+                bearer_token=auth_context['bearer_token'],
+                api_key_header_name=payload.api_key_header_name or DEFAULT_API_KEY_HEADER_NAME,
+                timeout_seconds=timeout_seconds,
+                patient_id=payload.patient_id or '',
+                max_pages=payload.max_pages,
+            ),
+            today=_utc_now().date(),
+        )
+        result = {
+            'report': payload.report,
+            'source_operation': source_operation,
+            'operation_parameters': operation_parameters,
+            'max_pages': payload.max_pages,
+            'auth_mode': payload.auth_mode,
+            'api_key_used': bool(auth_context['api_key']),
+            'bearer_token_used': bool(auth_context['bearer_token']),
+            'credential_source': auth_context['credential_source'],
+            'token_result': auth_context['token_result'] if auth_context.get('token_result') else {},
+            **patient_centered_result,
+        }
+        report_result = {
+            'status': result['status'],
+            'message': result['message'],
+            'report': payload.report,
+            'source_operation': source_operation,
+            'rows': result.get('rows', []),
+            'total_records_seen': result.get('total_records_seen'),
+            'returned_count': result.get('returned_count'),
+            'category': result.get('category'),
+            'patient_selection': result.get('patient_selection'),
+            'review_data_status': result.get('review_data_status'),
+            'next_review_due_source': result.get('next_review_due_source'),
+        }
+        result['report'] = build_api_connectivity_report(
+            report_type=f'alleva_{payload.report}',
+            request=quick_pull_request_payload,
+            result=report_result,
+        )
+        result['report_path'] = persist_api_connectivity_report(result['report'])
+        log_event(
+            db,
+            request,
+            'api_configuration.alleva_quick_pull',
+            actor=user,
+            event_category='api_connectivity',
+            target_entity=source_operation,
+            target_entity_type='external_api_operation',
+            details={
+                'status': result['status'],
+                'report': payload.report,
+                'auth_mode': payload.auth_mode,
+                'api_key_used': bool(auth_context['api_key']),
+                'bearer_token_used': bool(auth_context['bearer_token']),
+                'credential_source': auth_context['credential_source'],
+                'total_records_seen': result['total_records_seen'],
+                'returned_count': result['returned_count'],
+                'fetch_error_count': len(result['fetch_errors']),
+                'patient_selection': result['patient_selection'],
             },
             outcome_status='failure' if result['status'] == 'fail' else 'success',
             severity='info' if result['status'] == 'ok' else 'warning',

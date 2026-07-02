@@ -21,6 +21,7 @@ class TreatmentPlanHarnessRequest:
     api_key_header_name: str = 'x-api-key'
     timeout_seconds: int = 10
     patient_id: str = ''
+    max_pages: int = 10
 
 
 @dataclass(frozen=True, slots=True)

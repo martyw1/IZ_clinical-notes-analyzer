@@ -857,9 +857,13 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert all_payload['source_operation'] == 'GET /clients'
         assert all_payload['returned_count'] == 3
         assert all_payload['columns'][:3] == ['patient_id', 'source_id', 'admission_date']
+        assert 'status_id' in all_payload['columns']
+        assert 'planned_discharge_date' in all_payload['columns']
+        assert 'actual_sys_discharge_date' not in all_payload['columns']
+        assert 'is_discharge' not in all_payload['columns']
         assert 'client_name' not in all_payload['rows'][0]
         assert all_payload['tsv'].splitlines()[0].startswith('patient_id\tsource_id\tadmission_date')
-        assert 'PAT-ACTIVE-001\t201\t2026-02-03' in all_payload['tsv']
+        assert '201\tPAT-ACTIVE-001\t2026-02-03' in all_payload['tsv']
         assert 'Synthetic Active Client' not in all_payload['tsv']
 
         active = client.post('/api/api-configuration/alleva-quick-pull', headers=headers, json={**base_body, 'report': 'active_treatment_plans'})
@@ -894,10 +898,11 @@ def test_api_configuration_alleva_quick_pull_computes_summaries_without_logging_
         assert patients.status_code == 200
         assert patients.json()['returned_count'] == 2
         patient_rows = {row['patient_id']: row for row in patients.json()['rows']}
-        assert set(patient_rows) == {'PAT-ACTIVE-001', 'PAT-ACTIVE-DISCHARGE-FIELD'}
-        assert patient_rows['PAT-ACTIVE-001']['first_admitted'] == '2026-02-03'
-        assert patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['discharge_conflict'] is True
-        assert 'status is Active' in patient_rows['PAT-ACTIVE-DISCHARGE-FIELD']['why_active']
+        assert set(patient_rows) == {'201', '203'}
+        assert patient_rows['201']['first_admitted'] == '2026-02-03'
+        assert patient_rows['203']['planned_discharge_date'] == '2026-06-01'
+        assert patient_rows['203']['status_label'] == 'Active'
+        assert 'status label is Active' in patient_rows['203']['why_active']
 
         aggregate = client.post(
             '/api/api-configuration/alleva-quick-pull',
