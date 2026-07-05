@@ -579,6 +579,15 @@ label {
   gap: 0.65rem;
 }
 
+.finding-card dl > div,
+.finding-card dd,
+.checklist-result-card summary > span,
+.evaluated-value-list,
+.evaluated-value-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .finding-card dt {
   font-weight: 700;
 }
@@ -586,6 +595,7 @@ label {
 .finding-card dd {
   margin: 0.2rem 0 0;
   color: #5f7067;
+  overflow-wrap: anywhere;
 }
 
 .checklist-result-card summary {
@@ -595,6 +605,17 @@ label {
   gap: 1rem;
   cursor: pointer;
   list-style-position: inside;
+}
+
+.checklist-result-card summary > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checklist-result-card summary > .pill {
+  flex: 0 0 auto;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .checklist-result-card summary small {
@@ -1115,6 +1136,7 @@ label {
   margin: 0.2rem 0 0;
   color: #263940;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .timeliness-client-summary p {
@@ -2597,7 +2619,7 @@ body {
 
 .timeliness-workspace {
   display: grid;
-  grid-template-columns: minmax(520px, 1.04fr) minmax(420px, 0.96fr);
+  grid-template-columns: minmax(560px, 0.98fr) minmax(420px, 1.02fr);
   gap: 1rem;
   align-items: start;
 }
@@ -2606,7 +2628,8 @@ body {
 .timeliness-detail-panel {
   min-width: 0;
   max-height: calc(100vh - 1.5rem);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .timeliness-queue-panel > .panel-heading,
@@ -2652,19 +2675,38 @@ body {
 
 .timeliness-queue-table {
   display: grid;
-  min-width: 1120px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--bg-surface);
 }
 
 .timeliness-queue-table__head,
 .timeliness-queue-table__row {
   display: grid;
-  grid-template-columns: 14px minmax(118px, 1.1fr) minmax(110px, 0.9fr) minmax(130px, 0.9fr) minmax(104px, 0.8fr) minmax(142px, 1fr) minmax(106px, 0.8fr) minmax(106px, 0.8fr) minmax(116px, 0.95fr) minmax(100px, 0.8fr) minmax(132px, 1fr) minmax(120px, 0.9fr) minmax(128px, 0.9fr);
+  grid-template-columns: 14px minmax(116px, 1.25fr) minmax(86px, 0.85fr) minmax(112px, 0.92fr) minmax(108px, 0.9fr) minmax(88px, 0.72fr) minmax(96px, 0.78fr);
   gap: 0.45rem;
   align-items: stretch;
+  min-width: 640px;
+}
+
+.timeliness-queue-table__head > span:nth-child(5),
+.timeliness-queue-table__head > span:nth-child(6),
+.timeliness-queue-table__head > span:nth-child(7),
+.timeliness-queue-table__head > span:nth-child(11),
+.timeliness-queue-table__head > span:nth-child(12),
+.timeliness-queue-table__head > span:nth-child(13),
+.timeliness-queue-table__row > span:nth-child(5),
+.timeliness-queue-table__row > span:nth-child(6),
+.timeliness-queue-table__row > span:nth-child(7),
+.timeliness-queue-table__row > span:nth-child(11),
+.timeliness-queue-table__row > span:nth-child(12),
+.timeliness-queue-table__row > span:nth-child(13) {
+  display: none;
 }
 
 .timeliness-queue-table__head {
@@ -2673,6 +2715,12 @@ body {
   font-size: 0.76rem;
   font-weight: 700;
   background: var(--bg-subtle);
+}
+
+.timeliness-queue-table__head > span:first-child {
+  padding: 0;
+  overflow: hidden;
+  color: transparent;
 }
 
 .queue-group {
@@ -2802,7 +2850,8 @@ body {
 
 .source-comparison-table > div[role='table'] {
   display: grid;
-  min-width: 780px;
+  width: 100%;
+  min-width: min(680px, 100%);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   overflow: hidden;
@@ -2830,6 +2879,7 @@ body {
 }
 
 .source-comparison-table {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -2972,6 +3022,7 @@ body {
   margin: 0.2rem 0 0;
   color: var(--text-main);
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .source-readiness-card__lists {
@@ -3001,6 +3052,134 @@ body {
   border-color: #dac7ff;
   background: #f8f4ff;
   color: var(--status-unvalidated);
+}
+
+@media (max-width: 1380px) {
+  .timeliness-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .timeliness-queue-panel,
+  .timeliness-detail-panel {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .timeliness-client-summary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .checklist-result-card summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .timeliness-table--loc,
+  .timeliness-table--evidence {
+    gap: 0.6rem;
+    border: 0;
+    overflow: visible;
+  }
+
+  .timeliness-table--loc .timeliness-table__head,
+  .timeliness-table--evidence .timeliness-table__head {
+    display: none;
+  }
+
+  .timeliness-table--loc .timeliness-table__row,
+  .timeliness-table--evidence .timeliness-table__row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-surface);
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span,
+  .timeliness-table--evidence .timeliness-table__row > span {
+    display: grid;
+    grid-template-columns: minmax(7.25rem, 0.42fr) minmax(0, 1fr);
+    gap: 0.65rem;
+    min-width: 0;
+    padding: 0.3rem 0;
+    border-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span::before,
+  .timeliness-table--evidence .timeliness-table__row > span::before {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(1)::before {
+    content: "LOC";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(2)::before {
+    content: "Facility";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(3)::before {
+    content: "Effective";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(4)::before {
+    content: "Discharge";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(5)::before {
+    content: "Cadence";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(6)::before {
+    content: "State";
+  }
+
+  .timeliness-table--loc .timeliness-table__row > span:nth-child(7)::before {
+    content: "Evidence";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(1)::before {
+    content: "Type";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(2)::before {
+    content: "Source";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(3)::before {
+    content: "Document";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(4)::before {
+    content: "Staff";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(5)::before {
+    content: "Client";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(6)::before {
+    content: "Next due";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(7)::before {
+    content: "Content";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(8)::before {
+    content: "Status";
+  }
+
+  .timeliness-table--evidence .timeliness-table__row > span:nth-child(9)::before {
+    content: "Evidence";
+  }
 }
 
 @media (max-width: 1180px) {
@@ -3048,18 +3227,198 @@ body {
   .source-readiness-preview__grid,
   .source-readiness-grid,
   .date-evidence-timeline ol,
+  .source-mode-facts,
   .source-readiness-card__facts,
   .source-readiness-card__lists {
     grid-template-columns: 1fr;
+  }
+
+  .source-mode-facts div,
+  .source-readiness-card__facts div {
+    min-height: 0;
+    border-right: 0;
   }
 
   .timeliness-filter-row {
     grid-template-columns: 1fr;
   }
 
-  .timeliness-queue-table,
+  .timeliness-queue-table {
+    gap: 0.75rem;
+    border: 0;
+    overflow: visible;
+    background: transparent;
+  }
+
+  .timeliness-queue-table__head {
+    display: none;
+  }
+
+  .queue-group {
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-surface);
+  }
+
+  .timeliness-queue-table__row {
+    grid-template-columns: 5px minmax(0, 1fr);
+    gap: 0.55rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.55rem 0.65rem 0.65rem;
+  }
+
+  .timeliness-queue-table__row > span:nth-child(5),
+  .timeliness-queue-table__row > span:nth-child(6),
+  .timeliness-queue-table__row > span:nth-child(7),
+  .timeliness-queue-table__row > span:nth-child(11),
+  .timeliness-queue-table__row > span:nth-child(12),
+  .timeliness-queue-table__row > span:nth-child(13) {
+    display: grid;
+  }
+
+  .timeliness-queue-table__row > span:not(.queue-risk-stripe) {
+    grid-column: 2;
+    grid-template-columns: minmax(7.25rem, 0.42fr) minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: start;
+    padding: 0.3rem 0;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .timeliness-queue-table__row > span:nth-child(2) {
+    border-top: 0;
+  }
+
+  .timeliness-queue-table__row > span:not(.queue-risk-stripe)::before {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .timeliness-queue-table__row > span:nth-child(2)::before {
+    content: "Client";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(3)::before {
+    content: "LOC / program";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(4)::before {
+    content: "Status";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(5)::before {
+    content: "Initial TP date";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(6)::before {
+    content: "Master TP due";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(7)::before {
+    content: "Last update";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(8)::before {
+    content: "Next due";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(9)::before {
+    content: "Days";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(10)::before {
+    content: "Evidence";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(11)::before {
+    content: "Source";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(12)::before {
+    content: "Reviewer";
+  }
+
+  .timeliness-queue-table__row > span:nth-child(13)::before {
+    content: "Last checked";
+  }
+
+  .queue-risk-stripe {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    width: 5px;
+  }
+
+  .source-comparison-table {
+    overflow: visible;
+  }
+
   .source-comparison-table > div[role='table'] {
-    min-width: 900px;
+    gap: 0.6rem;
+    min-width: 0;
+    border: 0;
+    overflow: visible;
+  }
+
+  .source-comparison-table__head {
+    display: none;
+  }
+
+  .source-comparison-table__row {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: #fbfdfb;
+  }
+
+  .source-comparison-table__row > span {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .source-comparison-table__row > span::before {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .source-comparison-table__row > span .pill {
+    justify-self: start;
+  }
+
+  .source-comparison-table__row > span:nth-child(1)::before {
+    content: "Field";
+  }
+
+  .source-comparison-table__row > span:nth-child(2)::before {
+    content: "Manual upload";
+  }
+
+  .source-comparison-table__row > span:nth-child(3)::before {
+    content: "API";
+  }
+
+  .source-comparison-table__row > span:nth-child(4)::before {
+    content: "Alleva sync";
+  }
+
+  .source-comparison-table__row > span:nth-child(5)::before {
+    content: "Result";
+  }
+
+  .checklist-result-card summary {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-result-card summary > .pill {
+    justify-self: start;
   }
 
   .evidence-ledger__entry,
