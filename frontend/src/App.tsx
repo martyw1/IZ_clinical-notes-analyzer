@@ -15,6 +15,28 @@ import {
   type AllevaPatientCenteredTreatmentPlanReport,
   type AllevaPatientPlanPullState,
 } from './components/AllevaPatientTreatmentPlanPanel'
+import {
+  OPERATIONAL_STATUS_CONFIG,
+  buildStatusSummaries,
+  formatDueDelta,
+  groupOperationalQueueItems,
+  statusToOperationalStatus,
+  type OperationalFilter,
+  type OperationalStatus,
+  type StatusSummary,
+} from './clinicalOperationsModel'
+import {
+  DateEvidenceTimeline,
+  EmptyTreatmentPlanDetail,
+  EvidenceLedger,
+  RiskStatusStrip,
+  SourceComparisonTable,
+  SourceReadinessCard,
+  type EvidenceLedgerEntry,
+  type EvidenceTimelineStep,
+  type SourceComparisonRow,
+  type SourceReadinessCardModel,
+} from './components/ClinicalOperationsWorkbench'
 import { contentItemMetadataSummary, safeContentItems, safeContentTree, type TreatmentPlanContentItem } from './treatmentPlanContentSafety'
 import './app.css'
 
@@ -32,7 +54,7 @@ type NoteSetStatus = 'active' | 'superseded'
 type NoteSetUploadMode = 'initial' | 'update'
 type AllevaBucket = 'custom_forms' | 'uploaded_documents' | 'portal_documents' | 'labs' | 'medications' | 'notes' | 'other'
 type DocumentCompletionStatus = 'completed' | 'incomplete' | 'draft'
-type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'checklist' | 'uploads' | 'profile' | 'users' | 'workflows' | 'logs' | 'settings' | 'help'
+type AppView = 'dashboard' | 'reviews' | 'timeliness' | 'sources' | 'checklist' | 'uploads' | 'profile' | 'users' | 'workflows' | 'logs' | 'settings' | 'help'
 
 type VersionInfo = {
   app_name: string
@@ -173,17 +195,9 @@ type AuditLogRecord = {
 }
 
 type TimelinessStatus =
-  | 'Overdue'
-  | 'Urgent'
-  | 'Due Soon'
-  | 'Returned for Correction'
-  | 'Needs Review'
-  | 'Missing Data'
-  | 'Conflicting Evidence'
-  | 'Unable to Evaluate'
-  | 'Compliant'
+  | OperationalStatus
   | 'Approved'
-type TimelinessFilter = 'All' | TimelinessStatus
+type TimelinessFilter = OperationalFilter
 
 type TimelinessClientSummary = {
   id: number
@@ -873,19 +887,7 @@ const NOTE_SET_STATUS_LABELS: Record<NoteSetStatus, string> = {
   superseded: 'Superseded',
 }
 
-const TIMELINESS_FILTERS: TimelinessFilter[] = [
-  'All',
-  'Overdue',
-  'Urgent',
-  'Due Soon',
-  'Returned for Correction',
-  'Needs Review',
-  'Missing Data',
-  'Conflicting Evidence',
-  'Unable to Evaluate',
-  'Compliant',
-  'Approved',
-]
+const TIMELINESS_FILTERS: TimelinessFilter[] = ['All', ...OPERATIONAL_STATUS_CONFIG.map((config) => config.status)]
 const TIMELINESS_TASK_STATUSES = new Set<TimelinessStatus>([
   'Overdue',
   'Urgent',
@@ -904,6 +906,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   reviews: 'Review queue',
   uploads: 'Manual upload',
   timeliness: 'Treatment plans',
+  sources: 'Source readiness',
   checklist: 'Checklist',
   profile: 'My account',
   users: 'User management',
@@ -913,7 +916,7 @@ const VIEW_LABELS: Record<AppView, string> = {
   help: 'Help',
 }
 
-const APP_VIEWS: AppView[] = ['dashboard', 'timeliness', 'reviews', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
+const APP_VIEWS: AppView[] = ['dashboard', 'timeliness', 'reviews', 'sources', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
 
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
@@ -1537,7 +1540,256 @@ function managerCriterionTone(status: string) {
 function timelinessFilterCount(dashboard: TimelinessDashboard | null, filter: TimelinessFilter) {
   if (!dashboard) return 0
   if (filter === 'All') return dashboard.items.length
-  return dashboard.items.filter((item) => item.status === filter).length
+  return dashboard.items.filter((item) => statusToOperationalStatus(item.status) === filter).length
+}
+
+function timelinessDashboardCounts(dashboard: TimelinessDashboard | null): Partial<Record<OperationalStatus, number>> {
+  return {
+    Overdue: dashboard?.overdue ?? 0,
+    Urgent: dashboard?.urgent ?? 0,
+    'Due Soon': dashboard?.due_soon ?? 0,
+    'Returned for Correction': dashboard?.returned ?? 0,
+    'Needs Review': dashboard?.needs_review ?? 0,
+    'Missing Data': dashboard?.missing_data ?? 0,
+    'Conflicting Evidence': dashboard?.conflicting_evidence ?? 0,
+    'Unable to Evaluate': dashboard?.unable_to_evaluate ?? 0,
+    Compliant: (dashboard?.compliant ?? 0) + (dashboard?.approved ?? 0),
+  }
+}
+
+function operationalStatusSentence(summaries: StatusSummary[]) {
+  const activeSummaries = summaries.filter((summary) => summary.count > 0)
+  if (!activeSummaries.length) return 'No treatment-plan records are loaded yet.'
+  return activeSummaries.map((summary) => `${summary.count} ${summary.label.toLowerCase()}`).join(', ')
+}
+
+type SourceReadinessInputs = {
+  readonly reviewSourceDiscovery: ReviewSourceDiscovery | null
+  readonly appSettings: AppSettings | null
+  readonly noteSets: readonly PatientNoteSetSummary[]
+  readonly readiness: RuntimeReadiness | null
+  readonly lastAllevaSyncResult: AllevaTreatmentPlanSyncResult | null
+  readonly canRunAllevaTreatmentPlanSync: boolean
+}
+
+type EvidenceLedgerInputs = {
+  readonly reviewSourceDiscovery: ReviewSourceDiscovery | null
+  readonly appSettings: AppSettings | null
+  readonly noteSets: readonly PatientNoteSetSummary[]
+  readonly logs: readonly AuditLogRecord[]
+  readonly lastAllevaSyncResult: AllevaTreatmentPlanSyncResult | null
+}
+
+function latestNoteSet(noteSets: readonly PatientNoteSetSummary[]) {
+  return [...noteSets].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())[0] || null
+}
+
+function sourceReadinessCards(input: SourceReadinessInputs): SourceReadinessCardModel[] {
+  const latestUpload = latestNoteSet(input.noteSets)
+  const apiConfigured = Boolean(input.reviewSourceDiscovery?.api_configured || input.appSettings?.emr_api_enabled)
+  const syncEnabled = Boolean(input.appSettings?.alleva_treatment_plan_sync_enabled)
+  const syncApproved = Boolean(input.appSettings?.alleva_treatment_plan_sync_approved)
+  const syncMapped = Boolean(input.appSettings?.alleva_treatment_plan_endpoint_mapping_validated)
+  const syncReady = syncEnabled && syncApproved && syncMapped
+  const syncBlockers = [
+    syncApproved ? '' : 'R3/Alleva approval for live treatment-plan sync is not recorded.',
+    syncMapped ? '' : 'Treatment-plan endpoint mapping is not validated.',
+    syncEnabled ? '' : 'Alleva treatment-plan sync is disabled by default.',
+    input.appSettings?.api_client_secret_configured ? '' : 'Saved API secret is not configured.',
+  ].filter(Boolean)
+
+  return [
+    {
+      title: 'Manual upload',
+      state: latestUpload ? 'Available' : 'Ready for binder',
+      tone: 'success',
+      description: input.reviewSourceDiscovery?.manual_mode_message || 'Encrypted local binder upload remains the approved fallback source for chart review and treatment-plan evaluation.',
+      facts: [
+        { label: 'Active binders', value: String(input.noteSets.filter((noteSet) => noteSet.status === 'active').length) },
+        { label: 'Latest upload', value: latestUpload ? formatDateTime(latestUpload.created_at) : 'No upload loaded' },
+        { label: 'Cadence', value: input.reviewSourceDiscovery?.manual_review_cadence || 'Monthly compliance-check fallback' },
+        { label: 'Freshness', value: 'As of upload time only' },
+      ],
+      blockers: [],
+      allowedActions: ['Upload encrypted binder', 'Review generated findings', 'Export task lists'],
+      disabledActions: ['Automatic vendor import from manual files'],
+      prerequisites: ['Synthetic or approved patient IDs only', 'No local runtime files committed'],
+    },
+    {
+      title: 'API readiness',
+      state: input.reviewSourceDiscovery?.api_mode_label || (apiConfigured ? 'Configured for readiness' : 'Mock/stub mode'),
+      tone: apiConfigured ? 'needs-review' : 'missing-data',
+      description: input.reviewSourceDiscovery?.plain_english_status || 'API checks stay in readiness mode until vendor credentials, mapping, and compliance approval are complete.',
+      facts: [
+        { label: 'Last safe check', value: input.reviewSourceDiscovery?.last_successful_check_at ? formatDateTime(input.reviewSourceDiscovery.last_successful_check_at) : 'Not run' },
+        { label: 'Last failure', value: input.reviewSourceDiscovery?.last_failure_at ? formatDateTime(input.reviewSourceDiscovery.last_failure_at) : input.appSettings?.emr_last_failure_at ? formatDateTime(input.appSettings.emr_last_failure_at) : 'None loaded' },
+        { label: 'Next refresh', value: input.reviewSourceDiscovery?.next_refresh_at ? formatDateTime(input.reviewSourceDiscovery.next_refresh_at) : 'After configuration' },
+        { label: 'Runtime', value: input.readiness ? `${input.readiness.status}; ${input.readiness.warnings} warning(s)` : 'Readiness not loaded' },
+      ],
+      blockers: apiConfigured ? [] : ['API client, token URL, and encrypted secret must be configured by an admin.'],
+      allowedActions: ['Run safe API readiness check', 'Review source discovery items'],
+      disabledActions: ['Live Alleva patient import'],
+      prerequisites: ['Official tenant credentials', 'Endpoint documentation', 'Compliance approval'],
+    },
+    {
+      title: 'Alleva treatment-plan sync',
+      state: syncReady ? 'Ready for admin pull' : 'Awaiting approval',
+      tone: syncReady ? 'success' : 'conflicting',
+      description: 'Manual admin pull remains gated and must not run as live patient import until approval, credentials, and endpoint mapping are confirmed.',
+      facts: [
+        { label: 'Last sync', value: input.appSettings?.alleva_treatment_plan_sync_last_at ? formatDateTime(input.appSettings.alleva_treatment_plan_sync_last_at) : 'Not run' },
+        { label: 'Last status', value: input.appSettings?.alleva_treatment_plan_sync_last_status || input.lastAllevaSyncResult?.status || 'No sync result' },
+        { label: 'Configured limit', value: String(input.appSettings?.alleva_treatment_plan_sync_limit ?? 'Not set') },
+        { label: 'Admin action', value: input.canRunAllevaTreatmentPlanSync ? 'Visible to admin' : 'Admin only' },
+      ],
+      blockers: syncBlockers.length ? syncBlockers : [],
+      allowedActions: syncReady ? ['Retrieve Active Treatment Plans', 'Review sync diagnostics'] : ['Review configuration', 'Document blocker status'],
+      disabledActions: syncReady ? ['Automatic startup live import unless separately enabled'] : ['Retrieve Active Treatment Plans'],
+      prerequisites: ['R3/Alleva approval', 'Validated endpoint mapping', 'Encrypted credential storage', 'Pagination/rate-limit behavior confirmed'],
+    },
+  ]
+}
+
+function evidenceLedgerEntries(input: EvidenceLedgerInputs): EvidenceLedgerEntry[] {
+  const latestUpload = latestNoteSet(input.noteSets)
+  const recentExport = input.logs.find((entry) => entry.action.toLowerCase().includes('export'))
+  const recentOverride = input.logs.find((entry) => entry.action.toLowerCase().includes('override'))
+  const entries = [
+    input.reviewSourceDiscovery?.last_successful_check_at
+      ? {
+          label: 'Safe API readiness check',
+          detail: input.reviewSourceDiscovery.last_check_mode || input.reviewSourceDiscovery.refresh_mode || 'Readiness check completed',
+          timestamp: formatDateTime(input.reviewSourceDiscovery.last_successful_check_at),
+          tone: 'needs-review',
+        }
+      : null,
+    latestUpload
+      ? {
+          label: 'Manual binder upload',
+          detail: `${latestUpload.file_count} file(s); ${latestUpload.status} binder`,
+          timestamp: formatDateTime(latestUpload.created_at),
+          tone: 'success',
+        }
+      : null,
+    input.appSettings?.alleva_treatment_plan_sync_last_at
+      ? {
+          label: 'Alleva sync gate',
+          detail: input.appSettings.alleva_treatment_plan_sync_last_message || input.appSettings.alleva_treatment_plan_sync_last_status,
+          timestamp: formatDateTime(input.appSettings.alleva_treatment_plan_sync_last_at),
+          tone: input.appSettings.alleva_treatment_plan_sync_approved ? 'success' : 'conflicting',
+        }
+      : null,
+    input.lastAllevaSyncResult
+      ? {
+          label: 'Latest sync diagnostics',
+          detail: input.lastAllevaSyncResult.message || input.lastAllevaSyncResult.status,
+          timestamp: 'Current session',
+          tone: input.lastAllevaSyncResult.status === 'success' ? 'success' : 'warning',
+        }
+      : null,
+    recentExport
+      ? {
+          label: 'Recent export',
+          detail: recentExport.message || recentExport.action,
+          timestamp: formatLogDateTime(recentExport),
+          tone: 'neutral',
+        }
+      : null,
+    recentOverride
+      ? {
+          label: 'Manual override',
+          detail: recentOverride.message || recentOverride.action,
+          timestamp: formatLogDateTime(recentOverride),
+          tone: 'warning',
+        }
+      : null,
+  ].filter((entry): entry is EvidenceLedgerEntry => entry !== null)
+
+  return entries.slice(0, 8)
+}
+
+function treatmentPlanTimelineSteps(client: TimelinessClientDetail): EvidenceTimelineStep[] {
+  const initialPlan = client.treatment_plans.find((plan) => plan.plan_kind === 'initial') || null
+  const currentPlan = client.current_plan_record_id
+    ? client.treatment_plans.find((plan) => plan.id === client.current_plan_record_id) || null
+    : client.treatment_plans.find((plan) => plan.is_current) || null
+  const comparison = client.evidence_comparison
+  return [
+    {
+      label: 'Admission date',
+      date: displayDate(client.admission_date),
+      source: client.source_evidence || 'Client record',
+      confidence: client.admission_date ? 'Available' : 'Missing',
+      tone: client.admission_date ? 'success' : 'missing-data',
+    },
+    {
+      label: 'Initial TP date',
+      date: displayDate(initialPlan?.document_date),
+      source: initialPlan?.source_evidence || 'Treatment-plan record',
+      confidence: initialPlan?.is_valid ? 'Valid source' : 'Needs review',
+      tone: initialPlan?.document_date ? 'success' : 'missing-data',
+    },
+    {
+      label: 'Current plan anchor',
+      date: displayDate(comparison.date_clock_anchor_date || currentPlan?.document_date),
+      source: comparison.date_clock_anchor_source || currentPlan?.source_evidence || 'Date clock',
+      confidence: comparison.date_clock_anchor_date || currentPlan?.document_date ? 'Used for date clock' : 'Unable to evaluate',
+      tone: comparison.date_clock_anchor_date || currentPlan?.document_date ? timelinessTone(client.status) : 'unable',
+    },
+    {
+      label: 'LOC change anchor',
+      date: displayDate(comparison.loc_effective_date),
+      source: comparison.loc_change_rule_validated ? 'Validated LOC rule' : 'Unvalidated LOC rule',
+      confidence:
+        comparison.loc_change_window_days == null ? 'Window not configured' : `${comparison.loc_change_window_days} day window`,
+      tone: comparison.loc_change_rule_validated ? 'success' : 'conflicting',
+    },
+    {
+      label: 'Next required update',
+      date: displayDate(client.next_due_date || comparison.date_clock_due_date),
+      source: client.rule_used || 'Timeliness rule',
+      confidence: formatDueDelta(client.status, client.days_until_due),
+      tone: timelinessTone(client.status),
+    },
+  ]
+}
+
+function treatmentPlanSourceRows(client: TimelinessClientDetail): SourceComparisonRow[] {
+  const comparison = client.evidence_comparison
+  return [
+    {
+      field: 'Admission date',
+      manualUpload: displayDate(client.admission_date),
+      api: displayDate(comparison.date_clock_anchor_date),
+      allevaSync: client.last_imported_at ? `Imported ${formatDateTime(client.last_imported_at)}` : 'No import timestamp',
+      result: client.admission_date ? 'Available' : 'Missing data',
+      tone: client.admission_date ? 'success' : 'missing-data',
+    },
+    {
+      field: 'Source-document next review',
+      manualUpload: displayDate(comparison.document_next_due_date),
+      api: displayDate(comparison.date_clock_due_date),
+      allevaSync: displayDate(comparison.signature_anchor_due_date),
+      result: comparison.document_next_due_date ? 'Compared' : 'Missing data',
+      tone: comparison.document_next_due_date ? timelinessTone(client.status) : 'missing-data',
+    },
+    {
+      field: 'LOC-change due date',
+      manualUpload: displayDate(comparison.loc_anchor_due_date),
+      api: displayDate(comparison.loc_change_due_date),
+      allevaSync: displayDate(comparison.loc_effective_date),
+      result: comparison.loc_change_rule_validated ? 'Validated' : 'Unvalidated',
+      tone: comparison.loc_change_rule_validated ? 'success' : 'conflicting',
+    },
+    {
+      field: 'Final status',
+      manualUpload: client.evidence_summary || 'No evidence summary',
+      api: comparison.source_evidence || 'No source evidence',
+      allevaSync: client.source_confidence || 'No confidence label',
+      result: comparison.final_status,
+      tone: timelinessTone(comparison.final_status),
+    },
+  ]
 }
 
 function versionPrefix(versionInfo: VersionInfo | null) {
@@ -1852,7 +2104,7 @@ export function App() {
     const query = timelinessSearch.trim().toLowerCase()
     const items = timelinessDashboard?.items || []
     return items.filter((item) => {
-      const matchesStatus = timelinessStatusFilter === 'All' || item.status === timelinessStatusFilter
+      const matchesStatus = timelinessStatusFilter === 'All' || statusToOperationalStatus(item.status) === timelinessStatusFilter
       const matchesQuery =
         !query ||
         item.patient_id.toLowerCase().includes(query) ||
@@ -1861,6 +2113,44 @@ export function App() {
       return matchesStatus && matchesQuery
     })
   }, [timelinessDashboard, timelinessSearch, timelinessStatusFilter])
+
+  const timelinessStatusSummaries = useMemo(
+    () => buildStatusSummaries(timelinessDashboardCounts(timelinessDashboard)),
+    [timelinessDashboard],
+  )
+  const groupedTimelinessItems = useMemo(() => groupOperationalQueueItems(filteredTimelinessItems), [filteredTimelinessItems])
+  const operationalStatusText = useMemo(() => operationalStatusSentence(timelinessStatusSummaries), [timelinessStatusSummaries])
+  const sourceCards = useMemo(
+    () =>
+      sourceReadinessCards({
+        reviewSourceDiscovery,
+        appSettings,
+        noteSets,
+        readiness,
+        lastAllevaSyncResult,
+        canRunAllevaTreatmentPlanSync,
+      }),
+    [appSettings, canRunAllevaTreatmentPlanSync, lastAllevaSyncResult, noteSets, readiness, reviewSourceDiscovery],
+  )
+  const evidenceLedger = useMemo(
+    () =>
+      evidenceLedgerEntries({
+        reviewSourceDiscovery,
+        appSettings,
+        noteSets,
+        logs,
+        lastAllevaSyncResult,
+      }),
+    [appSettings, lastAllevaSyncResult, logs, noteSets, reviewSourceDiscovery],
+  )
+  const selectedTreatmentTimeline = useMemo(
+    () => (selectedTimelinessClient ? treatmentPlanTimelineSteps(selectedTimelinessClient) : []),
+    [selectedTimelinessClient],
+  )
+  const selectedSourceComparisonRows = useMemo(
+    () => (selectedTimelinessClient ? treatmentPlanSourceRows(selectedTimelinessClient) : []),
+    [selectedTimelinessClient],
+  )
 
   const exportableTimelinessTaskCount = useMemo(
     () => timelinessTaskItems(timelinessDashboard?.items || []).length,
@@ -2461,6 +2751,7 @@ export function App() {
       ])
 
       setUser(profile)
+      setStatus(`Workspace ready for ${profile.full_name || profile.username}.`)
       setProfileForm({ full_name: profile.full_name })
       applyInitialRoleView(profile)
       setCharts(chartList)
@@ -2593,6 +2884,14 @@ export function App() {
   useEffect(() => {
     if (activeView === 'timeliness' && token && user && !mustResetPassword) {
       void loadTimelinessDashboard()
+    }
+  }, [activeView, token, user, mustResetPassword])
+
+  useEffect(() => {
+    if ((activeView === 'dashboard' || activeView === 'sources') && token && user && !mustResetPassword) {
+      void loadTimelinessDashboard().catch(() => {
+        setTimelinessDashboard(null)
+      })
     }
   }, [activeView, token, user, mustResetPassword])
 
@@ -4217,7 +4516,7 @@ export function App() {
           </section>
 
           <nav className='view-tabs'>
-            {(['dashboard', 'timeliness', 'reviews', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
+            {(['dashboard', 'timeliness', 'reviews', 'sources', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
               <button
                 key={view}
                 className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
@@ -4256,35 +4555,52 @@ export function App() {
             </button>
           </nav>
 
-	          {activeView === 'dashboard' ? (
-	            <section className='dashboard-grid'>
-              <section className='panel detail-panel'>
+          {activeView === 'dashboard' ? (
+            <section className='dashboard-grid dashboard-workbench'>
+              <section className='panel detail-panel dashboard-main-panel'>
                 <div className='panel-heading'>
                   <div>
                     <h2>Summary dashboard</h2>
-                    <p>Queue health, recent throughput, and approval trends for the current workspace.</p>
+                    <p>Executive view of treatment-plan risk, source readiness, queue movement, and recent evidence events.</p>
                   </div>
                   <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
                     Refresh
                   </button>
                 </div>
 
-                <div className='dashboard-metrics'>
+                <section className='operational-status-band'>
+                  <div>
+                    <h3>Today's operational status</h3>
+                    <p>{operationalStatusText}</p>
+                  </div>
+                  <RiskStatusStrip
+                    summaries={timelinessStatusSummaries}
+                    activeFilter={timelinessStatusFilter}
+                    allCount={timelinessDashboard?.items.length ?? 0}
+                    onSelect={(filter) => {
+                      setTimelinessStatusFilter(filter)
+                      changeView('timeliness')
+                    }}
+                    label='Dashboard treatment-plan risk status'
+                  />
+                </section>
+
+                <div className='dashboard-metrics dashboard-metrics--operations'>
                   <article className='mini-card'>
-                    <span>Active binders</span>
-                    <strong>{activeBinders}</strong>
+                    <span>Active clients</span>
+                    <strong>{timelinessDashboard?.total_active_clients ?? activeBinders}</strong>
+                  </article>
+                  <article className='mini-card mini-card--danger'>
+                    <span>Overdue</span>
+                    <strong>{timelinessDashboard?.overdue ?? 0}</strong>
+                  </article>
+                  <article className='mini-card mini-card--warning'>
+                    <span>Urgent</span>
+                    <strong>{timelinessDashboard?.urgent ?? 0}</strong>
                   </article>
                   <article className='mini-card'>
                     <span>Manager queue</span>
                     <strong>{totalAwaiting}</strong>
-                  </article>
-                  <article className='mini-card'>
-                    <span>Returned for correction</span>
-                    <strong>{totalWaitingReverification}</strong>
-                  </article>
-                  <article className='mini-card'>
-                    <span>Current user</span>
-                    <strong>{user?.full_name || user?.username}</strong>
                   </article>
                   <article className='mini-card'>
                     <span>Checklist</span>
@@ -4292,191 +4608,161 @@ export function App() {
                   </article>
                 </div>
 
-                <div className='trend-grid'>
-                  {renderTrendCard('New evaluations', newEvaluationTrend)}
-                  {renderTrendCard('Approvals', approvalTrend)}
-                  {renderTrendCard('Re-verification queue', reverificationTrend)}
-                  {renderTrendCard('Binder uploads', uploadTrend)}
-                </div>
-
-                <section className='panel-subsection'>
-                  <h3>Review source</h3>
-                  <div className='source-choice-grid'>
-                    <article className='finding-card source-mode-card'>
-                      <div className='finding-card__header'>
-                        <strong>EMR/API access</strong>
-                        <span className='pill pill--warning'>{reviewSourceDiscovery?.api_mode_label || 'Mock/stub mode'}</span>
-                      </div>
-                      <p>{reviewSourceDiscovery?.plain_english_status || 'API discovery stays in mock/readiness mode until vendor credentials, endpoint mapping, and compliance approval are complete.'}</p>
-                      <dl className='source-mode-facts'>
+                <section className='panel-subsection source-readiness-preview'>
+                  <div className='panel-heading'>
+                    <div>
+                      <h3>Source readiness</h3>
+                      <p>Manual upload, API readiness, and gated Alleva sync share one evidence model.</p>
+                    </div>
+                    <button type='button' className='ghost-button' onClick={() => changeView('sources')}>
+                      Open source readiness
+                    </button>
+                  </div>
+                  <div className='source-readiness-preview__grid'>
+                    {sourceCards.map((card) => (
+                      <article key={card.title} className={`source-readiness-preview__card source-readiness-preview__card--${card.tone}`}>
                         <div>
-                          <dt>Daily monitoring</dt>
-                          <dd>{reviewSourceDiscovery?.daily_monitoring_enabled ? 'Readiness schedule available' : 'Simulated until live approval'}</dd>
+                          <strong>{card.title}</strong>
+                          <span className={`pill pill--${card.tone}`}>{card.state}</span>
                         </div>
-                        <div>
-                          <dt>Last refresh</dt>
-                          <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.last_refresh_at) : 'Not run'}</dd>
-                        </div>
-                        <div>
-                          <dt>Last safe check</dt>
-                          <dd>{reviewSourceDiscovery?.last_successful_check_at ? formatDateTime(reviewSourceDiscovery.last_successful_check_at) : 'Not run'}</dd>
-                        </div>
-                        <div>
-                          <dt>Next refresh</dt>
-                          <dd>{reviewSourceDiscovery ? formatDateTime(reviewSourceDiscovery.next_refresh_at) : 'After configuration'}</dd>
-                        </div>
-                        <div>
-                          <dt>Needs follow-up</dt>
-                          <dd>{reviewSourceDiscovery?.notification_badge_count ?? reviewSourceApiItems}</dd>
-                        </div>
-                      </dl>
-                      <div className='decision-actions'>
-                        {canRunAllevaTreatmentPlanSync ? (
-                          <button type='button' onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })} disabled={isBusy}>
-                            Retrieve Active Treatment Plans
-                          </button>
-                        ) : null}
-                        <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
-                          Open Treatment plans
-                        </button>
-                        {user?.role === 'admin' || user?.role === 'manager' ? (
-                          <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy}>
-                            Run safe API readiness check
-                          </button>
-                        ) : null}
-                        {user?.role === 'admin' ? (
-                          <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
-                            Open API settings
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                    <article className='finding-card source-mode-card'>
-                      <div className='finding-card__header'>
-                        <strong>Manual upload</strong>
-                        <span className='pill pill--success'>Available</span>
-                      </div>
-                      <p>{reviewSourceDiscovery?.manual_mode_message || 'Upload exported treatment plans and clinical note binders, then review findings using the same checklist workflow.'}</p>
-                      <dl className='source-mode-facts'>
-                        <div>
-                          <dt>Cadence</dt>
-                          <dd>Monthly compliance-check fallback</dd>
-                        </div>
-                        <div>
-                          <dt>Active uploads</dt>
-                          <dd>{activeBinders}</dd>
-                        </div>
-                        <div>
-                          <dt>Shared workflow</dt>
-                          <dd>{reviewSourceUploadItems} routed item{reviewSourceUploadItems === 1 ? '' : 's'}</dd>
-                        </div>
-                        <div>
-                          <dt>Snapshot warning</dt>
-                          <dd>As of upload time only</dd>
-                        </div>
-                      </dl>
-                      <div className='decision-actions'>
-                        <button type='button' className='ghost-button' onClick={() => changeView('uploads')}>
-                          Upload binder
-                        </button>
-                        <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
-                          View Details
-                        </button>
-                      </div>
-                    </article>
+                        <p>{card.description}</p>
+                        <small>{card.facts.map((fact) => `${fact.label}: ${fact.value}`).slice(0, 2).join(' | ')}</small>
+                      </article>
+                    ))}
+                  </div>
+                  <div className='source-readiness-legacy-labels' aria-label='Source readiness compatibility labels'>
+                    <span>Monthly compliance-check fallback</span>
+                    <span>As of upload time only</span>
                   </div>
                 </section>
-              </section>
 
-              <aside className='panel queue-panel'>
-                <section className='panel-subsection'>
-                  <h3>Quick actions</h3>
-                  <div className='quick-actions'>
-                    <button type='button' onClick={() => changeView('uploads')}>
-                      Upload binder
-                    </button>
-                    <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
-                      Open review queue
-                    </button>
+                <section className='panel-subsection dashboard-queue-preview'>
+                  <div className='panel-heading'>
+                    <div>
+                      <h3>Work queue preview</h3>
+                      <p>Risk-ordered treatment-plan work from the same queue used by the Treatment Plans page.</p>
+                    </div>
                     <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
-                      Treatment plans
+                      Open Treatment plans
                     </button>
-                    <button type='button' className='ghost-button' onClick={() => changeView('checklist')}>
-                      Checklist v1
-                    </button>
-                    <button type='button' className='ghost-button' onClick={() => changeView('profile')}>
-                      My account
-                    </button>
-                    <button type='button' className='ghost-button' onClick={() => changeView('help')}>
-                      Help
-                    </button>
-                    {user?.role === 'admin' || user?.role === 'manager' ? (
-                      <>
-                        <button type='button' className='ghost-button' onClick={() => changeView('users')}>
-                          User management
-                        </button>
-                        <button type='button' className='ghost-button' onClick={() => changeView('workflows')}>
-                          Workflow profiles
-                        </button>
-                      </>
-                    ) : null}
-                    {user?.role === 'admin' ? (
-                      <>
-                        <button type='button' className='ghost-button' onClick={() => changeView('logs')}>
-                          Forensic logs
-                        </button>
-                        <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
-                          App settings
-                        </button>
-                        <button type='button' className='danger-button' onClick={openClearPatientDataDialog} disabled={isBusy}>
-                          Clear All Patient Data
-                        </button>
-                      </>
-                    ) : null}
                   </div>
-                </section>
-
-                <section className='panel-subsection'>
-                  <h3>Current queue</h3>
-                  {charts.length ? (
-                    <ul className='queue-list'>
-                      {charts.slice(0, 5).map((chart) => (
-                        <li key={chart.id}>
-                          <button type='button' className='queue-item' data-audit-label='Open dashboard queue chart' onClick={() => void loadChartDetail(chart.id)}>
-                            <div>
-                              <strong>{chart.patient_id}</strong>
-                              <span>{chart.primary_clinician || 'Clinician pending'}</span>
-                            </div>
-                            <div className='queue-item-meta'>
-                              <span className={`pill pill--${workflowTone(chart.state)}`}>{chart.state}</span>
-                              <span>{chart.system_score}%</span>
-                            </div>
-                          </button>
-                        </li>
+                  {groupedTimelinessItems.length ? (
+                    <div className='compact-work-queue'>
+                      {groupedTimelinessItems.slice(0, 3).map((group) => (
+                        <section key={group.status} className='compact-work-queue__group'>
+                          <h4>{group.label}</h4>
+                          {group.items.slice(0, 3).map((item) => (
+                            <button
+                              type='button'
+                              key={item.id}
+                              className='compact-work-queue__row'
+                              onClick={() => {
+                                changeView('timeliness')
+                                void loadTimelinessClientDetail(item.id)
+                              }}
+                            >
+                              <span>
+                                <strong>{item.patient_id}</strong>
+                                <small>{item.current_level_of_care || 'LOC missing'}</small>
+                              </span>
+                              <span className={`pill pill--${timelinessTone(item.status)}`}>{formatDueDelta(item.status, item.days_until_due)}</span>
+                            </button>
+                          ))}
+                        </section>
                       ))}
-                    </ul>
+                    </div>
                   ) : (
-                    <p className='empty-state'>No automated reviews are in the queue yet.</p>
+                    <p className='empty-state'>No treatment-plan work queue is loaded yet.</p>
                   )}
                 </section>
 
-                {user?.role === 'admin' ? (
-                  <section className='panel-subsection admin-banner'>
-                    <h3>Administrator controls</h3>
-                    <p>
-                      User management and forensic log review are available only to the administrator. Active: {activeUserCount}, locked:{' '}
-                      {lockedUserCount}, password reset required: {resetRequiredCount}.
-                    </p>
-                    {readiness ? (
-                      <p>
-                        Runtime readiness: {readiness.status}. Failed checks: {readiness.failed}. Warnings: {readiness.warnings}.
-                      </p>
+                <section className='panel-subsection'>
+                  <div className='panel-heading'>
+                    <div>
+                      <h3>Recent evidence ledger</h3>
+                      <p>Latest source events available to the local workstation.</p>
+                    </div>
+                    {user?.role === 'admin' ? (
+                      <button type='button' className='ghost-button' onClick={() => changeView('logs')}>
+                        Forensic logs
+                      </button>
                     ) : null}
-                  </section>
-                ) : null}
+                  </div>
+                  <EvidenceLedger entries={evidenceLedger.slice(0, 4)} title='Recent evidence ledger' />
+                </section>
+              </section>
+
+              <aside className='panel queue-panel action-rail' aria-label='Dashboard action rail'>
+                <section className='action-rail__section'>
+                  <h3>Review Work</h3>
+                  <button type='button' onClick={() => changeView('timeliness')}>
+                    Treatment plans
+                  </button>
+                  <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
+                    Review queue
+                  </button>
+                  <button type='button' className='ghost-button' onClick={() => changeView('checklist')}>
+                    Checklist v1
+                  </button>
+                  <button type='button' className='ghost-button' onClick={exportTimelinessTaskList} disabled={isBusy}>
+                    Export task list
+                  </button>
+                </section>
+                <section className='action-rail__section'>
+                  <h3>Data / Source Setup</h3>
+                  <button type='button' className='ghost-button' onClick={() => changeView('uploads')}>
+                    Upload binder
+                  </button>
+                  <button type='button' className='ghost-button' onClick={() => changeView('sources')}>
+                    Source readiness
+                  </button>
+                  {user?.role === 'admin' || user?.role === 'manager' ? (
+                    <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy}>
+                      Run safe API readiness check
+                    </button>
+                  ) : null}
+                  {canRunAllevaTreatmentPlanSync ? (
+                    <button type='button' className='ghost-button' onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })} disabled={isBusy}>
+                      Retrieve Active Treatment Plans
+                    </button>
+                  ) : null}
+                </section>
+                <section className='action-rail__section'>
+                  <h3>Admin</h3>
+                  <button type='button' className='ghost-button' onClick={() => changeView('profile')}>
+                    My account
+                  </button>
+                  <button type='button' className='ghost-button' onClick={() => changeView('help')}>
+                    Help
+                  </button>
+                  {user?.role === 'admin' || user?.role === 'manager' ? (
+                    <>
+                      <button type='button' className='ghost-button' onClick={() => changeView('users')}>
+                        User management
+                      </button>
+                      <button type='button' className='ghost-button' onClick={() => changeView('workflows')}>
+                        Workflow profiles
+                      </button>
+                    </>
+                  ) : null}
+                  {user?.role === 'admin' ? (
+                    <>
+                      <button type='button' className='ghost-button' onClick={() => changeView('logs')}>
+                        Forensic logs
+                      </button>
+                      <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
+                        App settings
+                      </button>
+                      <button type='button' className='danger-button' onClick={openClearPatientDataDialog} disabled={isBusy}>
+                        Clear All Patient Data
+                      </button>
+                    </>
+                  ) : null}
+                  {readiness ? <p>Runtime readiness: {readiness.status}; failed checks {readiness.failed}; warnings {readiness.warnings}.</p> : null}
+                </section>
               </aside>
-	            </section>
-	          ) : null}
+            </section>
+          ) : null}
 
           {activeView === 'help' ? (
             <section className='panel detail-panel help-workspace'>
@@ -4534,12 +4820,13 @@ export function App() {
             </section>
           ) : null}
 
-	          {activeView === 'timeliness' ? (
-	            <section className='timeliness-workspace'>
+          {activeView === 'timeliness' ? (
+            <section className='timeliness-workspace'>
+              <h2 className='sr-only'>Treatment plan timeliness</h2>
 	              <aside className='panel queue-panel timeliness-queue-panel'>
 	                <div className='panel-heading'>
 	                  <div>
-	                    <h2>Treatment plan timeliness</h2>
+	                    <h2>Treatment Plan Workbench</h2>
 	                    <p>Evidence-first work queue updated in {timelinessBuildLabel}; compare source due dates, staff signatures, and LOC anchors before acting.</p>
 	                  </div>
 	                  <div className='button-row'>
@@ -4552,9 +4839,17 @@ export function App() {
 	                    <button type='button' className='ghost-button' onClick={() => void loadTimelinessDashboard()} disabled={isBusy}>
 	                      Refresh
 	                    </button>
+                      <button type='button' className='ghost-button' onClick={() => changeView('sources')}>
+                        Open API readiness
+                      </button>
+                      {user?.role === 'admin' ? (
+                        <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
+                          Settings
+                        </button>
+                      ) : null}
 	                    {user?.role === 'admin' ? (
 	                      <button type='button' onClick={() => void runAllevaTreatmentPlanSyncNow()} disabled={isBusy}>
-	                        Pull / refresh treatment plans
+	                        Pull / sync
 	                      </button>
 	                    ) : null}
 	                  </div>
@@ -4627,64 +4922,84 @@ export function App() {
 	                  </section>
 	                ) : null}
 
-	                <div className='timeliness-filter-strip' aria-label='Timeliness status filters'>
-	                  {TIMELINESS_FILTERS.map((filter) => (
-	                    <button
-	                      key={filter}
-	                      type='button'
-	                      className={timelinessStatusFilter === filter ? 'status-filter status-filter--active' : 'status-filter'}
-	                      aria-pressed={timelinessStatusFilter === filter}
-	                      onClick={() => setTimelinessStatusFilter(filter)}
-	                    >
-	                      <span>{filter}</span>
-	                      <strong>{timelinessFilterCount(timelinessDashboard, filter)}</strong>
-	                    </button>
-	                  ))}
-	                </div>
+                <RiskStatusStrip
+                  summaries={timelinessStatusSummaries}
+                  activeFilter={timelinessStatusFilter}
+                  allCount={timelinessFilterCount(timelinessDashboard, 'All')}
+                  onSelect={setTimelinessStatusFilter}
+                  label='Treatment plan risk status filters'
+                />
 
 	                {timelinessDashboard?.items.length ? (
 	                  <div className='timeliness-queue-table' role='table' aria-label='Treatment plan timeliness queue'>
 	                    <div className='timeliness-queue-table__head' role='row'>
+                        <span>Risk</span>
 	                      <span>Client</span>
+                        <span>LOC / program</span>
 	                      <span>Status</span>
+                        <span>Initial TP date</span>
+                        <span>Master TP due</span>
+                        <span>Last update</span>
 	                      <span>Next due</span>
-	                      <span>LOC</span>
+                        <span>Days</span>
 	                      <span>Evidence</span>
+                        <span>Source</span>
+                        <span>Reviewer</span>
+                        <span>Last checked</span>
 	                    </div>
 	                    {filteredTimelinessItems.length ? (
-	                      filteredTimelinessItems.map((item) => (
-	                        <button
-	                          type='button'
-	                          key={item.id}
-	                          className={
-	                            selectedTimelinessClientId === item.id
-	                              ? 'timeliness-queue-table__row timeliness-queue-table__row--active'
-	                              : 'timeliness-queue-table__row'
-	                          }
-                          data-audit-label='Open treatment-plan evidence'
-	                          onClick={() => void loadTimelinessClientDetail(item.id)}
-	                          aria-label={`Open ${item.patient_id} treatment plan evidence`}
-	                        >
-	                          <span>
-	                            <strong>{item.patient_id}</strong>
-	                            <small>{item.counselor_name || 'Primary clinician pending'}</small>
-	                            {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
-	                          </span>
-	                          <span>
-	                            <span className={`pill pill--${timelinessTone(item.status)}`}>{item.status}</span>
-	                            {!item.current_plan_record_id ? <small className='text-warning'>Current plan not selected</small> : null}
-	                          </span>
-	                          <span>
-	                            <strong>{item.next_due_date || 'Missing'}</strong>
-	                            <small>{item.days_until_due == null ? 'days n/a' : `${item.days_until_due} days`}</small>
-	                          </span>
-	                          <span>{item.current_level_of_care || 'Missing'}</span>
-	                          <span>
-	                            <strong>{item.evidence_completeness_percent}%</strong>
-	                            <small>{item.rule_used}</small>
-	                          </span>
-	                        </button>
-	                      ))
+                      groupedTimelinessItems.map((group) => (
+                        <section key={group.status} className='queue-group' role='rowgroup' aria-label={`${group.label} clients`}>
+                          <div className='queue-group__header' role='row'>
+                            <strong>{group.label}</strong>
+                            <span>{group.items.length} client{group.items.length === 1 ? '' : 's'}</span>
+                          </div>
+                          {group.items.map((item) => (
+                            <button
+                              type='button'
+                              key={item.id}
+                              className={
+                                selectedTimelinessClientId === item.id
+                                  ? `timeliness-queue-table__row timeliness-queue-table__row--${timelinessTone(item.status)} timeliness-queue-table__row--active`
+                                  : `timeliness-queue-table__row timeliness-queue-table__row--${timelinessTone(item.status)}`
+                              }
+                              data-audit-label='Open treatment-plan evidence'
+                              onClick={() => void loadTimelinessClientDetail(item.id)}
+                              aria-label={`Open ${item.patient_id} treatment plan evidence`}
+                            >
+                              <span className={`queue-risk-stripe queue-risk-stripe--${timelinessTone(item.status)}`} aria-hidden='true' />
+                              <span>
+                                <strong>{item.patient_id}</strong>
+                                <small>{item.counselor_name || 'Primary clinician pending'}</small>
+                                {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
+                              </span>
+                              <span>{item.current_level_of_care || 'Missing'}</span>
+                              <span>
+                                <span className={`pill pill--${timelinessTone(item.status)}`}>{statusToOperationalStatus(item.status)}</span>
+                                {!item.current_plan_record_id ? <small className='text-warning'>Current plan not selected</small> : null}
+                              </span>
+                              <span>{item.admission_date || 'Missing'}</span>
+                              <span>
+                                <strong>{item.rule_used || 'Rule unavailable'}</strong>
+                                <small>{item.current_plan_record_id ? 'Current plan selected' : 'Current plan missing'}</small>
+                              </span>
+                              <span>{displayDate(item.last_valid_review_date)}</span>
+                              <span>
+                                <strong>{item.next_due_date || 'Missing'}</strong>
+                                <small>{item.current_date || 'Evaluation date unavailable'}</small>
+                              </span>
+                              <span>{formatDueDelta(item.status, item.days_until_due)}</span>
+                              <span>
+                                <strong>{item.evidence_completeness_percent}%</strong>
+                                <small>{item.missing_evidence_fields.length ? `${item.missing_evidence_fields.length} missing` : 'Complete'}</small>
+                              </span>
+                              <span>{item.last_imported_at ? `Imported ${formatDateTime(item.last_imported_at)}` : 'Manual/source pending'}</span>
+                              <span>{item.counselor_name || 'Reviewer pending'}</span>
+                              <span>{formatDateTime(item.last_checked_at)}</span>
+                            </button>
+                          ))}
+                        </section>
+                      ))
 	                    ) : (
 	                      <p className='empty-state'>No treatment-plan clients match the current filter.</p>
 	                    )}
@@ -4700,7 +5015,7 @@ export function App() {
 	                    <div className='panel-heading'>
 	                      <div>
 	                        <h2>{selectedTimelinessClient.patient_id}</h2>
-	                        <p>{selectedTimelinessClient.patient_id}</p>
+	                        <p>{selectedTimelinessClient.current_level_of_care || 'LOC missing'} | {selectedTimelinessClient.counselor_name || 'Reviewer pending'}</p>
 	                      </div>
 	                      <div className='button-row'>
 	                        <button type='button' className='ghost-button' onClick={() => exportSelectedTimeliness('csv')}>
@@ -4715,6 +5030,10 @@ export function App() {
 	                        <span className={`pill pill--${timelinessTone(selectedTimelinessClient.status)}`}>{selectedTimelinessClient.status}</span>
 	                      </div>
 	                    </div>
+
+                    <DateEvidenceTimeline steps={selectedTreatmentTimeline} />
+
+                    <SourceComparisonTable rows={selectedSourceComparisonRows} />
 
 	                    <section className='timeliness-client-summary' aria-label='Selected treatment plan client summary'>
 	                      <div>
@@ -5187,11 +5506,104 @@ export function App() {
 	                    </section>
 	                  </>
 	                ) : (
-	                  <p className='empty-state-block'>Select a treatment-plan client to review rule results, source evidence, and overrides.</p>
+                  <EmptyTreatmentPlanDetail
+                    onPull={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })}
+                    onUpload={() => changeView('uploads')}
+                    onReadiness={() => changeView('sources')}
+                    onSettings={() => changeView('settings')}
+                    canPull={canRunAllevaTreatmentPlanSync}
+                    canOpenSettings={user?.role === 'admin'}
+                  />
 	                )}
 	              </section>
 	            </section>
 	          ) : null}
+
+          {activeView === 'sources' ? (
+            <section className='source-readiness-workspace'>
+              <header className='operational-toolbar source-readiness-toolbar'>
+                <div className='operational-toolbar__title'>
+                  <h2>Source readiness</h2>
+                  <p>Manual upload, safe API readiness, and gated Alleva treatment-plan sync status for the local workstation.</p>
+                </div>
+                <div className='operational-toolbar__controls'>
+                  <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
+                    Refresh
+                  </button>
+                  <button type='button' className='ghost-button' onClick={() => changeView('uploads')}>
+                    Upload binder
+                  </button>
+                  {user?.role === 'admin' || user?.role === 'manager' ? (
+                    <button type='button' className='ghost-button' onClick={() => void runDailyReviewSourceCheck()} disabled={isBusy}>
+                      Run safe API readiness check
+                    </button>
+                  ) : null}
+                  {user?.role === 'admin' ? (
+                    <button type='button' onClick={() => void runAllevaTreatmentPlanSyncNow({ revealTimeliness: true })} disabled={isBusy}>
+                      Retrieve Active Treatment Plans
+                    </button>
+                  ) : null}
+                </div>
+              </header>
+
+              <section className='timeliness-release-banner source-readiness-boundary' role='status' aria-label='Alleva live sync boundary'>
+                <strong>Alleva live import remains gated</strong>
+                <span>Live patient import is disabled until approval, credentials, endpoint mapping, pagination, rate limits, and compliance review are complete.</span>
+              </section>
+
+              <div className='source-readiness-grid'>
+                {sourceCards.map((card) => (
+                  <SourceReadinessCard key={card.title} source={card} />
+                ))}
+              </div>
+
+              <section className='source-readiness-layout'>
+                <EvidenceLedger entries={evidenceLedger} />
+                <aside className='panel source-readiness-summary'>
+                  <h3>Readiness facts</h3>
+                  <dl className='source-mode-facts'>
+                    <div>
+                      <dt>API mode</dt>
+                      <dd>{reviewSourceDiscovery?.api_mode_label || 'Mock/stub mode'}</dd>
+                    </div>
+                    <div>
+                      <dt>Manual cadence</dt>
+                      <dd>{reviewSourceDiscovery?.manual_review_cadence || 'Monthly compliance-check fallback'}</dd>
+                    </div>
+                    <div>
+                      <dt>Upload freshness</dt>
+                      <dd>As of upload time only</dd>
+                    </div>
+                    <div>
+                      <dt>Needs follow-up</dt>
+                      <dd>{reviewSourceDiscovery?.notification_badge_count ?? reviewSourceApiItems}</dd>
+                    </div>
+                    <div>
+                      <dt>Routed manual items</dt>
+                      <dd>{reviewSourceUploadItems}</dd>
+                    </div>
+                    <div>
+                      <dt>LOC change window</dt>
+                      <dd>
+                        {timelinessDashboard?.loc_change_window_days == null ? 'Not configured' : `${timelinessDashboard.loc_change_window_days} days`};{' '}
+                        {timelinessDashboard?.loc_change_window_validated ? 'validated' : 'unvalidated'}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className='button-row'>
+                    <button type='button' className='ghost-button' onClick={() => changeView('timeliness')}>
+                      Open Treatment plans
+                    </button>
+                    {user?.role === 'admin' ? (
+                      <button type='button' className='ghost-button' onClick={() => changeView('settings')}>
+                        Open API settings
+                      </button>
+                    ) : null}
+                  </div>
+                </aside>
+              </section>
+            </section>
+          ) : null}
 
           {activeView === 'checklist' ? (
             <section className='panel detail-panel'>
