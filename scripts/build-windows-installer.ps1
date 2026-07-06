@@ -390,6 +390,7 @@ function Assert-ReleaseRequiredItems {
         'app\frontend\dist',
         'app\frontend\dist\index.html',
         'app\docs\patient-treatment-plan-handling.md',
+        'app\docs\beta-client-test-run-guide.md',
         'app\scripts',
         'Install-IZ-Clinical-Notes-Analyzer.cmd',
         'Launch-IZ-Clinical-Notes-Analyzer.cmd',
@@ -864,6 +865,7 @@ try {
         uninstall_command = 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
         complete_uninstall_command = 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
         treatment_plan_handling_reference = 'app\docs\patient-treatment-plan-handling.md'
+        beta_client_test_run_guide = 'app\docs\beta-client-test-run-guide.md'
         treatment_plan_compliance_engine = 'local deterministic timeliness and checklist evaluation'
         frontend_dist_validated = $true
         forbidden_file_scan = 'passed'

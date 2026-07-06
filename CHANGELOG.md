@@ -4,7 +4,10 @@
 
 ### Changed
 - Promoted current app metadata to beta `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
+- Simplified the app shell so the primary navigation focuses on `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with support/admin pages as smaller shortcuts.
+- Bounded global and Alleva treatment-plan lookup status/results so long messages scroll inside the status/result areas instead of pushing lower page content below the viewport.
 - Added non-technical no-admin Windows install, backup, diagnostics, data-preserving uninstall, and complete-uninstall documentation.
+- Added `docs/beta-client-test-run-guide.md` as the non-technical first beta client test-run guide and made the Windows release builder require it in the package.
 - Added packaged backup and complete-uninstall helper scripts and wired them into the Windows release-folder builder.
 - Added selected-client 42-step Treatment Plans checklist evaluation details and included those results in selected treatment-plan CSV/JSON exports.
 - Added `docs/patient-treatment-plan-handling.md` as the current map for manual-upload treatment plans, gated Alleva REST sync, patient treatment-plan aggregates, local tables, deterministic evaluation, checklist output, content-fact privacy handling, API routes, and Treatment Plans UI locations.
@@ -12,6 +15,7 @@
 - Kept Treatment Plan Checklist content version separate at `1.2.0`.
 
 ### Verified
+- Added focused regression coverage that source-document due-date disagreement without a validated LOC-change explanation remains a `Needs Review` treatment-plan outcome with `TP-DUE-DATE-CONFLICT`.
 - Pending target-laptop packaged install, backup, and uninstall validation with synthetic data.
 
 ## 1.4.4 - 2026-06-19

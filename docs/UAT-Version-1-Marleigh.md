@@ -4,7 +4,9 @@ Use synthetic data only for this script.
 
 Current beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
-Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds Patient-ID-only privacy hardening, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, redacted diagnostics, and REST/OpenAPI/HL7-readiness-only Alleva setup.
+Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds Patient-ID-only privacy hardening, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, redacted diagnostics, REST/OpenAPI/HL7-readiness-only Alleva setup, simplified primary navigation, bounded lookup status/results, and the non-technical `docs\beta-client-test-run-guide.md`.
+
+Before starting the numbered script, confirm the prepared release includes `app\docs\beta-client-test-run-guide.md` and that the tester has the secure first sign-in instructions.
 
 1. Install the app with `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 2. Launch from the Start Menu shortcut.
@@ -19,10 +21,10 @@ Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app versio
 11. Confirm the app footer also shows `Beta v1.4.6-beta.1`.
 12. Confirm the Review source section shows EMR/API access, Manual upload, and `Retrieve Active Treatment Plans`.
 13. Open Treatment plans.
-14. Confirm the updated evidence queue banner is visible, the selected-client current treatment-plan content summary and 42-step checklist evaluation open in Treatment Plans, and the footer shows `Beta v1.4.6-beta.1`.
+14. Confirm the updated evidence queue banner is visible, the selected-client current treatment-plan content summary and 42-step checklist evaluation open in Treatment Plans, the primary navigation shows `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, and the footer shows `Beta v1.4.6-beta.1`.
 15. Confirm mock/API readiness or synthetic treatment-plan items are visible when live API credentials are not configured.
 16. Select a treatment-plan item.
-17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison.
+17. Review rule results, evidence, and the source-document/date-clock/LOC-change due-date comparison. If source-document next-due evidence disagrees with the date-clock due date, confirm the item stays in a review/error state instead of silently becoming compliant.
 18. Add manager status/comments to at least two checklist criteria using synthetic text and save.
 19. Export the counselor action list and confirm it includes the selected criteria, manager comments, dates/status context, and no secrets.
 20. Add a manual override comment using synthetic text.
@@ -53,7 +55,7 @@ Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app versio
 45. Upload a synthetic file whose text includes a fake patient name/address and confirm the UI still labels the chart with Patient ID only.
 46. Export CSV/JSON reports and confirm patient names, addresses, original local filenames, source attachment URLs, and secrets are absent.
 47. Run `IZ Clinical Notes Analyzer Diagnostics` and confirm the zip is created under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`.
-48. Review `docs\admin-access-reset.md` and confirm the local admin recovery guidance is understandable for an authorized admin.
+48. Review `docs\admin-access-reset.md` and `docs\beta-client-test-run-guide.md` and confirm the local admin recovery and non-technical beta-run guidance are understandable.
 49. Confirm the Beta 1.4.6-beta.1 local recovery utility exists at `scripts\update-local-admin.ps1`.
 50. In App settings, confirm Alleva REST treatment-plan sync has its own base URL/OpenAPI/startup controls and remains gated by approval plus endpoint mapping validation.
 51. Close the browser and app window.

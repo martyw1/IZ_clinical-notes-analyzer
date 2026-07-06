@@ -33,7 +33,7 @@ The normal build:
 - verifies `frontend\dist\index.html` and built JS/CSS assets exist
 - creates the release folder and zip under `dist\windows-release`
 - validates required release files
-- validates that `app\docs\patient-treatment-plan-handling.md` is included in the release folder
+- validates that `app\docs\patient-treatment-plan-handling.md` and `app\docs\beta-client-test-run-guide.md` are included in the release folder
 - scans the release folder and zip for forbidden local files
 
 On success, the window prints:
@@ -133,6 +133,8 @@ Normal installs preserve existing `.env`, local database, uploads, exports,
 reports, and logs.
 
 The release includes `app\docs\patient-treatment-plan-handling.md`, the current reference for how patient treatment-plan data moves from manual upload or approved Alleva sync into local storage, deterministic timeliness status, aggregate diagnostics, and the Treatment Plans screen.
+
+The release also includes `app\docs\beta-client-test-run-guide.md`, the non-technical first beta client test-run guide for install checks, day-of-test workflow, lookup status behavior, treatment-plan review expectations, diagnostics, backup, and maintenance.
 
 ### Launch
 

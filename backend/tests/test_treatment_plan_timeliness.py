@@ -88,6 +88,7 @@ def _single_loc_client_payload(
     *,
     loc: str = 'PHP',
     review_date: str = '2026-05-01',
+    displayed_next_due_date: str = '',
     is_active: bool = True,
 ):
     return {
@@ -127,6 +128,7 @@ def _single_loc_client_payload(
                 'document_date': review_date,
                 'staff_signature_date': review_date,
                 'client_signature_date': '',
+                'displayed_next_due_date': displayed_next_due_date,
                 'source_evidence': 'Treatment Plan Review synthetic record',
                 'source_section': 'Treatment Plan Reviews',
             },
@@ -225,6 +227,36 @@ def test_timeliness_due_date_conflict_stays_needs_review(app_with_sqlite):
         assert payload['evidence_comparison']['loc_change_due_date'] == '2026-04-06'
         assert payload['evidence_comparison']['loc_change_window_days'] == 7
         assert 'LOC-change due date is 2026-04-06' in payload['evidence_comparison']['conflict_explanation']
+        assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
+
+
+def test_timeliness_source_due_date_disagreement_requires_review_without_loc_change(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        created = client.post(
+            '/api/timeliness/clients',
+            headers=headers,
+            json=_single_loc_client_payload(
+                patient_id='PAT-SOURCE-DUE-CONFLICT',
+                loc='PHP',
+                review_date='2026-05-01',
+                displayed_next_due_date='2026-07-15',
+            ),
+        )
+        assert created.status_code == 200
+
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}?evaluation_date=2026-05-20", headers=headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload['status'] == 'Needs Review'
+        assert payload['next_due_date'] == '2026-05-31'
+        assert payload['days_until_due'] == 11
+        assert payload['rule_used'] == 'TP-DUE-DATE-CONFLICT'
+        assert payload['evidence_comparison']['document_next_due_date'] == '2026-07-15'
+        assert payload['evidence_comparison']['signature_anchor_due_date'] == '2026-05-31'
+        assert payload['evidence_comparison']['loc_change_due_date'] is None
         assert any(result['rule_id'] == 'TP-DUE-DATE-CONFLICT' for result in payload['rule_results'])
 
 

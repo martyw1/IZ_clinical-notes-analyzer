@@ -1,6 +1,6 @@
 # Operations Runbook
 
-Date: 2026-06-30
+Date: 2026-07-06
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
@@ -36,10 +36,13 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 ## Treatment Plan Timeliness operations
 
 - Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
+- The primary navigation should show the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`; less-frequent support/admin pages should appear as smaller shortcuts.
 - Use `docs\patient-treatment-plan-handling.md` as the implementation map for treatment-plan storage, sync, aggregate, deterministic evaluation, selected-client checklist results, and UI code locations.
 - The queue uses deterministic rules and current Beta 1.4.6-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
 - The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
+- If source-document next-due evidence disagrees with the date-clock due date and there is no validated LOC-change anchor, the expected result is a review/error state such as `Needs Review`, not silent compliance.
 - The selected-client detail also shows current treatment-plan content counts/facts, data-quality warnings, source confidence, current-plan selection, LOC history, treatment-plan evidence, rule results, 42-step checklist rows, manager notes, and manual overrides.
+- Alleva/API lookup status and result details should remain inside bounded scroll areas so lookup progress does not expand the page and hide lower controls.
 - Managers can save status/comments on each selected-client 42-step checklist criterion and export a counselor action CSV for that client.
 - Review Queue remains the generated/manual uploaded-binder chart-review workbench. Treatment Plans remains the active due-date/timeliness work queue.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.

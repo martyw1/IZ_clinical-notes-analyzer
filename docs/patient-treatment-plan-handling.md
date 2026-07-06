@@ -1,6 +1,6 @@
 # Patient Treatment Plan Handling
 
-Date: 2026-07-01
+Date: 2026-07-06
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
 
@@ -120,8 +120,11 @@ Treatment Plans tab:
 - `frontend/src/App.tsx` renders the `timeliness` view.
 - Admins and office managers can open the Treatment Plans queue. Counselors do not have queue access because explicit counselor ownership is not modeled in the treatment-plan table.
 - Admins see `Pull / refresh treatment plans`, which calls the gated Alleva REST sync route.
+- The app shell keeps the daily work areas in the primary navigation: `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`. Less-frequent support/admin pages are secondary shortcuts.
 - The queue shows active clients, status, next due date, current LOC, evidence completeness, current-plan selection, and data-quality warnings.
 - Selected-client detail shows the current treatment-plan content summary, evidence comparison, LOC history, treatment-plan evidence, rule results, 42-step checklist evaluation, manager notes, manual overrides, audit history, and export actions.
+- Alleva/API lookup status and lookup result rows are bounded inside the treatment-plan lookup panel so progress messages and long diagnostics do not expand the page and hide lower treatment-plan details.
+- When source-document `Next Review Due` disagrees with the computed date-clock due date and no validated LOC-change cadence explains the difference, the evaluator should keep the item in a review/error state such as `Needs Review` with `TP-DUE-DATE-CONFLICT`; it must not silently treat the item as compliant.
 
 API routes:
 
@@ -178,10 +181,12 @@ npm run test -- --run
 npm run build
 ```
 
+Regression coverage should include source-document due-date disagreement, missing admission or LOC evidence, LOC-change unresolved behavior, selected-client checklist payloads, manager criterion notes, bounded lookup status display, and release-package doc inclusion.
+
 Packaging validation should use:
 
 ```powershell
 .\Build-IZ-Windows-Installer.cmd
 ```
 
-The release build must include `docs\patient-treatment-plan-handling.md`, built frontend assets, install/launch/diagnostics/backup/uninstall commands, and must scan the folder and zip to exclude local `.env`, databases, uploads, logs, API tokens, raw vendor credentials, and other generated or sensitive files.
+The release build must include `docs\patient-treatment-plan-handling.md`, `docs\beta-client-test-run-guide.md`, built frontend assets, install/launch/diagnostics/backup/uninstall commands, and must scan the folder and zip to exclude local `.env`, databases, uploads, logs, API tokens, raw vendor credentials, and other generated or sensitive files.

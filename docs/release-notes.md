@@ -12,6 +12,14 @@ Build: `2026.06.30.1`
 
 Version metadata name: `Beta 1.4.6-beta.1 Windows no-admin install readiness`
 
+Post-build beta-readiness update on 2026-07-06:
+
+- Simplifies the app shell navigation so daily work starts with `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, while less-frequent support/admin pages appear as smaller shortcuts.
+- Bounds global and Alleva treatment-plan lookup status/results so long progress or diagnostic text scrolls within the status/result areas instead of pushing lower page content below the viewport.
+- Adds regression coverage that source-document due-date disagreement without a validated LOC-change explanation remains a `Needs Review` treatment-plan outcome with `TP-DUE-DATE-CONFLICT`.
+- Adds `docs\beta-client-test-run-guide.md` for non-technical first beta client install, launch checks, treatment-plan review expectations, lookup status behavior, diagnostics, backup, maintenance, and known beta boundaries.
+- Updates release packaging validation and manifest metadata so the beta client test-run guide is included alongside `docs\patient-treatment-plan-handling.md`.
+
 Summary:
 
 - Aligns version metadata and active docs to `1.4.6-beta.1` / build `2026.06.30.1`.

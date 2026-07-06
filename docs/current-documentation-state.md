@@ -1,6 +1,6 @@
 # Current Documentation State
 
-Date: 2026-07-04
+Date: 2026-07-06
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
 
@@ -23,7 +23,10 @@ Historical validation reports, PRD notes, and earlier implementation analyses ma
 - `config\checklists\treatment-plan-v1.json` remains the canonical 42-step checklist source.
 - Checklist content version remains `1.2.0`; app version remains separate at `1.4.6-beta.1`.
 - The Treatment Plans tab is the admin/office-manager Treatment Plan Timeliness work queue.
+- The primary navigation is intentionally limited to the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`; less-frequent support/admin pages are smaller shortcuts.
 - The selected-client detail includes the `42-Step Checklist Evaluation`, source evidence, date-clock results, current-plan content summary, manager criterion status/comments, manual overrides, audit context, and CSV/JSON export paths.
+- Alleva/API treatment-plan lookup status and lookup results should stay inside bounded scroll areas so long progress/diagnostic text does not push lower content below the viewport.
+- Source-document due-date disagreement without a validated LOC-change explanation remains a review/error outcome such as `Needs Review`, not silent compliance.
 - Patient ID is the only accepted patient identifier for current upload/import/display/export/log workflows. Patient names, addresses, contact details, original filenames, attachment URLs, and author/custodian labels must not be local display labels or matching keys.
 - Alleva patient-name import/display remains opt-in and off by default. Name-only matching remains disabled by default and validation-only.
 - The LOC-change treatment-plan update window remains unresolved. The app keeps the manager-editable 7-calendar-day preset, but docs and UI must continue marking the rule as unvalidated until R3/Marleigh confirms the exact rule.
@@ -87,6 +90,7 @@ Use these as the active documentation set:
 - `README.md`
 - `CHANGELOG.md`
 - `docs\release-notes.md`
+- `docs\beta-client-test-run-guide.md`
 - `docs\Windows-User-Guide-Version-1.md`
 - `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
 - `docs\windows-installer-build-and-install.md`

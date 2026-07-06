@@ -917,6 +917,10 @@ const VIEW_LABELS: Record<AppView, string> = {
 }
 
 const APP_VIEWS: AppView[] = ['dashboard', 'timeliness', 'reviews', 'sources', 'checklist', 'uploads', 'profile', 'users', 'workflows', 'logs', 'settings', 'help']
+const PRIMARY_WORKFLOW_VIEWS: readonly AppView[] = ['dashboard', 'timeliness', 'reviews', 'uploads']
+const SUPPORT_WORKFLOW_VIEWS: readonly AppView[] = ['sources', 'checklist', 'help', 'profile']
+const MANAGER_WORKFLOW_VIEWS: readonly AppView[] = ['users', 'workflows']
+const ADMIN_WORKFLOW_VIEWS: readonly AppView[] = ['logs', 'settings']
 
 const TRANSITIONS: Record<Role, Partial<Record<WorkflowState, TransitionAction[]>>> = {
   admin: {
@@ -4401,10 +4405,12 @@ export function App() {
             Local-first compliance workspace for treatment-plan timeliness, deterministic checklist review, manual upload, workflow queues, and API readiness.
           </p>
         </div>
-        <div className='status-card'>
+        <div className='status-card' role='status' aria-live='polite' aria-label='Current app status'>
           <h2>Current status</h2>
-          <p>{status}</p>
-          {error ? <p className='error-text'>{error}</p> : null}
+          <div className='status-card__messages'>
+            <p>{status}</p>
+            {error ? <p className='error-text'>{error}</p> : null}
+          </div>
           {user ? (
             <div className='status-meta'>
               <span>{user.full_name || user.username}</span>
@@ -4515,45 +4521,59 @@ export function App() {
             </article>
           </section>
 
-          <nav className='view-tabs'>
-            {(['dashboard', 'timeliness', 'reviews', 'sources', 'checklist', 'uploads', 'profile', 'help'] as AppView[]).map((view) => (
-              <button
-                key={view}
-                className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
-                onClick={() => changeView(view)}
-                type='button'
-              >
-                {VIEW_LABELS[view]}
+          <div className='view-tabs'>
+            <nav className='view-tabs__primary' aria-label='Primary workflow'>
+              {PRIMARY_WORKFLOW_VIEWS.map((view) => (
+                <button
+                  key={view}
+                  className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
+                  onClick={() => changeView(view)}
+                  type='button'
+                >
+                  {VIEW_LABELS[view]}
+                </button>
+              ))}
+            </nav>
+            <div className='view-tabs__secondary' aria-label='Support and administration shortcuts'>
+              {SUPPORT_WORKFLOW_VIEWS.map((view) => (
+                <button
+                  key={view}
+                  className={activeView === view ? 'utility-nav-button utility-nav-button--active' : 'utility-nav-button'}
+                  onClick={() => changeView(view)}
+                  type='button'
+                >
+                  {VIEW_LABELS[view]}
+                </button>
+              ))}
+              {user?.role === 'admin' || user?.role === 'manager'
+                ? MANAGER_WORKFLOW_VIEWS.map((view) => (
+                    <button
+                      key={view}
+                      className={activeView === view ? 'utility-nav-button utility-nav-button--active' : 'utility-nav-button'}
+                      onClick={() => changeView(view)}
+                      type='button'
+                    >
+                      {VIEW_LABELS[view]}
+                    </button>
+                  ))
+                : null}
+              {user?.role === 'admin'
+                ? ADMIN_WORKFLOW_VIEWS.map((view) => (
+                    <button
+                      key={view}
+                      className={activeView === view ? 'utility-nav-button utility-nav-button--active' : 'utility-nav-button'}
+                      onClick={() => changeView(view)}
+                      type='button'
+                    >
+                      {VIEW_LABELS[view]}
+                    </button>
+                  ))
+                : null}
+              <button className='utility-nav-button utility-nav-button--signout' onClick={handleSignOut} type='button'>
+                Sign out
               </button>
-            ))}
-            {user?.role === 'admin' || user?.role === 'manager'
-              ? (['users', 'workflows'] as AppView[]).map((view) => (
-                  <button
-                    key={view}
-                    className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
-                    onClick={() => changeView(view)}
-                    type='button'
-                  >
-                    {VIEW_LABELS[view]}
-                  </button>
-                ))
-              : null}
-            {user?.role === 'admin'
-              ? (['logs', 'settings'] as AppView[]).map((view) => (
-                  <button
-                    key={view}
-                    className={activeView === view ? 'tab-button tab-button--active' : 'tab-button'}
-                    onClick={() => changeView(view)}
-                    type='button'
-                  >
-                    {VIEW_LABELS[view]}
-                  </button>
-                ))
-              : null}
-            <button className='tab-button' onClick={handleSignOut} type='button'>
-              Sign out
-            </button>
-          </nav>
+            </div>
+          </div>
 
           {activeView === 'dashboard' ? (
             <section className='dashboard-grid dashboard-workbench'>

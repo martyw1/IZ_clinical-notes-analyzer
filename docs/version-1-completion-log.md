@@ -1,5 +1,13 @@
 # Version 1 Completion Log
 
+## 2026-07-06 1.4.6-beta.1 Beta Client Usability Readiness
+
+- Simplified app-shell navigation around the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with less-frequent support/admin pages as secondary shortcuts.
+- Bounded global status and Alleva treatment-plan lookup status/results so long progress or diagnostic text stays inside the status/result areas instead of pushing lower content below the viewport.
+- Added a treatment-plan timeliness regression for source-document due-date disagreement without validated LOC-change evidence, preserving the `Needs Review` / `TP-DUE-DATE-CONFLICT` outcome.
+- Added `docs/beta-client-test-run-guide.md` and required it in the Windows release package alongside `docs/patient-treatment-plan-handling.md`.
+- Updated active non-technical, deployment, runbook, UAT, documentation-state, codebase-map, release-note, and changelog guidance for the first client beta run.
+
 ## 2026-06-23 1.4.5-beta.1 R3 Beta-Client Readiness
 
 - Updated app/version metadata to `1.4.5-beta.1` / build `2026.06.23.1`.

@@ -42,15 +42,19 @@ type Props = {
 export function AllevaPatientTreatmentPlanPanel({ pullState, patientId, onPatientIdChange, onLoadPatient, onLoadActivePatients, isBusy }: Props) {
   const rows = pullState.result?.rows || []
   return (
-    <section className='panel-subsection' aria-label='Alleva synced patient treatment-plan aggregate'>
+    <section className='panel-subsection alleva-lookup-panel' aria-label='Alleva synced patient treatment-plan aggregate'>
       <div className='panel-heading'>
         <div>
           <h3>Alleva synced treatment-plan record</h3>
           <p>Patient-centered aggregate from the reviewed Alleva REST contract.</p>
         </div>
+        <div className='compact-status-frame compact-status-frame--lookup' role='status' aria-label='Alleva patient treatment-plan pull status'>
+          <strong>{pullState.status}</strong>
+          <pre>{pullState.message}</pre>
+        </div>
       </div>
       <form
-        className='form-grid'
+        className='form-grid alleva-lookup-form'
         onSubmit={(event) => {
           event.preventDefault()
           onLoadPatient()
@@ -67,12 +71,8 @@ export function AllevaPatientTreatmentPlanPanel({ pullState, patientId, onPatien
           Load active patient-centered records
         </button>
       </form>
-      <div className='compact-status-frame' role='status' aria-label='Alleva patient treatment-plan pull status'>
-        <strong>{pullState.status}</strong>
-        <pre>{pullState.message}</pre>
-      </div>
       {pullState.result ? (
-        <dl className='finding-card finding-card--compact'>
+        <dl className='finding-card finding-card--compact alleva-lookup-summary'>
           <AllevaField label='report' value={pullState.result.report} />
           <AllevaField label='source_operation' value={pullState.result.source_operation} />
           <AllevaField label='client_query_parameter' value={pullState.result.client_query_parameter} />
@@ -83,11 +83,13 @@ export function AllevaPatientTreatmentPlanPanel({ pullState, patientId, onPatien
         </dl>
       ) : null}
       {rows.length ? (
-        <div className='finding-list'>
-          {rows.map((aggregate) => (
-            <AllevaPatientTreatmentPlanAggregateCard aggregate={aggregate} key={aggregate.patient_id} />
-          ))}
-        </div>
+        <section className='alleva-lookup-results' aria-label='Alleva lookup result rows'>
+          <div className='finding-list'>
+            {rows.map((aggregate) => (
+              <AllevaPatientTreatmentPlanAggregateCard aggregate={aggregate} key={aggregate.patient_id} />
+            ))}
+          </div>
+        </section>
       ) : pullState.status === 'ready' ? (
         <p className='empty-state'>No patient-centered aggregate rows returned.</p>
       ) : null}

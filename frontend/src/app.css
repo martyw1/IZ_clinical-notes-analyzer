@@ -127,6 +127,25 @@ label {
   padding: 1.35rem;
 }
 
+.status-card {
+  align-self: start;
+  display: grid;
+  gap: 0.75rem;
+  max-height: min(22rem, calc(100vh - 4rem));
+  overflow: hidden;
+}
+
+.status-card__messages {
+  min-height: 4rem;
+  max-height: 7.5rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.status-card__messages p {
+  margin: 0 0 0.45rem;
+}
+
 .status-card h2,
 .panel h2,
 .panel h3,
@@ -151,6 +170,9 @@ label {
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   gap: 0.65rem 0.9rem;
   margin: 1rem 0 0;
+  max-height: 8rem;
+  overflow: auto;
+  padding-right: 0.25rem;
   color: #4f6258;
   font-size: 0.86rem;
 }
@@ -231,6 +253,17 @@ label {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.view-tabs__primary,
+.view-tabs__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.view-tabs__secondary {
+  justify-content: flex-end;
 }
 
 .tab-button {
@@ -1904,10 +1937,18 @@ label {
 }
 
 .view-tabs {
-  gap: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.35rem;
   padding: 0 1rem;
   background: var(--video-nav);
   border-bottom: 1px solid var(--video-nav-deep);
+}
+
+.view-tabs__primary,
+.view-tabs__secondary {
+  gap: 0;
 }
 
 .tab-button,
@@ -1922,6 +1963,26 @@ label {
 .tab-button--active {
   background: var(--video-coral);
   color: #ffffff;
+}
+
+.utility-nav-button {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #d5e4e8;
+  padding: 0.7rem 0.75rem;
+  font-size: 0.88rem;
+}
+
+.utility-nav-button:hover,
+.utility-nav-button--active {
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
+}
+
+.utility-nav-button--signout {
+  color: #ffcfc9;
 }
 
 .ghost-button {
@@ -2199,8 +2260,13 @@ label {
   .view-tabs {
     width: 100%;
     max-width: 100vw;
+    grid-template-columns: 1fr;
     overflow-x: auto;
     padding: 0;
+  }
+
+  .view-tabs__secondary {
+    justify-content: flex-start;
   }
 }
 
@@ -2585,6 +2651,44 @@ body {
 
 .compact-work-queue__row small {
   color: var(--text-muted);
+}
+
+.alleva-lookup-panel {
+  padding: 0.9rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.alleva-lookup-panel > .panel-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  align-items: start;
+}
+
+.alleva-lookup-form {
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  align-items: end;
+}
+
+.compact-status-frame--lookup {
+  max-height: 8.5rem;
+  min-height: 5.75rem;
+  overflow: hidden;
+}
+
+.compact-status-frame--lookup pre {
+  max-height: 5.25rem;
+}
+
+.alleva-lookup-summary {
+  margin: 0;
+}
+
+.alleva-lookup-results {
+  max-height: 30rem;
+  overflow: auto;
+  padding-right: 0.25rem;
 }
 
 .action-rail {
@@ -3240,6 +3344,11 @@ body {
   }
 
   .timeliness-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .alleva-lookup-panel > .panel-heading,
+  .alleva-lookup-form {
     grid-template-columns: 1fr;
   }
 

@@ -33,6 +33,7 @@ The release folder contains these double-click commands:
 - `release-manifest.json`
 - `app\` source/runtime files with built frontend assets
 - `app\docs\patient-treatment-plan-handling.md` current treatment-plan handling and code-location reference
+- `app\docs\beta-client-test-run-guide.md` non-technical first beta client test-run guide
 
 ## Installed Shortcuts
 
@@ -218,11 +219,15 @@ Before giving the release to a non-technical tester, verify on the target Window
 4. Confirm the UI footer shows `Beta v1.4.6-beta.1`.
 5. Create a synthetic upload/review/treatment-plan workflow.
 6. Confirm `app\docs\patient-treatment-plan-handling.md` is present in the release app files and matches the active treatment-plan workflow.
-7. Run Diagnostics and confirm a zip appears under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`.
-8. Run Backup and confirm a zip appears under Documents.
-9. Run data-preserving uninstall and confirm local data remains.
-10. Reinstall and confirm the prior local data is still present.
-11. Run complete uninstall on disposable data and confirm both app files and local data are removed.
+7. Confirm `app\docs\beta-client-test-run-guide.md` is present and understandable for a non-technical tester.
+8. Confirm the main navigation is limited to `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with support/admin pages presented as smaller shortcuts.
+9. Perform a synthetic or approved Alleva/API lookup and confirm long status/result text stays inside the bounded status/result areas instead of pushing page content below the viewport.
+10. Confirm a synthetic source-document due-date disagreement is shown as `Needs Review` or another review/error state instead of being treated as compliant.
+11. Run Diagnostics and confirm a zip appears under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\diagnostics`.
+12. Run Backup and confirm a zip appears under Documents.
+13. Run data-preserving uninstall and confirm local data remains.
+14. Reinstall and confirm the prior local data is still present.
+15. Run complete uninstall on disposable data and confirm both app files and local data are removed.
 
 ## Security Checks
 

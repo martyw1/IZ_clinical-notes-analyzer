@@ -67,6 +67,19 @@ If the app does not open automatically, open your browser and go to:
 http://localhost:8000
 ```
 
+## First Beta Run Checklist
+
+Use this quick check before a non-technical beta tester starts meaningful work:
+
+1. Confirm the footer says `Beta v1.4.6-beta.1`.
+2. Confirm the main navigation shows `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`.
+3. Confirm support/admin shortcuts such as `Checklist`, `Help`, `Profile`, `User management`, `Workflow profiles`, `Forensic logs`, and `App settings` appear only when your role allows them.
+4. Open `Treatment plans` and confirm the local date-clock date is visible.
+5. Perform only synthetic or approved beta-test lookups/uploads until R3 approves real PHI use.
+6. If a lookup status message is long, it should stay in the bounded status area and scroll instead of pushing the page below the screen.
+
+For the full day-of-test checklist, use `docs\beta-client-test-run-guide.md`.
+
 ## Backup
 
 Backups are important because the local settings file, database, and encrypted uploads must stay together.
@@ -151,12 +164,18 @@ After complete uninstall, the local database, encrypted uploads, settings, saved
 
 ## Main Screens
 
+The main navigation now emphasizes the four daily work areas:
+
 - Status Dashboard: summary, source selection, current queue, checklist version, EMR/API readiness, manual upload entry point, gated `Retrieve Active Treatment Plans`, and admin-only `Clear All Patient Data`.
-- Treatment plans: admin/office-manager work queue, date-clock status, source evidence, LOC-change blocker, rule results, overrides, manager notes/actions, and CSV/JSON exports.
+- Treatment plans: admin/office-manager work queue, date-clock status, source evidence, LOC-change blocker, rule results, lookup status, overrides, manager notes/actions, and CSV/JSON exports.
 - Review queue: generated/manual uploaded-binder chart review workbench.
-- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
 - Manual upload: upload files, inspect uploaded binders, download stored documents when authorized, and delete a local uploaded binder.
+
+Smaller support/admin shortcuts appear when your role allows them:
+
+- Checklist: acronym definitions, review statuses, LOC-change blocker, and the 42 Version 1.2.0 PRD steps.
 - Help: role permissions, screen guide, setup notes, API/EMR definitions, workflow guidance, and LLM setup notes.
+- Profile: your account details.
 - User management: admins can manage all roles; office managers can manage counselor accounts only; counselors manage only their own account.
 - Workflow profiles: admin/manager workflow logic screen.
 - App settings: admin-only organization, API/EMR setup, optional LLM setup, LOC-change settings, and `Clear All Patient Data`.
@@ -167,6 +186,8 @@ After complete uninstall, the local database, encrypted uploads, settings, saved
 Live Alleva patient import remains disabled until R3/Alleva approve tenant credentials, endpoint mapping, auth requirements, pagination, rate limits, attachment behavior, vendor documentation, and compliance handling.
 
 The detailed current handling reference for patient treatment plans is `docs\patient-treatment-plan-handling.md`. R3 support can use it to identify where manual uploads, approved Alleva sync, local storage, deterministic status, aggregate diagnostics, and the Treatment Plans screen are implemented.
+
+The first client beta run checklist is `docs\beta-client-test-run-guide.md`.
 
 Optional LLM behavior is disabled by default and is not required for compliance or timeliness decisions.
 

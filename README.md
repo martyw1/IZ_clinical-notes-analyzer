@@ -153,6 +153,7 @@ Diagram boundaries:
 ## Primary Docs
 
 - `docs\release-notes.md`
+- `docs\beta-client-test-run-guide.md`
 - `docs\Windows-User-Guide-Version-1.md`
 - `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
 - `docs\UAT-Version-1-Marleigh.md`
@@ -328,6 +329,8 @@ The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work qu
 
 The current implementation reference is `docs\patient-treatment-plan-handling.md`. It maps the manual-upload path, gated Alleva REST sync, patient-level aggregate, local treatment-plan tables, deterministic timeliness evaluator, 42-step selected-client checklist output, content-fact privacy boundary, and exact backend/frontend code locations.
 
+For the first client beta run, use `docs\beta-client-test-run-guide.md` as the non-technical day-of-test checklist for install, launch checks, lookup status behavior, treatment-plan review expectations, diagnostics, backup, and maintenance.
+
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
 If an uploaded or API-style pulled plan has no permitted patient name, the app creates a safe fallback display name:
@@ -386,6 +389,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `VERSION` and `VERSION.json` | Version metadata shown by `/api/version` and the UI footer |
 | `frontend\package.json` | Frontend package version metadata |
 | `docs\release-notes.md` | Current release notes and version history |
+| `docs\beta-client-test-run-guide.md` | Non-technical first beta client test-run guide |
 | `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows launcher |
 | `scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows cleanup and restart prompt |
 | `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd` | Double-click local-data backup helper |

@@ -77,16 +77,18 @@ The startup script prints the first local admin password the first time it creat
 1. Sign in as `admin`.
 2. Confirm the footer shows `Beta v1.4.6-beta.1` after the final version bump.
 3. Open `Status Dashboard` and confirm the R3 logo, EMR/API source card, Manual upload source card, and `Retrieve Active Treatment Plans` action are visible.
-4. Open `Treatment plans`.
-5. Confirm the dashboard loads, the updated evidence queue and footer version `Beta v1.4.6-beta.1` are visible, the selected-client 42-step checklist evaluation opens in Treatment Plans, manager notes can be saved on synthetic criteria, and the LOC-change window is visibly unvalidated if not confirmed.
-6. Open `App settings`.
-7. Confirm runtime readiness is not `fail`, startup treatment-plan sync is off by default, and `Clear All Patient Data` requires the exact phrase before deletion.
-8. Open `Workflow profiles` and confirm it shows `Treatment Plan Timeliness Tracker` with a published version.
-9. Use `Seed draft from 42-step checklist` to create a synthetic editable draft with no PHI.
-10. Confirm the draft snapshot and transition rules can be edited before publish and a draft can be edited in place.
-11. Publish or discard the synthetic draft according to the validation run plan.
-12. Open `Forensic logs` and confirm workflow events are present.
-13. Upload only synthetic test files if upload validation is needed.
+4. Confirm the primary navigation shows `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with support/admin pages shown as smaller shortcuts.
+5. Open `Treatment plans`.
+6. Confirm the dashboard loads, the updated evidence queue and footer version `Beta v1.4.6-beta.1` are visible, the selected-client 42-step checklist evaluation opens in Treatment Plans, manager notes can be saved on synthetic criteria, and the LOC-change window is visibly unvalidated if not confirmed.
+7. Perform a synthetic or approved lookup and confirm long lookup status/result text remains inside the bounded panel areas instead of pushing lower content below the viewport.
+8. Open `App settings`.
+9. Confirm runtime readiness is not `fail`, startup treatment-plan sync is off by default, and `Clear All Patient Data` requires the exact phrase before deletion.
+10. Open `Workflow profiles` and confirm it shows `Treatment Plan Timeliness Tracker` with a published version.
+11. Use `Seed draft from 42-step checklist` to create a synthetic editable draft with no PHI.
+12. Confirm the draft snapshot and transition rules can be edited before publish and a draft can be edited in place.
+13. Publish or discard the synthetic draft according to the validation run plan.
+14. Open `Forensic logs` and confirm workflow events are present.
+15. Upload only synthetic test files if upload validation is needed.
 
 ## Evidence to Save
 
@@ -98,7 +100,7 @@ Save these outputs locally on the Dell, outside the repository if they might con
 - `.\scripts\test-api-configuration-local.ps1 -Port 8021` final PASS output.
 - Screenshot of the app footer showing version `Beta v1.4.6-beta.1`.
 - Screenshot of the Status Dashboard with R3 logo and source cards.
-- Screenshot of the Treatment Plan Timeliness tab showing the updated evidence queue, selected-client checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`.
+- Screenshot of the Treatment Plan Timeliness tab showing simplified primary navigation, bounded lookup status/results, the updated evidence queue, selected-client checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`.
 - Screenshot of Workflow profiles showing the seeded Treatment Plan Timeliness Tracker profile and 42-step draft action.
 
 Do not save screenshots containing real PHI or real credentials.

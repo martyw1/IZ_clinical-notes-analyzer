@@ -1277,10 +1277,12 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Summary dashboard' })).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText(/Beta v1\.4\.5-beta\.1/)).toBeInTheDocument())
-    const primaryNavLabels = within(screen.getByRole('navigation'))
+    const primaryNavLabels = within(screen.getByRole('navigation', { name: 'Primary workflow' }))
       .getAllByRole('button')
       .map((button) => button.textContent)
-    expect(primaryNavLabels.slice(0, 3)).toEqual(['Status Dashboard', 'Treatment plans', 'Review queue'])
+    expect(primaryNavLabels).toEqual(['Status Dashboard', 'Treatment plans', 'Review queue', 'Manual upload'])
+    expect(screen.getByRole('status', { name: 'Current app status' })).toHaveClass('status-card')
+    expect(within(screen.getByLabelText('Support and administration shortcuts')).getByRole('button', { name: 'Checklist' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'My account' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Waiting re-verification')).toBeInTheDocument()
@@ -1500,6 +1502,9 @@ describe('App turnkey workflow', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
     await waitFor(() => expect(postedQuickPullBodies.length).toBe(1))
+    expect(screen.getByRole('status', { name: 'Alleva patient treatment-plan pull status' })).toHaveTextContent(
+      'Alleva single-patient treatment-plan pull built 1 aggregate(s) from 3 fetched record(s) using ClientId.',
+    )
     const postedQuickPullBody = postedQuickPullBodies[0]
     if (!postedQuickPullBody) throw new Error('Alleva quick-pull request was not posted.')
     const operationParameters = postedQuickPullBody.operation_parameters as Record<string, unknown>
@@ -1519,6 +1524,7 @@ describe('App turnkey workflow', () => {
     expect(operationParameters).not.toHaveProperty('clientId')
 
     const aggregate = await screen.findByTestId('alleva-patient-aggregate-307')
+    expect(screen.getByLabelText('Alleva lookup result rows')).toContainElement(aggregate)
     expect(within(aggregate).getByText('patient_id 307')).toBeInTheDocument()
     expect(within(aggregate).getByText('status_label Active - status_scope active')).toBeInTheDocument()
     expect(within(aggregate).getByText('patient.status_id')).toBeInTheDocument()
