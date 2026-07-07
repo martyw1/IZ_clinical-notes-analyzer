@@ -43,6 +43,10 @@ def test_api_configuration_treatment_plan_harness_saves_all_response_metadata(ap
         assert payload['report']['report_type'] == 'alleva_all_treatment_plans'
         assert payload['report']['result']['report'] == 'all_treatment_plans'
         assert payload['returned_count'] == 2
+        assert payload['copy_format'] == 'tsv'
+        assert payload['columns'][:3] == ['treatment_plan_id', 'patient_id', 'raw_client_ref']
+        assert payload['tsv'].splitlines()[0].startswith('treatment_plan_id\tpatient_id\traw_client_ref')
+        assert 'tp-101\tPAT-HREF-001\t/clients/PAT-HREF-001' in payload['tsv']
         assert payload['rows'][0]['description_present'] is True
         assert 'description' not in payload['rows'][0]
         assert payload['rows'][0]['content_items'][0]['kind'] == 'plan_field'
@@ -75,6 +79,54 @@ def test_api_configuration_treatment_plan_harness_saves_all_response_metadata(ap
             assert secret not in serialized
     finally:
         db.close()
+
+
+def test_api_configuration_treatment_plan_harness_counts_and_all_pages_return_tsv(app_with_sqlite, monkeypatch):
+    # Given: saved OAuth settings and a synthetic Alleva /treatment-plans payload.
+    app, _ = app_with_sqlite
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        patch_outbound_httpx(monkeypatch, TreatmentPlanHarnessHttpxClient)
+        headers = saved_client_credentials_headers(client)
+
+        # When: the admin requests a lightweight count-only report.
+        counts = client.post(
+            '/api/api-configuration/alleva-quick-pull',
+            headers=headers,
+            json={**base_body(), 'report': 'treatment_plan_counts', 'max_pages': 50},
+        )
+
+        # Then: the count response is copy/paste-ready and separates total, active, and inactive plans.
+        assert counts.status_code == 200
+        count_payload = counts.json()
+        assert count_payload['status'] == 'ok'
+        assert count_payload['copy_format'] == 'tsv'
+        assert count_payload['treatment_plan_counts'] == {
+            'total_treatment_plans': 2,
+            'active_treatment_plans': 2,
+            'inactive_treatment_plans': 0,
+        }
+        assert 'metric\tcount' in count_payload['tsv']
+        assert 'total_treatment_plans\t2' in count_payload['tsv']
+        assert 'active_treatment_plans_isActive_true\t2' in count_payload['tsv']
+        assert 'inactive_treatment_plans_isActive_false\t0' in count_payload['tsv']
+
+        # When: the admin requests the all-pages diagnostic export.
+        all_pages = client.post(
+            '/api/api-configuration/alleva-quick-pull',
+            headers=headers,
+            json={**base_body(), 'report': 'all_treatment_plans_all_pages', 'max_pages': 50},
+        )
+
+        # Then: the response uses the same TSV columns as other Section 5 exports.
+        assert all_pages.status_code == 200
+        all_pages_payload = all_pages.json()
+        assert all_pages_payload['status'] == 'ok'
+        assert all_pages_payload['copy_format'] == 'tsv'
+        assert all_pages_payload['returned_count'] == 2
+        assert all_pages_payload['tsv'].splitlines()[0].startswith('treatment_plan_id\tpatient_id\traw_client_ref')
+        assert 'tp-102\tPAT-OTHER-002\t/clients/PAT-OTHER-002' in all_pages_payload['tsv']
 
 
 def test_api_configuration_treatment_plan_harness_filters_single_patient_by_client_href(app_with_sqlite, monkeypatch):
@@ -210,6 +262,10 @@ def test_api_configuration_patient_centered_treatment_plan_harness_uses_ClientId
         assert payload['client_query_parameter'] == 'ClientId'
         assert payload['lowercase_clientId_used'] is False
         assert payload['ignored_lowercase_clientId_parameter'] is True
+        assert payload['copy_format'] == 'tsv'
+        assert payload['tsv'].splitlines()[0].startswith('patient_id\tpatient_status_id\tpatient_status_label')
+        assert '307\t1049\tActive\tactive\t10\t/clients/307\t307\tTrue\tTrue\tTrue' in payload['tsv']
+        assert '\t12\t3\t2\tunavailable\tunavailable_via_rest_without_known_review_id' in payload['tsv']
         assert payload['returned_count'] == 1
         aggregate = payload['rows'][0]
         assert aggregate['patient_id'] == '307'

@@ -12,6 +12,7 @@ from app.services.alleva_retrieval import (
     AllevaCollectionResult,
     fetch_alleva_collection,
     fetch_alleva_detail,
+    rows_to_tsv,
     text_value,
 )
 from app.services.alleva_treatment_plan_harness_models import TreatmentPlanHarnessRequest
@@ -23,6 +24,28 @@ PATIENT_CENTERED_TREATMENT_PLAN_REPORTS: Final = {
 }
 PATIENT_CENTERED_SOURCE_OPERATION: Final = 'GET /clients + GET /treatment-plans?ClientId={patient_id}'
 PatientSelection = Literal['all', 'active', 'single']
+PATIENT_CENTERED_TSV_COLUMNS: Final = [
+    'patient_id',
+    'patient_status_id',
+    'patient_status_label',
+    'patient_status_scope',
+    'treatment_plan_id',
+    'plan_client_ref',
+    'plan_client_id',
+    'join_validated',
+    'is_active',
+    'is_complete',
+    'is_initial_tp',
+    'start_date',
+    'end_date',
+    'last_modified',
+    'latest_created_active_plan_id',
+    'total_plan_count',
+    'active_plan_count',
+    'next_review_due_source',
+    'review_data_status',
+    'warnings',
+]
 
 
 def _patient_selection(report: str) -> PatientSelection:
@@ -142,6 +165,72 @@ def _fetch_error(endpoint: str, result: AllevaCollectionResult) -> dict[str, Any
     return {'endpoint': endpoint, **issue}
 
 
+def _warning_codes(aggregate: dict[str, Any], plan: dict[str, Any] | None = None) -> str:
+    warnings = aggregate.get('warnings')
+    plan_warnings = plan.get('warnings') if plan else None
+    codes: list[str] = []
+    if isinstance(warnings, list):
+        codes.extend([text_value(item.get('code')) for item in warnings if isinstance(item, dict) and text_value(item.get('code'))])
+    if isinstance(plan_warnings, list):
+        codes.extend([text_value(item.get('code')) for item in plan_warnings if isinstance(item, dict) and text_value(item.get('code'))])
+    return ', '.join(dict.fromkeys(codes))
+
+
+def _aggregate_tsv_rows(aggregates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for aggregate in aggregates:
+        base_row = {
+            'patient_id': text_value(aggregate.get('patient_id')),
+            'patient_status_id': text_value(aggregate.get('status_id')),
+            'patient_status_label': text_value(aggregate.get('status_label')),
+            'patient_status_scope': text_value(aggregate.get('status_scope')),
+            'latest_created_active_plan_id': text_value(aggregate.get('latest_created_active_plan_id')),
+            'total_plan_count': aggregate.get('total_plan_count'),
+            'active_plan_count': aggregate.get('active_plan_count'),
+            'next_review_due_source': text_value(aggregate.get('next_review_due_source')),
+            'review_data_status': text_value(aggregate.get('review_data_status')),
+        }
+        plans = aggregate.get('treatment_plans')
+        if not isinstance(plans, list) or not plans:
+            rows.append(
+                {
+                    **base_row,
+                    'treatment_plan_id': '',
+                    'plan_client_ref': '',
+                    'plan_client_id': '',
+                    'join_validated': '',
+                    'is_active': '',
+                    'is_complete': '',
+                    'is_initial_tp': '',
+                    'start_date': '',
+                    'end_date': '',
+                    'last_modified': '',
+                    'warnings': _warning_codes(aggregate),
+                }
+            )
+            continue
+        for plan in plans:
+            if not isinstance(plan, dict):
+                continue
+            rows.append(
+                {
+                    **base_row,
+                    'treatment_plan_id': text_value(plan.get('treatment_plan_id')),
+                    'plan_client_ref': text_value(plan.get('raw_client_ref')),
+                    'plan_client_id': text_value(plan.get('plan_client_id')),
+                    'join_validated': plan.get('join_validated'),
+                    'is_active': plan.get('is_active'),
+                    'is_complete': plan.get('is_complete'),
+                    'is_initial_tp': plan.get('is_initial_tp'),
+                    'start_date': text_value(plan.get('start_date')),
+                    'end_date': text_value(plan.get('end_date')),
+                    'last_modified': text_value(plan.get('last_modified')),
+                    'warnings': _warning_codes(aggregate, plan),
+                }
+            )
+    return rows
+
+
 def run_patient_centered_treatment_plan_harness_pull(request: TreatmentPlanHarnessRequest, *, today: date) -> dict[str, Any]:
     selection = _patient_selection(request.report)
     if selection == 'single' and not request.patient_id.strip():
@@ -180,6 +269,7 @@ def run_patient_centered_treatment_plan_harness_pull(request: TreatmentPlanHarne
     elif fetch_errors or not aggregates:
         status = 'warn'
     message = _message(status=status, selection=selection, aggregate_count=len(aggregates), total_records_seen=total_records_seen)
+    tsv_rows = _aggregate_tsv_rows(aggregates)
     return {
         'status': status,
         'message': message,
@@ -201,9 +291,9 @@ def run_patient_centered_treatment_plan_harness_pull(request: TreatmentPlanHarne
         'ignored_lowercase_clientId_parameter': 'clientId' in request.operation_parameters,
         'direct_patient_filter_supported': True,
         'filtering_mode': 'server_side_ClientId_query',
-        'columns': [],
-        'tsv': '',
-        'copy_format': 'json',
+        'columns': PATIENT_CENTERED_TSV_COLUMNS,
+        'tsv': rows_to_tsv(tsv_rows, PATIENT_CENTERED_TSV_COLUMNS),
+        'copy_format': 'tsv',
     }
 
 

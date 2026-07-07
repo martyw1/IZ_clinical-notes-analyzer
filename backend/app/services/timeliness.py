@@ -48,6 +48,10 @@ STATUS_PRIORITY = [
     TimelinessStatus.approved.value,
 ]
 DEFAULT_LOC_CHANGE_WINDOW_DAYS = 7
+DEFAULT_MASTER_DUE_DAYS = 30
+DEFAULT_PHP_REVIEW_INTERVAL_DAYS = 30
+DEFAULT_IOP_OP_REVIEW_INTERVAL_DAYS = 60
+IOP_OP_LEVELS = {'iop', 'iop-5', 'iop-19', 'iop-3', 'outpatient', 'op'}
 PLAN_KIND_ALIASES = {
     'initial': TreatmentPlanKind.initial,
     'initial_treatment_plan': TreatmentPlanKind.initial,
@@ -170,6 +174,21 @@ def _add_days(anchor: date | None, days: int | None) -> date | None:
 
 def _loc_change_window_days(app_settings: AppSetting) -> int:
     return app_settings.treatment_plan_loc_change_window_days if app_settings.treatment_plan_loc_change_window_days is not None else DEFAULT_LOC_CHANGE_WINDOW_DAYS
+
+
+def _setting_days(value: int | None, default: int) -> int:
+    return value if isinstance(value, int) and value >= 0 else default
+
+
+def _review_interval_days(mapped_loc: str | None, configured_interval_days: int | None, app_settings: AppSetting) -> int | None:
+    if not mapped_loc:
+        return configured_interval_days
+    normalized = mapped_loc.strip().lower()
+    if normalized == 'php':
+        return _setting_days(app_settings.treatment_plan_php_review_interval_days, configured_interval_days or DEFAULT_PHP_REVIEW_INTERVAL_DAYS)
+    if normalized in IOP_OP_LEVELS:
+        return _setting_days(app_settings.treatment_plan_iop_op_review_interval_days, configured_interval_days or DEFAULT_IOP_OP_REVIEW_INTERVAL_DAYS)
+    return configured_interval_days
 
 
 def _status_from_due_date(due_date: date | None, evaluation_date: date) -> tuple[str | None, int | None]:
@@ -413,7 +432,8 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
     rule_results: list[RuleResult] = []
 
     admission = _date(client.admission_date)
-    mapped_loc, interval_days = map_level_of_care(client.current_level_of_care)
+    mapped_loc, configured_interval_days = map_level_of_care(client.current_level_of_care)
+    interval_days = _review_interval_days(mapped_loc, configured_interval_days, app_settings)
     has_conflict = any(plan.conflict_note.strip() for plan in plans)
     latest_review = _latest_review_plan(plans)
     current_plan, current_plan_selected = _selected_current_plan(client, plans)
@@ -484,16 +504,17 @@ def evaluate_client(client: TreatmentPlanClient, app_settings: AppSetting, *, ev
             )
 
     master = _latest_plan(plans, TreatmentPlanKind.master)
+    master_due_days = _setting_days(app_settings.treatment_plan_master_due_days, DEFAULT_MASTER_DUE_DAYS)
     master_due = admission.toordinal() if admission else None
-    master_due_date = date.fromordinal(master_due + 30) if master_due is not None else None
+    master_due_date = date.fromordinal(master_due + master_due_days) if master_due is not None else None
     if master_due_date:
         if _plan_has_required_signatures(master) and (_date(master.staff_signature_date) or date.max) <= master_due_date and (_date(master.client_signature_date) or date.max) <= master_due_date:
-            rule_results.append(_result('TP-MASTER-30', 'Master Treatment Plan', master_due_date, TimelinessStatus.compliant.value, 'Master Treatment Plan was signed within 30 calendar days of admission.'))
+            rule_results.append(_result(f'TP-MASTER-{master_due_days}', 'Master Treatment Plan', master_due_date, TimelinessStatus.compliant.value, f'Master Treatment Plan was signed within {master_due_days} calendar days of admission.'))
         elif master is None:
             due_status, _ = _status_from_due_date(master_due_date, today)
-            rule_results.append(_result('TP-MASTER-30', 'Master Treatment Plan', master_due_date, due_status or TimelinessStatus.missing_data.value, 'Master Treatment Plan record is missing.'))
+            rule_results.append(_result(f'TP-MASTER-{master_due_days}', 'Master Treatment Plan', master_due_date, due_status or TimelinessStatus.missing_data.value, 'Master Treatment Plan record is missing.'))
         else:
-            rule_results.append(_result('TP-MASTER-SIGNATURES', 'Master Treatment Plan signatures', master_due_date, TimelinessStatus.needs_review.value, 'Master Treatment Plan signatures are missing, incomplete, or after the 30-day window.'))
+            rule_results.append(_result('TP-MASTER-SIGNATURES', 'Master Treatment Plan signatures', master_due_date, TimelinessStatus.needs_review.value, f'Master Treatment Plan signatures are missing, incomplete, or after the {master_due_days}-day window.'))
 
     if date_clock_anchor and interval_days:
         review_due = date.fromordinal(date_clock_anchor.toordinal() + interval_days)
@@ -739,7 +760,8 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
     loc_history = sorted(client.level_of_care_history, key=lambda item: _date(item.effective_date) or date.min)
     rule_results = evaluation.rule_results
     admission = _date(client.admission_date)
-    mapped_loc, interval_days = map_level_of_care(client.current_level_of_care)
+    mapped_loc, configured_interval_days = map_level_of_care(client.current_level_of_care)
+    interval_days = evaluation.evidence_comparison.interval_days or configured_interval_days
     active_loc = _active_level_of_care(loc_history)
     initial = _latest_plan(plans, TreatmentPlanKind.initial)
     master = _latest_plan(plans, TreatmentPlanKind.master)
@@ -821,8 +843,8 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
         'active_status': _checklist_value('active_status', 'Active status', 'Active' if client.is_active else 'Inactive', source=client.source_evidence, status='present' if client.is_active else 'not_applicable'),
         'admission_date': _checklist_value('admission_date', 'Admission date', client.admission_date, source=client.source_evidence),
         'current_level_of_care': _checklist_value('current_level_of_care', 'Current LOC', client.current_level_of_care, source=_combined_evidence(client.source_evidence, active_loc.source_evidence if active_loc else '')),
-        'mapped_level_of_care': _checklist_value('mapped_level_of_care', 'Mapped LOC rule category', mapped_loc, source='config/rules'),
-        'rules_version': _checklist_value('rules_version', 'Rules version', 'configured deterministic rules', source='config/rules'),
+        'mapped_level_of_care': _checklist_value('mapped_level_of_care', 'Mapped LOC rule category', mapped_loc, source='App settings and config/rules'),
+        'rules_version': _checklist_value('rules_version', 'Rules version', 'admin settings over configured deterministic defaults', source='App settings; config/rules'),
         'loc_history': _checklist_value('loc_history', 'LOC history', loc_history_summary(), source=_combined_evidence(*[item.source_evidence for item in loc_history])),
         'effective_date': _checklist_value('effective_date', 'LOC effective dates', joined([item.effective_date for item in loc_history]), source=_combined_evidence(*[item.source_evidence for item in loc_history])),
         'discharge_date': _checklist_value('discharge_date', 'LOC discharge dates', joined([item.discharge_date for item in loc_history]) or 'No LOC discharge date recorded', source=_combined_evidence(*[item.source_evidence for item in loc_history]), status='present' if joined([item.discharge_date for item in loc_history]) else 'not_applicable'),
@@ -842,7 +864,7 @@ def build_checklist_results(evaluation: TimelinessEvaluation, audit_history: lis
         'date_clock_due_date': _checklist_value('date_clock_due_date', 'Calculated date-clock due date', evaluation.evidence_comparison.date_clock_due_date, source=evaluation.evidence_comparison.date_clock_anchor_source),
         'loc_anchor_due_date': _checklist_value('loc_anchor_due_date', 'LOC effective-anchor due date', evaluation.evidence_comparison.loc_anchor_due_date, source=active_loc.source_evidence if active_loc else ''),
         'loc_change_due_date': _checklist_value('loc_change_due_date', 'LOC-change due date', evaluation.evidence_comparison.loc_change_due_date, source=active_loc.source_evidence if active_loc else ''),
-        'interval_days': _checklist_value('interval_days', 'LOC cadence interval', interval_days, source='config/rules'),
+        'interval_days': _checklist_value('interval_days', 'LOC cadence interval', interval_days, source='App settings; config/rules fallback'),
         'next_due_date': _checklist_value('next_due_date', 'Next due date', evaluation.next_due_date, source=evaluation.evidence_summary),
         'overall_status': _checklist_value('overall_status', 'Overall status', evaluation.status, source=evaluation.evidence_summary),
         'days_until_due': _checklist_value('days_until_due', 'Days until due', evaluation.days_until_due, source=evaluation.evidence_summary),
@@ -1416,6 +1438,7 @@ def summary_payload(evaluation: TimelinessEvaluation) -> dict[str, Any]:
         'id': client.id,
         'patient_id': client.patient_id,
         'permitted_name': _client_display_label(client, patient_name_display_enabled=evaluation.patient_name_display_enabled),
+        'is_active': client.is_active,
         'current_level_of_care': client.current_level_of_care,
         'counselor_name': client.counselor_name,
         'admission_date': client.admission_date,

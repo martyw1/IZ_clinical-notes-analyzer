@@ -227,6 +227,9 @@ function appSettingsPayload() {
     alleva_treatment_plan_sync_last_message: '',
     alleva_treatment_plan_sync_last_success_at: null,
     alleva_treatment_plan_sync_last_failure_at: null,
+    treatment_plan_master_due_days: 30,
+    treatment_plan_php_review_interval_days: 30,
+    treatment_plan_iop_op_review_interval_days: 60,
     treatment_plan_loc_change_window_days: 7,
     treatment_plan_loc_change_window_validated: false,
     updated_by_id: 1,
@@ -800,6 +803,10 @@ function timelinessChecklistResultsPayload() {
 function timelinessDashboardPayload() {
   return {
     total_active_clients: 1,
+    total_clients: 1,
+    active_clients: 1,
+    inactive_clients: 0,
+    include_inactive: true,
     compliant: 0,
     due_soon: 1,
     urgent: 0,
@@ -811,6 +818,9 @@ function timelinessDashboardPayload() {
     unable_to_evaluate: 0,
     approved: 0,
     compliance_percentage: 0,
+    treatment_plan_master_due_days: 30,
+    treatment_plan_php_review_interval_days: 30,
+    treatment_plan_iop_op_review_interval_days: 60,
     loc_change_window_days: 7,
     loc_change_window_validated: false,
     items: [
@@ -818,6 +828,7 @@ function timelinessDashboardPayload() {
         id: 21,
         patient_id: 'PAT-TP-001',
         permitted_name: 'Synthetic Client',
+        is_active: true,
         current_level_of_care: 'IOP-5',
         counselor_name: 'Counselor One',
         admission_date: '2026-02-26',
@@ -1280,7 +1291,7 @@ describe('App turnkey workflow', () => {
     const primaryNavLabels = within(screen.getByRole('navigation', { name: 'Primary workflow' }))
       .getAllByRole('button')
       .map((button) => button.textContent)
-    expect(primaryNavLabels).toEqual(['Status Dashboard', 'Treatment plans', 'Review queue', 'Manual upload'])
+    expect(primaryNavLabels).toEqual(['Status Dashboard', 'Treatment plans', 'Review queue (manual reviews)', 'Manual upload'])
     expect(screen.getByRole('status', { name: 'Current app status' })).toHaveClass('status-card')
     expect(within(screen.getByLabelText('Support and administration shortcuts')).getByRole('button', { name: 'Checklist' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'User management' }).length).toBeGreaterThan(0)
@@ -1525,32 +1536,32 @@ describe('App turnkey workflow', () => {
 
     const aggregate = await screen.findByTestId('alleva-patient-aggregate-307')
     expect(screen.getByLabelText('Alleva lookup result rows')).toContainElement(aggregate)
-    expect(within(aggregate).getByText('patient_id 307')).toBeInTheDocument()
-    expect(within(aggregate).getByText('status_label Active - status_scope active')).toBeInTheDocument()
-    expect(within(aggregate).getByText('patient.status_id')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Patient ID (/clients.id / LeadId): 307')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Patient status Active - active')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Alleva status ID')).toBeInTheDocument()
     expect(within(aggregate).getByText('1049')).toBeInTheDocument()
-    expect(within(aggregate).getByText('patient.planned_discharge_date (planned/scheduled)')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Planned discharge date (not actual discharge)')).toBeInTheDocument()
     expect(within(aggregate).getByText('2026-09-10')).toBeInTheDocument()
     expect(within(aggregate).getByText('Multiple active treatment plans')).toBeInTheDocument()
-    expect(within(aggregate).getByText('latest_created_active_plan_id')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Latest-created active Treatment Plan ID')).toBeInTheDocument()
     expect(within(aggregate).getByText('TP-307-2')).toBeInTheDocument()
-    expect(within(aggregate).getByText('review_data_status')).toBeInTheDocument()
+    expect(within(aggregate).getByText('Review data status')).toBeInTheDocument()
     expect(within(aggregate).getByText('unavailable_via_rest_without_known_review_id')).toBeInTheDocument()
     expect(within(aggregate).getAllByText('Treatment review due date unavailable through REST without a known treatmentPlanReviewId').length).toBeGreaterThan(0)
 
     const latestPlan = await screen.findByTestId('alleva-treatment-plan-TP-307-2')
-    expect(within(latestPlan).getByText('treatment_plan_id TP-307-2')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Treatment Plan ID (Alleva TPId): TP-307-2')).toBeInTheDocument()
     expect(within(latestPlan).getByText('Latest-created active plan - active')).toBeInTheDocument()
-    expect(within(latestPlan).getByText('join_validated true')).toBeInTheDocument()
-    expect(within(latestPlan).getByText('raw_client_ref')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Patient join validated')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Plan client reference (/clients/{id})')).toBeInTheDocument()
     expect(within(latestPlan).getByText('/clients/307')).toBeInTheDocument()
-    expect(within(latestPlan).getByText('extracted_patient_id')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Extracted Patient ID')).toBeInTheDocument()
     expect(within(latestPlan).getAllByText('307').length).toBeGreaterThan(0)
-    expect(within(latestPlan).getByText('is_active')).toBeInTheDocument()
-    expect(within(latestPlan).getAllByText('true').length).toBeGreaterThan(0)
-    expect(within(latestPlan).getByText('has_reason_for_admission')).toBeInTheDocument()
-    expect(within(latestPlan).getByText('problem_count')).toBeInTheDocument()
-    expect(within(latestPlan).getByText('diagnosis_count')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Active plan (isActive)')).toBeInTheDocument()
+    expect(within(latestPlan).getAllByText('Yes').length).toBeGreaterThan(0)
+    expect(within(latestPlan).getByText('Reason for admission captured')).toBeInTheDocument()
+    expect(within(latestPlan).getByText('Problems')).toBeInTheDocument()
+    expect(within(latestPlan).getAllByText('Diagnoses').length).toBeGreaterThan(0)
     expect(within(latestPlan).getByText('Behavioral Definition 1')).toBeInTheDocument()
     expect(within(latestPlan).getByText('Goal 1')).toBeInTheDocument()
     expect(within(latestPlan).getByText('Objective 1')).toBeInTheDocument()
@@ -1589,12 +1600,14 @@ describe('App turnkey workflow', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Treatment plans' }).length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByRole('button', { name: 'Treatment plans' })[0])
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Treatment plan timeliness' })).toBeInTheDocument())
-    expect(screen.getByRole('status', { name: 'Treatment plan timeliness update status' })).toHaveTextContent(/Source-document Next Review Due/)
+    expect(screen.getByRole('status', { name: 'Treatment plan timeliness update status' })).toHaveTextContent(
+      /Showing all patient treatment plans; Patient ID means Alleva \/clients.id \/ LeadId./,
+    )
     fireEvent.click(screen.getByRole('button', { name: /Needs Review 1/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /Open PAT-TP-AMBIG treatment plan evidence/i }))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'PAT-TP-AMBIG' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient ID: PAT-TP-AMBIG' })).toBeInTheDocument())
     expect(screen.queryByText('Ambiguous Review Client')).not.toBeInTheDocument()
     expect(screen.getAllByText('2026-05-29').length).toBeGreaterThan(0)
     expect(screen.getAllByText('2026-06-01').length).toBeGreaterThan(0)
@@ -1670,8 +1683,8 @@ describe('App turnkey workflow', () => {
     render(<App />)
     signIn()
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue (manual reviews)' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Review queue (manual reviews)' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Patient Details' })).toBeInTheDocument())
     expect(screen.getByText('Patient ID: PAT-001')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
@@ -1964,8 +1977,8 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password-1234' } })
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Review queue' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review queue (manual reviews)' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Review queue (manual reviews)' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Criterion review workbench' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark OK' }))
@@ -2026,6 +2039,9 @@ describe('App turnkey workflow', () => {
           alleva_treatment_plan_patient_name_import_enabled: body.alleva_treatment_plan_patient_name_import_enabled,
           alleva_treatment_plan_name_join_fallback_enabled: body.alleva_treatment_plan_name_join_fallback_enabled,
           alleva_treatment_plan_detail_fetch_limit: body.alleva_treatment_plan_detail_fetch_limit,
+          treatment_plan_master_due_days: body.treatment_plan_master_due_days,
+          treatment_plan_php_review_interval_days: body.treatment_plan_php_review_interval_days,
+          treatment_plan_iop_op_review_interval_days: body.treatment_plan_iop_op_review_interval_days,
           treatment_plan_loc_change_window_days: body.treatment_plan_loc_change_window_days,
           treatment_plan_loc_change_window_validated: body.treatment_plan_loc_change_window_validated,
         }
@@ -2106,6 +2122,9 @@ describe('App turnkey workflow', () => {
     fireEvent.change(screen.getByLabelText('LLM API key'), { target: { value: 'sk-test-123' } })
     fireEvent.change(screen.getByLabelText('API client ID'), { target: { value: 'rest-client' } })
     fireEvent.change(screen.getByLabelText('API client secret'), { target: { value: 'rest-secret' } })
+    fireEvent.change(screen.getByLabelText('Master Treatment Plan due after admission (days)'), { target: { value: '21' } })
+    fireEvent.change(screen.getByLabelText('PHP treatment-plan review interval (days)'), { target: { value: '45' } })
+    fireEvent.change(screen.getByLabelText('IOP/OP treatment-plan review interval (days)'), { target: { value: '75' } })
     expect(screen.getByLabelText('Import and display Alleva patient names')).not.toBeChecked()
     fireEvent.click(screen.getByLabelText('Import and display Alleva patient names'))
     fireEvent.click(screen.getByLabelText('Allow name fallback only for validation'))
@@ -2115,6 +2134,9 @@ describe('App turnkey workflow', () => {
     expect(savedSettings.api_client_secret_configured).toBe(true)
     expect(savedSettings.alleva_treatment_plan_patient_name_import_enabled).toBe(true)
     expect(savedSettings.alleva_treatment_plan_name_join_fallback_enabled).toBe(true)
+    expect(savedSettings.treatment_plan_master_due_days).toBe(21)
+    expect(savedSettings.treatment_plan_php_review_interval_days).toBe(45)
+    expect(savedSettings.treatment_plan_iop_op_review_interval_days).toBe(75)
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic logs' }))
     await waitFor(() => expect(screen.getByText('chart.system_evaluated')).toBeInTheDocument())

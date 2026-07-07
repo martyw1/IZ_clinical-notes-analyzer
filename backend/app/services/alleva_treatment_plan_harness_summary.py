@@ -34,6 +34,30 @@ def _client_reference_values(record: dict[str, Any]) -> list[str]:
     return values
 
 
+def _primary_client_reference(record: dict[str, Any]) -> str:
+    client = record.get('client')
+    if isinstance(client, dict):
+        for key in ('href', 'clientHref', 'url', 'reference'):
+            value = text_value(client.get(key))
+            if value:
+                return value
+    if isinstance(client, str):
+        return client.strip()
+    for key in ('clientHref', 'clientUrl'):
+        value = text_value(record.get(key))
+        if value:
+            return value
+    return ''
+
+
+def _patient_id_from_client_reference(value: str) -> str:
+    parsed_path = urlparse(value).path if '://' in value else value
+    path_parts = [unquote(part) for part in parsed_path.strip('/').split('/') if part]
+    if len(path_parts) >= 2 and path_parts[-2].lower() == 'clients':
+        return path_parts[-1]
+    return ''
+
+
 def _reference_matches(candidate: str, patient_id: str) -> bool:
     target = patient_id.strip().lower()
     value = candidate.strip()
@@ -78,6 +102,8 @@ def _content_value_preview(items: list[dict[str, Any]]) -> str:
 
 def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str, Any]:
     ids = treatment_plan_identifier_summary(record)
+    raw_client_ref = _primary_client_reference(record)
+    patient_id = _patient_id_from_client_reference(raw_client_ref) or ids['app_patient_id']
     scope, reason = treatment_plan_status_scope(record)
     end_date = parse_date(record.get('endDate'))
     start_date = parse_date(record.get('startDate'))
@@ -96,7 +122,8 @@ def safe_treatment_plan_row(record: dict[str, Any], *, today: date) -> dict[str,
         reasons.append('isComplete is false or missing')
     return {
         'treatment_plan_id': ids['treatment_plan_id'],
-        'patient_id': ids['app_patient_id'],
+        'patient_id': patient_id,
+        'raw_client_ref': raw_client_ref,
         'client_id': ids['client_id'],
         'source_client_id': ids['source_client_id'],
         'description_present': bool(text_value(record.get('description'))),

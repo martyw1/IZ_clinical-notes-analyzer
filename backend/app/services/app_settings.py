@@ -16,13 +16,30 @@ def _utc_now() -> datetime:
 def get_or_create_app_settings(db: Session) -> AppSetting:
     settings_row = db.execute(select(AppSetting).order_by(AppSetting.id.asc())).scalars().first()
     if settings_row is not None:
+        changed = False
+        if settings_row.treatment_plan_master_due_days is None:
+            settings_row.treatment_plan_master_due_days = 30
+            changed = True
+        if settings_row.treatment_plan_php_review_interval_days is None:
+            settings_row.treatment_plan_php_review_interval_days = 30
+            changed = True
+        if settings_row.treatment_plan_iop_op_review_interval_days is None:
+            settings_row.treatment_plan_iop_op_review_interval_days = 60
+            changed = True
         if settings_row.treatment_plan_loc_change_window_days is None:
             settings_row.treatment_plan_loc_change_window_days = 7
+            changed = True
+        if changed:
             db.commit()
             db.refresh(settings_row)
         return settings_row
 
-    settings_row = AppSetting(treatment_plan_loc_change_window_days=7)
+    settings_row = AppSetting(
+        treatment_plan_master_due_days=30,
+        treatment_plan_php_review_interval_days=30,
+        treatment_plan_iop_op_review_interval_days=60,
+        treatment_plan_loc_change_window_days=7,
+    )
     db.add(settings_row)
     db.commit()
     db.refresh(settings_row)
@@ -79,6 +96,9 @@ def app_settings_public_payload(settings_row: AppSetting) -> dict[str, object]:
         'facility_timezone': settings_row.facility_timezone,
         'effective_timezone': normalize_timezone_name(settings_row.facility_timezone),
         'effective_timezone_label': effective_timezone_label(settings_row.facility_timezone),
+        'treatment_plan_master_due_days': settings_row.treatment_plan_master_due_days,
+        'treatment_plan_php_review_interval_days': settings_row.treatment_plan_php_review_interval_days,
+        'treatment_plan_iop_op_review_interval_days': settings_row.treatment_plan_iop_op_review_interval_days,
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,

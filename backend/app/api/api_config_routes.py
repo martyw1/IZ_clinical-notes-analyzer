@@ -32,6 +32,7 @@ from app.services.alleva_patient_plan_harness import (
     PATIENT_CENTERED_TREATMENT_PLAN_REPORTS,
     run_patient_centered_treatment_plan_harness_pull,
 )
+from app.services.alleva_patient_plan_contract import extract_patient_id_from_client_ref
 from app.services.alleva_treatment_plan_aggregate import AggregateBuildOptions, build_patient_treatment_plan_aggregate_result
 from app.services.alleva_treatment_plan_harness import (
     TREATMENT_PLAN_HARNESS_REPORTS,
@@ -183,6 +184,8 @@ class AllevaQuickPullInput(ApiDefinitionPullInput):
         'active_patients',
         'patient_treatment_plan_aggregates',
         'all_treatment_plans',
+        'all_treatment_plans_all_pages',
+        'treatment_plan_counts',
         'single_treatment_plan',
         'patient_centered_treatment_plans',
         'active_patient_centered_treatment_plans',
@@ -407,12 +410,21 @@ def _patient_id(payload: dict[str, Any]) -> str:
     return _scalar_text(payload.get('id'))
 
 
-def _plan_client_id(payload: dict[str, Any]) -> str:
+def _raw_plan_client_ref(payload: dict[str, Any]) -> str:
     client = payload.get('client')
+    if isinstance(client, str):
+        return client.strip()
     if isinstance(client, dict):
         nested = _first_text(client, 'clientId', 'id', 'uniqueId', 'mrn')
         if nested:
             return nested
+    return _first_text(payload, 'clientId', 'patientId', 'leadId')
+
+
+def _plan_client_id(payload: dict[str, Any]) -> str:
+    raw_client_ref = _raw_plan_client_ref(payload)
+    if raw_client_ref:
+        return extract_patient_id_from_client_ref(raw_client_ref) or raw_client_ref
     return _first_text(payload, 'clientId', 'patientId', 'leadId', 'id')
 
 
@@ -444,6 +456,7 @@ def _plan_summary(payload: dict[str, Any], *, today: date) -> dict[str, Any]:
     return {
         'treatment_plan_id': _first_text(payload, 'id'),
         'patient_id': _plan_client_id(payload),
+        'raw_client_ref': _raw_plan_client_ref(payload),
         'description_present': bool(_text(payload.get('description'))),
         'description_length': len(_text(payload.get('description'))),
         'start_date': start_date.isoformat() if start_date else _date_only(payload.get('startDate')),
@@ -499,6 +512,28 @@ ALL_PATIENT_RECORD_COLUMNS = [
     'primary_clinician',
     'first_contact_date',
 ]
+
+TREATMENT_PLAN_RECORD_COLUMNS = [
+    'treatment_plan_id',
+    'patient_id',
+    'raw_client_ref',
+    'start_date',
+    'end_date',
+    'is_active',
+    'is_complete',
+    'is_initial_tp',
+    'problem_count',
+    'diagnosis_count',
+    'goal_count',
+    'objective_count',
+    'intervention_count',
+    'guardian_signature_date',
+    'has_guardian_signature',
+    'last_modified',
+    'why',
+]
+
+TREATMENT_PLAN_COUNT_COLUMNS = ['metric', 'count']
 
 ALL_PATIENT_RECORD_FIELDS = [
     'id',
@@ -1409,14 +1444,41 @@ def run_alleva_quick_pull(
         message_subject = 'active patient(s)'
     else:
         plan_rows = [_plan_summary(item, today=today) for item in records]
-        if payload.report == 'active_treatment_plans':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
+        if payload.report == 'treatment_plan_counts':
+            active_count = sum(1 for item in plan_rows if item['is_active'])
+            inactive_count = len(plan_rows) - active_count
+            rows = [
+                {'metric': 'total_treatment_plans', 'count': len(plan_rows)},
+                {'metric': 'active_treatment_plans_isActive_true', 'count': active_count},
+                {'metric': 'inactive_treatment_plans_isActive_false', 'count': inactive_count},
+            ]
+            columns = TREATMENT_PLAN_COUNT_COLUMNS
+            tsv = _rows_to_tsv(rows, columns)
+            copy_format = 'tsv'
+            message_subject = 'treatment-plan count(s)'
+        elif payload.report == 'all_treatment_plans_all_pages':
+            rows = plan_rows
+            columns = TREATMENT_PLAN_RECORD_COLUMNS
+            tsv = _rows_to_tsv(rows, columns)
+            copy_format = 'tsv'
+            message_subject = 'all treatment plan(s)'
+        elif payload.report == 'active_treatment_plans':  # noqa: IF_VARIANT_OK - legacy quick-pull report routing, not a closed enum boundary.
             rows = [item for item in plan_rows if item['is_active']]
+            columns = TREATMENT_PLAN_RECORD_COLUMNS
+            tsv = _rows_to_tsv(rows, columns)
+            copy_format = 'tsv'
             message_subject = 'active treatment plan(s)'
         elif payload.report == 'overdue_treatment_plans':
             rows = [item for item in plan_rows if item['is_active'] and _row_end_date_before(item, today)]
+            columns = TREATMENT_PLAN_RECORD_COLUMNS
+            tsv = _rows_to_tsv(rows, columns)
+            copy_format = 'tsv'
             message_subject = 'overdue active treatment plan(s)'
         else:
             rows = [item for item in plan_rows if not item['is_active']]
+            columns = TREATMENT_PLAN_RECORD_COLUMNS
+            tsv = _rows_to_tsv(rows, columns)
+            copy_format = 'tsv'
             message_subject = 'inactive treatment plan(s)'
 
     if fetch_error:
@@ -1434,9 +1496,17 @@ def run_alleva_quick_pull(
             f'ALL Patient Records pull returned {len(rows)} row(s) from {len(records)} fetched record(s). '
             'Copy the TSV output into Excel if needed.'
         )
+    elif payload.report == 'treatment_plan_counts':
+        status = 'ok'
+        active_row = next((item for item in rows if item.get('metric') == 'active_treatment_plans_isActive_true'), {})
+        inactive_row = next((item for item in rows if item.get('metric') == 'inactive_treatment_plans_isActive_false'), {})
+        message = (
+            f'Treatment-plan count completed from {len(records)} fetched record(s): '
+            f'{active_row.get("count", 0)} active by isActive=true and {inactive_row.get("count", 0)} inactive by isActive=false.'
+        )
     else:
         status = 'ok'
-        message = f'Alleva quick pull found {len(rows)} {message_subject} from {len(records)} fetched record(s).'
+        message = f'Alleva quick pull found {len(rows)} {message_subject} from {len(records)} fetched record(s). Copy the TSV output into Excel if needed.'
     result = {
         'status': status,
         'message': message,

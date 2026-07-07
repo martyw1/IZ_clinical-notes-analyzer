@@ -203,6 +203,7 @@ type TimelinessClientSummary = {
   id: number
   patient_id: string
   permitted_name: string
+  is_active: boolean
   current_level_of_care: string
   counselor_name: string
   admission_date: string
@@ -227,6 +228,10 @@ type TimelinessClientSummary = {
 
 type TimelinessDashboard = {
   total_active_clients: number
+  total_clients: number
+  active_clients: number
+  inactive_clients: number
+  include_inactive: boolean
   compliant: number
   due_soon: number
   urgent: number
@@ -238,6 +243,9 @@ type TimelinessDashboard = {
   unable_to_evaluate: number
   approved: number
   compliance_percentage: number
+  treatment_plan_master_due_days: number
+  treatment_plan_php_review_interval_days: number
+  treatment_plan_iop_op_review_interval_days: number
   loc_change_window_days: number | null
   loc_change_window_validated: boolean
   items: TimelinessClientSummary[]
@@ -441,6 +449,9 @@ type AppSettings = {
   facility_timezone: string
   effective_timezone: string
   effective_timezone_label: string
+  treatment_plan_master_due_days: number
+  treatment_plan_php_review_interval_days: number
+  treatment_plan_iop_op_review_interval_days: number
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
   updated_by_id: number | null
@@ -487,6 +498,9 @@ type AppSettingsForm = {
   alleva_treatment_plan_name_join_fallback_enabled: boolean
   alleva_treatment_plan_detail_fetch_limit: number
   facility_timezone: string
+  treatment_plan_master_due_days: number
+  treatment_plan_php_review_interval_days: number
+  treatment_plan_iop_op_review_interval_days: number
   treatment_plan_loc_change_window_days: number | null
   treatment_plan_loc_change_window_validated: boolean
 }
@@ -571,6 +585,15 @@ type WorkflowVersionForm = {
   version_notes: string
   definition_snapshot_text: string
   transition_rules_text: string
+}
+
+type JsonObject = Record<string, unknown>
+
+type WorkflowTextEditorProps = {
+  readonly snapshotText: string
+  readonly transitionRulesText: string
+  readonly onSnapshotTextChange: (value: string) => void
+  readonly onTransitionRulesTextChange: (value: string) => void
 }
 
 type UploadEntry = {
@@ -903,7 +926,7 @@ const MANAGER_CRITERION_STATUSES = ['Not Reviewed', 'OK', 'Needs Review', 'Needs
 
 const VIEW_LABELS: Record<AppView, string> = {
   dashboard: 'Status Dashboard',
-  reviews: 'Review queue',
+  reviews: 'Review queue (manual reviews)',
   uploads: 'Manual upload',
   timeliness: 'Treatment plans',
   sources: 'Source readiness',
@@ -976,7 +999,7 @@ const HELP_SECTIONS = [
     title: 'Treatment Plans',
     items: [
       'The date clock uses the local laptop/facility date, the admission date, and the last valid treatment-plan review/update date to calculate the next required update.',
-      'PHP levels use a 30-calendar-day recurring update window; IOP, OP, and other configured non-PHP levels use 60 calendar days.',
+      'PHP, IOP/OP, and master-treatment-plan timing limits are manager-editable in App settings and drive the next-due calculation.',
       'Level-of-care changes use the separate manager-editable LOC-change window in App settings. The preset is 7 calendar days and the validation checkbox shows whether R3 has accepted the rule.',
       'Status filters narrow the queue by Overdue, Urgent, Due Soon, Returned, Needs Review, Missing Data, Conflicting Evidence, Unable to Evaluate, Compliant, or Approved.',
       'View evidence opens the exact date fields used for the selected due-date comparison.',
@@ -996,10 +1019,10 @@ const HELP_SECTIONS = [
     ],
   },
   {
-    title: 'Review Queue',
+    title: 'Review queue (manual reviews)',
     items: [
       'Open automated review loads the selected uploaded-binder chart and criterion workbench.',
-      'Review Queue remains the manual/generated chart-review workbench; Treatment Plans remains the active due-date and timeliness work queue.',
+      'Review queue remains the manual/generated chart-review workbench; Treatment Plans remains the due-date and timeliness work queue.',
       'Mark OK, Mark not OK, Not applicable, and Save criterion review changes are available to admins and office managers.',
       'Export CSV and Export JSON keep the existing checklist-domain status rows and also include the current 42-step workflow statuses.',
       'Approve and Return to counselor are manager/admin decisions; returns require a correction note.',
@@ -1018,7 +1041,7 @@ const HELP_SECTIONS = [
     title: 'Workflow Profiles',
     items: [
       'Create profile defines a versioned checklist/workflow logic container.',
-      'Seed draft from 42-step checklist loads the canonical checklist into editable workflow JSON.',
+      'Seed draft from 42-step checklist loads the canonical checklist into the rule editor.',
       'Edit draft changes the selected draft in place. Use as draft loads a published version as a new draft template without archiving the current profile.',
       'Create draft version records proposed logic changes; Publish makes that version current and archives the previous published version.',
       'Archive profile retires a workflow profile without deleting its audit history.',
@@ -1191,7 +1214,7 @@ function allevaPatientCenteredTreatmentPlanPullPayload(
     api_key_header_name: config.api_key_header_name || 'x-api-key',
     scope: null,
     timeout_seconds: config.timeout_seconds || 10,
-    max_pages: 1,
+    max_pages: report === 'single_patient_treatment_plans' ? 1 : 50,
     operation_parameters: allevaTreatmentPlanOperationParameters('1.0'),
   }
 }
@@ -1241,6 +1264,9 @@ function createSettingsForm(settings: AppSettings): AppSettingsForm {
     alleva_treatment_plan_name_join_fallback_enabled: Boolean(settings.alleva_treatment_plan_name_join_fallback_enabled),
     alleva_treatment_plan_detail_fetch_limit: settings.alleva_treatment_plan_detail_fetch_limit ?? 50,
     facility_timezone: settings.facility_timezone || 'local_machine',
+    treatment_plan_master_due_days: settings.treatment_plan_master_due_days ?? 30,
+    treatment_plan_php_review_interval_days: settings.treatment_plan_php_review_interval_days ?? 30,
+    treatment_plan_iop_op_review_interval_days: settings.treatment_plan_iop_op_review_interval_days ?? 60,
     treatment_plan_loc_change_window_days: settings.treatment_plan_loc_change_window_days ?? 7,
     treatment_plan_loc_change_window_validated: settings.treatment_plan_loc_change_window_validated,
   }
@@ -1333,6 +1359,227 @@ function defaultWorkflowTransitionsFromChecklist() {
     { from: 'returned_for_correction', to: 'ready_for_review', roles: ['admin', 'manager'] },
     { from: 'approved_finalized', to: 'ready_for_review', roles: ['admin'], reason_required: true },
   ]
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function parseJsonObjectText(text: string, fallback: JsonObject): JsonObject {
+  try {
+    const parsed = JSON.parse(text || '{}') as unknown
+    return isJsonObject(parsed) ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function parseJsonObjectArrayText(text: string): JsonObject[] {
+  try {
+    const parsed = JSON.parse(text || '[]') as unknown
+    return Array.isArray(parsed) ? parsed.filter(isJsonObject) : []
+  } catch {
+    return []
+  }
+}
+
+function workflowStepsFromSnapshot(snapshot: JsonObject): JsonObject[] {
+  const steps = snapshot.steps
+  return Array.isArray(steps) ? steps.filter(isJsonObject) : []
+}
+
+function workflowTextValue(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback
+}
+
+function workflowBooleanValue(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function replaceWorkflowStep(snapshotText: string, index: number, patch: JsonObject) {
+  const snapshot = parseJsonObjectText(snapshotText, { steps: [] })
+  const steps = workflowStepsFromSnapshot(snapshot)
+  const currentStep = steps[index] || {}
+  const nextSteps = [...steps]
+  nextSteps[index] = { ...currentStep, ...patch }
+  return JSON.stringify({ ...snapshot, steps: nextSteps }, null, 2)
+}
+
+function removeWorkflowStep(snapshotText: string, index: number) {
+  const snapshot = parseJsonObjectText(snapshotText, { steps: [] })
+  const steps = workflowStepsFromSnapshot(snapshot)
+  return JSON.stringify({ ...snapshot, steps: steps.filter((_step, stepIndex) => stepIndex !== index) }, null, 2)
+}
+
+function addWorkflowStep(snapshotText: string) {
+  const snapshot = parseJsonObjectText(snapshotText, { steps: [] })
+  const steps = workflowStepsFromSnapshot(snapshot)
+  const nextStep = steps.length + 1
+  const nextSteps = [
+    ...steps,
+    {
+      step: nextStep,
+      key: `new_rule_${nextStep}`,
+      label: `New rule ${nextStep}`,
+      title: `New rule ${nextStep}`,
+      severity_default: 'medium',
+      active: true,
+    },
+  ]
+  return JSON.stringify({ ...snapshot, steps: nextSteps }, null, 2)
+}
+
+function replaceWorkflowTransition(transitionRulesText: string, index: number, patch: JsonObject) {
+  const transitions = parseJsonObjectArrayText(transitionRulesText)
+  const currentTransition = transitions[index] || {}
+  const nextTransitions = [...transitions]
+  nextTransitions[index] = { ...currentTransition, ...patch }
+  return JSON.stringify(nextTransitions, null, 2)
+}
+
+function removeWorkflowTransition(transitionRulesText: string, index: number) {
+  const transitions = parseJsonObjectArrayText(transitionRulesText)
+  return JSON.stringify(transitions.filter((_transition, transitionIndex) => transitionIndex !== index), null, 2)
+}
+
+function addWorkflowTransition(transitionRulesText: string) {
+  const transitions = parseJsonObjectArrayText(transitionRulesText)
+  return JSON.stringify(
+    [
+      ...transitions,
+      {
+        from: 'ready_for_review',
+        to: 'in_review',
+        roles: ['admin', 'manager'],
+        reason_required: false,
+        active: true,
+      },
+    ],
+    null,
+    2,
+  )
+}
+
+function WorkflowRulesEditor({ snapshotText, transitionRulesText, onSnapshotTextChange, onTransitionRulesTextChange }: WorkflowTextEditorProps) {
+  const snapshot = parseJsonObjectText(snapshotText, { steps: [] })
+  const steps = workflowStepsFromSnapshot(snapshot)
+  const transitions = parseJsonObjectArrayText(transitionRulesText)
+  return (
+    <section className='workflow-rule-editor full-width' aria-label='Plain-language workflow rule editor'>
+      <div className='panel-heading panel-heading--compact'>
+        <div>
+          <h4>Rules</h4>
+          <p>Add, edit, activate, deactivate, or remove workflow rules without editing JSON.</p>
+        </div>
+        <button type='button' className='ghost-button' onClick={() => onSnapshotTextChange(addWorkflowStep(snapshotText))}>
+          Add rule
+        </button>
+      </div>
+      <div className='workflow-rule-list'>
+        {steps.length ? (
+          steps.map((step, index) => (
+            <article key={`${workflowTextValue(step.key, 'rule')}-${index}`} className='workflow-rule-card'>
+              <label>
+                Rule name
+                <input
+                  value={workflowTextValue(step.title) || workflowTextValue(step.label) || workflowTextValue(step.key)}
+                  onChange={(event) => onSnapshotTextChange(replaceWorkflowStep(snapshotText, index, { title: event.target.value, label: event.target.value }))}
+                />
+              </label>
+              <label>
+                Rule key
+                <input value={workflowTextValue(step.key)} onChange={(event) => onSnapshotTextChange(replaceWorkflowStep(snapshotText, index, { key: event.target.value }))} />
+              </label>
+              <label>
+                Severity
+                <select value={workflowTextValue(step.severity_default, 'medium')} onChange={(event) => onSnapshotTextChange(replaceWorkflowStep(snapshotText, index, { severity_default: event.target.value }))}>
+                  <option value='low'>Low</option>
+                  <option value='medium'>Medium</option>
+                  <option value='high'>High</option>
+                  <option value='critical'>Critical</option>
+                </select>
+              </label>
+              <label className='checkbox-label'>
+                <input
+                  type='checkbox'
+                  checked={workflowBooleanValue(step.active, true)}
+                  onChange={(event) => onSnapshotTextChange(replaceWorkflowStep(snapshotText, index, { active: event.target.checked }))}
+                />
+                Active
+              </label>
+              <button type='button' className='danger-button' onClick={() => onSnapshotTextChange(removeWorkflowStep(snapshotText, index))}>
+                Delete rule
+              </button>
+            </article>
+          ))
+        ) : (
+          <p className='empty-state'>No rules yet. Add a rule to start this workflow profile.</p>
+        )}
+      </div>
+      <div className='panel-heading panel-heading--compact workflow-transition-heading'>
+        <div>
+          <h4>Status movement rules</h4>
+          <p>Control who can move work from one status to another and whether a reason is required.</p>
+        </div>
+        <button type='button' className='ghost-button' onClick={() => onTransitionRulesTextChange(addWorkflowTransition(transitionRulesText))}>
+          Add status rule
+        </button>
+      </div>
+      <div className='workflow-rule-list workflow-rule-list--transitions'>
+        {transitions.length ? (
+          transitions.map((transition, index) => (
+            <article key={`${workflowTextValue(transition.from, 'from')}-${workflowTextValue(transition.to, 'to')}-${index}`} className='workflow-rule-card workflow-rule-card--transition'>
+              <label>
+                From status
+                <input value={workflowTextValue(transition.from)} onChange={(event) => onTransitionRulesTextChange(replaceWorkflowTransition(transitionRulesText, index, { from: event.target.value }))} />
+              </label>
+              <label>
+                To status
+                <input value={workflowTextValue(transition.to)} onChange={(event) => onTransitionRulesTextChange(replaceWorkflowTransition(transitionRulesText, index, { to: event.target.value }))} />
+              </label>
+              <label>
+                Roles
+                <input
+                  value={Array.isArray(transition.roles) ? transition.roles.map((role) => String(role)).join(', ') : ''}
+                  onChange={(event) =>
+                    onTransitionRulesTextChange(
+                      replaceWorkflowTransition(transitionRulesText, index, {
+                        roles: event.target.value
+                          .split(',')
+                          .map((role) => role.trim())
+                          .filter(Boolean),
+                      }),
+                    )
+                  }
+                />
+              </label>
+              <label className='checkbox-label'>
+                <input
+                  type='checkbox'
+                  checked={workflowBooleanValue(transition.reason_required, false)}
+                  onChange={(event) => onTransitionRulesTextChange(replaceWorkflowTransition(transitionRulesText, index, { reason_required: event.target.checked }))}
+                />
+                Require reason
+              </label>
+              <label className='checkbox-label'>
+                <input
+                  type='checkbox'
+                  checked={workflowBooleanValue(transition.active, true)}
+                  onChange={(event) => onTransitionRulesTextChange(replaceWorkflowTransition(transitionRulesText, index, { active: event.target.checked }))}
+                />
+                Active
+              </label>
+              <button type='button' className='danger-button' onClick={() => onTransitionRulesTextChange(removeWorkflowTransition(transitionRulesText, index))}>
+                Delete status rule
+              </button>
+            </article>
+          ))
+        ) : (
+          <p className='empty-state'>No status movement rules yet.</p>
+        )}
+      </div>
+    </section>
+  )
 }
 
 function parseWorkflowVersionInput(form: WorkflowDefinitionForm | WorkflowVersionForm) {
@@ -1991,6 +2238,7 @@ export function App() {
   const [selectedTimelinessClientId, setSelectedTimelinessClientId] = useState<number | null>(null)
   const [selectedTimelinessClient, setSelectedTimelinessClient] = useState<TimelinessClientDetail | null>(null)
   const [timelinessEvaluationDate, setTimelinessEvaluationDate] = useState('')
+  const [showOnlyActivePatientTreatmentPlans, setShowOnlyActivePatientTreatmentPlans] = useState(false)
   const [timelinessStatusFilter, setTimelinessStatusFilter] = useState<TimelinessFilter>('All')
   const [timelinessSearch, setTimelinessSearch] = useState('')
   const [timelinessOverrideForm, setTimelinessOverrideForm] = useState<TimelinessOverrideForm>(createTimelinessOverrideForm())
@@ -2633,6 +2881,14 @@ export function App() {
     return query ? `?${query}` : ''
   }
 
+  function timelinessDashboardQueryString() {
+    const params = new URLSearchParams()
+    if (timelinessEvaluationDate.trim()) params.set('evaluation_date', timelinessEvaluationDate.trim())
+    if (!showOnlyActivePatientTreatmentPlans) params.set('include_inactive', 'true')
+    const query = params.toString()
+    return query ? `?${query}` : ''
+  }
+
   async function loadTimelinessClientDetail(clientId: number) {
     const detail = await apiRequest<TimelinessClientDetail>(`/timeliness/clients/${clientId}${timelinessQueryString()}`)
     setSelectedTimelinessClient(detail)
@@ -2642,7 +2898,7 @@ export function App() {
   }
 
   async function loadTimelinessDashboard(preferredId?: number | null) {
-    const payload = await apiRequest<TimelinessDashboard>(`/timeliness/dashboard${timelinessQueryString()}`)
+    const payload = await apiRequest<TimelinessDashboard>(`/timeliness/dashboard${timelinessDashboardQueryString()}`)
     setTimelinessDashboard(payload)
     const preferred = preferredId ?? selectedTimelinessClientId
     const nextId = preferred && payload.items.some((item) => item.id === preferred) ? preferred : payload.items[0]?.id ?? null
@@ -2672,7 +2928,7 @@ export function App() {
       message:
         report === 'single_patient_treatment_plans'
           ? `Loading single_patient_treatment_plans for patient_id ${requestedPatientId}...`
-          : 'Loading active_patient_centered_treatment_plans...',
+          : `Loading ${report}...`,
       result: null,
       selectedPatientId: requestedPatientId,
     })
@@ -2889,7 +3145,7 @@ export function App() {
     if (activeView === 'timeliness' && token && user && !mustResetPassword) {
       void loadTimelinessDashboard()
     }
-  }, [activeView, token, user, mustResetPassword])
+  }, [activeView, token, user, mustResetPassword, showOnlyActivePatientTreatmentPlans, timelinessEvaluationDate])
 
   useEffect(() => {
     if ((activeView === 'dashboard' || activeView === 'sources') && token && user && !mustResetPassword) {
@@ -3929,6 +4185,14 @@ export function App() {
       setError('Missing treatment-plan setting: LOC-change update window days.')
       return
     }
+    if (
+      settingsForm.treatment_plan_master_due_days < 1 ||
+      settingsForm.treatment_plan_php_review_interval_days < 1 ||
+      settingsForm.treatment_plan_iop_op_review_interval_days < 1
+    ) {
+      setError('Treatment-plan timing limits must be at least 1 day.')
+      return
+    }
     setIsBusy(true)
     setError('')
     appendSettingsActivity('Saving App settings.')
@@ -4719,7 +4983,7 @@ export function App() {
                     Treatment plans
                   </button>
                   <button type='button' className='ghost-button' onClick={() => changeView('reviews')}>
-                    Review queue
+                    Review queue (manual reviews)
                   </button>
                   <button type='button' className='ghost-button' onClick={() => changeView('checklist')}>
                     Checklist v1
@@ -4877,7 +5141,9 @@ export function App() {
 
 	                <section className='timeliness-release-banner' role='status' aria-label='Treatment plan timeliness update status'>
 	                  <strong>Updated evidence queue {timelinessBuildLabel}</strong>
-	                  <span>Source-document Next Review Due, date-clock due date, and LOC-change due date are shown side by side in the selected-client detail.</span>
+	                  <span>
+                      Showing {showOnlyActivePatientTreatmentPlans ? 'only active patient treatment plans' : 'all patient treatment plans'}; Patient ID means Alleva /clients.id / LeadId.
+                    </span>
 	                </section>
 
 	                <form
@@ -4900,6 +5166,14 @@ export function App() {
 	                      placeholder='Client, LOC, clinician'
 	                    />
 	                  </label>
+	                  <label className='checkbox-label timeliness-active-toggle'>
+                      <input
+                        type='checkbox'
+                        checked={showOnlyActivePatientTreatmentPlans}
+                        onChange={(event) => setShowOnlyActivePatientTreatmentPlans(event.target.checked)}
+                      />
+                      Show Only Active Patient Treatment Plans
+                    </label>
 	                  <button type='submit' disabled={isBusy}>
 	                    Apply date
 	                  </button>
@@ -4907,12 +5181,16 @@ export function App() {
 
 	                <div className='dashboard-metrics timeliness-metrics'>
 	                  <article className='mini-card'>
-	                    <span>Active clients</span>
-	                    <strong>{timelinessDashboard?.total_active_clients ?? 0}</strong>
+	                    <span>Patients shown</span>
+	                    <strong>{timelinessDashboard?.total_clients ?? 0}</strong>
 	                  </article>
 	                  <article className='mini-card'>
-	                    <span>Task rows</span>
-	                    <strong>{exportableTimelinessTaskCount}</strong>
+	                    <span>Active patients</span>
+	                    <strong>{timelinessDashboard?.active_clients ?? timelinessDashboard?.total_active_clients ?? 0}</strong>
+	                  </article>
+	                  <article className='mini-card'>
+	                    <span>Inactive patients</span>
+	                    <strong>{timelinessDashboard?.inactive_clients ?? 0}</strong>
 	                  </article>
 	                  <article className='mini-card mini-card--danger'>
 	                    <span>Overdue</span>
@@ -4954,7 +5232,7 @@ export function App() {
 	                  <div className='timeliness-queue-table' role='table' aria-label='Treatment plan timeliness queue'>
 	                    <div className='timeliness-queue-table__head' role='row'>
                         <span>Risk</span>
-	                      <span>Client</span>
+	                      <span>Patient ID (/clients.id / LeadId)</span>
                         <span>LOC / program</span>
 	                      <span>Status</span>
                         <span>Initial TP date</span>
@@ -4988,10 +5266,10 @@ export function App() {
                               aria-label={`Open ${item.patient_id} treatment plan evidence`}
                             >
                               <span className={`queue-risk-stripe queue-risk-stripe--${timelinessTone(item.status)}`} aria-hidden='true' />
-                              <span>
-                                <strong>{item.patient_id}</strong>
-                                <small>{item.counselor_name || 'Primary clinician pending'}</small>
-                                {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
+	                              <span>
+	                                <strong>{item.patient_id}</strong>
+	                                <small>{item.is_active ? 'Active patient' : 'Inactive patient'}; {item.counselor_name || 'Primary clinician pending'}</small>
+	                                {item.discharge_conflict ? <small className='text-warning'>Active status plus discharge field</small> : null}
                               </span>
                               <span>{item.current_level_of_care || 'Missing'}</span>
                               <span>
@@ -5025,7 +5303,7 @@ export function App() {
 	                    )}
 	                  </div>
 	                ) : (
-	                  <p className='empty-state'>No active treatment-plan clients are loaded.</p>
+	                  <p className='empty-state'>No patient treatment-plan rows are loaded for the current active/all scope.</p>
 	                )}
 	              </aside>
 
@@ -5034,8 +5312,11 @@ export function App() {
 	                  <>
 	                    <div className='panel-heading'>
 	                      <div>
-	                        <h2>{selectedTimelinessClient.patient_id}</h2>
-	                        <p>{selectedTimelinessClient.current_level_of_care || 'LOC missing'} | {selectedTimelinessClient.counselor_name || 'Reviewer pending'}</p>
+	                        <h2>Patient ID: {selectedTimelinessClient.patient_id}</h2>
+	                        <p>
+                            Patient ID is Alleva /clients.id / LeadId; local tracker row ID {selectedTimelinessClient.id}.{' '}
+                            {selectedTimelinessClient.current_level_of_care || 'LOC missing'} | {selectedTimelinessClient.counselor_name || 'Reviewer pending'}
+                          </p>
 	                      </div>
 	                      <div className='button-row'>
 	                        <button type='button' className='ghost-button' onClick={() => exportSelectedTimeliness('csv')}>
@@ -5062,6 +5343,18 @@ export function App() {
 	                        <small>{selectedTimelinessClient.days_until_due == null ? 'No day count' : `${selectedTimelinessClient.days_until_due} days from evaluation date`}</small>
 	                      </div>
 	                      <dl>
+	                        <div>
+	                          <dt>Patient ID</dt>
+	                          <dd>{selectedTimelinessClient.patient_id} (/clients.id / LeadId)</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Local tracker row ID</dt>
+	                          <dd>{selectedTimelinessClient.id}</dd>
+	                        </div>
+	                        <div>
+	                          <dt>Patient status</dt>
+	                          <dd>{selectedTimelinessClient.is_active ? 'Active patient' : 'Inactive patient'}</dd>
+	                        </div>
 	                        <div>
 	                          <dt>Current date used</dt>
 	                          <dd>{selectedTimelinessClient.current_date || selectedTimelinessClient.evidence_comparison.current_date}</dd>
@@ -5124,9 +5417,10 @@ export function App() {
                       <AllevaPatientTreatmentPlanPanel
                         pullState={allevaPatientPlanPull}
                         patientId={allevaPatientPlanInput}
-                        onPatientIdChange={(nextPatientId) => setAllevaPatientPlanInput(nextPatientId)}
-                        onLoadPatient={() => void loadAllevaPatientCenteredTreatmentPlans('single_patient_treatment_plans')}
-                        onLoadActivePatients={() => void loadAllevaPatientCenteredTreatmentPlans('active_patient_centered_treatment_plans')}
+	                        onPatientIdChange={(nextPatientId) => setAllevaPatientPlanInput(nextPatientId)}
+	                        onLoadPatient={() => void loadAllevaPatientCenteredTreatmentPlans('single_patient_treatment_plans')}
+	                        onLoadAllPatients={() => void loadAllevaPatientCenteredTreatmentPlans('patient_centered_treatment_plans')}
+	                        onLoadActivePatients={() => void loadAllevaPatientCenteredTreatmentPlans('active_patient_centered_treatment_plans')}
                         isBusy={isBusy || allevaPatientPlanPull.status === 'loading'}
                       />
                     ) : null}
@@ -5381,12 +5675,12 @@ export function App() {
 	                      <h3>Treatment plan evidence</h3>
 	                      {selectedTimelinessClient.treatment_plans.length ? (
 	                        <div className='timeliness-table timeliness-table--evidence'>
-	                          <div className='timeliness-table__head'>
-	                            <span>Type</span>
-	                            <span>Source</span>
-	                            <span>Document</span>
-	                            <span>Staff</span>
-	                            <span>Client</span>
+		                          <div className='timeliness-table__head'>
+		                            <span>Plan type / local row ID</span>
+		                            <span>Source system</span>
+		                            <span>Treatment Plan ID / source document ID</span>
+		                            <span>Staff</span>
+		                            <span>Client signature</span>
 	                            <span>Next due</span>
 	                            <span>Content</span>
 	                            <span>Status</span>
@@ -5394,11 +5688,15 @@ export function App() {
 	                          </div>
 	                          {selectedTimelinessClient.treatment_plans.map((plan) => (
 	                            <div key={plan.id} className='timeliness-table__row'>
-	                              <span>
-	                                <span className={`pill pill--${planKindTone(plan.plan_kind)}`}>{planKindLabel(plan.plan_kind)}</span>
-	                              </span>
-	                              <span>{plan.source_section || plan.source_evidence || 'Not recorded'}</span>
-	                              <span>{plan.document_date || 'Missing'}</span>
+		                              <span>
+		                                <span className={`pill pill--${planKindTone(plan.plan_kind)}`}>{planKindLabel(plan.plan_kind)}</span>
+		                                <small>Local row ID {plan.id}</small>
+		                              </span>
+		                              <span>{plan.source_section || plan.source_evidence || 'Not recorded'}</span>
+		                              <span>
+		                                <strong>{plan.source_document_id || 'Not recorded'}</strong>
+		                                <small>{plan.document_date || 'Document date missing'}</small>
+		                              </span>
 	                              <span>{signedLabel(plan.staff_signature_date)}</span>
 	                              <span>{plan.client_signature_date || (plan.plan_kind === 'review' ? 'Optional' : 'Missing')}</span>
 	                              <span>{plan.displayed_next_due_date || 'Not recorded'}</span>
@@ -5767,7 +6065,10 @@ export function App() {
             <section className='workspace-grid'>
               <aside className='panel queue-panel'>
                 <div className='panel-heading'>
-                  <h2>Automated review queue</h2>
+                  <div>
+                    <h2>Review queue (manual reviews)</h2>
+                    <p>Generated chart-review work from manual uploads. Use Treatment Plans for due-date/timeliness tracking.</p>
+                  </div>
                   <div className='button-row'>
                     <button type='button' className='ghost-button' onClick={() => void loadWorkspace()} disabled={isBusy}>
                       Refresh
@@ -6939,22 +7240,31 @@ export function App() {
                       onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, description: event.target.value }))}
                     />
                   </label>
-                  <label className='full-width'>
-                    Definition JSON
-                    <textarea
-                      className='code-textarea'
-                      value={workflowDefinitionForm.definition_snapshot_text}
-                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
-                    />
-                  </label>
-                  <label className='full-width'>
-                    Transition rules JSON
-                    <textarea
-                      className='code-textarea'
-                      value={workflowDefinitionForm.transition_rules_text}
-                      onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
-                    />
-                  </label>
+                  <WorkflowRulesEditor
+                    snapshotText={workflowDefinitionForm.definition_snapshot_text}
+                    transitionRulesText={workflowDefinitionForm.transition_rules_text}
+                    onSnapshotTextChange={(value) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: value }))}
+                    onTransitionRulesTextChange={(value) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: value }))}
+                  />
+                  <details className='advanced-json-editor full-width'>
+                    <summary>Advanced JSON editor</summary>
+                    <label>
+                      Definition JSON
+                      <textarea
+                        className='code-textarea'
+                        value={workflowDefinitionForm.definition_snapshot_text}
+                        onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Transition rules JSON
+                      <textarea
+                        className='code-textarea'
+                        value={workflowDefinitionForm.transition_rules_text}
+                        onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                      />
+                    </label>
+                  </details>
                   <div className='full-width form-actions'>
                     <button type='submit' disabled={isBusy}>
                       Create profile
@@ -6968,7 +7278,7 @@ export function App() {
                   <h3>{editingWorkflowVersionId ? 'Edit draft version' : 'Create draft version'}</h3>
                   <div className='rule-alert'>
                     <strong>Manager/admin-editable checklist workflow</strong>
-                    <p>Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.</p>
+                    <p>Seed a draft from the canonical 42-step checklist, adjust the rule names, active status, and status-movement rules, create the draft, then publish it when approved.</p>
                     <div className='form-actions'>
                       <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
                         Seed draft from 42-step checklist
@@ -6986,22 +7296,31 @@ export function App() {
                         onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, version_notes: event.target.value }))}
                       />
                     </label>
-                    <label className='full-width'>
-                      Definition JSON
-                      <textarea
-                        className='code-textarea'
-                        value={workflowVersionForm.definition_snapshot_text}
-                        onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+	                    <WorkflowRulesEditor
+                        snapshotText={workflowVersionForm.definition_snapshot_text}
+                        transitionRulesText={workflowVersionForm.transition_rules_text}
+                        onSnapshotTextChange={(value) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: value }))}
+                        onTransitionRulesTextChange={(value) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: value }))}
                       />
-                    </label>
-                    <label className='full-width'>
-                      Transition rules JSON
-                      <textarea
-                        className='code-textarea'
-                        value={workflowVersionForm.transition_rules_text}
-                        onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
-                      />
-                    </label>
+                      <details className='advanced-json-editor full-width'>
+                        <summary>Advanced JSON editor</summary>
+                        <label>
+                          Definition JSON
+                          <textarea
+                            className='code-textarea'
+                            value={workflowVersionForm.definition_snapshot_text}
+                            onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                          />
+                        </label>
+                        <label>
+                          Transition rules JSON
+                          <textarea
+                            className='code-textarea'
+                            value={workflowVersionForm.transition_rules_text}
+                            onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                          />
+                        </label>
+                      </details>
                     <div className='full-width form-actions'>
                       <button type='submit' disabled={isBusy}>
                         {editingWorkflowVersionId ? 'Save draft edits' : 'Create draft version'}
@@ -7093,9 +7412,21 @@ export function App() {
 	                    <dt>Runtime readiness</dt>
 	                    <dd>{readiness ? `${readiness.status} (${readiness.failed} failed, ${readiness.warnings} warnings)` : 'Not loaded'}</dd>
 	                  </div>
+                  <div>
+	                    <dt>Master plan due</dt>
+	                    <dd>{appSettings?.treatment_plan_master_due_days ?? 30} days after admission</dd>
+	                  </div>
 	                  <div>
-	                    <dt>LOC-change window</dt>
-	                    <dd>
+	                    <dt>PHP review clock</dt>
+	                    <dd>{appSettings?.treatment_plan_php_review_interval_days ?? 30} days</dd>
+	                  </div>
+	                  <div>
+	                    <dt>IOP/OP review clock</dt>
+	                    <dd>{appSettings?.treatment_plan_iop_op_review_interval_days ?? 60} days</dd>
+	                  </div>
+	                  <div>
+		                    <dt>LOC-change window</dt>
+		                    <dd>
 	                      {appSettings?.treatment_plan_loc_change_window_days == null
 	                        ? 'Not set'
 	                        : `${appSettings.treatment_plan_loc_change_window_days} days`}{' '}
@@ -7124,7 +7455,7 @@ export function App() {
                         onChange={(event) => setSettingsForm((current) => (current ? { ...current, facility_timezone: event.target.value } : current))}
                       />
                     </label>
-                    <div className='field-action-row'>
+	                    <div className='field-action-row'>
                       <button
                         type='button'
                         className='ghost-button'
@@ -7133,7 +7464,49 @@ export function App() {
                         Use this device timezone
                       </button>
                       <span className='muted-text'>{appSettings?.effective_timezone_label || 'Local machine timezone'}</span>
-                    </div>
+	                    </div>
+	                    <label>
+	                      Master Treatment Plan due after admission (days)
+	                      <input
+	                        type='number'
+	                        min={1}
+	                        max={365}
+	                        value={settingsForm.treatment_plan_master_due_days}
+	                        onChange={(event) =>
+	                          setSettingsForm((current) =>
+	                            current ? { ...current, treatment_plan_master_due_days: Number(event.target.value || 30) } : current
+	                          )
+	                        }
+	                      />
+	                    </label>
+	                    <label>
+	                      PHP treatment-plan review interval (days)
+	                      <input
+	                        type='number'
+	                        min={1}
+	                        max={365}
+	                        value={settingsForm.treatment_plan_php_review_interval_days}
+	                        onChange={(event) =>
+	                          setSettingsForm((current) =>
+	                            current ? { ...current, treatment_plan_php_review_interval_days: Number(event.target.value || 30) } : current
+	                          )
+	                        }
+	                      />
+	                    </label>
+	                    <label>
+	                      IOP/OP treatment-plan review interval (days)
+	                      <input
+	                        type='number'
+	                        min={1}
+	                        max={365}
+	                        value={settingsForm.treatment_plan_iop_op_review_interval_days}
+	                        onChange={(event) =>
+	                          setSettingsForm((current) =>
+	                            current ? { ...current, treatment_plan_iop_op_review_interval_days: Number(event.target.value || 60) } : current
+	                          )
+	                        }
+	                      />
+	                    </label>
 	                    <label>
 	                      LOC-change update window (days)
 	                      <input
@@ -7154,7 +7527,7 @@ export function App() {
 	                      />
 	                    </label>
 	                    <p className='muted-text field-note'>
-	                      PHP treatment plans use a 30-calendar-day update clock. IOP, OP, and other configured non-PHP levels use 60 calendar days. This field controls the separate LOC-change update clock; the preset is 7 calendar days and remains manager-editable.
+	                      These timing limits drive the next-due calculation in Treatment Plans. The LOC-change window remains separate and still marked unvalidated until R3/Marleigh confirms it.
 	                    </p>
 	                    <label className='checkbox-row'>
 	                      <input
@@ -8056,22 +8429,31 @@ export function App() {
                               onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, description: event.target.value }))}
                             />
                           </label>
-                          <label className='full-width'>
-                            Definition JSON
-                            <textarea
-                              className='code-textarea'
-                              value={workflowDefinitionForm.definition_snapshot_text}
-                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
-                            />
-                          </label>
-                          <label className='full-width'>
-                            Transition rules JSON
-                            <textarea
-                              className='code-textarea'
-                              value={workflowDefinitionForm.transition_rules_text}
-                              onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
-                            />
-                          </label>
+                          <WorkflowRulesEditor
+                            snapshotText={workflowDefinitionForm.definition_snapshot_text}
+                            transitionRulesText={workflowDefinitionForm.transition_rules_text}
+                            onSnapshotTextChange={(value) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: value }))}
+                            onTransitionRulesTextChange={(value) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: value }))}
+                          />
+                          <details className='advanced-json-editor full-width'>
+                            <summary>Advanced JSON editor</summary>
+                            <label>
+                              Definition JSON
+                              <textarea
+                                className='code-textarea'
+                                value={workflowDefinitionForm.definition_snapshot_text}
+                                onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                              />
+                            </label>
+                            <label>
+                              Transition rules JSON
+                              <textarea
+                                className='code-textarea'
+                                value={workflowDefinitionForm.transition_rules_text}
+                                onChange={(event) => setWorkflowDefinitionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                              />
+                            </label>
+                          </details>
                           <div className='full-width form-actions'>
                             <button type='submit' disabled={isBusy}>
                               Create profile
@@ -8086,7 +8468,7 @@ export function App() {
                           <div className='rule-alert'>
                             <strong>Manager/admin-editable checklist workflow</strong>
                             <p>
-                              Seed a draft from the canonical 42-step checklist, adjust the workflow JSON for R3 operations, create the draft, then publish it when approved.
+                              Seed a draft from the canonical 42-step checklist, adjust the rule names, active status, and status-movement rules, create the draft, then publish it when approved.
                             </p>
                             <div className='form-actions'>
                               <button type='button' className='ghost-button' onClick={() => void seedWorkflowDraftFromCanonicalChecklist()} disabled={isBusy}>
@@ -8105,22 +8487,31 @@ export function App() {
                                 onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, version_notes: event.target.value }))}
                               />
                             </label>
-                            <label className='full-width'>
-                              Definition JSON
-                              <textarea
-                                className='code-textarea'
-                                value={workflowVersionForm.definition_snapshot_text}
-                                onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
-                              />
-                            </label>
-                            <label className='full-width'>
-                              Transition rules JSON
-                              <textarea
-                                className='code-textarea'
-                                value={workflowVersionForm.transition_rules_text}
-                                onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
-                              />
-                            </label>
+                            <WorkflowRulesEditor
+                              snapshotText={workflowVersionForm.definition_snapshot_text}
+                              transitionRulesText={workflowVersionForm.transition_rules_text}
+                              onSnapshotTextChange={(value) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: value }))}
+                              onTransitionRulesTextChange={(value) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: value }))}
+                            />
+                            <details className='advanced-json-editor full-width'>
+                              <summary>Advanced JSON editor</summary>
+                              <label>
+                                Definition JSON
+                                <textarea
+                                  className='code-textarea'
+                                  value={workflowVersionForm.definition_snapshot_text}
+                                  onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, definition_snapshot_text: event.target.value }))}
+                                />
+                              </label>
+                              <label>
+                                Transition rules JSON
+                                <textarea
+                                  className='code-textarea'
+                                  value={workflowVersionForm.transition_rules_text}
+                                  onChange={(event) => setWorkflowVersionForm((current) => ({ ...current, transition_rules_text: event.target.value }))}
+                                />
+                              </label>
+                            </details>
                             <div className='full-width form-actions'>
                               <button type='submit' disabled={isBusy}>
                                 {editingWorkflowVersionId ? 'Save draft edits' : 'Create draft version'}

@@ -436,6 +436,9 @@ def _settings_snapshot(settings_row: AppSetting) -> dict[str, object]:
         'alleva_treatment_plan_sync_last_success_at': settings_row.alleva_treatment_plan_sync_last_success_at,
         'alleva_treatment_plan_sync_last_failure_at': settings_row.alleva_treatment_plan_sync_last_failure_at,
         'facility_timezone': settings_row.facility_timezone,
+        'treatment_plan_master_due_days': settings_row.treatment_plan_master_due_days,
+        'treatment_plan_php_review_interval_days': settings_row.treatment_plan_php_review_interval_days,
+        'treatment_plan_iop_op_review_interval_days': settings_row.treatment_plan_iop_op_review_interval_days,
         'treatment_plan_loc_change_window_days': settings_row.treatment_plan_loc_change_window_days,
         'treatment_plan_loc_change_window_validated': settings_row.treatment_plan_loc_change_window_validated,
         'updated_by_id': settings_row.updated_by_id,
@@ -1013,6 +1016,12 @@ def update_app_settings(
             settings_row.facility_timezone = normalize_timezone_name(payload.facility_timezone)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.treatment_plan_master_due_days is not None:
+        settings_row.treatment_plan_master_due_days = payload.treatment_plan_master_due_days
+    if payload.treatment_plan_php_review_interval_days is not None:
+        settings_row.treatment_plan_php_review_interval_days = payload.treatment_plan_php_review_interval_days
+    if payload.treatment_plan_iop_op_review_interval_days is not None:
+        settings_row.treatment_plan_iop_op_review_interval_days = payload.treatment_plan_iop_op_review_interval_days
     if payload.treatment_plan_loc_change_window_days is not None:
         settings_row.treatment_plan_loc_change_window_days = payload.treatment_plan_loc_change_window_days
     if payload.treatment_plan_loc_change_window_validated is not None:

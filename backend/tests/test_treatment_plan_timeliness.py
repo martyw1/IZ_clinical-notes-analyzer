@@ -313,19 +313,77 @@ def test_timeliness_exact_30_and_60_day_boundaries_are_not_overdue(app_with_sqli
         assert payload['status'] == 'Urgent'
 
 
+def test_timeliness_due_dates_use_nontechnical_app_setting_limits(app_with_sqlite):
+    app, _ = app_with_sqlite
+
+    with TestClient(app) as client:
+        headers = _auth_headers(client)
+        configured = client.patch(
+            '/api/settings',
+            headers=headers,
+            json={
+                'treatment_plan_master_due_days': 21,
+                'treatment_plan_php_review_interval_days': 45,
+                'treatment_plan_iop_op_review_interval_days': 75,
+                'treatment_plan_loc_change_window_days': 7,
+                'treatment_plan_loc_change_window_validated': False,
+            },
+        )
+        assert configured.status_code == 200
+        assert configured.json()['treatment_plan_master_due_days'] == 21
+        assert configured.json()['treatment_plan_php_review_interval_days'] == 45
+        assert configured.json()['treatment_plan_iop_op_review_interval_days'] == 75
+
+        created = client.post(
+            '/api/timeliness/clients',
+            headers=headers,
+            json=_single_loc_client_payload(patient_id='PAT-PHP-45-DAY', loc='PHP', review_date='2026-05-01'),
+        )
+        assert created.status_code == 200
+
+        detail = client.get(f"/api/timeliness/clients/{created.json()['id']}?evaluation_date=2026-06-15", headers=headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload['next_due_date'] == '2026-06-15'
+        assert payload['days_until_due'] == 0
+        assert payload['status'] == 'Urgent'
+        assert payload['rule_used'] == 'TP-REVIEW-45'
+        assert payload['evidence_comparison']['interval_days'] == 45
+        assert any(result['rule_id'] == 'TP-MASTER-21' for result in payload['rule_results'])
+
+
 def test_inactive_clients_are_excluded_from_active_timeliness_dashboard(app_with_sqlite):
     app, _ = app_with_sqlite
 
     with TestClient(app) as client:
         headers = _auth_headers(client)
+        active = client.post('/api/timeliness/clients', headers=headers, json=_single_loc_client_payload(patient_id='PAT-ACTIVE-TP'))
+        assert active.status_code == 200
         created = client.post('/api/timeliness/clients', headers=headers, json=_single_loc_client_payload(patient_id='PAT-INACTIVE-TP', is_active=False))
         assert created.status_code == 200
 
         dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-31', headers=headers)
         assert dashboard.status_code == 200
         payload = dashboard.json()
-        assert payload['total_active_clients'] == 0
-        assert payload['items'] == []
+        assert payload['include_inactive'] is False
+        assert payload['total_clients'] == 1
+        assert payload['total_active_clients'] == 1
+        assert payload['active_clients'] == 1
+        assert payload['inactive_clients'] == 0
+        assert [item['patient_id'] for item in payload['items']] == ['PAT-ACTIVE-TP']
+        assert payload['items'][0]['is_active'] is True
+
+        all_dashboard = client.get('/api/timeliness/dashboard?evaluation_date=2026-05-31&include_inactive=true', headers=headers)
+        assert all_dashboard.status_code == 200
+        all_payload = all_dashboard.json()
+        assert all_payload['include_inactive'] is True
+        assert all_payload['total_clients'] == 2
+        assert all_payload['active_clients'] == 1
+        assert all_payload['inactive_clients'] == 1
+        assert {item['patient_id']: item['is_active'] for item in all_payload['items']} == {
+            'PAT-ACTIVE-TP': True,
+            'PAT-INACTIVE-TP': False,
+        }
 
 
 def test_timeliness_criterion_reviews_persist_and_are_audited_without_comments(app_with_sqlite):
@@ -1341,6 +1399,9 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
                 'access_reputation_api_key': 'rep-synthetic-test',
                 'alleva_treatment_plan_patient_name_import_enabled': True,
                 'alleva_treatment_plan_name_join_fallback_enabled': True,
+                'treatment_plan_master_due_days': 21,
+                'treatment_plan_php_review_interval_days': 45,
+                'treatment_plan_iop_op_review_interval_days': 75,
                 'treatment_plan_loc_change_window_days': 3,
                 'treatment_plan_loc_change_window_validated': False,
             },
@@ -1351,6 +1412,9 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
         assert payload['access_reputation_api_key_configured'] is True
         assert payload['alleva_treatment_plan_patient_name_import_enabled'] is True
         assert payload['alleva_treatment_plan_name_join_fallback_enabled'] is True
+        assert payload['treatment_plan_master_due_days'] == 21
+        assert payload['treatment_plan_php_review_interval_days'] == 45
+        assert payload['treatment_plan_iop_op_review_interval_days'] == 75
         assert payload['treatment_plan_loc_change_window_days'] == 3
         assert payload['treatment_plan_loc_change_window_validated'] is False
         assert payload['alleva_treatment_plan_sync_on_startup'] is False
@@ -1362,6 +1426,9 @@ def test_settings_api_encrypts_saved_api_keys_and_exposes_loc_blocker(app_with_s
         assert text_secret_is_encrypted(app_settings.access_reputation_api_key)
         assert app_settings.alleva_treatment_plan_patient_name_import_enabled is True
         assert app_settings.alleva_treatment_plan_name_join_fallback_enabled is True
+        assert app_settings.treatment_plan_master_due_days == 21
+        assert app_settings.treatment_plan_php_review_interval_days == 45
+        assert app_settings.treatment_plan_iop_op_review_interval_days == 75
     finally:
         db.close()
 

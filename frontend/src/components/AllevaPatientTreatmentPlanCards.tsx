@@ -12,7 +12,7 @@ type DisplayContentItem = {
 
 export function displayAllevaValue(value: string | number | boolean | null | undefined, fallback = 'Missing') {
   if (value === null || value === undefined) return fallback
-  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   const text = String(value).trim()
   return text || fallback
 }
@@ -125,41 +125,41 @@ function planCard(plan: AllevaTreatmentPlan, latestCreatedActivePlanId: string) 
     <article className='finding-card finding-card--compact' key={plan.treatment_plan_id} data-testid={`alleva-treatment-plan-${plan.treatment_plan_id}`}>
       <div className='finding-card__header'>
         <div>
-          <strong>treatment_plan_id {plan.treatment_plan_id}</strong>
+          <strong>Treatment Plan ID (Alleva TPId): {plan.treatment_plan_id}</strong>
           <p>
             {plan.treatment_plan_id === latestCreatedActivePlanId ? 'Latest-created active plan' : 'Treatment plan'} - {plan.is_active ? 'active' : 'inactive'}
           </p>
         </div>
-        <span className={`pill pill--${plan.join_validated ? 'success' : 'warning'}`}>join_validated {displayAllevaValue(plan.join_validated)}</span>
+        <span className={`pill pill--${plan.join_validated ? 'success' : 'warning'}`}>Patient join {plan.join_validated ? 'validated' : 'needs review'}</span>
       </div>
       {!plan.join_validated || !plan.raw_client_ref ? (
         <div className='rule-alert'>
           <strong>Plan join not validated</strong>
-          <p>{plan.join_warning || 'raw_client_ref did not validate back to the patient id.'}</p>
+          <p>{plan.join_warning || 'Plan client reference did not validate back to the Patient ID.'}</p>
         </div>
       ) : null}
       <dl>
-        <AllevaField label='raw_client_ref' value={plan.raw_client_ref} />
-        <AllevaField label='extracted_patient_id' value={plan.extracted_patient_id} />
-        <AllevaField label='plan_client_id' value={plan.plan_client_id} />
-        <AllevaField label='start_date' value={plan.start_date} />
-        <AllevaField label='end_date' value={plan.end_date} />
-        <AllevaField label='created_date' value={plan.created_date} />
-        <AllevaField label='last_modified' value={plan.last_modified} />
-        <AllevaField label='is_active' value={plan.is_active} />
-        <AllevaField label='is_complete' value={plan.is_complete} />
-        <AllevaField label='is_initial_tp' value={plan.is_initial_tp} />
-        <AllevaField label='is_wiley' value={plan.is_wiley} />
-        <AllevaField label='has_reason_for_admission' value={plan.has_reason_for_admission} />
-        <AllevaField label='has_initial_client_needs' value={plan.has_initial_client_needs} />
-        <AllevaField label='has_family_education_needs' value={plan.has_family_education_needs} />
-        <AllevaField label='problem_count' value={plan.problem_count} />
-        <AllevaField label='diagnosis_count' value={plan.diagnosis_count} />
-        <AllevaField label='behavioral_definition_count' value={plan.behavioral_definition_count} />
-        <AllevaField label='goal_count' value={plan.goal_count} />
-        <AllevaField label='objective_count' value={plan.objective_count} />
-        <AllevaField label='intervention_count' value={plan.intervention_count} />
-        <AllevaField label='content_value_status' value={plan.content_value_status} />
+        <AllevaField label='Plan client reference (/clients/{id})' value={plan.raw_client_ref} />
+        <AllevaField label='Extracted Patient ID' value={plan.extracted_patient_id} />
+        <AllevaField label='Patient ID used for ClientId' value={plan.plan_client_id} />
+        <AllevaField label='Plan start date' value={plan.start_date} />
+        <AllevaField label='Plan end date' value={plan.end_date} />
+        <AllevaField label='Plan created date' value={plan.created_date} />
+        <AllevaField label='Last modified in Alleva' value={plan.last_modified} />
+        <AllevaField label='Active plan (isActive)' value={plan.is_active} />
+        <AllevaField label='Complete/submitted in Alleva (isComplete)' value={plan.is_complete} />
+        <AllevaField label='Initial treatment plan (isInitialTP)' value={plan.is_initial_tp} />
+        <AllevaField label='Wiley template plan' value={plan.is_wiley} />
+        <AllevaField label='Reason for admission captured' value={plan.has_reason_for_admission} />
+        <AllevaField label='Initial client needs captured' value={plan.has_initial_client_needs} />
+        <AllevaField label='Family education needs captured' value={plan.has_family_education_needs} />
+        <AllevaField label='Problems' value={plan.problem_count} />
+        <AllevaField label='Diagnoses' value={plan.diagnosis_count} />
+        <AllevaField label='Behavioral definitions' value={plan.behavioral_definition_count} />
+        <AllevaField label='Goals' value={plan.goal_count} />
+        <AllevaField label='Objectives' value={plan.objective_count} />
+        <AllevaField label='Interventions' value={plan.intervention_count} />
+        <AllevaField label='Content value status' value={plan.content_value_status} />
       </dl>
       {contentTree(plan)}
     </article>
@@ -171,9 +171,9 @@ export function AllevaPatientTreatmentPlanAggregateCard({ aggregate }: { readonl
     <article className='finding-card' data-testid={`alleva-patient-aggregate-${aggregate.patient_id}`}>
       <div className='finding-card__header'>
         <div>
-          <strong>patient_id {aggregate.patient_id}</strong>
+          <strong>Patient ID (/clients.id / LeadId): {aggregate.patient_id}</strong>
           <p>
-            status_label {displayAllevaValue(aggregate.status_label)} - status_scope {displayAllevaValue(aggregate.status_scope)}
+            Patient status {displayAllevaValue(aggregate.status_label)} - {displayAllevaValue(aggregate.status_scope)}
           </p>
         </div>
         <span className={`pill pill--${aggregate.has_multiple_active_plans ? 'warning' : 'success'}`}>
@@ -181,21 +181,21 @@ export function AllevaPatientTreatmentPlanAggregateCard({ aggregate }: { readonl
         </span>
       </div>
       <dl>
-        <AllevaField label='patient.status_id' value={aggregate.status_id} fallback='[blank]' />
-        <AllevaField label='patient.admission_date' value={aggregate.patient.admission_date} />
-        <AllevaField label='patient.planned_discharge_date (planned/scheduled)' value={aggregate.patient.planned_discharge_date} />
-        <AllevaField label='patient.level_of_care' value={aggregate.patient.level_of_care} />
-        <AllevaField label='patient.primary_clinician' value={aggregate.patient.primary_clinician} />
-        <AllevaField label='total_plan_count' value={aggregate.total_plan_count} />
-        <AllevaField label='active_plan_count' value={aggregate.active_plan_count} />
-        <AllevaField label='has_multiple_active_plans' value={aggregate.has_multiple_active_plans} />
-        <AllevaField label='treatment_plan_ids' value={aggregate.treatment_plan_ids.join(', ')} />
-        <AllevaField label='active_treatment_plan_ids' value={aggregate.active_treatment_plan_ids.join(', ')} />
-        <AllevaField label='latest_created_active_plan_id' value={aggregate.latest_created_active_plan_id} />
-        <AllevaField label='review_data_status' value={aggregate.review_data_status} />
-        <AllevaField label='next_review_due_source' value={aggregate.next_review_due_source} />
-        <AllevaField label='review_due_date_status' value={REVIEW_DUE_DATE_UNAVAILABLE} />
-        <AllevaField label='review_availability.message' value={aggregate.review_availability.message} />
+        <AllevaField label='Alleva status ID' value={aggregate.status_id} fallback='[blank]' />
+        <AllevaField label='Admission date' value={aggregate.patient.admission_date} />
+        <AllevaField label='Planned discharge date (not actual discharge)' value={aggregate.patient.planned_discharge_date} />
+        <AllevaField label='Level of care' value={aggregate.patient.level_of_care} />
+        <AllevaField label='Primary clinician' value={aggregate.patient.primary_clinician} />
+        <AllevaField label='Total treatment plans' value={aggregate.total_plan_count} />
+        <AllevaField label='Active treatment plans' value={aggregate.active_plan_count} />
+        <AllevaField label='Multiple active plans present' value={aggregate.has_multiple_active_plans} />
+        <AllevaField label='All Treatment Plan IDs' value={aggregate.treatment_plan_ids.join(', ')} />
+        <AllevaField label='Active Treatment Plan IDs' value={aggregate.active_treatment_plan_ids.join(', ')} />
+        <AllevaField label='Latest-created active Treatment Plan ID' value={aggregate.latest_created_active_plan_id} />
+        <AllevaField label='Review data status' value={aggregate.review_data_status} />
+        <AllevaField label='Next review due source' value={aggregate.next_review_due_source} />
+        <AllevaField label='Review due date status' value={REVIEW_DUE_DATE_UNAVAILABLE} />
+        <AllevaField label='Review availability message' value={aggregate.review_availability.message} />
       </dl>
       <p>{REVIEW_DUE_DATE_UNAVAILABLE}</p>
       <p>{aggregate.review_availability.message}</p>

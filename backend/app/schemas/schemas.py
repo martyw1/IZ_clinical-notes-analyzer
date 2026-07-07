@@ -113,6 +113,9 @@ class AppSettingsUpdate(BaseModel):
     alleva_treatment_plan_name_join_fallback_enabled: bool | None = None
     alleva_treatment_plan_detail_fetch_limit: int | None = Field(default=None, ge=0, le=5000)
     facility_timezone: str | None = Field(default=None, max_length=80)
+    treatment_plan_master_due_days: int | None = Field(default=None, ge=0, le=365)
+    treatment_plan_php_review_interval_days: int | None = Field(default=None, ge=1, le=365)
+    treatment_plan_iop_op_review_interval_days: int | None = Field(default=None, ge=1, le=365)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
     treatment_plan_loc_change_window_validated: bool | None = None
 
@@ -166,6 +169,9 @@ class AppSettingsOut(BaseModel):
     facility_timezone: str
     effective_timezone: str
     effective_timezone_label: str
+    treatment_plan_master_due_days: int
+    treatment_plan_php_review_interval_days: int
+    treatment_plan_iop_op_review_interval_days: int
     treatment_plan_loc_change_window_days: int | None = None
     treatment_plan_loc_change_window_validated: bool
     updated_by_id: int | None = None
@@ -802,6 +808,7 @@ class TimelinessClientSummaryOut(BaseModel):
     id: int
     patient_id: str
     permitted_name: str
+    is_active: bool = True
     current_level_of_care: str
     counselor_name: str
     admission_date: str
@@ -826,6 +833,10 @@ class TimelinessClientSummaryOut(BaseModel):
 
 class TimelinessDashboardOut(BaseModel):
     total_active_clients: int
+    total_clients: int = 0
+    active_clients: int = 0
+    inactive_clients: int = 0
+    include_inactive: bool = False
     compliant: int
     due_soon: int
     urgent: int
@@ -837,6 +848,9 @@ class TimelinessDashboardOut(BaseModel):
     unable_to_evaluate: int = 0
     approved: int = 0
     compliance_percentage: float
+    treatment_plan_master_due_days: int = 30
+    treatment_plan_php_review_interval_days: int = 30
+    treatment_plan_iop_op_review_interval_days: int = 60
     loc_change_window_days: int | None = None
     loc_change_window_validated: bool
     items: list[TimelinessClientSummaryOut]

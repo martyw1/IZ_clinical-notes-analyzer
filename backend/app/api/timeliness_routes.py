@@ -81,12 +81,13 @@ def _log_timeliness_analysis_result(db: Session, request: Request, user: User, e
 def get_timeliness_dashboard(
     request: Request,
     evaluation_date: str | None = Query(default=None),
+    include_inactive: bool = Query(default=False),
     user: User = Depends(require_roles(*NOTE_SET_ROLES)),
     db: Session = Depends(get_db),
 ):
     app_settings = get_or_create_app_settings(db)
     as_of = _parse_evaluation_date(evaluation_date)
-    evaluations = [evaluate_client(client, app_settings, evaluation_date=as_of) for client in list_timeliness_clients(db)]
+    evaluations = [evaluate_client(client, app_settings, evaluation_date=as_of) for client in list_timeliness_clients(db, active_only=not include_inactive)]
     workflow_context = current_treatment_plan_workflow_context(db)
     for evaluation in evaluations:
         _log_timeliness_analysis_result(db, request, user, evaluation, workflow_context)
@@ -94,6 +95,8 @@ def get_timeliness_dashboard(
     for evaluation in evaluations:
         status_counts[evaluation.status] = status_counts.get(evaluation.status, 0) + 1
     total = len(evaluations)
+    active_clients = sum(1 for evaluation in evaluations if evaluation.client.is_active)
+    inactive_clients = total - active_clients
     compliance_percentage = round((status_counts['Compliant'] / total) * 100, 1) if total else 0.0
     items = sorted(
         [timeliness_summary_payload(evaluation) for evaluation in evaluations],
@@ -111,11 +114,15 @@ def get_timeliness_dashboard(
         event_category='workflow',
         target_entity='treatment_plan_timeliness',
         target_entity_type='timeliness_dashboard',
-        details={'count': total, 'evaluation_date': evaluation_date or ''},
+        details={'count': total, 'evaluation_date': evaluation_date or '', 'include_inactive': include_inactive},
         message='Treatment Plan Timeliness dashboard viewed.',
     )
     return {
-        'total_active_clients': total,
+        'total_active_clients': active_clients,
+        'total_clients': total,
+        'active_clients': active_clients,
+        'inactive_clients': inactive_clients,
+        'include_inactive': include_inactive,
         'compliant': status_counts['Compliant'],
         'due_soon': status_counts['Due Soon'],
         'urgent': status_counts['Urgent'],
@@ -127,6 +134,9 @@ def get_timeliness_dashboard(
         'unable_to_evaluate': status_counts['Unable to Evaluate'],
         'approved': status_counts['Approved'],
         'compliance_percentage': compliance_percentage,
+        'treatment_plan_master_due_days': app_settings.treatment_plan_master_due_days,
+        'treatment_plan_php_review_interval_days': app_settings.treatment_plan_php_review_interval_days,
+        'treatment_plan_iop_op_review_interval_days': app_settings.treatment_plan_iop_op_review_interval_days,
         'loc_change_window_days': app_settings.treatment_plan_loc_change_window_days,
         'loc_change_window_validated': app_settings.treatment_plan_loc_change_window_validated,
         'items': items,

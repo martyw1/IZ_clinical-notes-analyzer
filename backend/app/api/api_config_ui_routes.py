@@ -166,7 +166,9 @@ def _api_configuration_page() -> HTMLResponse:
         <button id="pullPatientCenteredTreatmentPlansButton" onclick="runTreatmentPlanPull('patient_centered_treatment_plans')" class="primary-action">Pull Patient-Centered Treatment Plans</button>
         <button id="pullActivePatientCenteredTreatmentPlansButton" onclick="runTreatmentPlanPull('active_patient_centered_treatment_plans')" class="primary-action">Pull Active Patient-Centered Treatment Plans</button>
         <button id="pullSingleTreatmentPlanButton" onclick="runTreatmentPlanPull('single_patient_treatment_plans')" class="primary-action" disabled>Pull Single Patient Treatment Plans</button>
-        <button id="pullAllTreatmentPlansButton" onclick="runTreatmentPlanPull('all_treatment_plans')" class="secondary">Diagnostic: Pull All Treatment Plans</button>
+        <button id="pullAllTreatmentPlansButton" onclick="runTreatmentPlanPull('all_treatment_plans')" class="secondary">Diagnostic: Pull first treatment-plan page</button>
+        <button id="pullAllTreatmentPlansAllPagesButton" onclick="runTreatmentPlanPull('all_treatment_plans_all_pages')" class="primary-action">Diagnostic: Pull ALL treatment-plan pages</button>
+        <button id="countTreatmentPlansButton" onclick="runTreatmentPlanPull('treatment_plan_counts')" class="secondary">Count treatment plans</button>
         <label>Treatment-plan request details that will be sent
           <textarea id="treatmentPlanPullPayload" spellcheck="false"></textarea>
         </label>
@@ -174,6 +176,9 @@ def _api_configuration_page() -> HTMLResponse:
           <strong>Patient Treatment Plans status</strong>
           <pre id="treatmentPlanPullStatus">The treatment-plan request is prepared after settings load.</pre>
         </div>
+        <label>Excel-ready treatment-plan TSV output
+          <textarea id="treatmentPlanPullTsv" class="copy-output" readonly spellcheck="false">Run a treatment-plan pull to create copy/paste rows for Excel.</textarea>
+        </label>
         <pre id="treatmentPlanPullResult">Treatment-plan pull result metadata and compact preview will appear here.</pre>
       </section>
 
@@ -269,7 +274,9 @@ def _api_configuration_page() -> HTMLResponse:
           overdue_treatment_plans: 'overdue treatment plans with computed reasons',
           inactive_treatment_plans: 'inactive treatment plans with computed reasons',
           active_patients: 'active patients with patient ID and first admission',
-          all_treatment_plans: 'all patient treatment plans',
+          all_treatment_plans: 'first page of treatment plans',
+          all_treatment_plans_all_pages: 'ALL treatment-plan pages',
+          treatment_plan_counts: 'treatment-plan counts',
           single_treatment_plan: 'single patient treatment plan',
           patient_centered_treatment_plans: 'patient-centered treatment plans',
           active_patient_centered_treatment_plans: 'active patient-centered treatment plans',
@@ -491,7 +498,7 @@ def _api_configuration_page() -> HTMLResponse:
           api_key_header_name: getValue('apiKeyHeaderName') || 'x-api-key',
           scope: getValue('scope') || null,
           timeout_seconds: Number(getValue('timeoutSeconds') || '10'),
-          max_pages: 1,
+          max_pages: report === 'all_treatment_plans' || report === 'single_treatment_plan' || report === 'single_patient_treatment_plans' ? 1 : 50,
           operation_parameters: treatmentPlanOperationParameters()
         };
       }
@@ -506,7 +513,9 @@ def _api_configuration_page() -> HTMLResponse:
         byId('treatmentPlanPullPayload').value = JSON.stringify(payload, null, 2);
         const operation = report.includes('patient_centered') || report === 'single_patient_treatment_plans'
           ? 'GET /clients followed by GET /treatment-plans?ClientId={patient_id}'
-          : 'GET /treatment-plans';
+          : report === 'treatment_plan_counts'
+            ? 'GET /treatment-plans with pagination for total/active/inactive counts'
+            : 'GET /treatment-plans';
         appendStatus('treatmentPlanPullStatus', `Prepared ${quickPullLabel(report)} using ${operation}.`);
         updateTreatmentPlanSingleButtonState();
         return payload;
@@ -523,11 +532,15 @@ def _api_configuration_page() -> HTMLResponse:
           return;
         }
         const allButton = byId('pullAllTreatmentPlansButton');
+        const allPagesButton = byId('pullAllTreatmentPlansAllPagesButton');
+        const countButton = byId('countTreatmentPlansButton');
         const patientCenteredButton = byId('pullPatientCenteredTreatmentPlansButton');
         const activePatientCenteredButton = byId('pullActivePatientCenteredTreatmentPlansButton');
         const singleButton = byId('pullSingleTreatmentPlanButton');
         const body = prepareTreatmentPlanPull(report);
         allButton.disabled = true;
+        allPagesButton.disabled = true;
+        countButton.disabled = true;
         patientCenteredButton.disabled = true;
         activePatientCenteredButton.disabled = true;
         singleButton.disabled = true;
@@ -539,11 +552,14 @@ def _api_configuration_page() -> HTMLResponse:
             body: JSON.stringify(body)
           }));
           appendStatus('treatmentPlanPullStatus', `${result.status}: ${result.message}`);
+          byId('treatmentPlanPullTsv').value = result.tsv || 'No TSV rows returned.';
           displayResult('treatmentPlanPullResult', result);
         } catch (error) {
           appendStatus('treatmentPlanPullStatus', `Treatment-plan pull failed: ${error.message}`);
         } finally {
           allButton.disabled = false;
+          allPagesButton.disabled = false;
+          countButton.disabled = false;
           patientCenteredButton.disabled = false;
           activePatientCenteredButton.disabled = false;
           updateTreatmentPlanSingleButtonState();
