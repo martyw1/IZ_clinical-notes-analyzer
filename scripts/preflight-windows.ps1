@@ -380,19 +380,43 @@ function Test-BackendConfig {
     $env:IZ_CNA_ENV_FILE = $EnvFile
     $env:PYTHONPATH = Join-Path $RootDir 'backend'
     $code = @"
-from app.services.rules_engine import load_rules_config, validate_rules_config
-from app.services.treatment_plan_checklist import load_treatment_plan_checklist, validate_treatment_plan_checklist
-rules = load_rules_config()
-errors = validate_rules_config(rules)
-if errors:
-    raise SystemExit('; '.join(errors))
-checklist = load_treatment_plan_checklist()
-checklist_errors = validate_treatment_plan_checklist(checklist)
-if checklist_errors:
-    raise SystemExit('; '.join(checklist_errors))
-if len(checklist['steps']) != 42:
-    raise SystemExit('Treatment Plan Checklist must contain 42 steps.')
-print('backend configuration ok')
+import json
+from pathlib import Path
+
+import yaml
+
+from app.services.version import build_version_payload
+from app.v2.api.routes import router as v2_router
+
+root = Path(r"$RootDir")
+rules_path = root / "config" / "rules" / "alleva_treatment_plan_completeness_rules.yaml"
+checklist_path = root / "config" / "checklists" / "treatment-plan-v1.json"
+
+rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
+if not isinstance(rules, dict):
+    raise SystemExit("Rules config must be a YAML mapping.")
+if not rules.get("rules"):
+    raise SystemExit("Rules config must include at least one rule.")
+if not rules.get("levels_of_care"):
+    raise SystemExit("Rules config must include levels_of_care.")
+if rules.get("loc_change_blocker", {}).get("status") != "unvalidated":
+    raise SystemExit("LOC-change blocker must remain unvalidated.")
+
+checklist = json.loads(checklist_path.read_text(encoding="utf-8"))
+steps = checklist.get("steps")
+if not isinstance(steps, list) or len(steps) != 42:
+    raise SystemExit("Treatment Plan Checklist must contain 42 steps.")
+expected_steps = list(range(1, 43))
+actual_steps = [step.get("step") for step in steps]
+if actual_steps != expected_steps:
+    raise SystemExit("Treatment Plan Checklist steps must be numbered 1 through 42.")
+
+version = build_version_payload()
+if version.get("version") != "2.0.0-beta.1" or version.get("release_channel") != "beta-local-desktop-v2":
+    raise SystemExit("Active version metadata is not V2 beta.")
+if not v2_router.routes:
+    raise SystemExit("V2 router has no active routes.")
+print("backend configuration ok")
 "@
     $exitCode = Invoke-PythonSnippetFile -PythonExe $VenvPython -Code $code
     if ([int]$exitCode -eq 0) {

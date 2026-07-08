@@ -1,20 +1,20 @@
 # Open Blockers
 
-Date: 2026-07-04
+Date: 2026-07-08
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.1` / build `2026.07.08.1`.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
-Current patient treatment-plan handling is documented in `docs\patient-treatment-plan-handling.md`, including the local tables, approved ID matching, gated Alleva REST sync, aggregate diagnostics, deterministic evaluator, selected-client checklist output, and Treatment Plans UI files. The current documentation-state tracker is `docs\current-documentation-state.md`. The blockers below remain active boundaries for that implementation.
+Current V2 treatment-plan handling is documented in `docs\v2-beta\`, including product scope, data contract, Alleva/API contract, rules contract, UI workflows, security/privacy/audit notes, validation evidence, and task coverage audit. Version 1 treatment-plan handling remains archived for historical reference under `deprecated\v1\`. The blockers below remain active boundaries for the V2 beta runtime.
 
 ## LOC-Change Treatment-Plan Update Window
 
-Status: unvalidated.
+Status: unvalidated for Version 2.0 Beta.
 
-The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The Version 1 implementation must keep this value configurable and must visibly mark it as unvalidated in admin/App settings UI, the Treatment Plan Checklist, the timeliness dashboard, and operator documentation.
+The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The active V2 implementation must keep this value configurable and must visibly mark it as unvalidated in readiness, settings UI, Treatment Plans/checklist evidence, and operator documentation.
 
-Current implementation state: Beta 1.4.6-beta.1 defaults the manager-editable LOC-change preset to 7 calendar days, but keeps the validation checkbox off and keeps the UI/docs marked unvalidated until R3/Marleigh confirms the final rule. The timeliness work queue/detail output marks LOC-change/date-anchor conflicts as `Needs Review`, `Missing Data`, or `Conflicting Evidence` while this blocker remains unresolved. The selected-client detail view shows source-document `Next Review Due`, date-clock anchor, date-clock due date, LOC-change due date, selected-client 42-step checklist evaluation, and saved manager status/comment notes side by side. The checklist content version remains `1.2.0` and includes a dedicated step to hold the LOC-change deadline as unresolved until R3 confirms it.
+Current implementation state: Version 2.0 Beta keeps the LOC-change update window visibly unresolved in Settings, Treatment Plans, checklist evidence, V2 docs, and validation notes. The placeholder remains 7 calendar days and must stay configurable until R3/Marleigh confirms the final rule. The V2 Treatment Plans Workbench marks affected cases as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when evidence is incomplete or conflicting.
 
 Until R3 confirms the rule, do not hard-code a final number of days and do not silently treat a LOC-change case as compliant. If source evidence is incomplete or conflicting, return `Needs Review` or `Missing Data` according to the deterministic rules.
 
@@ -31,7 +31,7 @@ Owner: R3 + Alleva
 
 Status: Open.
 
-Current implementation state: Beta 1.4.6-beta.1 uses Alleva REST/OpenAPI/HL7-readiness only and can normalize approved REST payloads into the R3 timeliness engine. Startup sync remains disabled by default and cannot be armed until the admin confirms R3/Alleva live-sync approval and validated endpoint mapping. Manual retrieval is available from the Status Dashboard EMR/API card, the Treatment Plans tab, and App Settings sync controls, but all of those paths use the same approval and mapping gates. App settings presents one active Alleva/API connection; saved endpoint profiles are presets that must be activated into the active connection before they affect readiness checks, periodic checks, API harness tests, or approved REST sync.
+Current implementation state: Version 2.0 Beta uses Alleva REST/OpenAPI readiness and synthetic/local API-harness validation only. Startup sync and live patient import remain disabled and cannot be armed until R3/Alleva live-sync approval and validated endpoint mapping exist. The V2 API Testing Harness exposes `ClientId` and bounded Pull ALL Treatment Plans job behavior for readiness testing; it is not a production import approval.
 
 Current patient-centered API harness contract:
 
@@ -75,17 +75,17 @@ Required resolution evidence:
 
 ## Windows Packaging and Validation
 
-Status: in progress for Version 1.
+Status: V2 beta release-folder package validated; signed MSI/MSIX remains open.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
-Current implementation state: Beta 1.4.6-beta.1 keeps Windows preflight, prompted source-checkout setup/start wrappers, a release-folder builder, double-click install/launch/diagnostics/backup/data-preserving uninstall/complete uninstall commands, built frontend assets, Start Menu and desktop shortcut creation, AppData preflight reports, redacted diagnostics bundles, backup zips, manual-upload delete-button usability fixes, selected-client 42-step checklist detail visibility, Status Dashboard branding, admin-only clear-patient-data controls, and legacy SQLite audit-log repair for retired FHIR-era audit columns. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
+Current implementation state: Version 2.0 Beta keeps Windows preflight, source-checkout local stack testing, API configuration smoke testing, release-folder builder, built frontend assets, required-file validation, and forbidden-file scans for the release folder and zip. The package is not code-signed and is not a full MSI/MSIX with repair/modify support.
 
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `1.4.6-beta.1` and `beta-local-desktop` on that machine.
-- The `Treatment plans` tab shows the updated evidence queue, selected-client 42-step checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`, proving the date-clock/source-evidence workflow UI is the currently served build.
+- `/api/version` and the UI footer show `2.0.0-beta.1` and `beta-local-desktop-v2` on that machine.
+- The `Treatment Plans` workbench shows the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.1 | beta-local-desktop-v2`, proving the V2 workflow UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
 - The Backup shortcut creates a full local-data backup zip under the user's Documents folder and warns that it can contain clinical data and encryption material.
@@ -117,7 +117,7 @@ Required resolution evidence:
 
 Status: resolved for Vitest on this Windows 11 laptop.
 
-Frontend Vitest and production build completed locally on 2026-06-30 for Beta 1.4.6-beta.1. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
+Frontend Vitest and production build completed locally on 2026-07-08 for Version 2.0 Beta. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
 
 Required resolution evidence:
 

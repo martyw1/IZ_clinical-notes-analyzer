@@ -1,10 +1,27 @@
 # Release Notes
 
-Current app version: `1.4.6-beta.1` / build `2026.06.30.1`.
+Current app version: `2.0.0-beta.1` / build `2026.07.08.1`.
 
-Current release channel: `beta-local-desktop`.
+Current release channel: `beta-local-desktop-v2`.
 
-Current release date in version metadata: `2026-06-30`.
+Current release date in version metadata: `2026-07-08`.
+
+## 2.0.0-beta.1 - V2 beta local desktop rebuild
+
+Build: `2026.07.08.1`
+
+Version metadata name: `Version 2.0 Beta local desktop rebuild`
+
+Summary:
+
+- Archives the pre-2.0 runtime under `deprecated/v1/`.
+- Activates a focused V2 FastAPI and React/Vite local desktop runtime.
+- Adds V2 treatment-plan aggregate/content contracts, nested detail viewer, 42-step checklist evidence surface, bounded Raw Field Explorer, and Evidence Coverage Map.
+- Adds a local API Harness job model for `Pull ALL Treatment Plans - ALL Fields` with incremental JSONL, TSV/CSV, observed schema, logs, artifacts, compact progress, cancel, and bounded preview.
+- Keeps patient names excluded by default and keeps clinical narrative text out of forensic logs.
+- Keeps the LOC-change treatment-plan update window unvalidated and configurable.
+- Updates Windows preflight, local-stack, API-configuration smoke, and release build validation for the active V2 runtime.
+- Records final validation evidence in `docs/v2-beta/validation-report.md` and task-list coverage in `docs/v2-beta/task-coverage-audit.md`.
 
 ## 1.4.6-beta.1 - Windows no-admin install readiness
 
@@ -164,4 +181,4 @@ Current version values must stay aligned in:
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
 
-Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `1.4.6-beta.1`.
+Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `2.0.0-beta.1`.

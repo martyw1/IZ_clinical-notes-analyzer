@@ -15,7 +15,7 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 function Write-Step($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" }
 
 function New-RandomSecret([int]$Length) {
-    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+=' 
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
     $bytes = New-Object byte[] $Length
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($bytes) }
@@ -94,9 +94,9 @@ EMR_API_ENABLED=false
     $env:IZ_CNA_ENV_FILE = $EnvFile
     $env:PYTHONPATH = Join-Path $RootDir 'backend'
 
-    Write-Step 'Running focused backend API connectivity tests.'
-    & $python -m pytest (Join-Path $RootDir 'backend\tests\test_api_connectivity.py') -q
-    if ($LASTEXITCODE -ne 0) { throw 'API connectivity unit tests failed.' }
+    Write-Step 'Running focused backend V2 API harness tests.'
+    & $python -m pytest (Join-Path $RootDir 'backend\tests\test_v2_runtime.py') -q
+    if ($LASTEXITCODE -ne 0) { throw 'V2 API harness unit tests failed.' }
 
     Write-Step "Starting desktop app test server on $BaseUrl ."
     $appDir = Join-Path $RootDir 'backend'
@@ -141,11 +141,37 @@ EMR_API_ENABLED=false
             api_base_url = $BaseUrl
             use_saved_api_key = $true
             api_key_header_name = 'x-api-key'
+            client_id = 'ClientId'
             timeout_seconds = 5
         } | ConvertTo-Json
         $definition = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/api-configuration/pull-definitions" -Headers $headers -ContentType 'application/json' -Body $definitionBody
         if ($definition.status -ne 'ok') { throw "API definition pull did not pass: $($definition | ConvertTo-Json -Depth 8)" }
         if ($definition.definition_summary.title -notmatch 'Connectivity Test Definition') { throw 'API definition summary was not returned as expected.' }
+        if ($definition.request_keys -notcontains 'client_id') { throw 'API definition pull did not include the ClientId request key.' }
+
+        Write-Step 'Starting bounded Pull ALL Treatment Plans job.'
+        $jobBody = @{ job_type = 'pull_all_treatment_plans_all_fields' } | ConvertTo-Json
+        $job = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v2/api-harness/jobs" -Headers $headers -ContentType 'application/json' -Body $jobBody
+        if (!$job.job_id) { throw "V2 API harness job did not return a job_id: $($job | ConvertTo-Json -Depth 8)" }
+
+        $jobState = $job
+        for ($i = 0; $i -lt 30; $i++) {
+            $jobState = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)" -Headers $headers -TimeoutSec 10
+            if ($jobState.status -eq 'completed' -or $jobState.status -eq 'completed_with_warnings' -or $jobState.status -eq 'failed') { break }
+            Start-Sleep -Milliseconds 250
+        }
+        if ($jobState.status -ne 'completed') { throw "V2 API harness job did not complete: $($jobState | ConvertTo-Json -Depth 8)" }
+
+        $preview = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)/preview" -Headers $headers -TimeoutSec 10
+        if ($preview.max_records -ne 25 -or $preview.max_fields -ne 50) { throw "V2 API harness preview was not bounded: $($preview | ConvertTo-Json -Depth 8)" }
+
+        $artifacts = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)/artifacts" -Headers $headers -TimeoutSec 10
+        $artifactNames = @($artifacts | ForEach-Object { $_.name })
+        foreach ($expectedArtifact in @('all-treatment-plans.all-fields.redacted.jsonl', 'all-treatment-plans.flattened-fields.tsv', 'all-treatment-plans.observed-schema.json')) {
+            if ($artifactNames -notcontains $expectedArtifact) {
+                throw "V2 API harness artifacts did not include $expectedArtifact. Found: $($artifactNames -join ', ')"
+            }
+        }
 
         Write-Step 'API configuration local smoke test passed.'
     }

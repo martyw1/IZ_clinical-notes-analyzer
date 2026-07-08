@@ -1,34 +1,26 @@
 # IZ Clinical Notes Analyzer
 
-Current app version: `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
+Current app version: `2.0.0-beta.1` / build `2026.07.08.1` on the `beta-local-desktop-v2` channel.
+
+Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
 
 IZ Clinical Notes Analyzer is a local-first clinical chart-review and Treatment Plan Timeliness Tracker app for Windows 10/11 desktop use. It helps R3 staff check clinical-note binders and treatment-plan tracking evidence before office-manager approval. The current app runs as one local FastAPI desktop service with a React/Vite browser interface at `http://localhost:8000`, SQLite under the user's local app-data folder, encrypted local uploaded-file storage, encrypted API configuration storage, role-based access control, deterministic treatment-plan rules, workflow profiles, readiness checks, optional LLM configuration disabled by default, and forensic audit logging.
 
 The normal R3 Windows user path does not require Windows administrator access, Docker, PostgreSQL, cloud hosting, Git, Node.js, command-line work, or a database administrator when a prepared release folder with built frontend assets is used.
 
-## Current Beta 1.4.6-beta.1 State
+## Current Version 2.0 Beta State
 
-Version 1.4.6-beta.1 is the current local Windows desktop beta. It includes:
+Version 2.0 Beta is the current local Windows desktop beta. It includes:
 
-- Treatment Plan Checklist Version 1 as the canonical source in `config\checklists\treatment-plan-v1.json`; its checklist content version remains `1.2.0` and is separate from the app version.
-- A user-visible Checklist tab with acronym definitions, review statuses, the LOC-change blocker, and all 42 PRD checklist steps.
-- A selected-client Treatment Plans detail section named `42-Step Checklist Evaluation`, where managers can inspect each checklist item for the selected treatment-plan client/item with status, evidence, finding, metadata, required documents, checks, examples, remediation, reviewer actions, override rules, audit event, export fields, and saved manager status/comment notes.
-- A `Status Dashboard` with R3 logo branding, review-source choices for EMR/API readiness and manual upload, plus a gated `Retrieve Active Treatment Plans` action.
-- Admin-only `Clear All Patient Data` controls in Status Dashboard Quick Actions and App Settings. The action requires the exact phrase `CLEAR ALL PATIENT DATA`, deletes local patient/chart/treatment-plan/manual-upload/review data and encrypted uploads, and preserves settings, API credentials, users, audit logs, rules, and docs.
-- Manual upload, uploaded-binder deletion, automated review, reviewer notes, manager disposition, and CSV/JSON exports.
-- Manual upload delete controls that show confirmation guidance when clicked early and no longer present disabled buttons with a Windows busy cursor.
-- Treatment Plan Timeliness dashboard/detail views, manual overrides, evidence comparison, task-list copy/export, selected-client counselor action export, CSV/JSON exports, and due-date windows where due today/one day out are `Urgent`, 2-7 days out are `Due Soon`, 8+ days out are `Compliant`, and only dates before today are `Overdue`.
-- Admin/manager Workflow profiles with draft, publish, archive, unused-draft delete, and `Seed draft from 42-step checklist` actions.
-- Role-scoped User management: admins can manage all roles; office managers can manage counselor accounts only; counselors manage only their own account.
-- In-app Help with role permissions, screen guides, button behavior, setup notes, workflow guidance, API/EMR definitions, and LLM configuration notes.
-- One active Alleva/API connection in App settings, with encrypted client-secret storage, optional saved endpoint-profile presets that can be activated into that active connection, and disabled-by-default Alleva patient-name import/display.
-- Alleva REST/OpenAPI/HL7-readiness setup with active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements removed.
-- Legacy local SQLite audit-log repair for databases that still contain retired FHIR-era required audit columns.
-- Admin-only App settings, API/EMR setup, LLM setup, and Forensic logs.
-- Deployment-readiness hardening for redacted PDF metadata extraction, generated placeholder display names, timezone-aware audit display, stale-session handling, button-event audit logging, safe periodic source checks, bounded API operation responses, and API client-credentials testing.
-- Windows preflight, setup/start wrappers, release-folder packaging scripts, built frontend assets, and install/launch/diagnostics/backup/uninstall commands for a prepared release folder.
-
-Version 1.4.6-beta.1 still does not include ungated live Alleva patient import or a signed MSI/MSIX. The Alleva REST treatment-plan sync path is present and preserved, but disabled by default until R3/Alleva live-sync approval and endpoint mapping validation are complete. Startup sync remains off by default. Alleva patient names stay redacted unless an admin explicitly enables and saves patient-name import/display in App settings. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
+- A focused V2 FastAPI runtime in `backend/app/` with active V2 routes in `backend/app/v2/api/routes.py`.
+- A focused V2 React/Vite UI in `frontend/src/v2/` for Status Dashboard, Treatment Plans, Manual Upload, API Testing Harness, Users, Forensic Logs, Settings, and Help.
+- Treatment Plan Checklist Version 1 as the canonical source in `config\checklists\treatment-plan-v1.json`; its checklist content version remains separate from the app version.
+- A selected-client Treatment Plans Workbench with patient-ID-only labels, deterministic status order, nested clinical-content viewer, 42-step checklist evidence, manager action controls, Evidence Coverage Map, and bounded Raw Field Explorer.
+- A V2 API Testing Harness with `ClientId`, Pull ALL Treatment Plans job lifecycle, compact progress, cancel, redacted JSONL/TSV/schema artifacts, and bounded preview.
+- Local-first audit/version/readiness services, safe forensic log summaries, encrypted/local app-data boundaries, and frontend footer version metadata.
+- Windows preflight, local-stack smoke, API-configuration smoke, release-folder packaging, required-file validation, and forbidden-file scans for a prepared release folder.
+- V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
+Version 2.0 Beta still does not include ungated live Alleva patient import or a signed MSI/MSIX. Live Alleva sync remains disabled until R3/Alleva approval and endpoint mapping validation are complete. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
 ## Interactive Architecture Diagram
 
@@ -47,22 +39,21 @@ flowchart TB
 
     subgraph Browser["Browser UI served from localhost:8000"]
         ReactApp["React app<br/>frontend/src/App.tsx"]
-        Views["Main screens<br/>Dashboard, Treatment plans, Uploads,<br/>Review queue, Checklist, Help,<br/>Users, Workflow profiles, Settings, Logs"]
-        Feedback["Dialogs and progress UI<br/>frontend/src/components/feedback.tsx"]
+        Views["Main screens<br/>Dashboard, Treatment Plans, Manual Upload,<br/>API Testing Harness, Users, Logs,<br/>Settings, Help"]
+        DetailUI["Treatment detail and evidence UI<br/>frontend/src/v2/components/TreatmentPlanDetailViewer.tsx"]
+        JobUI["Large job progress UI<br/>frontend/src/v2/components/JobProgressCard.tsx"]
         Styles["Responsive styles and status colors<br/>frontend/src/app.css"]
     end
 
     subgraph Backend["FastAPI backend services"]
         MainAPI["Main API and app factory<br/>backend/app/main.py"]
-        Auth["Auth, password reset, RBAC<br/>backend/app/api/auth_user_routes.py"]
-        Routes["Primary authenticated routes<br/>backend/app/api/routes.py"]
-        Uploads["Patient-note binder service<br/>backend/app/services/patient_notes.py"]
-        Timeliness["Treatment Plan Timeliness<br/>backend/app/services/timeliness.py"]
-        Rules["Deterministic rules engine<br/>backend/app/services/rules_engine.py"]
-        Workflow["Workflow profile versioning<br/>backend/app/api/workflow_routes.py"]
-        APIHarness["API/EMR readiness harness<br/>backend/app/api/api_config_routes.py"]
+        Routes["Active V2 routes<br/>backend/app/v2/api/routes.py"]
+        Domain["Treatment-plan contracts<br/>backend/app/v2/domain/schemas.py"]
+        SampleData["Synthetic V2 aggregate<br/>backend/app/v2/services/sample_data.py"]
+        Jobs["Large API jobs and artifacts<br/>backend/app/v2/services/jobs.py<br/>backend/app/v2/services/job_artifacts.py"]
+        DashboardData["Dashboard data<br/>backend/app/v2/services/dashboard_data.py"]
         Audit["Forensic audit logging<br/>backend/app/services/audit.py"]
-        Version["Version and readiness<br/>backend/app/services/version.py<br/>backend/app/services/runtime_checks.py"]
+        Version["Version and readiness<br/>backend/app/services/version.py<br/>backend/app/v2/api/routes.py"]
     end
 
     subgraph Config["Repo configuration and product rules"]
@@ -86,36 +77,35 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1"]
-        Legacy["Legacy Docker/PostgreSQL notes<br/>docs/removal-log.md and legacy startup stubs"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1"]
+        Legacy["Archived V1 runtime<br/>deprecated/v1"]
     end
 
     Staff --> Launcher --> Preflight --> Desktop
     Desktop --> StaticUI --> ReactApp
     Staff --> ReactApp
     ReactApp --> Views
-    ReactApp --> Feedback
+    ReactApp --> DetailUI
+    ReactApp --> JobUI
     ReactApp --> Styles
     ReactApp --> MainAPI
     Desktop --> MainAPI
-    MainAPI --> Auth
     MainAPI --> Routes
-    Routes --> Uploads
-    Routes --> Timeliness
-    Routes --> Workflow
-    Routes --> APIHarness
+    Routes --> Domain
+    Routes --> SampleData
+    Routes --> Jobs
+    Routes --> DashboardData
     Routes --> Audit
     Routes --> Version
-    Timeliness --> Rules
-    Rules --> RuleYaml
+    Domain --> RuleYaml
     Routes --> Checklist
     Version --> VersionFiles
-    Uploads --> EncryptedUploads
+    SampleData --> EncryptedUploads
     MainAPI --> SQLite
     MainAPI --> Env
     Audit --> Logs
-    APIHarness --> Reports
-    APIHarness -. readiness only, no live patient import .-> Alleva
+    Jobs --> Reports
+    Jobs -. readiness only, no live patient import .-> Alleva
     MainAPI -. optional and disabled by default .-> LLM
     Builder --> Release
     Legacy -. not ordinary Windows runtime .-> Windows
@@ -124,22 +114,21 @@ flowchart TB
     click Preflight "scripts/preflight-windows.ps1" "Open Windows preflight"
     click Desktop "backend/app/desktop_main.py" "Open desktop runtime"
     click ReactApp "frontend/src/App.tsx" "Open React app"
-    click Feedback "frontend/src/components/feedback.tsx" "Open feedback components"
+    click DetailUI "frontend/src/v2/components/TreatmentPlanDetailViewer.tsx" "Open treatment detail UI"
+    click JobUI "frontend/src/v2/components/JobProgressCard.tsx" "Open large job UI"
     click Styles "frontend/src/app.css" "Open app styles"
     click MainAPI "backend/app/main.py" "Open main FastAPI app"
-    click Auth "backend/app/api/auth_user_routes.py" "Open auth and user routes"
-    click Routes "backend/app/api/routes.py" "Open primary routes"
-    click Uploads "backend/app/services/patient_notes.py" "Open patient-note service"
-    click Timeliness "backend/app/services/timeliness.py" "Open timeliness service"
-    click Rules "backend/app/services/rules_engine.py" "Open rules engine"
-    click Workflow "backend/app/api/workflow_routes.py" "Open workflow routes"
-    click APIHarness "backend/app/api/api_config_routes.py" "Open API configuration routes"
+    click Routes "backend/app/v2/api/routes.py" "Open active V2 routes"
+    click Domain "backend/app/v2/domain/schemas.py" "Open V2 contracts"
+    click SampleData "backend/app/v2/services/sample_data.py" "Open synthetic aggregate"
+    click Jobs "backend/app/v2/services/jobs.py" "Open large job service"
+    click DashboardData "backend/app/v2/services/dashboard_data.py" "Open dashboard data"
     click Audit "backend/app/services/audit.py" "Open audit service"
     click Checklist "config/checklists/treatment-plan-v1.json" "Open canonical checklist"
     click RuleYaml "config/rules/alleva_treatment_plan_completeness_rules.yaml" "Open deterministic rules"
     click VersionFiles "VERSION.json" "Open version metadata"
     click Builder "scripts/build-windows-installer.ps1" "Open release builder"
-    click Legacy "docs/removal-log.md" "Open removal log"
+    click Legacy "deprecated/v1/README.md" "Open V1 archive notes"
 ```
 
 Diagram boundaries:
@@ -171,14 +160,14 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For Beta 1.4.6-beta.1 it writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For Version 2.0 Beta it writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1.zip`
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
+1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
