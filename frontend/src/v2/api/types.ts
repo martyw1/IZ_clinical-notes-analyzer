@@ -1,0 +1,126 @@
+import type { TreatmentPlanStatus } from '../types/treatmentPlan'
+
+export type UserRole = 'admin' | 'office_manager' | 'counselor' | 'viewer'
+
+export type UserProfile = {
+  readonly id: number
+  readonly username: string
+  readonly fullName: string
+  readonly role: UserRole
+  readonly isActive: boolean
+  readonly isLocked: boolean
+  readonly mustResetPassword: boolean
+}
+
+export type LoginResult = {
+  readonly accessToken: string
+  readonly mustResetPassword: boolean
+}
+
+export type NavigationResult = {
+  readonly items: readonly string[]
+  readonly activeRuntime: string
+}
+
+export type SourceCard = {
+  readonly label: string
+  readonly status: string
+  readonly detail: string
+}
+
+export type DashboardData = {
+  readonly sourceCards: readonly SourceCard[]
+  readonly metrics: Record<string, number>
+  readonly blockers: readonly string[]
+}
+
+export type TreatmentPlanListItem = {
+  readonly patientId: string
+  readonly patientDisplayLabel: string
+  readonly currentLevelOfCare: string
+  readonly admissionDate: string
+  readonly nextDueDate: string
+  readonly status: TreatmentPlanStatus
+  readonly missingCriteriaCount: number
+  readonly returnedCriteriaCount: number
+  readonly sourceMode: string
+  readonly warnings: readonly string[]
+}
+
+export type TreatmentPlanListData = {
+  readonly items: readonly TreatmentPlanListItem[]
+  readonly statusOrder: readonly TreatmentPlanStatus[]
+}
+
+export type ManualTreatmentPlanImportResult = {
+  readonly status: 'imported'
+  readonly patientId: string
+  readonly patientDisplayLabel: string
+  readonly sourceMode: 'manual_upload'
+  readonly criteriaTotal: number
+  readonly encryptedAtRest: boolean
+  readonly sourceFileArchived: boolean
+  readonly sourceFileId: string
+}
+
+export type AppSettings = {
+  readonly organizationName: string
+  readonly facilityTimezone: string
+  readonly treatmentPlanMasterDueDays: number
+  readonly treatmentPlanPhpReviewIntervalDays: number
+  readonly treatmentPlanIopOpReviewIntervalDays: number
+  readonly treatmentPlanLocChangeWindowDays: number | null
+  readonly treatmentPlanLocChangeWindowValidated: boolean
+}
+
+export type ApiConfiguration = {
+  readonly vendorName: string
+  readonly apiBaseUrl: string
+  readonly openapiUrl: string
+  readonly tokenUrl: string
+  readonly clientId: string
+  readonly apiKeyConfigured: boolean
+  readonly clientSecretConfigured: boolean
+  readonly tokenAuthStyle: string
+  readonly scopes: string
+  readonly paginationLimit: number
+  readonly syncLimit: number
+  readonly timeoutSeconds: number
+  readonly apiEnabled: boolean
+}
+
+export type AuditLogItem = {
+  readonly eventId: string
+  readonly timestampUtc: string
+  readonly actorUsername: string
+  readonly actorRole: string
+  readonly action: string
+  readonly targetEntityType: string
+  readonly targetEntityId: string
+  readonly outcomeStatus: string
+}
+
+export type ApiHarnessArtifact = {
+  readonly artifactId: string
+  readonly name: string
+  readonly mediaType: string
+  readonly sizeBytes: number
+  readonly redactionMode: string
+}
+
+export type ApiHarnessJob = {
+  readonly jobId: string
+  readonly status: string
+  readonly progressPercent: number
+  readonly recordsWritten: number
+  readonly recordsFailed: number
+  readonly warningsCount: number
+  readonly artifacts: readonly ApiHarnessArtifact[]
+}
+
+export type ManagerActionPayload = {
+  readonly criterionId: string
+  readonly action: 'approve' | 'return_for_correction' | 'override' | 'comment'
+  readonly comment: string
+  readonly overrideReason: string
+}

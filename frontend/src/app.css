@@ -242,6 +242,27 @@ dd,
   color: var(--text-main);
 }
 
+<<<<<<< HEAD
+.nav-button:hover,
+.status-segment:hover,
+.secondary-button:hover {
+  background: #f5faf7;
+  color: var(--text-main);
+}
+
+.danger-button {
+  border-color: var(--status-overdue);
+  background: var(--bg-surface);
+  color: var(--status-overdue);
+}
+
+.danger-button:hover {
+  background: #fee2e2;
+  color: var(--status-overdue);
+}
+
+=======
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .nav-button[aria-pressed="true"] {
   border-color: #18543b;
   background: #e2f1e8;
@@ -297,8 +318,13 @@ dd,
 
 .source-card--blocked,
 .warning-band {
+<<<<<<< HEAD
+  border-color: #d97706;
+  background: #fffbeb;
+=======
   border-color: #c084fc;
   background: #f3e8ff;
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 }
 
 .metric-grid,
@@ -380,7 +406,11 @@ dd,
 }
 
 .queue-and-detail {
+<<<<<<< HEAD
+  grid-template-columns: minmax(500px, 0.85fr) minmax(0, 1.15fr);
+=======
   grid-template-columns: minmax(360px, 0.7fr) minmax(0, 1.3fr);
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 }
 
 .queue-panel {
@@ -391,9 +421,35 @@ dd,
   overflow-x: auto;
 }
 
+<<<<<<< HEAD
+=======
 .queue-panel table,
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .table-panel table {
   min-width: 640px;
+}
+
+<<<<<<< HEAD
+.raw-field-table {
+  min-width: 760px;
+}
+
+.raw-field-table td[data-label='Field path'],
+.raw-field-table td[data-label='Type'],
+.raw-field-table td[data-label='State'],
+.raw-field-table td[data-label='Checklist'] {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.queue-panel table {
+  min-width: 0;
+}
+
+.queue-panel th,
+.queue-panel td {
+  padding: 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .detail-grid {
@@ -408,6 +464,20 @@ dd,
   padding-top: 0.75rem;
 }
 
+=======
+.detail-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.content-panel details,
+.evidence-panel,
+.manager-actions {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .criterion-list {
   max-height: 18rem;
   overflow: auto;
@@ -426,6 +496,25 @@ dd,
   text-align: left;
 }
 
+<<<<<<< HEAD
+.topbar-actions,
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.link-button {
+  padding: 0.55rem 0.7rem;
+  white-space: normal;
+}
+
+=======
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .signature-grid,
 .job-stats {
   margin: 0;
@@ -450,6 +539,45 @@ dd,
   padding-left: 1.25rem;
 }
 
+<<<<<<< HEAD
+.source-document-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.source-document-list li,
+.source-document-list li div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.source-document-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.source-document-metadata {
+  min-width: 0;
+}
+
+.source-document-metadata strong,
+.source-document-metadata span {
+  overflow-wrap: anywhere;
+}
+
+.source-document-list .source-document-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.source-document-list code {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
 .warning-band,
 .muted {
   color: var(--text-muted);
@@ -459,6 +587,17 @@ dd,
   border-top: 1px solid var(--border-soft);
   padding: 1rem 0;
   color: var(--text-muted);
+=======
+.warning-band,
+.muted {
+  color: var(--text-muted);
+}
+
+.v2-footer {
+  border-top: 1px solid var(--border-soft);
+  padding: 1rem 0;
+  color: var(--text-muted);
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   font-size: 0.84rem;
 }
 
@@ -474,21 +613,115 @@ dd,
     padding: 0.75rem;
   }
 
+<<<<<<< HEAD
+  .sticky-toolbar {
+    position: static;
+  }
+
   .sticky-toolbar,
   .v2-topbar,
   .section-heading {
     align-items: stretch;
   }
 
+=======
+  .sticky-toolbar,
+  .v2-topbar,
+  .section-heading {
+    align-items: stretch;
+  }
+
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   .v2-topbar > *,
   .sticky-toolbar > *,
   .section-heading > * {
     min-width: 0;
+<<<<<<< HEAD
+  }
+
+  .sticky-toolbar label,
+  .sticky-toolbar button,
+  .button-row button,
+  .source-document-list button {
+    width: 100%;
+  }
+
+  .source-document-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-panel thead {
+    display: none;
+  }
+
+  .queue-panel tr,
+  .queue-panel td {
+    display: block;
+    width: 100%;
+  }
+
+  .queue-panel tr {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+
+  .queue-panel td {
+    border-bottom: 0;
+    padding: 0.25rem 0;
+  }
+
+  .queue-panel td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .table-panel table,
+  .table-panel thead,
+  .table-panel tbody,
+  .table-panel tr,
+  .table-panel td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .table-panel thead {
+    display: none;
+  }
+
+  .table-panel tr {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+
+  .table-panel td {
+    border-bottom: 0;
+    padding: 0.25rem 0;
+  }
+
+  .table-panel td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .raw-field-table td[data-label='Field path'] {
+    overflow-wrap: anywhere;
+    white-space: normal;
+=======
   }
 
   .sticky-toolbar label,
   .sticky-toolbar button,
   .button-row button {
     width: 100%;
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   }
 }

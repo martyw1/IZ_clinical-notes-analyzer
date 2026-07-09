@@ -1,6 +1,14 @@
 import { JobProgressCard } from '../components/JobProgressCard'
 
+<<<<<<< HEAD
+type ApiHarnessPageProps = {
+  readonly token: string
+}
+
+export function ApiHarnessPage({ token }: ApiHarnessPageProps) {
+=======
 export function ApiHarnessPage() {
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   return (
     <div className='page-grid'>
       <section className='panel'>
@@ -17,7 +25,11 @@ export function ApiHarnessPage() {
           <article>Diagnostic Pull All Treatment Plans</article>
         </div>
       </section>
+<<<<<<< HEAD
+      <JobProgressCard token={token} />
+=======
       <JobProgressCard />
+>>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
     </div>
   )
 }
