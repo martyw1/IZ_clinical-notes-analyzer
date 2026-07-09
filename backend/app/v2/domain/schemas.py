@@ -142,6 +142,18 @@ class TreatmentPlanEvidenceCoverage(V2Model):
     warnings: tuple[str, ...]
 
 
+class SourceDocumentRef(V2Model):
+    source_file_id: str
+    source_kind: str
+    source_format: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    redaction_status: str
+    created_at: str
+    download_url: str
+
+
 class TreatmentPlanAggregate(V2Model):
     patient_id: str
     patient_display_label: str
@@ -177,6 +189,7 @@ class TreatmentPlanAggregate(V2Model):
     audit_refs: tuple[str, ...]
     evidence_coverage_summary: TreatmentPlanEvidenceCoverage
     content_snapshot: TreatmentPlanContentSnapshot
+    source_documents: tuple[SourceDocumentRef, ...] = ()
 
 
 class ApiHarnessArtifact(V2Model):

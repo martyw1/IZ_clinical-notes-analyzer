@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useEffect, useMemo, useState } from 'react'
 import type { ManagerActionPayload } from '../api/types'
 import { EvidencePanel } from './EvidencePanel'
@@ -38,30 +37,11 @@ export function TreatmentPlanDetailViewer({
   const [sourceArchiveMessage, setSourceArchiveMessage] = useState('')
   const [downloadingSourceFileId, setDownloadingSourceFileId] = useState('')
   const [deletingSourceFileId, setDeletingSourceFileId] = useState('')
-=======
-import { useMemo, useState } from 'react'
-import { EvidencePanel } from './EvidencePanel'
-import { RawFieldExplorer } from './RawFieldExplorer'
-import { StatusBadge } from './StatusBadge'
-import type { CriterionResult, TreatmentPlanAggregate } from '../types/treatmentPlan'
-
-type TreatmentPlanDetailViewerProps = {
-  readonly plan: TreatmentPlanAggregate
-}
-
-export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerProps) {
-  const [query, setQuery] = useState('')
-  const [selectedCriterion, setSelectedCriterion] = useState<CriterionResult>(plan.criteria[0])
-  const [comment, setComment] = useState('')
-  const [overrideReason, setOverrideReason] = useState('')
-  const [actionMessage, setActionMessage] = useState('')
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   const filteredCriteria = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return plan.criteria
     return plan.criteria.filter((criterion) => criterion.title.toLowerCase().includes(normalized))
   }, [plan.criteria, query])
-<<<<<<< HEAD
   const selectedCriterion = plan.criteria.find((criterion) => criterion.criterionId === selectedCriterionId) ?? plan.criteria[0] ?? null
 
   useEffect(() => {
@@ -138,15 +118,6 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
     } finally {
       setDeletingSourceFileId('')
     }
-=======
-
-  const saveReturn = () => {
-    setActionMessage(comment.trim() ? 'Criterion returned for correction with manager comment.' : 'Add a comment before returning a criterion.')
-  }
-
-  const saveOverride = () => {
-    setActionMessage(overrideReason.trim() ? 'Override saved with required reason and audit event.' : 'Override reason is required.')
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   }
 
   return (
@@ -173,15 +144,9 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
 
       <section className='panel content-panel'>
         <h2>Clinical Content</h2>
-<<<<<<< HEAD
         <p><strong>Reason for admission:</strong> {plan.reasonForAdmission}</p>
         <p><strong>Initial client needs:</strong> {plan.initialClientNeeds}</p>
         <p><strong>Family education needs:</strong> {plan.familyEducationNeeds}</p>
-=======
-        <p><strong>Reason for admission:</strong> Synthetic clinical rationale is present for local validation.</p>
-        <p><strong>Initial client needs:</strong> Stabilization and relapse-prevention needs are present.</p>
-        <p><strong>Family education needs:</strong> Reviewed as applicable.</p>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         {plan.problems.map((problem) => (
           <details key={problem.problemNumber} open>
             <summary>Problem {problem.problemNumber}: {problem.description}</summary>
@@ -228,21 +193,13 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
         </div>
         <div className='criterion-list'>
           {filteredCriteria.map((criterion) => (
-<<<<<<< HEAD
             <button key={criterion.criterionId} type='button' className='criterion-row' onClick={() => setSelectedCriterionId(criterion.criterionId)}>
-=======
-            <button key={criterion.criterionId} type='button' className='criterion-row' onClick={() => setSelectedCriterion(criterion)}>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
               <span>{criterion.title}</span>
               <StatusBadge status={criterion.status} />
             </button>
           ))}
         </div>
-<<<<<<< HEAD
         {selectedCriterion ? <EvidencePanel criterion={selectedCriterion} /> : <p className='muted'>No checklist criteria returned for this plan.</p>}
-=======
-        <EvidencePanel criterion={selectedCriterion} />
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         <div className='manager-actions'>
           <label>
             Manager comment
@@ -253,20 +210,14 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
             <input value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} />
           </label>
           <div className='button-row'>
-<<<<<<< HEAD
             <button type='button' onClick={saveReturn} disabled={isSaving || !selectedCriterion}>Return for correction</button>
             <button type='button' className='secondary-button' onClick={saveOverride} disabled={isSaving || !selectedCriterion}>Save override</button>
-=======
-            <button type='button' onClick={saveReturn}>Return for correction</button>
-            <button type='button' className='secondary-button' onClick={saveOverride}>Save override</button>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
           </div>
           {actionMessage && <p role='status'>{actionMessage}</p>}
         </div>
       </section>
 
       <section className='panel'>
-<<<<<<< HEAD
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Manager review history</p>
@@ -298,19 +249,10 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
           <span>With evidence: {plan.evidenceCoverageSummary.criteriaWithEvidence}</span>
           <span>Missing evidence: {plan.evidenceCoverageSummary.criteriaMissingEvidence}</span>
           <span>Runtime-only fields: {plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span>
-=======
-        <h2>Evidence Coverage Map</h2>
-        <div className='summary-grid'>
-          <span>Criteria total: 42</span>
-          <span>With evidence: 39</span>
-          <span>Missing evidence: 3</span>
-          <span>Runtime-only fields: 1</span>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         </div>
         <p>Used, missing, unmapped, and unused content are separated so managers can see what the checklist did and did not evaluate.</p>
       </section>
 
-<<<<<<< HEAD
       <SourceFileArchivePanel
         sourceDocuments={plan.sourceDocuments}
         archiveMessage={sourceArchiveMessage}
@@ -320,8 +262,6 @@ export function TreatmentPlanDetailViewer({ plan }: TreatmentPlanDetailViewerPro
         onDeleteSourceDocument={(document) => void deleteSourceDocument(document)}
       />
 
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
       <RawFieldExplorer plan={plan} />
     </div>
   )

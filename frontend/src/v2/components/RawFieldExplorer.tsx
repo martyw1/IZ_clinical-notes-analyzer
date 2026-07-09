@@ -27,11 +27,7 @@ export function RawFieldExplorer({ plan }: RawFieldExplorerProps) {
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder='Search field path' />
         </label>
       </div>
-<<<<<<< HEAD
       <table className='raw-field-table'>
-=======
-      <table>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         <thead>
           <tr>
             <th>Field path</th>
@@ -44,19 +40,11 @@ export function RawFieldExplorer({ plan }: RawFieldExplorerProps) {
         <tbody>
           {fields.map((field) => (
             <tr key={field.fieldPath}>
-<<<<<<< HEAD
               <td data-label='Field path'>{field.fieldPath}</td>
               <td data-label='Type'>{field.valueType}</td>
               <td data-label='State'>{field.state}</td>
               <td data-label='Safe preview'>{field.sampleRedactedValue}</td>
               <td data-label='Checklist'>{field.usedByChecklist ? 'Used' : 'Unused'}</td>
-=======
-              <td>{field.fieldPath}</td>
-              <td>{field.valueType}</td>
-              <td>{field.state}</td>
-              <td>{field.sampleRedactedValue}</td>
-              <td>{field.usedByChecklist ? 'Used' : 'Unused'}</td>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
             </tr>
           ))}
         </tbody>

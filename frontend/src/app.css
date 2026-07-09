@@ -242,7 +242,6 @@ dd,
   color: var(--text-main);
 }
 
-<<<<<<< HEAD
 .nav-button:hover,
 .status-segment:hover,
 .secondary-button:hover {
@@ -261,8 +260,6 @@ dd,
   color: var(--status-overdue);
 }
 
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .nav-button[aria-pressed="true"] {
   border-color: #18543b;
   background: #e2f1e8;
@@ -318,13 +315,8 @@ dd,
 
 .source-card--blocked,
 .warning-band {
-<<<<<<< HEAD
   border-color: #d97706;
   background: #fffbeb;
-=======
-  border-color: #c084fc;
-  background: #f3e8ff;
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 }
 
 .metric-grid,
@@ -406,11 +398,7 @@ dd,
 }
 
 .queue-and-detail {
-<<<<<<< HEAD
   grid-template-columns: minmax(500px, 0.85fr) minmax(0, 1.15fr);
-=======
-  grid-template-columns: minmax(360px, 0.7fr) minmax(0, 1.3fr);
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 }
 
 .queue-panel {
@@ -421,15 +409,10 @@ dd,
   overflow-x: auto;
 }
 
-<<<<<<< HEAD
-=======
-.queue-panel table,
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .table-panel table {
   min-width: 640px;
 }
 
-<<<<<<< HEAD
 .raw-field-table {
   min-width: 760px;
 }
@@ -464,20 +447,6 @@ dd,
   padding-top: 0.75rem;
 }
 
-=======
-.detail-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.content-panel details,
-.evidence-panel,
-.manager-actions {
-  border-top: 1px solid var(--border-soft);
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-}
-
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .criterion-list {
   max-height: 18rem;
   overflow: auto;
@@ -496,7 +465,6 @@ dd,
   text-align: left;
 }
 
-<<<<<<< HEAD
 .topbar-actions,
 .checkbox-row {
   display: flex;
@@ -513,8 +481,6 @@ dd,
   white-space: normal;
 }
 
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 .signature-grid,
 .job-stats {
   margin: 0;
@@ -539,7 +505,6 @@ dd,
   padding-left: 1.25rem;
 }
 
-<<<<<<< HEAD
 .source-document-list {
   display: grid;
   gap: 0.65rem;
@@ -587,17 +552,6 @@ dd,
   border-top: 1px solid var(--border-soft);
   padding: 1rem 0;
   color: var(--text-muted);
-=======
-.warning-band,
-.muted {
-  color: var(--text-muted);
-}
-
-.v2-footer {
-  border-top: 1px solid var(--border-soft);
-  padding: 1rem 0;
-  color: var(--text-muted);
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   font-size: 0.84rem;
 }
 
@@ -613,7 +567,6 @@ dd,
     padding: 0.75rem;
   }
 
-<<<<<<< HEAD
   .sticky-toolbar {
     position: static;
   }
@@ -624,19 +577,10 @@ dd,
     align-items: stretch;
   }
 
-=======
-  .sticky-toolbar,
-  .v2-topbar,
-  .section-heading {
-    align-items: stretch;
-  }
-
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   .v2-topbar > *,
   .sticky-toolbar > *,
   .section-heading > * {
     min-width: 0;
-<<<<<<< HEAD
   }
 
   .sticky-toolbar label,
@@ -715,13 +659,5 @@ dd,
   .raw-field-table td[data-label='Field path'] {
     overflow-wrap: anywhere;
     white-space: normal;
-=======
-  }
-
-  .sticky-toolbar label,
-  .sticky-toolbar button,
-  .button-row button {
-    width: 100%;
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   }
 }

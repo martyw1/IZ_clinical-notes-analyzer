@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useState } from 'react'
 import { getApiHarnessJob, listApiHarnessArtifacts, startApiHarnessJob } from '../api/jobs'
 import { ApiRequestError } from '../api/json'
@@ -43,31 +42,6 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
       current = await getApiHarnessJob(token, current.jobId)
     }
     return current
-=======
-import { useEffect, useState } from 'react'
-
-type JobStatus = 'idle' | 'queued' | 'running' | 'completed' | 'cancelled'
-
-export function JobProgressCard() {
-  const [status, setStatus] = useState<JobStatus>('idle')
-  const [progress, setProgress] = useState(0)
-
-  useEffect(() => {
-    if (status !== 'running') return undefined
-    const timer = window.setInterval(() => {
-      setProgress((current) => {
-        const next = Math.min(100, current + 25)
-        if (next === 100) setStatus('completed')
-        return next
-      })
-    }, 80)
-    return () => window.clearInterval(timer)
-  }, [status])
-
-  const startJob = () => {
-    setProgress(5)
-    setStatus('running')
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   }
 
   return (
@@ -87,11 +61,7 @@ export function JobProgressCard() {
         </div>
         <div>
           <dt>Records written</dt>
-<<<<<<< HEAD
           <dd>{job?.recordsWritten ?? 0}</dd>
-=======
-          <dd>{status === 'idle' ? '0' : '6'}</dd>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         </div>
         <div>
           <dt>Preview limit</dt>
@@ -99,7 +69,6 @@ export function JobProgressCard() {
         </div>
       </dl>
       <div className='button-row'>
-<<<<<<< HEAD
         <button type='button' onClick={startJob} disabled={isStarting}>
           {isStarting ? 'Starting large job...' : 'Start large job'}
         </button>
@@ -113,27 +82,11 @@ export function JobProgressCard() {
           {artifacts.map((artifact) => (
             <li key={artifact.artifactId}>{artifact.name}</li>
           ))}
-=======
-        <button type='button' onClick={startJob}>
-          Start synthetic large job
-        </button>
-        <button type='button' className='secondary-button' onClick={() => setStatus('cancelled')}>
-          Cancel
-        </button>
-      </div>
-      {status === 'completed' && (
-        <ul className='artifact-list' aria-label='Completed job artifacts'>
-          <li>run-summary.json</li>
-          <li>all-treatment-plans.all-fields.redacted.jsonl</li>
-          <li>all-treatment-plans.flattened-fields.tsv</li>
-          <li>all-treatment-plans.observed-schema.json</li>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         </ul>
       )}
     </section>
   )
 }
-<<<<<<< HEAD
 
 function isTerminalStatus(status: string): boolean {
   return ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'stale_or_interrupted'].includes(status)
@@ -142,5 +95,3 @@ function isTerminalStatus(status: string): boolean {
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)

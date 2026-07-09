@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useEffect, useMemo, useState } from 'react'
 import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
 import { deleteTreatmentPlanSourceDocument, downloadTreatmentPlanSourceDocument } from '../api/downloads'
@@ -98,24 +97,13 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     return <section className='panel muted'>Loading treatment-plan queue...</section>
   }
 
-=======
-import { syntheticTreatmentPlan } from '../data'
-import { TreatmentPlanDetailViewer } from '../components/TreatmentPlanDetailViewer'
-import { StatusBadge } from '../components/StatusBadge'
-import { statusOrder } from '../types/treatmentPlan'
-
-export function TreatmentPlansPage() {
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   return (
     <div className='treatment-workbench'>
       <section className='sticky-toolbar'>
         <div>
           <p className='eyebrow'>Treatment Plans Workbench</p>
           <h2>Focused V2 treatment-plan review queue</h2>
-<<<<<<< HEAD
           <p className='muted'>Signed in as {user.fullName}</p>
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
         </div>
         <label>
           Evaluation date
@@ -125,23 +113,14 @@ export function TreatmentPlansPage() {
           Search
           <input placeholder='Patient ID or status' />
         </label>
-<<<<<<< HEAD
         <button type='button' onClick={() => setSelectedPatientId(listData.items[0]?.patientId ?? '')}>Refresh</button>
         <button type='button' className='secondary-button' disabled>Manual upload sync pending</button>
-=======
-        <button type='button'>Refresh</button>
-        <button type='button' className='secondary-button'>Manual upload</button>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
       </section>
       <section className='status-strip' aria-label='Treatment Plans status strip'>
         {statusOrder.map((status) => (
           <button key={status} type='button' className='status-segment'>
             <StatusBadge status={status} />
-<<<<<<< HEAD
             <span>{countStatus(listData.items, status)}</span>
-=======
-            <span>{status === syntheticTreatmentPlan.status ? '1' : status === 'Missing Data' ? '3' : '0'}</span>
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
           </button>
         ))}
       </section>
@@ -153,7 +132,6 @@ export function TreatmentPlansPage() {
               <tr>
                 <th>Patient</th>
                 <th>LOC</th>
-<<<<<<< HEAD
                 <th>Next due</th>
                 <th>Status</th>
               </tr>
@@ -180,27 +158,6 @@ export function TreatmentPlansPage() {
           />
         )}
         {!isLoadingDetail && !selectedPlan && <section className='panel muted'>No treatment plans returned.</section>}
-=======
-                <th>Admission</th>
-                <th>Next due</th>
-                <th>Status</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>{syntheticTreatmentPlan.patientDisplayLabel}</td>
-                <td>{syntheticTreatmentPlan.currentLevelOfCare}</td>
-                <td>{syntheticTreatmentPlan.admissionDate}</td>
-                <td>{syntheticTreatmentPlan.dueDate}</td>
-                <td><StatusBadge status={syntheticTreatmentPlan.status} /></td>
-                <td>{syntheticTreatmentPlan.sourceMode}</td>
-              </tr>
-            </tbody>
-          </table>
-        </article>
-        <TreatmentPlanDetailViewer plan={syntheticTreatmentPlan} />
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
       </section>
     </div>
   )

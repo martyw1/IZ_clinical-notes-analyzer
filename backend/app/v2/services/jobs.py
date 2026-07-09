@@ -5,6 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Final
 from uuid import uuid4
 
 from app.core.config import settings
@@ -14,6 +15,18 @@ from app.v2.services.job_artifacts import media_type, now_iso, record, write_pro
 
 JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
+ARTIFACT_NAMES: Final = (
+    "run-summary.json",
+    "progress.json",
+    "all-treatment-plans.all-fields.redacted.jsonl",
+    "all-treatment-plans.flattened-fields.tsv",
+    "all-treatment-plans.flattened-fields.csv",
+    "all-treatment-plans.observed-schema.json",
+    "all-treatment-plans.field-frequency.tsv",
+    "all-treatment-plans.warning-log.jsonl",
+    "all-treatment-plans.error-log.jsonl",
+    "audit-summary.json",
+)
 
 
 def _now() -> str:
@@ -118,20 +131,8 @@ class ApiHarnessJobService:
 
     def artifacts(self, job_id: str) -> tuple[ApiHarnessArtifact, ...]:
         output_dir = self._output_dir(job_id)
-        names = (
-            "run-summary.json",
-            "progress.json",
-            "all-treatment-plans.all-fields.redacted.jsonl",
-            "all-treatment-plans.flattened-fields.tsv",
-            "all-treatment-plans.flattened-fields.csv",
-            "all-treatment-plans.observed-schema.json",
-            "all-treatment-plans.field-frequency.tsv",
-            "all-treatment-plans.warning-log.jsonl",
-            "all-treatment-plans.error-log.jsonl",
-            "audit-summary.json",
-        )
         artifacts: list[ApiHarnessArtifact] = []
-        for name in names:
+        for name in ARTIFACT_NAMES:
             path = output_dir / name
             if path.exists():
                 artifacts.append(
@@ -146,7 +147,10 @@ class ApiHarnessJobService:
         return tuple(artifacts)
 
     def artifact_path(self, job_id: str, artifact_id: str) -> Path:
-        path = Path(self.get_job(job_id).output_dir) / artifact_id
+        if artifact_id not in ARTIFACT_NAMES:
+            raise FileNotFoundError(artifact_id)
+        output_dir = Path(self.get_job(job_id).output_dir)
+        path = output_dir / artifact_id
         if not path.exists():
             raise FileNotFoundError(artifact_id)
         return path

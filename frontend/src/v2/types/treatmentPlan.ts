@@ -37,7 +37,6 @@ export type ContentProblem = {
   }[]
 }
 
-<<<<<<< HEAD
 export type ManagerReview = {
   readonly criterionId: string
   readonly action: string
@@ -61,8 +60,6 @@ export type SourceDocument = {
   readonly downloadUrl: string
 }
 
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 export type TreatmentPlanAggregate = {
   readonly patientId: string
   readonly patientDisplayLabel: string
@@ -70,7 +67,6 @@ export type TreatmentPlanAggregate = {
   readonly admissionDate: string
   readonly dueDate: string
   readonly status: TreatmentPlanStatus
-<<<<<<< HEAD
   readonly sourceMode: 'manual_upload' | 'alleva_rest_api' | 'synthetic_fixture'
   readonly reasonForAdmission: string
   readonly initialClientNeeds: string
@@ -81,12 +77,6 @@ export type TreatmentPlanAggregate = {
   readonly managerReviews: readonly ManagerReview[]
   readonly overrides: readonly ManagerReview[]
   readonly sourceDocuments: readonly SourceDocument[]
-=======
-  readonly sourceMode: 'synthetic_fixture'
-  readonly contentSectionsPresent: readonly string[]
-  readonly contentSectionsMissing: readonly string[]
-  readonly criteria: readonly CriterionResult[]
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
   readonly problems: readonly ContentProblem[]
   readonly signatures: readonly {
     readonly signatureType: string
@@ -102,13 +92,10 @@ export type TreatmentPlanAggregate = {
     readonly sampleRedactedValue: string
     readonly usedByChecklist: boolean
   }[]
-<<<<<<< HEAD
   readonly evidenceCoverageSummary: {
     readonly criteriaTotal: number
     readonly criteriaWithEvidence: number
     readonly criteriaMissingEvidence: number
     readonly runtimeOnlyFields: readonly string[]
   }
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 }

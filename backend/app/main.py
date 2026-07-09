@@ -6,10 +6,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.services.audit import log_event
-<<<<<<< HEAD
 from app.v2.db import init_database
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
 from app.v2.api.routes import router as v2_router
 
 
@@ -17,10 +14,7 @@ def create_app() -> FastAPI:
     settings.local_app_data_dir.mkdir(parents=True, exist_ok=True)
     settings.api_harness_runs_dir.mkdir(parents=True, exist_ok=True)
     settings.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
-<<<<<<< HEAD
     init_database()
-=======
->>>>>>> 7ff7108 (Rebuild V2 beta local desktop app)
     api = FastAPI(title=f"{settings.app_name} V2 Beta")
     api.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
     api.add_middleware(
