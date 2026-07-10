@@ -11,6 +11,7 @@ email-validator==2.2.0
 pypdf==6.10.2
 cryptography==47.0.0
 PyYAML==6.0.2
+tzdata==2026.2
 pyinstaller==6.16.0
 pytest==9.0.3
 httpx==0.28.1

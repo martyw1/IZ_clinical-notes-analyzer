@@ -57,7 +57,7 @@ def assemble_treatment_plan_aggregate(
             records = tuple(item.record for _, item in decoded_plans if isinstance(item, PlanRecordSnapshot))
             return _merge_aggregate(snapshot.aggregate, records, reviews)
     records = tuple(snapshot.record for _, snapshot in decoded_plans if isinstance(snapshot, PlanRecordSnapshot))
-    return _record_aggregate(RecordAggregateSource(patient_id, plans[-1], records, reviews))
+    return record_aggregate(RecordAggregateSource(patient_id, plans[-1], records, reviews))
 
 
 def _plan_rows(db: Session, patient_id: str) -> tuple[PlanVersionRow, ...]:
@@ -88,7 +88,7 @@ def _review_rows(db: Session, patient_id: str) -> tuple[ReviewVersionRow, ...]:
     return tuple(ReviewVersionRow(str(row[0]), int(row[1]), row[2]) for row in rows)
 
 
-def _record_aggregate(source: RecordAggregateSource) -> TreatmentPlanAggregate:
+def record_aggregate(source: RecordAggregateSource) -> TreatmentPlanAggregate:
     latest_record = source.plans[-1]
     parsed = ParsedManualFields(
         patient_id=source.patient_id,
