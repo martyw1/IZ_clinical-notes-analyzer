@@ -13,6 +13,7 @@ from app.v2.migrations.runner import (
     restore_database,
     run_migrations,
 )
+from app.v2.migrations.registry import LATEST_SCHEMA_VERSION
 from app.v2.migrations.backup import BackupEnvelopeError
 from v2_migration_fixtures import SYNTHETIC_SECRET, create_legacy_database
 
@@ -26,7 +27,7 @@ def test_backfill_preserves_multi_plan_review_documents_and_role_mapping(tmp_pat
 
     # Then: version history, exact source linkage, canonical roles, and counts are preserved without names.
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM patients").fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM patients").fetchone() == (2,)
         assert connection.execute("SELECT COUNT(*) FROM treatment_plan_versions").fetchone() == (2,)
         assert connection.execute("SELECT COUNT(*) FROM treatment_review_versions").fetchone() == (2,)
         assert connection.execute("SELECT role FROM users WHERE username='manager'").fetchone() == ("office_manager",)
@@ -49,7 +50,7 @@ def test_ambiguous_manager_linkage_is_needs_review_and_migration_is_idempotent(t
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM manager_dispositions").fetchone() == (0,)
         assert connection.execute("SELECT outcome FROM reconciliation_outcomes").fetchone() == ("needs_review",)
-        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone() == (LATEST_SCHEMA_VERSION,)
     assert first.target_schema == second.target_schema
     assert second.applied_versions == ()
 

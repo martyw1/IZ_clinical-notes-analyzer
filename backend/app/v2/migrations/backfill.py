@@ -15,6 +15,7 @@ class RelationBackfill:
     encryption_secret: str
     local_app_data_dir: Path
     admin_id: int
+    facility_id: int
     plan_versions_by_patient: dict[int, list[tuple[int, str]]]
     now: str
 
@@ -27,7 +28,7 @@ def backfill_legacy_tables(connection: sqlite3.Connection, encryption_secret: st
     display_name = str(settings[0]) if settings else "R3 Recovery Services"
     timezone = str(settings[1]) if settings else "local_machine"
     connection.execute(
-        "INSERT INTO facilities(facility_key,display_name,timezone,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO facilities(facility_key,display_name,timezone,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?)",
         ("r3-default", display_name, timezone, 1, now, now),
     )
     facility_id = int(connection.execute("SELECT id FROM facilities WHERE facility_key='r3-default'").fetchone()[0])
@@ -37,8 +38,9 @@ def backfill_legacy_tables(connection: sqlite3.Connection, encryption_secret: st
         raise BackfillError("canonical administrator is missing")
     admin_id = int(admin[0])
     connection.execute(
-        "INSERT INTO user_facilities(user_id,facility_id,assigned_by_user_id,assigned_at) VALUES(?,?,?,?)",
-        (admin_id, facility_id, admin_id, now),
+        """INSERT OR IGNORE INTO user_facilities(user_id,facility_id,assigned_by_user_id,assigned_at)
+        SELECT id,?,?,? FROM users WHERE role IN ('admin','office_manager')""",
+        (facility_id, admin_id, now),
     )
     plan_versions_by_patient: dict[int, list[tuple[int, str]]] = {}
     legacy_imports = connection.execute(
@@ -47,7 +49,7 @@ def backfill_legacy_tables(connection: sqlite3.Connection, encryption_secret: st
     version_context = VersionBackfill(connection, facility_id, encryption_secret, plan_versions_by_patient)
     for legacy in legacy_imports:
         backfill_import(version_context, legacy)
-    relations = RelationBackfill(connection, encryption_secret, local_app_data_dir, admin_id, plan_versions_by_patient, now)
+    relations = RelationBackfill(connection, encryption_secret, local_app_data_dir, admin_id, facility_id, plan_versions_by_patient, now)
     _backfill_documents(relations)
     _backfill_manager_actions(relations)
 
@@ -85,7 +87,16 @@ def _backfill_manager_actions(context: RelationBackfill) -> None:
     for row in rows:
         patient = context.connection.execute("SELECT id FROM patients WHERE canonical_client_id=?", (str(row[1]),)).fetchone()
         if patient is None:
-            continue
+            context.connection.execute(
+                """INSERT OR IGNORE INTO patients(
+                    facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at
+                ) VALUES(?,?,'legacy_unmatched_action','needs_review',?,?,?)""",
+                (context.facility_id, str(row[1]), context.now, context.now, context.now),
+            )
+            patient = context.connection.execute(
+                "SELECT id FROM patients WHERE facility_id=? AND source_system='legacy_unmatched_action' AND canonical_client_id=?",
+                (context.facility_id, str(row[1])),
+            ).fetchone()
         patient_id = int(patient[0])
         versions = context.plan_versions_by_patient.get(patient_id, ())
         actor_id = user_id(context.connection, row[5], context.admin_id)

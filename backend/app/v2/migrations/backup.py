@@ -79,7 +79,7 @@ def create_backup(request: BackupRequest) -> BackupResult:
         "source_schema": request.source_schema,
         "target_schema": request.target_schema,
     }
-    header_bytes = json.dumps(header, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    header_bytes = _canonical_header_bytes(header)
     backup_dir = request.local_app_data_dir.resolve() / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     timestamp = created_at.replace("-", "").replace(":", "").replace("+00:00", "Z").replace(".", "")
@@ -101,11 +101,14 @@ def read_backup(path: Path, encryption_secret: str) -> BackupPayload:
     token_start = header_start + header_length
     if token_start >= len(envelope):
         raise BackupEnvelopeError("truncated payload")
+    encoded_header = envelope[header_start:token_start]
     try:
-        decoded = json.loads(envelope[header_start:token_start].decode("utf-8"))
+        decoded = json.loads(encoded_header.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise BackupEnvelopeError("header is not canonical JSON") from exc
     header = _validated_header(decoded)
+    if encoded_header != _canonical_header_bytes(header):
+        raise BackupEnvelopeError("header is not canonical JSON")
     token = envelope[token_start:]
     if hashlib.sha256(token).hexdigest() != header["ciphertext_sha256"]:
         raise BackupEnvelopeError("ciphertext hash mismatch")
@@ -158,3 +161,7 @@ def _validated_header(decoded: object) -> dict[str, str | int]:
     if decoded["plaintext_size"] < 0:
         raise BackupEnvelopeError("plaintext size is invalid")
     return decoded
+
+
+def _canonical_header_bytes(header: dict[str, str | int]) -> bytes:
+    return json.dumps(header, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")

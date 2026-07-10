@@ -4,10 +4,9 @@ import hashlib
 import os
 import shutil
 import sqlite3
+import tempfile
 import uuid
 from contextlib import closing
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
 from app.v2.migrations.backup import (
@@ -18,148 +17,66 @@ from app.v2.migrations.backup import (
     validate_sqlite_file,
 )
 from app.v2.migrations.backfill import backfill_legacy_tables
-from app.v2.migrations.registry import LATEST_SCHEMA_VERSION, MIGRATIONS, Migration
-from app.v2.migrations.schema_core import USER_EXTENSIONS
-
-
-class MigrationFailpoint(StrEnum):
-    AFTER_BACKUP = "after_backup"
-    AFTER_COPY = "after_copy"
-    AFTER_SCHEMA = "after_schema"
-    BEFORE_REPLACE = "before_replace"
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationStateError(Exception):
-    reason: str
-
-    def __str__(self) -> str:
-        return f"migration state rejected: {self.reason}"
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationRequest:
-    database_path: Path
-    local_app_data_dir: Path
-    encryption_secret: str
-    app_build: str
-    dry_run: bool = False
-    failpoint: MigrationFailpoint | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class RestoreRequest:
-    database_path: Path
-    local_app_data_dir: Path
-    encryption_secret: str
-    backup_path: Path
-
-
-@dataclass(frozen=True, slots=True)
-class ApplyRequest:
-    database_path: Path
-    local_app_data_dir: Path
-    encryption_secret: str
-    app_build: str
-    pending: tuple[Migration, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class TableCount:
-    table: str
-    count: int
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationReport:
-    source_schema: int
-    target_schema: int
-    dry_run: bool
-    original_sha256: str
-    migrated_sha256: str
-    applied_versions: tuple[int, ...]
-    counts: tuple[TableCount, ...]
-    backup_path: Path | None
-
-    def table_count(self, table: str) -> int:
-        matches = [entry.count for entry in self.counts if entry.table == table]
-        if not matches:
-            raise KeyError(table)
-        return matches[0]
-
-
-@dataclass(frozen=True, slots=True)
-class RestoreReport:
-    database_sha256: str
-    source_schema: int
-    target_schema: int
-
-
-REPORT_TABLES = (
-    "facilities",
-    "patients",
-    "patient_assignments",
-    "loc_history",
-    "treatment_plan_versions",
-    "treatment_review_versions",
-    "diagnosis_snapshots",
-    "source_documents",
-    "evaluation_runs",
-    "criterion_results",
-    "manager_dispositions",
-    "correction_work_items",
-    "correction_submissions",
-    "sync_jobs",
-    "sync_checkpoints",
-    "sync_failures",
-    "reconciliation_outcomes",
+from app.v2.migrations.errors import MigrationStateError
+from app.v2.migrations.lifecycle_types import (
+    ApplyRequest,
+    MigrationFailpoint,
+    MigrationReport,
+    MigrationRequest,
+    RestoreReport,
+    RestoreRequest,
 )
-
+from app.v2.migrations.registry import LATEST_SCHEMA_VERSION, MIGRATIONS
+from app.v2.migrations.reporting import table_counts, table_counts_database
+from app.v2.migrations.schema_core import USER_EXTENSIONS
+from app.v2.migrations.schema_verifier import (
+    reconciliation_counts,
+    reconciliation_counts_database,
+    record_reconciliation,
+    verify_connection,
+    verify_database,
+)
 
 def run_migrations(request: MigrationRequest) -> MigrationReport:
     database_path, root = _validated_paths(request.database_path, request.local_app_data_dir)
+    if request.dry_run:
+        return _run_dry_migration(request, database_path, root)
     _cleanup_temporary_databases(database_path)
     _checkpoint(database_path)
     original_sha256 = _file_sha256(database_path)
     source_schema = _current_schema(database_path)
     pending = tuple(migration for migration in MIGRATIONS if migration.version > source_schema)
     if not pending:
+        verify_database(database_path, source_schema)
         return MigrationReport(
             source_schema=source_schema,
             target_schema=source_schema,
-            dry_run=request.dry_run,
+            dry_run=False,
             original_sha256=original_sha256,
             migrated_sha256=original_sha256,
             applied_versions=(),
-            counts=_table_counts(database_path),
+            counts=table_counts_database(database_path),
+            reconciliation=reconciliation_counts_database(database_path),
             backup_path=None,
         )
     backup_path: Path | None = None
     temporary_path = database_path.with_name(f"{database_path.name}.migration-{uuid.uuid4().hex}.tmp")
     try:
-        if not request.dry_run:
-            backup = create_backup(
-                BackupRequest(database_path, root, request.encryption_secret, source_schema, LATEST_SCHEMA_VERSION, request.app_build)
-            )
-            backup_path = backup.path
-            _interrupt(request.failpoint, MigrationFailpoint.AFTER_BACKUP)
+        backup = create_backup(
+            BackupRequest(database_path, root, request.encryption_secret, source_schema, LATEST_SCHEMA_VERSION, request.app_build)
+        )
+        backup_path = backup.path
+        _interrupt(request.failpoint, MigrationFailpoint.AFTER_BACKUP)
         shutil.copy2(database_path, temporary_path)
         _interrupt(request.failpoint, MigrationFailpoint.AFTER_COPY)
-        _apply_pending(ApplyRequest(temporary_path, root, request.encryption_secret, request.app_build, pending))
+        with closing(sqlite3.connect(temporary_path)) as connection:
+            _apply_pending(connection, ApplyRequest(root, request.encryption_secret, request.app_build, pending))
+            verify_connection(connection, LATEST_SCHEMA_VERSION)
         _interrupt(request.failpoint, MigrationFailpoint.AFTER_SCHEMA)
         migrated_sha256 = _file_sha256(temporary_path)
-        counts = _table_counts(temporary_path)
-        if request.dry_run:
-            return MigrationReport(
-                source_schema=source_schema,
-                target_schema=LATEST_SCHEMA_VERSION,
-                dry_run=True,
-                original_sha256=original_sha256,
-                migrated_sha256=migrated_sha256,
-                applied_versions=tuple(item.version for item in pending),
-                counts=counts,
-                backup_path=None,
-            )
+        counts = table_counts_database(temporary_path)
+        with closing(sqlite3.connect(temporary_path)) as connection:
+            reconciliation = reconciliation_counts(connection)
         _interrupt(request.failpoint, MigrationFailpoint.BEFORE_REPLACE)
         os.replace(temporary_path, database_path)
         return MigrationReport(
@@ -170,6 +87,7 @@ def run_migrations(request: MigrationRequest) -> MigrationReport:
             migrated_sha256=migrated_sha256,
             applied_versions=tuple(item.version for item in pending),
             counts=counts,
+            reconciliation=reconciliation,
             backup_path=backup_path,
         )
     finally:
@@ -187,6 +105,10 @@ def restore_database(request: RestoreRequest) -> RestoreReport:
     try:
         temporary_path.write_bytes(payload.database_bytes)
         validate_sqlite_file(temporary_path)
+        try:
+            verify_database(temporary_path, payload.source_schema)
+        except MigrationStateError as exc:
+            raise BackupEnvelopeError("backup schema verification failed") from exc
         os.replace(temporary_path, database_path)
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -197,50 +119,83 @@ def restore_database(request: RestoreRequest) -> RestoreReport:
     )
 
 
-def _apply_pending(request: ApplyRequest) -> None:
-    with closing(sqlite3.connect(request.database_path)) as connection:
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            existing_user_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('users')")}
-            for name, definition in USER_EXTENSIONS:
-                if name not in existing_user_columns:
-                    connection.execute(f'ALTER TABLE users ADD COLUMN "{name}" {definition}')
-            connection.execute("UPDATE users SET role='office_manager' WHERE role='manager'")
-            invalid_role = connection.execute(
-                "SELECT 1 FROM users WHERE role NOT IN ('admin','office_manager','counselor','viewer') LIMIT 1"
-            ).fetchone()
-            if invalid_role is not None:
-                raise MigrationStateError("legacy user role cannot be mapped to a canonical role")
-            for migration in request.pending:
-                for statement in migration.statements:
-                    connection.execute(statement)
-                backfill_legacy_tables(connection, request.encryption_secret, request.local_app_data_dir)
-                connection.execute(
-                    "INSERT INTO schema_migrations(version,name,checksum_sha256,applied_at,app_build) VALUES(?,?,?,?,?)",
-                    (migration.version, migration.name, migration.checksum_sha256, "2026-07-10T00:00:00+00:00", request.app_build),
-                )
-            if connection.execute("PRAGMA foreign_key_check").fetchall():
-                raise MigrationStateError("foreign key reconciliation failed")
-            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                raise MigrationStateError("SQLite integrity check failed")
-            connection.commit()
-        except (sqlite3.DatabaseError, MigrationStateError):
-            connection.rollback()
-            raise
+def _run_dry_migration(request: MigrationRequest, database_path: Path, root: Path) -> MigrationReport:
+    with tempfile.TemporaryDirectory(prefix="izcna-dry-run-") as temporary_root:
+        rehearsal_path = Path(temporary_root) / database_path.name
+        shutil.copyfile(database_path, rehearsal_path)
+        wal_path = database_path.with_name(database_path.name + "-wal")
+        if wal_path.exists():
+            shutil.copyfile(wal_path, rehearsal_path.with_name(rehearsal_path.name + "-wal"))
+        with closing(sqlite3.connect(rehearsal_path)) as source, closing(sqlite3.connect(":memory:")) as target:
+            source.backup(target)
+            source_schema = _current_schema_connection(target)
+            verify_connection(target, source_schema)
+            pending = tuple(migration for migration in MIGRATIONS if migration.version > source_schema)
+            if pending:
+                _apply_pending(target, ApplyRequest(root, request.encryption_secret, request.app_build, pending))
+            target_schema = LATEST_SCHEMA_VERSION if pending else source_schema
+            verify_connection(target, target_schema)
+            migrated_sha256 = hashlib.sha256(target.serialize()).hexdigest()
+            counts = table_counts(target)
+            reconciliation = reconciliation_counts(target)
+    original_sha256 = _file_sha256(database_path)
+    return MigrationReport(
+        source_schema=source_schema,
+        target_schema=target_schema,
+        dry_run=True,
+        original_sha256=original_sha256,
+        migrated_sha256=migrated_sha256,
+        applied_versions=tuple(item.version for item in pending),
+        counts=counts,
+        reconciliation=reconciliation,
+        backup_path=None,
+    )
+
+
+def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> None:
+    connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        existing_user_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('users')")}
+        for name, definition in USER_EXTENSIONS:
+            if name not in existing_user_columns:
+                connection.execute(f'ALTER TABLE users ADD COLUMN "{name}" {definition}')
+        connection.execute("UPDATE users SET role='office_manager' WHERE role='manager'")
+        invalid_role = connection.execute(
+            "SELECT 1 FROM users WHERE role NOT IN ('admin','office_manager','counselor','viewer') LIMIT 1"
+        ).fetchone()
+        if invalid_role is not None:
+            raise MigrationStateError("legacy user role cannot be mapped to a canonical role")
+        for migration in request.pending:
+            for statement in migration.statements:
+                connection.execute(statement)
+            backfill_legacy_tables(connection, request.encryption_secret, request.local_app_data_dir)
+            connection.execute(
+                "INSERT INTO schema_migrations(version,name,checksum_sha256,applied_at,app_build) VALUES(?,?,?,?,?)",
+                (migration.version, migration.name, migration.checksum_sha256, "2026-07-10T00:00:00+00:00", request.app_build),
+            )
+            if migration.version >= 2:
+                record_reconciliation(connection, migration.version)
+        connection.commit()
+    except (sqlite3.DatabaseError, MigrationStateError):
+        connection.rollback()
+        raise
+
+
+def _current_schema_connection(connection: sqlite3.Connection) -> int:
+    table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+    ).fetchone()
+    if table is None:
+        return 0
+    version = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+    return int(version) if version is not None else 0
 
 
 def _current_schema(database_path: Path) -> int:
-    with closing(sqlite3.connect(database_path)) as connection:
-        table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'").fetchone()
-        if table is None:
-            return 0
-        rows = connection.execute("SELECT version,name,checksum_sha256 FROM schema_migrations ORDER BY version").fetchall()
-    for version, name, checksum in rows:
-        expected = next((item for item in MIGRATIONS if item.version == version), None)
-        if expected is None or expected.name != name or expected.checksum_sha256 != checksum:
-            raise MigrationStateError("applied migration registry does not match application registry")
-    return int(rows[-1][0]) if rows else 0
+    uri = f"file:{database_path.as_posix()}?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as connection:
+        return _current_schema_connection(connection)
 
 
 def _validated_paths(database_path: Path, local_app_data_dir: Path) -> tuple[Path, Path]:
@@ -265,16 +220,6 @@ def _checkpoint(database_path: Path) -> None:
 
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _table_counts(database_path: Path) -> tuple[TableCount, ...]:
-    with closing(sqlite3.connect(database_path)) as connection:
-        existing = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        return tuple(
-            TableCount(table=table, count=int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]))
-            for table in REPORT_TABLES
-            if table in existing
-        )
 
 
 def _interrupt(actual: MigrationFailpoint | None, expected: MigrationFailpoint) -> None:

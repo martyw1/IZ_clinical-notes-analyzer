@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from app.v2.migrations.schema_clinical import CLINICAL_STATEMENTS
 from app.v2.migrations.schema_core import CORE_STATEMENTS, USER_EXTENSIONS
+from app.v2.migrations.schema_hardening import HARDENING_STATEMENTS
 from app.v2.migrations.schema_sync import SYNC_STATEMENTS
 from app.v2.migrations.schema_workflow import WORKFLOW_STATEMENTS
 
@@ -29,6 +30,7 @@ MIGRATIONS = (
         "immutable_v2_clinical_foundation",
         (*CORE_STATEMENTS, *CLINICAL_STATEMENTS, *WORKFLOW_STATEMENTS, *SYNC_STATEMENTS),
     ),
+    _migration(2, "verify_and_harden_v2_clinical_foundation", HARDENING_STATEMENTS),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
