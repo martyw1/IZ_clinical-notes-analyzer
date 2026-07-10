@@ -2,9 +2,17 @@
 
 Initial date: 2026-06-04
 
-Latest update: 2026-06-28
+Latest update: 2026-07-10
 
 Scope: historical S1 cleanup records plus later main-branch legacy Docker/PostgreSQL removal records.
+
+## 2026-07-10 S0 Incident Containment (No Removals)
+
+S0 preserved metadata-only evidence for tracked clinical-export artifacts and credential exposure in Git history. No artifact, export, credential-bearing path, Git object, branch, tag, remote ref, release artifact, or history entry was removed or modified during this station.
+
+The authoritative exposure categories, counts, blob IDs, credential commit metadata, rotation requirement, downstream-owner inventory, remediation gates, and verification procedure are recorded in `docs/security/privacy-incident-s0-2026-07-10.md`.
+
+Ordinary current-tree/release-scope removal is deferred to S1 and must be logged here only after the S0 gate passes. Any later current-tree deletion is containment, not Git-history remediation. Destructive history rewriting and any coordinated remote update remain separately gated by credential rotation, downstream-owner inventory, evidence retention, and explicit user approval.
 
 ## Policy
 
