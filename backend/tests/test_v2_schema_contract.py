@@ -18,7 +18,7 @@ EXPECTED_COLUMNS = {
     "treatment_review_versions": ("id", "patient_id", "source_system", "source_record_id", "version_ordinal", "review_date", "signature_date", "normalized_snapshot_encrypted", "content_sha256", "evidence_sha256", "imported_at", "supersedes_version_id"),
     "diagnosis_snapshots": ("id", "plan_version_id", "review_version_id", "source_record_id", "normalized_snapshot_encrypted", "content_sha256", "captured_at"),
     "source_documents": ("id", "patient_id", "plan_version_id", "review_version_id", "document_id", "source_kind", "source_format", "content_type", "size_bytes", "sha256", "encrypted_relative_path", "created_by_user_id", "created_at"),
-    "evaluation_runs": ("id", "plan_version_id", "checklist_version", "rules_version", "evaluation_date", "facility_timezone", "evidence_sha256", "trigger_kind", "created_at"),
+    "evaluation_runs": ("id", "plan_version_id", "checklist_version", "rules_version", "evaluation_date", "facility_timezone", "evidence_sha256", "trigger_kind", "run_sequence", "created_at"),
     "criterion_results": ("id", "evaluation_run_id", "criterion_id", "result_status", "normalized_path", "source_record_type", "source_record_version_id", "evaluated_value_safe", "explanation", "evidence_sha256"),
     "manager_dispositions": ("id", "plan_version_id", "criterion_id", "status", "comment", "actor_user_id", "created_at", "supersedes_disposition_id"),
     "correction_work_items": ("id", "plan_version_id", "criterion_id", "disposition_id", "assigned_counselor_user_id", "status", "opened_at", "closed_at", "idempotency_key"),
@@ -62,7 +62,7 @@ EXPECTED_UNIQUE_KEYS = {
     "treatment_review_versions": {("patient_id", "source_system", "source_record_id", "content_sha256"), ("patient_id", "version_ordinal")},
     "diagnosis_snapshots": {("plan_version_id", "content_sha256"), ("review_version_id", "content_sha256")},
     "source_documents": {("document_id",), ("patient_id", "sha256", "source_kind")},
-    "evaluation_runs": {("plan_version_id", "checklist_version", "rules_version", "evaluation_date", "evidence_sha256")},
+    "evaluation_runs": {("plan_version_id", "checklist_version", "rules_version", "evaluation_date", "evidence_sha256", "run_sequence")},
     "criterion_results": {("evaluation_run_id", "criterion_id")},
     "manager_dispositions": {("plan_version_id", "criterion_id", "actor_user_id", "created_at")},
     "correction_work_items": {("idempotency_key",)},
@@ -129,6 +129,34 @@ def test_version_rows_are_immutable_and_uniqueness_is_enforced(tmp_path) -> None
     # Then: the original immutable row remains unchanged.
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT plan_date FROM treatment_plan_versions WHERE id=?", (plan[0],)).fetchone()[0] != "2030-01-01"
+
+
+def test_evaluation_and_criterion_ledgers_reject_update_and_delete(tmp_path) -> None:
+    # Given
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    with sqlite3.connect(database_path) as connection:
+        plan_id = connection.execute("SELECT id FROM treatment_plan_versions ORDER BY id LIMIT 1").fetchone()[0]
+        connection.execute(
+            "INSERT INTO evaluation_runs(plan_version_id,checklist_version,rules_version,evaluation_date,facility_timezone,evidence_sha256,trigger_kind,run_sequence,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (plan_id, "1.2.0", "1.2.0", "2026-07-10", "America/New_York", "e" * 64, "migration", 1, "2026-07-10T00:00:00+00:00"),
+        )
+        run_id = connection.execute("SELECT id FROM evaluation_runs").fetchone()[0]
+        connection.execute(
+            "INSERT INTO criterion_results(evaluation_run_id,criterion_id,result_status,normalized_path,source_record_type,source_record_version_id,evaluated_value_safe,explanation,evidence_sha256) VALUES(?,?,?,?,?,?,?,?,?)",
+            (run_id, "criterion-1", "Present", "path", "treatment_plan_version", plan_id, "safe", "safe explanation", "c" * 64),
+        )
+        connection.commit()
+
+        # When/Then
+        for statement in (
+            "UPDATE evaluation_runs SET trigger_kind='changed'",
+            "DELETE FROM evaluation_runs",
+            "UPDATE criterion_results SET result_status='changed'",
+            "DELETE FROM criterion_results",
+        ):
+            with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+                connection.execute(statement)
 
 
 def test_boolean_role_and_diagnosis_checks_reject_invalid_states(tmp_path) -> None:

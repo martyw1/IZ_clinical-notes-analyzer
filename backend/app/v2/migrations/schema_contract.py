@@ -43,9 +43,8 @@ def _apply_reference_migrations(connection: sqlite3.Connection, expected_version
         for statement in migration.statements:
             connection.execute(statement)
             match = OBJECT_PATTERN.match(statement)
-            if match is None:
-                raise MigrationStateError("migration statement does not declare a verifiable schema object")
-            objects.append(SchemaObject(_object_kind(match.group(1)), match.group(2)))
+            if match is not None:
+                objects.append(SchemaObject(_object_kind(match.group(1)), match.group(2)))
     return tuple(objects)
 
 

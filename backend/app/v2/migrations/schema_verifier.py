@@ -33,7 +33,7 @@ CURRENT_COLUMNS = {
     "treatment_review_versions": {"id", "patient_id", "source_system", "source_record_id", "version_ordinal", "normalized_snapshot_encrypted", "content_sha256", "evidence_sha256", "imported_at"},
     "diagnosis_snapshots": {"id", "plan_version_id", "review_version_id", "source_record_id", "normalized_snapshot_encrypted", "content_sha256", "captured_at"},
     "source_documents": {"id", "patient_id", "plan_version_id", "review_version_id", "document_id", "sha256", "encrypted_relative_path"},
-    "evaluation_runs": {"id", "plan_version_id", "checklist_version", "rules_version", "evaluation_date", "evidence_sha256"},
+    "evaluation_runs": {"id", "plan_version_id", "checklist_version", "rules_version", "evaluation_date", "evidence_sha256", "run_sequence"},
     "criterion_results": {"id", "evaluation_run_id", "criterion_id", "result_status", "evidence_sha256"},
     "manager_dispositions": {"id", "plan_version_id", "criterion_id", "status", "actor_user_id", "created_at"},
     "correction_work_items": {"id", "plan_version_id", "disposition_id", "idempotency_key"},

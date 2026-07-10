@@ -8,6 +8,7 @@ type JsonPrimitive = str | int | float | bool | None
 type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
 
 SourceMode = Literal["manual_upload", "alleva_rest_api", "synthetic_fixture"]
+SignatureEvidenceRole = Literal["initial_plan", "master_plan", "review", "unknown"]
 ReviewStatus = Literal[
     "Present",
     "Missing Data",
@@ -88,6 +89,8 @@ class TreatmentPlanSignatureMetadata(V2Model):
     signature_datetime: str
     signature_data_length: int
     signature_data_omitted_reason: str
+    evidence_role: SignatureEvidenceRole = "unknown"
+    source_json_path: str = "content_snapshot.signatures[*]"
 
 
 class TreatmentPlanObservedField(V2Model):

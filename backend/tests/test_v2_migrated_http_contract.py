@@ -56,6 +56,8 @@ def test_startup_migration_serves_multi_version_plan_and_review_records(tmp_path
     assert [review["id"] for review in payload["treatment_reviews"]] == ["synthetic-review-1", "synthetic-review-2"]
     assert PRIVACY_CANARY not in json.dumps(listed.json(), sort_keys=True)
     assert PRIVACY_CANARY not in json.dumps(payload, sort_keys=True)
+    with sqlite3.connect(tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3") as connection:
+        assert connection.execute("SELECT DISTINCT trigger_kind FROM evaluation_runs").fetchall() == [("migration",)]
 
 
 def test_snapshot_codec_accepts_legacy_record_envelope_and_rejects_malformed_token() -> None:

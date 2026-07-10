@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from app.v2.services.deterministic_evaluator import evaluate_plan_version, facility_local_date
+from app.v2.domain.schemas import TreatmentPlanSignatureMetadata
 from app.v2.services.manual_file_aggregate import build_manual_aggregate
 from app.v2.services.manual_file_types import ParsedManualFields
 from app.v2.services.rule_package import DeterministicRulePackage, LevelOfCareRule, RuleConfigurationError, load_rule_package
@@ -20,11 +21,26 @@ def _aggregate(*, loc: str = "PHP", admission: str = "2026-01-01", signature: st
         objective_description="Synthetic objective.", intervention_description="Synthetic intervention.",
         signature_datetime=signature, raw_text="Synthetic labeled treatment-plan evidence.",
     )
-    return build_manual_aggregate(parsed)
+    aggregate = build_manual_aggregate(parsed)
+    signatures = (
+        _signature("initial_plan", signature, "treatment_plans.initial.signatures[0]"),
+        _signature("master_plan", signature, "treatment_plans.master.signatures[0]"),
+    )
+    return aggregate.model_copy(update={
+        "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),
+    })
 
 
 def _criterion_status(bundle, criterion_id: str) -> str:
     return next(item.status for item in bundle.criteria if item.criterion_id == criterion_id)
+
+
+def _signature(role: str, signed_on: str, path: str) -> TreatmentPlanSignatureMetadata:
+    return TreatmentPlanSignatureMetadata(
+        signature_type=role, has_signature_data=True, signer_role_or_type="clinician",
+        signature_datetime=signed_on, signature_data_length=0, signature_data_omitted_reason="synthetic metadata only",
+        evidence_role=role, source_json_path=path,
+    )
 
 
 @pytest.mark.parametrize(
@@ -147,6 +163,100 @@ def test_day_one_and_master_signature_criteria_are_deterministic() -> None:
     assert _criterion_status(compliant, "master_plan_within_30_days") == "Compliant"
     assert _criterion_status(late_signature, "initial_plan_dated_correctly") == "Needs Review"
     assert _criterion_status(late_signature, "master_plan_within_30_days") == "Overdue"
+
+
+def test_initial_and_master_signature_roles_are_evaluated_independently() -> None:
+    # Given
+    package = load_rule_package()
+    aggregate = _aggregate().model_copy(update={"content_snapshot": _aggregate().content_snapshot.model_copy(update={
+        "signatures": (
+            _signature("initial_plan", "2026-01-01", "treatment_plans.initial.signatures[0]"),
+            _signature("master_plan", "2026-01-21", "treatment_plans.master.signatures[0]"),
+        )
+    })})
+
+    # When
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert _criterion_status(bundle, "initial_plan_dated_correctly") == "Compliant"
+    assert _criterion_status(bundle, "master_plan_within_30_days") == "Compliant"
+
+
+def test_untyped_signature_evidence_never_satisfies_initial_or_master_criteria() -> None:
+    # Given
+    package = load_rule_package()
+
+    # When
+    aggregate = _aggregate()
+    untyped = tuple(item.model_copy(update={"evidence_role": "unknown"}) for item in aggregate.content_snapshot.signatures)
+    aggregate = aggregate.model_copy(update={
+        "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": untyped}),
+    })
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert _criterion_status(bundle, "initial_plan_required_signatures") in {"Missing Data", "Needs Review"}
+    assert _criterion_status(bundle, "master_plan_required_signatures") in {"Missing Data", "Needs Review"}
+    assert bundle.overall_status != "Current/Compliant"
+
+
+def test_malformed_signature_mixed_with_valid_role_evidence_fails_closed() -> None:
+    # Given
+    package = load_rule_package()
+    aggregate = _aggregate().model_copy(update={"content_snapshot": _aggregate().content_snapshot.model_copy(update={
+        "signatures": (
+            _signature("initial_plan", "2026-01-01", "treatment_plans.initial.signatures[0]"),
+            _signature("master_plan", "2026-01-20", "treatment_plans.master.signatures[0]"),
+            _signature("review", "not-a-date", "treatment_reviews[0].signatures[0]"),
+        )
+    })})
+
+    # When
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert bundle.overall_status == "Conflicting Evidence"
+
+
+def test_future_signed_review_fails_closed() -> None:
+    # Given
+    package = load_rule_package()
+    aggregate = _aggregate(due="2027-02-01").model_copy(update={
+        "treatment_reviews": ({"review_date": "2027-01-02", "signature_date": "2027-01-02"},)
+    })
+
+    # When
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert bundle.overall_status == "Needs Review"
+
+
+def test_missing_source_due_and_absent_plan_records_fail_closed() -> None:
+    # Given
+    package = load_rule_package()
+    aggregate = _aggregate(due="Unknown").model_copy(update={"treatment_plans": (), "active_treatment_plans": ()})
+
+    # When
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert bundle.overall_status == "Missing Data"
+
+
+def test_current_loc_conflicting_with_only_loc_history_fails_closed() -> None:
+    # Given
+    package = load_rule_package()
+    aggregate = _aggregate(loc="PHP").model_copy(update={
+        "loc_history": ({"level_of_care": "IOP", "effective_date": "2026-01-01"},)
+    })
+
+    # When
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
+
+    # Then
+    assert bundle.overall_status == "Conflicting Evidence"
 
 
 def test_loc_change_candidate_is_display_only_and_recurring_due_remains_active() -> None:

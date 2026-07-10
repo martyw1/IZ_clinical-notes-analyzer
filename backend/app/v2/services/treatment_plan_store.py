@@ -19,6 +19,7 @@ from app.v2.services.manager_action_store import (
 from app.v2.services.manual_source_file_store import source_documents_for_patient
 from app.core.config import settings
 from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
+from app.v2.services.clinical_evidence_store import persist_clinical_evidence
 from app.v2.services.evaluation_store import PlanEvaluationTarget, latest_evaluated_aggregate, persist_plan_evaluation
 from app.v2.services.migrated_treatment_plan import assemble_treatment_plan_aggregate
 
@@ -143,7 +144,6 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
             "supersedes_version_id": supersedes_version_id,
         },
     )
-    db.commit()
     plan_version_id = int(db.execute(
         text(
             "SELECT id FROM treatment_plan_versions WHERE patient_id=:patient_id AND source_system=:source_system "
@@ -156,6 +156,12 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
     ).scalar_one())
     trigger = "sync" if aggregate.source_mode == "alleva_rest_api" else "import"
     evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), trigger)
+    events = persist_clinical_evidence(db, aggregate, patient_id, now)
+    if events.loc_change:
+        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "loc_change")
+    if events.new_review:
+        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "new_review")
+    db.commit()
     return _stored_plan(evaluated)
 
 

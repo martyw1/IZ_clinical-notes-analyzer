@@ -54,7 +54,7 @@ def persist_plan_evaluation(
     bundle = evaluate_plan_version(aggregate, loaded_package, evaluation_date, app_settings.facility_timezone)
     run_id = _evaluation_run(db, target, bundle, trigger, evaluated_at)
     _criterion_rows(db, run_id, target, bundle)
-    db.commit()
+    db.flush()
     return apply_evaluation(aggregate, bundle)
 
 
@@ -78,7 +78,9 @@ def latest_evaluated_aggregate(
     target = latest_plan_target(db, aggregate.patient_id)
     if target is None:
         return aggregate
-    return persist_plan_evaluation(db, aggregate, target, trigger)
+    evaluated = persist_plan_evaluation(db, aggregate, target, trigger)
+    db.commit()
+    return evaluated
 
 
 def refresh_patient_version(
@@ -90,6 +92,7 @@ def refresh_patient_version(
     if target is None:
         return EvaluationRefreshResult(0, "", "", "", "")
     evaluated = persist_plan_evaluation(db, aggregate, target, trigger)
+    db.commit()
     return EvaluationRefreshResult(
         versions_evaluated=1,
         evaluation_date=evaluated.evaluation_date,
@@ -125,6 +128,7 @@ def reevaluate_all_plan_versions(db: Session, trigger: EvaluationTrigger) -> Eva
             db, version_aggregate, PlanEvaluationTarget(int(row[0]), str(row[8])), trigger, package=package,
         )
         evaluation_date = evaluated.evaluation_date
+    db.commit()
     return EvaluationRefreshResult(
         versions_evaluated=len(rows), evaluation_date=evaluation_date,
         facility_timezone=app_settings.facility_timezone, checklist_version=package.checklist.version,
@@ -139,31 +143,47 @@ def _evaluation_run(
     trigger: EvaluationTrigger,
     evaluated_at: datetime,
 ) -> int:
+    parameters = {
+        "plan_version_id": target.plan_version_id, "checklist_version": bundle.checklist_version,
+        "rules_version": bundle.rules_version, "evaluation_date": bundle.evaluation_date,
+        "facility_timezone": bundle.facility_timezone, "evidence_sha256": target.evidence_sha256,
+        "trigger_kind": trigger, "created_at": evaluated_at.astimezone(timezone.utc).isoformat(),
+    }
+    existing = db.execute(
+        text(
+            "SELECT id,trigger_kind FROM evaluation_runs WHERE plan_version_id=:plan_version_id AND checklist_version=:checklist_version "
+            "AND rules_version=:rules_version AND evaluation_date=:evaluation_date AND evidence_sha256=:evidence_sha256 "
+            "ORDER BY run_sequence DESC,id DESC LIMIT 1"
+        ),
+        parameters,
+    ).first()
+    if existing is not None and (trigger == "date_rollover" or (trigger == "startup" and existing[1] == "migration")):
+        return int(existing[0])
+    run_sequence = int(db.execute(
+        text(
+            "SELECT COALESCE(MAX(run_sequence),0)+1 FROM evaluation_runs "
+            "WHERE plan_version_id=:plan_version_id AND checklist_version=:checklist_version "
+            "AND rules_version=:rules_version AND evaluation_date=:evaluation_date AND evidence_sha256=:evidence_sha256"
+        ),
+        parameters,
+    ).scalar_one())
     db.execute(
         text(
-            """INSERT OR IGNORE INTO evaluation_runs(
+            """INSERT INTO evaluation_runs(
                 plan_version_id,checklist_version,rules_version,evaluation_date,facility_timezone,
-                evidence_sha256,trigger_kind,created_at
+                evidence_sha256,trigger_kind,run_sequence,created_at
             ) VALUES(:plan_version_id,:checklist_version,:rules_version,:evaluation_date,:facility_timezone,
-                :evidence_sha256,:trigger_kind,:created_at)"""
+                :evidence_sha256,:trigger_kind,:run_sequence,:created_at)"""
         ),
-        {
-            "plan_version_id": target.plan_version_id, "checklist_version": bundle.checklist_version,
-            "rules_version": bundle.rules_version, "evaluation_date": bundle.evaluation_date,
-            "facility_timezone": bundle.facility_timezone, "evidence_sha256": target.evidence_sha256,
-            "trigger_kind": trigger, "created_at": evaluated_at.astimezone(timezone.utc).isoformat(),
-        },
+        parameters | {"run_sequence": run_sequence},
     )
     return int(db.execute(
         text(
             "SELECT id FROM evaluation_runs WHERE plan_version_id=:plan_version_id AND checklist_version=:checklist_version "
-            "AND rules_version=:rules_version AND evaluation_date=:evaluation_date AND evidence_sha256=:evidence_sha256"
+            "AND rules_version=:rules_version AND evaluation_date=:evaluation_date AND evidence_sha256=:evidence_sha256 "
+            "AND run_sequence=:run_sequence"
         ),
-        {
-            "plan_version_id": target.plan_version_id, "checklist_version": bundle.checklist_version,
-            "rules_version": bundle.rules_version, "evaluation_date": bundle.evaluation_date,
-            "evidence_sha256": target.evidence_sha256,
-        },
+        parameters | {"run_sequence": run_sequence},
     ).scalar_one())
 
 

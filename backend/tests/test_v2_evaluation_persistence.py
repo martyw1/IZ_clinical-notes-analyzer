@@ -22,11 +22,22 @@ def _aggregate(patient_id: str = "942"):
     )).model_copy(update={"patient_id": patient_id, "patient_display_label": PRIVACY_CANARY})
 
 
+def _with_typed_plan_signatures(aggregate):
+    source = aggregate.content_snapshot.signatures[0]
+    signatures = (
+        source.model_copy(update={"evidence_role": "initial_plan", "source_json_path": "treatment_plans.initial.signatures[0]"}),
+        source.model_copy(update={"evidence_role": "master_plan", "source_json_path": "treatment_plans.master.signatures[0]"}),
+    )
+    return aggregate.model_copy(update={
+        "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),
+    })
+
+
 def _database_path(tmp_path: Path) -> Path:
     return tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
 
 
-def test_import_persists_exact_versioned_criterion_provenance_and_refresh_is_idempotent(tmp_path, monkeypatch) -> None:
+def test_authorized_refresh_appends_distinct_run_and_preserves_import_provenance(tmp_path, monkeypatch) -> None:
     # Given
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -48,9 +59,12 @@ def test_import_persists_exact_versioned_criterion_provenance_and_refresh_is_ide
     assert refreshed.status_code == 200
     assert refreshed.json()["versions_evaluated"] == 1
     with sqlite3.connect(_database_path(tmp_path)) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM evaluation_runs").fetchone() == (1,)
-        assert connection.execute("SELECT COUNT(*) FROM criterion_results").fetchone() == (42,)
+        assert connection.execute("SELECT COUNT(*) FROM evaluation_runs").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM criterion_results").fetchone() == (84,)
         assert connection.execute("SELECT COUNT(DISTINCT source_record_version_id) FROM criterion_results").fetchone() == (1,)
+        assert connection.execute("SELECT trigger_kind FROM evaluation_runs ORDER BY run_sequence").fetchall() == [
+            ("import",), ("authorized_refresh",),
+        ]
 
 
 def test_each_immutable_plan_version_gets_an_independent_evaluation(tmp_path, monkeypatch) -> None:
@@ -117,17 +131,42 @@ def test_all_version_reevaluation_supports_system_triggers(
     from app.v2.db import SessionLocal
     from app.v2.services.evaluation_store import reevaluate_all_plan_versions
     with SessionLocal() as db:
-        db.execute(text("DELETE FROM criterion_results"))
-        db.execute(text("DELETE FROM evaluation_runs"))
-        db.commit()
-
         # When
         refreshed = reevaluate_all_plan_versions(db, trigger)
 
         # Then
         assert refreshed.versions_evaluated == 1
-        assert db.execute(text("SELECT trigger_kind FROM evaluation_runs")).scalar_one() == trigger
-        assert db.execute(text("SELECT COUNT(*) FROM criterion_results")).scalar_one() == 42
+        assert db.execute(text("SELECT trigger_kind FROM evaluation_runs ORDER BY run_sequence DESC LIMIT 1")).scalar_one() == trigger
+        assert db.execute(text("SELECT COUNT(*) FROM criterion_results")).scalar_one() == 84
+
+
+def test_plan_import_transaction_persists_loc_and_review_trigger_runs(tmp_path, monkeypatch) -> None:
+    # Given
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    aggregate = _aggregate("949").model_copy(update={
+        "loc_history": (
+            {"level_of_care": "IOP", "effective_date": "2026-01-01", "source_record_id": "loc-1"},
+            {"level_of_care": "PHP", "effective_date": "2026-01-15", "source_record_id": "loc-2"},
+        ),
+        "treatment_reviews": (
+            {"id": "review-1", "review_date": "2026-02-01", "signature_date": "2026-02-01"},
+        ),
+    })
+
+    # When
+    imported = client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate", headers=headers, json=aggregate.model_dump(mode="json"),
+    )
+
+    # Then
+    assert imported.status_code == 201
+    with sqlite3.connect(_database_path(tmp_path)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM loc_history").fetchone() == (2,)
+        assert connection.execute("SELECT COUNT(*) FROM treatment_review_versions").fetchone() == (1,)
+        triggers = connection.execute("SELECT trigger_kind FROM evaluation_runs ORDER BY run_sequence").fetchall()
+        assert triggers == [("import",), ("loc_change",), ("new_review",)]
+        assert connection.execute("SELECT COUNT(*) FROM criterion_results").fetchone() == (126,)
 
 
 def test_date_rollover_appends_a_new_run_and_recomputes_status(tmp_path, monkeypatch) -> None:
@@ -146,6 +185,7 @@ def test_date_rollover_appends_a_new_run_and_recomputes_status(tmp_path, monkeyp
         aggregate = treatment_plan_aggregate_for_patient(db, "946")
         target = latest_plan_target(db, "946")
         assert aggregate is not None and target is not None
+        aggregate = _with_typed_plan_signatures(aggregate)
 
         # When
         rolled = persist_plan_evaluation(
@@ -191,7 +231,7 @@ def test_loc_change_checkbox_cannot_activate_compliance(tmp_path, monkeypatch) -
         "/api/settings", headers=headers, json={"treatment_plan_loc_change_window_validated": True},
     )
     assert settings_response.status_code == 200
-    aggregate = _aggregate("948").model_copy(update={"loc_history": (
+    aggregate = _with_typed_plan_signatures(_aggregate("948")).model_copy(update={"loc_history": (
         {"level_of_care": "IOP", "effective_date": "2026-01-01"},
         {"level_of_care": "PHP", "effective_date": "2026-02-01"},
     )})

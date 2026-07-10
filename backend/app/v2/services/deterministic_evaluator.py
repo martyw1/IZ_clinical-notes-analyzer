@@ -2,21 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
-from typing import Final, Literal
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.v2.domain.schemas import (
-    JsonValue,
-    ReviewStatus,
-    TreatmentPlanAggregate,
-)
+from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
+from app.v2.services.evaluation_evidence import EvaluationEvidence, collect_evidence, known
 from app.v2.services.rule_package import ChecklistStep, DeterministicRulePackage
 
 EvaluationStatus = Literal[
     "Present", "Missing Data", "Needs Review", "Conflicting Evidence", "Unable to Evaluate",
     "Compliant", "Not Applicable", "Urgent", "Due Soon", "Current/Compliant", "Overdue",
 ]
-UNKNOWN_VALUES: Final = frozenset({"", "unknown", "unavailable", "unvalidated_configurable", "none", "null"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,23 +42,6 @@ class EvaluationBundle:
 
 
 @dataclass(frozen=True, slots=True)
-class EvaluationContext:
-    aggregate: TreatmentPlanAggregate
-    admission: date | None
-    signature: date | None
-    anchor: date | None
-    calculated_due: date | None
-    source_due: date | None
-    source_due_invalid: bool
-    mapped_loc: str
-    interval_days: int | None
-    timing_status: EvaluationStatus
-    conflict: bool
-    loc_changed: bool
-    loc_candidate: date | None
-
-
-@dataclass(frozen=True, slots=True)
 class FacilityTimezoneError(Exception):
     timezone_name: str
 
@@ -87,7 +66,8 @@ def evaluate_plan_version(
     evaluation_date: date,
     facility_timezone: str,
 ) -> EvaluationBundle:
-    context = _context(aggregate, package, evaluation_date)
+    evidence = collect_evidence(aggregate, package, evaluation_date)
+    context = EvaluationContext(evidence, _timing_status(evidence.calculated_due, evaluation_date))
     overall, explanation = _overall(context)
     criteria = tuple(_criterion(step, context, overall) for step in package.checklist.steps)
     return EvaluationBundle(
@@ -106,39 +86,30 @@ def evaluate_plan_version(
     )
 
 
-def _context(aggregate: TreatmentPlanAggregate, package: DeterministicRulePackage, today: date) -> EvaluationContext:
-    admission = _parse_date(aggregate.admission_date)
-    signature_dates = tuple(
-        parsed
-        for item in aggregate.content_snapshot.signatures
-        if (parsed := _parse_date(item.signature_datetime)) is not None
-    )
-    signature = max(signature_dates, default=None)
-    anchor = _latest_signed_review_date(aggregate) or admission
-    mapped_loc, interval = _map_loc(aggregate.current_level_of_care, package)
-    calculated_due = anchor + timedelta(days=interval) if anchor is not None and interval is not None else None
-    source_due = _parse_date(aggregate.source_due_date)
-    source_due_invalid = _known(aggregate.source_due_date) and source_due is None
-    conflict = calculated_due is not None and source_due is not None and calculated_due != source_due
-    loc_changed = len({_text(row, "level_of_care", "loc_code").casefold() for row in aggregate.loc_history if _text(row, "level_of_care", "loc_code")}) > 1
-    loc_effective_dates = tuple(_parse_date(_text(row, "effective_date")) for row in aggregate.loc_history)
-    latest_loc = max((item for item in loc_effective_dates if item is not None), default=None)
-    loc_candidate = latest_loc + timedelta(days=package.rules.loc_change_blocker.default_preset_calendar_days) if loc_changed and latest_loc else None
-    timing = _timing_status(calculated_due, today)
-    return EvaluationContext(aggregate, admission, signature, anchor, calculated_due, source_due, source_due_invalid,
-                             mapped_loc, interval, timing, conflict, loc_changed, loc_candidate)
+@dataclass(frozen=True, slots=True)
+class EvaluationContext:
+    evidence: EvaluationEvidence
+    timing_status: EvaluationStatus
+
+    def __getattr__(self, name: str):
+        return getattr(self.evidence, name)
 
 
 def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
-    if context.admission is None or context.signature is None:
-        return "Missing Data", "Required admission or signature evidence is missing; compliance was not inferred."
+    if context.malformed_signature or context.loc_conflict:
+        return "Conflicting Evidence", "Signature or level-of-care evidence is malformed or internally inconsistent."
+    if context.future_review:
+        return "Needs Review", "A signed review is future-dated relative to the facility evaluation date."
+    if (context.admission is None or context.initial_signature is None or context.master_signature is None
+            or context.source_due_missing or context.plans_missing):
+        return "Missing Data", "Required typed plan, signature, admission, or due-date evidence is missing."
     if context.source_due_invalid:
         return "Unable to Evaluate", "The source Next Review Due value is invalid; compliance was not inferred."
     if not context.mapped_loc or context.calculated_due is None:
         return "Unable to Evaluate", "The level of care or recurrence anchor is not configured; compliance was not inferred."
-    if context.conflict:
+    if context.due_conflict:
         return "Conflicting Evidence", "Source Next Review Due disagrees with the calculated signed-review recurrence."
-    if context.signature != context.admission:
+    if context.initial_signature != context.admission:
         return "Needs Review", "Initial treatment-plan signature evidence is not on admission Day 1."
     if context.loc_changed:
         return "Needs Review", "The seven-day LOC-change candidate is display-only and unvalidated; the recurring rule remains active."
@@ -152,13 +123,13 @@ def _criterion(step: ChecklistStep, context: EvaluationContext, overall: ReviewS
         "confirm_admission_date": _presence(step, "admission_date", context.admission),
         "confirm_current_loc": _presence(step, "current_level_of_care", context.aggregate.current_level_of_care),
         "confirm_loc_rule_mapping": _presence(step, "mapped_level_of_care", context.mapped_loc),
-        "confirm_staff_signature_status": _presence(step, "content_snapshot.signatures[*].signature_datetime", context.signature),
+        "confirm_staff_signature_status": _presence(step, context.initial_signature_path, context.initial_signature),
         "initial_plan_exists": _presence(step, "treatment_plans", context.aggregate.treatment_plans),
         "initial_plan_dated_correctly": _day_one(step, context),
         "initial_plan_required_signatures": _day_one(step, context),
         "master_plan_exists": _presence(step, "treatment_plans", context.aggregate.treatment_plans),
         "master_plan_within_30_days": _master(step, context),
-        "master_plan_required_signatures": _presence(step, "content_snapshot.signatures[*].signature_datetime", context.signature),
+        "master_plan_required_signatures": _presence(step, context.master_signature_path, context.master_signature),
         "latest_valid_review_identified": _anchor(step, context),
         "calculate_next_review_due_date": _due(step, context),
         "apply_php_timing_rule": _interval(step, context, "PHP"),
@@ -180,27 +151,27 @@ def _criterion(step: ChecklistStep, context: EvaluationContext, overall: ReviewS
 
 
 def _presence(step: ChecklistStep, path: str, value: str | date | tuple[dict[str, JsonValue], ...]) -> CriterionEvaluation:
-    present = bool(value) and (not isinstance(value, str) or _known(value))
+    present = bool(value) and (not isinstance(value, str) or known(value))
     return CriterionEvaluation(step.key, step.title, "Present" if present else "Missing Data", path,
                                _safe(value) if present else "missing", "Required evidence is present." if present else "Required evidence is missing.")
 
 
 def _day_one(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    if context.admission is None or context.signature is None:
+    if context.admission is None or context.initial_signature is None:
         return CriterionEvaluation(step.key, step.title, "Missing Data", "admission_date + signatures[*].signature_datetime", "missing", "Day-1 evidence is incomplete.")
-    compliant = context.signature == context.admission
+    compliant = context.initial_signature == context.admission
     return CriterionEvaluation(step.key, step.title, "Compliant" if compliant else "Needs Review",
-                               "content_snapshot.signatures[*].signature_datetime", context.signature.isoformat(),
+                               context.initial_signature_path, context.initial_signature.isoformat(),
                                "Initial plan is signed on admission Day 1." if compliant else "Initial plan is not signed on admission Day 1.")
 
 
 def _master(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    if context.admission is None or context.signature is None:
+    if context.admission is None or context.master_signature is None:
         return CriterionEvaluation(step.key, step.title, "Missing Data", "admission_date + signatures[*].signature_datetime", "missing", "Master-plan timing evidence is incomplete.")
     deadline = context.admission + timedelta(days=30)
-    compliant = context.signature <= deadline
-    return CriterionEvaluation(step.key, step.title, "Compliant" if compliant else "Overdue", "admission_date + 30 calendar days",
-                               deadline.isoformat(), "Signed master-plan evidence is within 30 days." if compliant else "Signed master-plan evidence exceeds 30 days.")
+    compliant = context.master_signature <= deadline
+    return CriterionEvaluation(step.key, step.title, "Compliant" if compliant else "Overdue", context.master_signature_path,
+                               context.master_signature.isoformat(), "Signed master-plan evidence is within 30 days." if compliant else "Signed master-plan evidence exceeds 30 days.")
 
 
 def _anchor(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
@@ -208,7 +179,7 @@ def _anchor(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluat
 
 
 def _due(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    status: EvaluationStatus = "Conflicting Evidence" if context.conflict else context.timing_status
+    status: EvaluationStatus = "Conflicting Evidence" if context.due_conflict else context.timing_status
     if context.calculated_due is None:
         status = "Unable to Evaluate"
     return CriterionEvaluation(step.key, step.title, status, "signed_review_anchor + configured_interval_days",
@@ -228,34 +199,15 @@ def _timing_criterion(step: ChecklistStep, context: EvaluationContext, *statuses
 
 
 def _conflict(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    return CriterionEvaluation(step.key, step.title, "Conflicting Evidence" if context.conflict else "Compliant",
+    return CriterionEvaluation(step.key, step.title, "Conflicting Evidence" if context.due_conflict else "Compliant",
                                "source_due_date vs calculated_due_date", f"source={_iso(context.source_due)}; calculated={_iso(context.calculated_due)}",
-                               "Conflicting due-date evidence found." if context.conflict else "No due-date conflict found.")
+                               "Conflicting due-date evidence found." if context.due_conflict else "No due-date conflict found.")
 
 
 def _loc_change(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
     status: EvaluationStatus = "Needs Review" if context.loc_changed else "Not Applicable"
     return CriterionEvaluation(step.key, step.title, status, "loc_history[*].effective_date",
                                _iso(context.loc_candidate) or "no candidate", "The seven-day candidate is display-only and cannot activate compliance.")
-
-
-def _map_loc(raw: str, package: DeterministicRulePackage) -> tuple[str, int | None]:
-    normalized = raw.strip().casefold()
-    for name, rule in package.rules.levels_of_care.items():
-        if normalized in {alias.strip().casefold() for alias in rule.aliases} | {name.casefold()}:
-            return name, rule.treatment_plan_update_interval_days
-    return "", None
-
-
-def _latest_signed_review_date(aggregate: TreatmentPlanAggregate) -> date | None:
-    candidates = []
-    for review in aggregate.treatment_reviews:
-        review_date = _parse_date(_text(review, "review_date", "reviewDate", "updated_date", "date"))
-        signature_date = _parse_date(_text(review, "signature_date", "signatureDate", "signed_at"))
-        signed = bool(signature_date) or _text(review, "signed", "is_signed").casefold() in {"true", "yes", "1"}
-        if signed and review_date is not None:
-            candidates.append(review_date)
-    return max(candidates, default=None)
 
 
 def _timing_status(due: date | None, today: date) -> EvaluationStatus:
@@ -269,27 +221,6 @@ def _timing_status(due: date | None, today: date) -> EvaluationStatus:
     if days <= 7:
         return "Due Soon"
     return "Current/Compliant"
-
-
-def _parse_date(raw: str) -> date | None:
-    if not _known(raw):
-        return None
-    try:
-        return date.fromisoformat(raw.strip()[:10])
-    except ValueError:
-        return None
-
-
-def _text(record: dict[str, JsonValue], *keys: str) -> str:
-    for key in keys:
-        value = record.get(key)
-        if isinstance(value, (str, int, float, bool)):
-            return str(value)
-    return ""
-
-
-def _known(raw: str) -> bool:
-    return raw.strip().casefold() not in UNKNOWN_VALUES
 
 
 def _iso(value: date | None) -> str:

@@ -41,7 +41,7 @@ def init_database() -> None:
         _ensure_app_settings(db)
         db.commit()
     engine.dispose()
-    run_migrations(
+    migration_report = run_migrations(
         MigrationRequest(
             database_path=settings.sqlite_db_path,
             local_app_data_dir=settings.local_app_data_dir,
@@ -52,7 +52,7 @@ def init_database() -> None:
     with SessionLocal() as db:
         _mark_interrupted_jobs_stale(db)
         _ensure_admin_facilities(db)
-        reevaluate_all_plan_versions(db, "startup")
+        reevaluate_all_plan_versions(db, "migration" if migration_report.applied_versions else "startup")
         db.commit()
 
 
