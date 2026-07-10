@@ -84,7 +84,7 @@ def test_timing_needs_review_for_loc_change_while_window_is_unvalidated() -> Non
     assert "LOC-change" in evaluation.reason
 
 
-def test_manual_aggregate_import_persists_derived_overdue_status(tmp_path, monkeypatch) -> None:
+def test_manual_aggregate_import_fails_closed_without_typed_plan_signatures(tmp_path, monkeypatch) -> None:
     # Given
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -106,4 +106,10 @@ def test_manual_aggregate_import_persists_derived_overdue_status(tmp_path, monke
     assert imported.status_code == 201
     detail = client.get("/api/v2/treatment-plans/912", headers=headers)
     assert detail.status_code == 200
-    assert detail.json()["overall_status"] == "Overdue"
+    assert detail.json()["overall_status"] == "Missing Data"
+    statuses = {
+        item["criterion_id"]: item["result_status"]
+        for item in detail.json()["criteria_results"]
+    }
+    assert statuses["initial_plan_required_signatures"] == "Missing Data"
+    assert statuses["master_plan_required_signatures"] == "Missing Data"

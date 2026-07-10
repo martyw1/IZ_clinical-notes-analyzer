@@ -102,7 +102,10 @@ def reconciliation_counts(connection: sqlite3.Connection) -> tuple[Reconciliatio
     return tuple(
         ReconciliationCount(str(row[0]), int(row[1]), int(row[2]), str(row[3]), str(row[4]))
         for row in connection.execute(
-            "SELECT category,source_count,target_count,source_sha256,target_sha256 FROM migration_reconciliation ORDER BY category"
+            "SELECT current.category,current.source_count,current.target_count,current.source_sha256,current.target_sha256 "
+            "FROM migration_reconciliation current WHERE current.migration_version=("
+            "SELECT MAX(history.migration_version) FROM migration_reconciliation history "
+            "WHERE history.category=current.category) ORDER BY current.category"
         )
     )
 
