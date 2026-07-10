@@ -10,6 +10,7 @@ from typing import assert_never
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.v2.migrations.backfill_types import BackfillError, JsonPrimitive, JsonValue, encrypt_bytes, fernet_key, iso_text
+from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
 
 PATIENT_NAME_ALIASES = frozenset(
     {"fullname", "displayname", "firstname", "lastname", "givenname", "surname"}
@@ -88,7 +89,7 @@ def _backfill_plans(
                 context.patient_id, context.source_system, source_record_id, ordinal,
                 _optional_text(plan.get("plan_date") or plan.get("planDate")),
                 _optional_text(plan.get("signature_date") or plan.get("signatureDate")),
-                _optional_text(legacy[4]), _optional_text(legacy[5]), encrypt_bytes(canonical, context.encryption_secret),
+                _optional_text(legacy[4]), _optional_text(legacy[5]), ClinicalSnapshotCodec(context.encryption_secret).encode_plan(plan),
                 content_sha256, evidence_sha256, context.imported_at, previous_plan_id,
             ),
         )
@@ -132,7 +133,7 @@ def _backfill_reviews(
                 context.patient_id, context.source_system, source_record_id, ordinal,
                 _optional_text(review.get("review_date") or review.get("reviewDate")),
                 _optional_text(review.get("signature_date") or review.get("signatureDate")),
-                encrypt_bytes(canonical, context.encryption_secret), content_sha256, evidence_sha256, context.imported_at, previous_review_id,
+                ClinicalSnapshotCodec(context.encryption_secret).encode_review(review), content_sha256, evidence_sha256, context.imported_at, previous_review_id,
             ),
         )
         if cursor.rowcount == 1:

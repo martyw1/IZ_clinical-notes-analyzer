@@ -13,6 +13,7 @@ from app.v2.migrations.backfill_types import JsonValue
 from app.v2.migrations.backup import MAGIC, BackupEnvelopeError, BackupRequest, create_backup, read_backup
 from app.v2.migrations.registry import LATEST_SCHEMA_VERSION
 from app.v2.migrations.runner import MigrationRequest, MigrationStateError, RestoreRequest, restore_database, run_migrations
+from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec, PlanRecordSnapshot
 from v2_migration_fixtures import SYNTHETIC_SECRET, create_legacy_database, encrypted_text
 
 
@@ -149,11 +150,17 @@ def test_backfill_recursively_removes_patient_name_aliases_before_reencryption(t
 
     # Then: decrypted migrated content retains safe data but no patient-name alias or canary.
     with closing(sqlite3.connect(database_path)) as connection:
-        encrypted = connection.execute("SELECT normalized_snapshot_encrypted FROM treatment_plan_versions ORDER BY id LIMIT 1").fetchone()[0]
-    migrated = _decrypt_snapshot(bytes(encrypted))
+        row = connection.execute(
+            "SELECT patient_id,source_system,source_record_id,normalized_snapshot_encrypted,content_sha256,evidence_sha256 "
+            "FROM treatment_plan_versions ORDER BY id LIMIT 1"
+        ).fetchone()
+    migrated = _decrypt_snapshot(bytes(row[3]))
+    canonical = json.dumps(migrated, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
     assert "PRIVACY-CANARY-NAME" not in json.dumps(migrated)
     assert "patientName" not in migrated
     assert migrated["nested"] == {"safe": "retained"}
+    assert hashlib.sha256(canonical).hexdigest() == row[4]
+    assert hashlib.sha256(f"{row[0]}:{row[1]}:{row[2]}:{row[4]}".encode("utf-8")).hexdigest() == row[5]
 
 
 def test_migration_neutralizes_legacy_plaintext_patient_identity_everywhere(tmp_path) -> None:
@@ -225,7 +232,9 @@ def _decrypt_legacy_text(stored: str) -> dict[str, JsonValue]:
 
 
 def _decrypt_snapshot(stored: bytes) -> dict[str, JsonValue]:
-    return json.loads(_fernet().decrypt(stored[7:]))
+    snapshot = ClinicalSnapshotCodec(SYNTHETIC_SECRET).decode_plan(stored)
+    assert isinstance(snapshot, PlanRecordSnapshot)
+    return snapshot.record
 
 
 def _sqlite_storage_bytes(connection: sqlite3.Connection) -> tuple[bytes, ...]:

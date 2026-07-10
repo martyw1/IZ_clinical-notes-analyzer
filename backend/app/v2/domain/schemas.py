@@ -4,8 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-JsonPrimitive = str | int | float | bool | None
-JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
+type JsonPrimitive = str | int | float | bool | None
+type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
 
 SourceMode = Literal["manual_upload", "alleva_rest_api", "synthetic_fixture"]
 ReviewStatus = Literal[
@@ -166,6 +166,7 @@ class TreatmentPlanAggregate(V2Model):
     admission_date: str
     loc_history: tuple[dict[str, JsonValue], ...]
     treatment_plans: tuple[dict[str, JsonValue], ...]
+    treatment_reviews: tuple[dict[str, JsonValue], ...] = ()
     active_treatment_plans: tuple[dict[str, JsonValue], ...]
     latest_created_active_plan: dict[str, JsonValue]
     has_multiple_active_plans: bool

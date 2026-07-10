@@ -17,7 +17,9 @@ from app.v2.services.manager_action_store import (
     open_correction_counts_by_patient,
 )
 from app.v2.services.manual_source_file_store import source_documents_for_patient
-from app.v2.services.secure_storage import decrypt_text_secret, encrypt_text_secret
+from app.core.config import settings
+from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
+from app.v2.services.migrated_treatment_plan import assemble_treatment_plan_aggregate
 from app.v2.services.timeliness import TimelinessRules, evaluate_treatment_plan_timing
 
 TREATMENT_PLAN_STATUS_ORDER: Final = (
@@ -59,20 +61,21 @@ class StoredTreatmentPlan:
     missing_criteria_count: int
     content_summary_json: str
     warnings_json: str
-    encrypted_payload: str
 
 
 def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
     rows = db.execute(
         text(
-            """SELECT p.canonical_client_id,v.normalized_snapshot_encrypted
-            FROM patients p JOIN treatment_plan_versions v ON v.patient_id=p.id
-            WHERE v.id=(SELECT latest.id FROM treatment_plan_versions latest
-                WHERE latest.patient_id=p.id ORDER BY latest.version_ordinal DESC,latest.id DESC LIMIT 1)
-            ORDER BY v.imported_at DESC,v.id DESC"""
+            "SELECT p.canonical_client_id,MAX(v.imported_at),MAX(v.id) FROM patients p "
+            "JOIN treatment_plan_versions v ON v.patient_id=p.id GROUP BY p.id,p.canonical_client_id "
+            "ORDER BY MAX(v.imported_at) DESC,MAX(v.id) DESC"
         )
     ).all()
-    return tuple(_stored_plan(str(row[0]), row[1]) for row in rows)
+    aggregates = tuple(
+        assemble_treatment_plan_aggregate(db, str(row[0]), settings.effective_data_encryption_secret)
+        for row in rows
+    )
+    return tuple(_stored_plan(aggregate) for aggregate in aggregates if aggregate is not None)
 
 
 def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem, ...]:
@@ -83,7 +86,7 @@ def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem
 def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate, actor: User) -> StoredTreatmentPlan:
     aggregate = _with_timeliness_evaluation(db, aggregate)
     payload_json = aggregate.model_dump_json()
-    encrypted_payload = encrypt_text_secret(payload_json)
+    encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
     content_sha256 = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
     evidence_sha256 = hashlib.sha256(
         f"{aggregate.patient_id}:{aggregate.source_mode}:{aggregate.content_snapshot.plan_id}:{content_sha256}".encode("utf-8")
@@ -129,7 +132,7 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
             "version_ordinal": version_ordinal,
             "admission_date": aggregate.admission_date,
             "next_due": aggregate.date_clock_due_date,
-            "payload": encrypted_payload.encode("utf-8"),
+            "payload": encrypted_payload,
             "content_sha256": content_sha256,
             "evidence_sha256": evidence_sha256,
             "imported_at": now,
@@ -137,7 +140,7 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
         },
     )
     db.commit()
-    return _stored_plan(aggregate.patient_id, encrypted_payload)
+    return _stored_plan(aggregate)
 
 
 def _with_timeliness_evaluation(db: Session, aggregate: TreatmentPlanAggregate) -> TreatmentPlanAggregate:
@@ -163,18 +166,9 @@ def _with_timeliness_evaluation(db: Session, aggregate: TreatmentPlanAggregate) 
 
 
 def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> TreatmentPlanAggregate | None:
-    encrypted_payload = db.execute(
-        text(
-            """SELECT v.normalized_snapshot_encrypted FROM patients p
-            JOIN treatment_plan_versions v ON v.patient_id=p.id
-            WHERE p.canonical_client_id=:client_id
-            ORDER BY v.imported_at DESC,v.version_ordinal DESC,v.id DESC LIMIT 1"""
-        ),
-        {"client_id": patient_id},
-    ).scalar_one_or_none()
-    if encrypted_payload is None:
+    aggregate = assemble_treatment_plan_aggregate(db, patient_id, settings.effective_data_encryption_secret)
+    if aggregate is None:
         return None
-    aggregate = TreatmentPlanAggregate.model_validate_json(decrypt_text_secret(_encrypted_text(encrypted_payload)))
     source_documents = source_documents_for_patient(db, patient_id)
     persisted_reviews = manager_review_dicts_for_patient(db, patient_id)
     if not persisted_reviews and not source_documents:
@@ -231,11 +225,9 @@ def _string_tuple(raw_json: str) -> tuple[str, ...]:
     return tuple(value for value in payload if isinstance(value, str))
 
 
-def _stored_plan(patient_id: str, encrypted_payload: str | bytes) -> StoredTreatmentPlan:
-    payload = _encrypted_text(encrypted_payload)
-    aggregate = TreatmentPlanAggregate.model_validate_json(decrypt_text_secret(payload))
+def _stored_plan(aggregate: TreatmentPlanAggregate) -> StoredTreatmentPlan:
     return StoredTreatmentPlan(
-        patient_id=patient_id,
+        patient_id=aggregate.patient_id,
         patient_display_label=aggregate.patient_display_label,
         plan_id=aggregate.content_snapshot.plan_id,
         source_mode=aggregate.source_mode,
@@ -246,9 +238,4 @@ def _stored_plan(patient_id: str, encrypted_payload: str | bytes) -> StoredTreat
         missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,
         content_summary_json=_content_summary_json(aggregate),
         warnings_json=json.dumps(list(aggregate.data_quality_warnings), sort_keys=True),
-        encrypted_payload=payload,
     )
-
-
-def _encrypted_text(value: str | bytes) -> str:
-    return value.decode("utf-8") if isinstance(value, bytes) else value
