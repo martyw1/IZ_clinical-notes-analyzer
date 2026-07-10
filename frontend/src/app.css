@@ -13,6 +13,11 @@
   --border-strong: #afc0b8;
   --text-main: #18201d;
   --text-muted: #5f6f68;
+  --action-primary: #18543b;
+  --action-primary-hover: #0f432d;
+  --action-active-bg: #e2f1e8;
+  --action-hover-bg: #f5faf7;
+  --focus-ring: rgba(37, 99, 168, 0.26);
   --status-overdue: #9f1d2d;
   --status-urgent: #b45309;
   --status-due-soon: #d39a16;
@@ -22,6 +27,7 @@
   --status-conflicting-evidence: #7c3aed;
   --status-unable-to-evaluate: #374151;
   --status-compliant: #2f7d4f;
+  --space-2: 8px;
 }
 
 * {
@@ -43,22 +49,30 @@ select {
 }
 
 button {
-  border: 1px solid #18543b;
+  border: 1px solid var(--action-primary);
   border-radius: 8px;
   padding: 0.66rem 0.95rem;
-  background: #18543b;
+  background: var(--action-primary);
   color: #fbfdfc;
   cursor: pointer;
 }
 
 button:hover {
-  background: #0f432d;
+  background: var(--action-primary-hover);
+}
+
+button:disabled,
+button:disabled:hover {
+  border-color: var(--border-soft);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(37, 99, 168, 0.26);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -245,7 +259,7 @@ dd,
 .nav-button:hover,
 .status-segment:hover,
 .secondary-button:hover {
-  background: #f5faf7;
+  background: var(--action-hover-bg);
   color: var(--text-main);
 }
 
@@ -261,8 +275,8 @@ dd,
 }
 
 .nav-button[aria-pressed="true"] {
-  border-color: #18543b;
-  background: #e2f1e8;
+  border-color: var(--action-primary);
+  background: var(--action-active-bg);
 }
 
 .page-grid,
@@ -323,6 +337,10 @@ dd,
 .summary-grid,
 .job-stats {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.summary-grid time {
+  white-space: nowrap;
 }
 
 .metric-tile dd {
@@ -470,6 +488,13 @@ dd,
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.workflow-version-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .checkbox-row input {

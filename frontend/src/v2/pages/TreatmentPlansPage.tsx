@@ -76,6 +76,12 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
   async function handleManagerAction(payload: ManagerActionPayload) {
     if (!selectedPlan) return
     await saveManagerAction(token, selectedPlan.patientId, payload)
+    const [detail, queue] = await Promise.all([
+      getTreatmentPlanDetail(token, selectedPlan.patientId),
+      getTreatmentPlans(token),
+    ])
+    setSelectedPlan(detail)
+    setListData(queue)
   }
 
   async function handleSourceDocumentDownload(sourceFileId: string) {
@@ -152,6 +158,7 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
         {!isLoadingDetail && selectedPlan && (
           <TreatmentPlanDetailViewer
             plan={selectedPlan}
+            canManage={user.role === 'admin' || user.role === 'office_manager'}
             onManagerAction={handleManagerAction}
             onDownloadSourceDocument={handleSourceDocumentDownload}
             onDeleteSourceDocument={handleSourceDocumentDelete}

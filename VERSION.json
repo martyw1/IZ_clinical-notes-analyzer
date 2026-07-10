@@ -8,5 +8,5 @@
   "stability": "beta",
   "is_prerelease": true,
   "version_name": "Version 2.0 Beta local desktop rebuild",
-  "description": "Archives the pre-2.0 runtime under deprecated/v1 and activates a focused V2 local FastAPI plus React/Vite treatment-plan workbench with content-graph checklist evidence, bounded Alleva API harness jobs, patient-ID-only synthetic fixtures, and visible LOC-change blocker handling."
+  "description": "Archives the pre-2.0 runtime under deprecated/v1 and activates a focused V2 local FastAPI plus React/Vite treatment-plan workbench with evidence-linked checklist evaluation, bounded Alleva API harness jobs, persisted manual or approved-sync data, and visible LOC-change blocker handling."
 }

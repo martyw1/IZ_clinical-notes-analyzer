@@ -19,6 +19,11 @@ IZ Clinical Notes Analyzer should feel like a clinical operations workbench: cal
 | Text main | `--text-main` | `#18201D` | `#F4F8F5` | Primary text |
 | Text muted | `--text-muted` | `#5F6F68` | `#A9B8B1` | Secondary text |
 | Text faint | `--text-faint` | `#7C8B84` | `#7E9188` | Metadata, disabled |
+| Primary action | `--action-primary` | `#18543B` | `#2F7D4F` | Primary commands |
+| Primary action hover | `--action-primary-hover` | `#0F432D` | `#24623F` | Primary command hover |
+| Action active fill | `--action-active-bg` | `#E2F1E8` | `#223C2D` | Active navigation and filters |
+| Action hover fill | `--action-hover-bg` | `#F5FAF7` | `#223029` | Secondary command hover |
+| Focus ring | `--focus-ring` | `rgba(37, 99, 168, 0.26)` | `rgba(147, 197, 253, 0.36)` | Keyboard focus outline |
 | Overdue | `--status-overdue` | `#9F1D2D` | `#F87171` | True overdue or critical action |
 | Urgent | `--status-urgent` | `#B45309` | `#FDBA74` | Immediate attention |
 | Due soon | `--status-due-soon` | `#D39A16` | `#FCD34D` | Upcoming deadline |

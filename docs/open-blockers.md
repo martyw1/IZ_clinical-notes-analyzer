@@ -14,7 +14,7 @@ Status: unvalidated for Version 2.0 Beta.
 
 The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The active V2 implementation must keep this value configurable and must visibly mark it as unvalidated in readiness, settings UI, Treatment Plans/checklist evidence, and operator documentation.
 
-Current implementation state: Version 2.0 Beta keeps the LOC-change update window visibly unresolved in Settings, Treatment Plans, checklist evidence, V2 docs, and validation notes. The placeholder remains 7 calendar days and must stay configurable until R3/Marleigh confirms the final rule. The V2 Treatment Plans Workbench marks affected cases as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when evidence is incomplete or conflicting.
+Current implementation state: Version 2.0 Beta keeps the LOC-change update window visibly unresolved in Settings, Treatment Plans, checklist evidence, V2 docs, and validation notes. The placeholder remains 7 calendar days and must stay configurable until R3/Marleigh confirms the final rule. When an imported aggregate has more than one LOC history entry while the setting is unvalidated, the V2 evaluator returns `Needs Review`; missing required evidence returns `Missing Data` and malformed dates return `Unable to Evaluate`.
 
 Until R3 confirms the rule, do not hard-code a final number of days and do not silently treat a LOC-change case as compliant. If source evidence is incomplete or conflicting, return `Needs Review` or `Missing Data` according to the deterministic rules.
 
@@ -31,7 +31,7 @@ Owner: R3 + Alleva
 
 Status: Open.
 
-Current implementation state: Version 2.0 Beta uses Alleva REST/OpenAPI readiness and synthetic/local API-harness validation only. Startup sync and live patient import remain disabled and cannot be armed until R3/Alleva live-sync approval and validated endpoint mapping exist. The V2 API Testing Harness exposes `ClientId` and bounded Pull ALL Treatment Plans job behavior for readiness testing; it is not a production import approval.
+Current implementation state: Version 2.0 Beta includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires API enablement, explicit sync enablement, recorded R3/Alleva approval, and endpoint-mapping validation before it can make `/clients`, paged `/treatment-plans`, and detail requests. Startup sync and live patient import remain disabled until R3/Alleva approval and validated endpoint mapping exist. The API Testing Harness remains readiness/testing evidence, not production import approval.
 
 Current patient-centered API harness contract:
 

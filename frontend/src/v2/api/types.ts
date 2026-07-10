@@ -61,6 +61,7 @@ export type ManualTreatmentPlanImportResult = {
   readonly encryptedAtRest: boolean
   readonly sourceFileArchived: boolean
   readonly sourceFileId: string
+  readonly patientIdCorrectionApplied: boolean
 }
 
 export type AppSettings = {
@@ -87,6 +88,31 @@ export type ApiConfiguration = {
   readonly syncLimit: number
   readonly timeoutSeconds: number
   readonly apiEnabled: boolean
+  readonly treatmentPlanSyncEnabled: boolean
+  readonly treatmentPlanSyncApproved: boolean
+  readonly treatmentPlanEndpointMappingValidated: boolean
+}
+
+export type OpenApiDefinitionSummary = {
+  readonly title: string
+  readonly operationCount: number
+}
+
+export type OAuthConnectivityResult = {
+  readonly status: 'ok' | 'failure'
+  readonly tokenAuthStyle: 'body' | 'basic'
+  readonly message: string
+  readonly tokenType: string
+  readonly expiresIn: number | null
+}
+
+export type OperationTestResult = {
+  readonly status: 'ok' | 'failure'
+  readonly message: string
+  readonly statusCode: number | null
+  readonly contentType: string
+  readonly responseBytes: number
+  readonly responseTruncated: boolean
 }
 
 export type AuditLogItem = {
@@ -98,6 +124,12 @@ export type AuditLogItem = {
   readonly targetEntityType: string
   readonly targetEntityId: string
   readonly outcomeStatus: string
+}
+
+export type AuditVerification = {
+  readonly valid: boolean
+  readonly eventCount: number
+  readonly firstInvalidId: number | null
 }
 
 export type ApiHarnessArtifact = {
@@ -123,4 +155,19 @@ export type ManagerActionPayload = {
   readonly action: 'approve' | 'return_for_correction' | 'override' | 'comment'
   readonly comment: string
   readonly overrideReason: string
+}
+
+export type CorrectionQueueItem = {
+  readonly patientId: string
+  readonly patientDisplayLabel: string
+  readonly criterionId: string
+  readonly criterionTitle: string
+  readonly returnComment: string
+  readonly returnedByUsername: string
+  readonly returnedAt: string
+}
+
+export type CorrectionSubmissionPayload = {
+  readonly criterionId: string
+  readonly comment: string
 }

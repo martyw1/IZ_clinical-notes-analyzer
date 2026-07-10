@@ -20,6 +20,9 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/.agents/
 
 .venv-*
 backend/.venv/

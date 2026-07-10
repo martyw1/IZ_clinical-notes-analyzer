@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listAuditLogs } from '../api/client'
+import { listAuditLogs, verifyAuditLogs } from '../api/auditClient'
 import { ApiRequestError } from '../api/json'
 import type { AuditLogItem } from '../api/types'
 
@@ -16,6 +16,7 @@ function messageForError(error: unknown): string {
 export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
   const [logs, setLogs] = useState<readonly AuditLogItem[]>([])
   const [error, setError] = useState('')
+  const [verification, setVerification] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -35,16 +36,25 @@ export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
 
   if (error) return <section className='panel error-banner' role='alert'>{error}</section>
 
+  async function verifyChain() {
+    try {
+      const result = await verifyAuditLogs(token)
+      setVerification(result.valid ? `Hash chain verified across ${result.eventCount} events.` : `Hash chain verification failed at audit record ${result.firstInvalidId ?? 'unknown'}.`)
+    } catch (verifyError) { setVerification(messageForError(verifyError)) }
+  }
+
   return (
     <section className='panel'>
       <p className='eyebrow'>Forensic Logs</p>
       <h2>Redacted audit events</h2>
       <div className='summary-grid'>
-        <span>Hash-chain verification: recorded</span>
+        <span>Hash chain: verify on demand</span>
         <span>Patient names: excluded</span>
         <span>Clinical narrative: not logged</span>
         <span>Vendor secrets: configured flags only</span>
       </div>
+      <button type='button' className='secondary-button' onClick={() => void verifyChain()}>Verify hash chain</button>
+      {verification && <p role='status'>{verification}</p>}
       <table>
         <thead><tr><th>Action</th><th>Actor</th><th>Entity</th><th>Outcome</th><th>Timestamp</th></tr></thead>
         <tbody>

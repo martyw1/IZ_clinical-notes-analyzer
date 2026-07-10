@@ -13,25 +13,35 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def record(job_id: str, index: int) -> dict[str, JsonValue]:
+def record(job_id: str, index: int, payload: dict[str, JsonValue], *, endpoint: str, page: int) -> dict[str, JsonValue]:
+    record_id = _identifier(payload, "id", "treatmentPlanId", "treatment_plan_id", "planId")
+    patient_id = _identifier(payload, "clientId", "client_id", "patientId", "patient_id")
     return {
         "job_id": job_id,
-        "source_endpoint": "GET /treatment-plans",
-        "page_number": index,
-        "cursor": f"cursor-{index}",
+        "source_endpoint": endpoint,
+        "page_number": page,
+        "cursor": f"offset-{index}",
         "record_index": index,
         "fetched_at": now_iso(),
         "http_status": 200,
-        "elapsed_ms": 40 + index,
-        "record_id": f"TP-900{index}",
-        "canonical_patient_id_if_known": "307",
-        "raw_client_ref_if_known": "/clients/307",
-        "extracted_patient_id_if_known": "307",
-        "join_validated_if_known": True,
+        "elapsed_ms": 0,
+        "record_id": record_id,
+        "canonical_patient_id_if_known": patient_id,
+        "raw_client_ref_if_known": "",
+        "extracted_patient_id_if_known": patient_id,
+        "join_validated_if_known": bool(patient_id),
         "redaction_status": "patient_names_excluded",
-        "payload": "redacted_safe_preview",
+        "payload": "redacted_external_record_metadata",
         "warnings": [],
     }
+
+
+def _identifier(payload: dict[str, JsonValue], *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, (str, int)):
+            return str(value)
+    return ""
 
 
 def write_progress(output_dir: Path, job_id: str, page: int, progress: int) -> None:
@@ -49,10 +59,10 @@ def write_tables(output_dir: Path, rows: list[dict[str, JsonValue]]) -> None:
             "source_endpoint": row["source_endpoint"],
             "treatment_plan_id": row["record_id"],
             "canonical_patient_id_if_known": row["canonical_patient_id_if_known"],
-            "field_path": "payload.goals[0].description",
+            "field_path": "redacted_external_record_metadata.record_id",
             "field_type": "string",
-            "field_value_preview": "redacted_safe_preview",
-            "is_blank": False,
+            "field_value_preview": row["record_id"],
+            "is_blank": not bool(row["record_id"]),
             "is_array": False,
             "is_object": False,
             "redaction_status": "redacted",
@@ -65,7 +75,7 @@ def write_tables(output_dir: Path, rows: list[dict[str, JsonValue]]) -> None:
     write_delimited(output_dir / "all-treatment-plans.flattened-fields.csv", table_rows, ",")
     write_delimited(
         output_dir / "all-treatment-plans.field-frequency.tsv",
-        [{"field_path": "payload.goals[0].description", "count_present": len(rows), "redaction_status": "redacted"}],
+        [{"field_path": "redacted_external_record_metadata.record_id", "count_present": sum(bool(row["record_id"]) for row in rows), "redaction_status": "redacted"}],
         "\t",
     )
 
@@ -81,7 +91,7 @@ def write_delimited(path: Path, rows: list[dict[str, JsonValue]], delimiter: str
 
 def write_summaries(output_dir: Path, job_id: str, rows: list[dict[str, JsonValue]]) -> None:
     schema = {
-        "field_path": "payload.goals[0].description",
+        "field_path": "redacted_external_record_metadata.record_id",
         "observed_types": ["string"],
         "count_present": len(rows),
         "count_blank": 0,

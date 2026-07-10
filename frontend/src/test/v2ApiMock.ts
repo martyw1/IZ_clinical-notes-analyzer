@@ -1,27 +1,20 @@
 import { vi } from 'vitest'
+import { auditLogsPayload, auditVerificationPayload } from './v2AuditMock'
 
 type Role = 'admin' | 'office_manager' | 'counselor' | 'viewer'
 
 type FetchState = {
   readonly role: Role
   readonly failLogin?: boolean
+  readonly workflowCreateFails?: boolean
 }
 
-export const adminNavigation = [
-  'Status Dashboard',
-  'Treatment Plans',
-  'Manual Upload',
-  'API Testing Harness',
-  'Users',
-  'Forensic Logs',
-  'Settings',
-  'Help',
-] as const
+export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Workflow Profiles', 'Forensic Logs', 'Settings', 'Help'] as const
 
-const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Help'] as const
+const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
-  const deletedSourceFileIds = new Set<string>()
+  const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const path = pathFrom(input)
@@ -36,17 +29,46 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload())
     if (path === '/api/v2/treatment-plans/812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812')))
     if (path === '/api/v2/treatment-plans/812/manager-actions' && method === 'POST') return jsonResponse({ status: 'saved' })
+    if (path === '/api/v2/corrections') return jsonResponse({ items: correctionSubmitted ? [] : [correctionQueueItemPayload()] })
+    if (path === '/api/v2/treatment-plans/812/correction-submissions' && method === 'POST') { correctionSubmitted = true; return jsonResponse({ status: 'submitted' }) }
     if (path === '/api/v2/treatment-plans/812/source-documents/source-file-812' && method === 'DELETE') {
       deletedSourceFileIds.add('source-file-812')
       return jsonResponse({ status: 'deleted', source_file_id: 'source-file-812', file_removed: true })
     }
     if (path === '/api/v2/treatment-plans/812/source-documents/source-file-812/download') return sourceDocumentDownloadResponse()
     if (path === '/api/v2/manual-uploads/treatment-plan-aggregate' && method === 'POST') return importResponse('812', false)
-    if (path === '/api/v2/manual-uploads/treatment-plan-file' && method === 'POST') return importResponse('914', true)
+    if (path === '/api/v2/manual-uploads/treatment-plan-file' && method === 'POST') {
+      const correctionConfirmed = init?.body instanceof FormData
+        && init.body.get('confirm_patient_id_correction') === 'true'
+      return importResponse('914', true, correctionConfirmed)
+    }
     if (path === '/api/settings') return jsonResponse(settingsPayload())
-    if (path === '/api/api-configuration') return jsonResponse(apiConfigurationPayload(method === 'PATCH'))
+    if (path === '/api/api-configuration') {
+      if (method === 'PATCH' && typeof init?.body === 'string') {
+        const body = JSON.parse(init.body)
+        syncEnabled = body.api_enabled === true
+          && body.treatment_plan_sync_enabled === true
+          && body.treatment_plan_sync_approved === true
+          && body.treatment_plan_endpoint_mapping_validated === true
+      }
+      return jsonResponse(apiConfigurationPayload(method === 'PATCH', syncEnabled))
+    }
+    if (path === '/api/v2/alleva-sync/run' && method === 'POST') return jsonResponse(syncJobPayload('queued'), 202)
+    if (path === '/api/v2/alleva-sync/jobs/sync-912') return jsonResponse(syncJobPayload('completed'))
+    if (path === '/api/api-configuration/pull-definitions' && method === 'POST') return jsonResponse({ status: 'ok', definition_summary: { title: 'Mock Treatment Plan API', operation_count: 3 }, redaction_status: 'safe_summary_only' })
+    if (path === '/api/api-configuration/test-connectivity' && method === 'POST') return jsonResponse({ status: 'ok', token_auth_style: 'body', message: 'OAuth client-credentials token obtained and discarded after verification.', token_type: 'Bearer', expires_in: 3600 })
+    if (path === '/api/api-configuration/test-operation' && method === 'POST') return jsonResponse({ status: 'ok', message: 'Read-only operation completed.', status_code: 200, content_type: 'application/json', response_bytes: 24, response_truncated: false })
+    if (path === '/api/users' && method === 'POST') return jsonResponse({ ...userPayload('counselor'), username: 'newcounselor', full_name: 'New Counselor', must_reset_password: true })
+    if (path === '/api/users/2/reset-password' && method === 'POST') return jsonResponse({ ...userPayload('counselor'), must_reset_password: true })
     if (path === '/api/users') return jsonResponse([userPayload('admin'), userPayload('counselor')])
+    if (path === '/api/workflow-definitions' && method === 'POST' && state.workflowCreateFails) return jsonResponse({ detail: 'Workflow key already exists' }, 409)
+    if (path === '/api/workflow-definitions') return jsonResponse([workflowProfilePayload(workflowProfileStatus)])
+    if (path === '/api/workflow-definitions/7/versions/71/publish' && method === 'POST') {
+      workflowProfileStatus = 'published'
+      return jsonResponse(workflowProfilePayload(workflowProfileStatus))
+    }
     if (path === '/api/audit/logs') return jsonResponse(auditLogsPayload())
+    if (path === '/api/audit/verify') return jsonResponse(auditVerificationPayload)
     if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload())
     if (path === '/api/v2/api-harness/jobs/job-812/artifacts') return jsonResponse(jobPayload().artifacts)
     return jsonResponse({ detail: `Unexpected test route ${method} ${path}` }, 404)
@@ -74,8 +96,8 @@ function sourceDocumentDownloadResponse(): Response {
   })
 }
 
-function importResponse(patientId: string, archived: boolean): Response {
-  return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `Patient ID ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null }, 201)
+function importResponse(patientId: string, archived: boolean, patientIdCorrectionApplied = false): Response {
+  return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `Patient ID ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
 }
 
 function userPayload(role: Role) {
@@ -122,6 +144,21 @@ function treatmentPlansPayload() {
   }
 }
 
+function correctionQueueItemPayload() { return { patient_id: '812', patient_display_label: 'Patient ID 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
+
+function workflowProfilePayload(status: 'draft' | 'published') {
+  const version = { id: 71, version: 1, status, version_notes: '' }
+  return {
+    id: 7,
+    workflow_key: 'clinical_timeliness_review',
+    display_name: 'Clinical Timeliness Review',
+    description: 'Synthetic workflow profile for frontend validation.',
+    is_active: true,
+    current_version: status === 'published' ? version : null,
+    versions: [version],
+  }
+}
+
 function treatmentPlanDetailPayload(sourceFileDeleted = false) {
   return {
     patient_id: '812',
@@ -133,6 +170,7 @@ function treatmentPlanDetailPayload(sourceFileDeleted = false) {
     overall_status: 'Needs Review',
     content_sections_present: ['diagnoses', 'goals', 'objectives', 'interventions', 'signatures_metadata'],
     content_sections_missing: ['trusted_nextReviewDue'],
+    data_quality_warnings: ['LOC-change update window remains unvalidated and configurable.'],
     manager_reviews: [{
       criterion_id: 'confirm_current_loc',
       action: 'override',
@@ -224,7 +262,7 @@ function settingsPayload() {
   }
 }
 
-function apiConfigurationPayload(configured: boolean) {
+function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
   return {
     vendor_name: 'Alleva REST API',
     api_base_url: 'https://api.allevasoft.com',
@@ -238,21 +276,10 @@ function apiConfigurationPayload(configured: boolean) {
     pagination_limit: 500,
     sync_limit: 100,
     timeout_seconds: 10,
-    api_enabled: false,
-  }
-}
-
-function auditLogsPayload() {
-  return {
-    items: [{
-      event_id: 'evt-1',
-      timestamp_utc: '2026-07-08T10:00:00Z',
-      actor_username: 'admin',
-      actor_role: 'admin',
-      action: 'settings.api_profile.saved',
-      details: { client_secret_configured: true },
-      target_entity_type: 'api_connection_profile', target_entity_id: 'Alleva REST API', outcome_status: 'success', prev_hash: '0', hash: 'abc',
-    }],
+    api_enabled: syncEnabled,
+    treatment_plan_sync_enabled: syncEnabled,
+    treatment_plan_sync_approved: syncEnabled,
+    treatment_plan_endpoint_mapping_validated: syncEnabled,
   }
 }
 
@@ -266,4 +293,8 @@ function jobPayload() {
     warnings_count: 0,
     artifacts: [{ artifact_id: 'run-summary.json', name: 'run-summary.json', media_type: 'application/json', size_bytes: 200, redaction_mode: 'safe' }, { artifact_id: 'all-treatment-plans.all-fields.redacted.jsonl', name: 'all-treatment-plans.all-fields.redacted.jsonl', media_type: 'application/jsonl', size_bytes: 800, redaction_mode: 'safe' }],
   }
+}
+
+function syncJobPayload(status: string) {
+  return { ...jobPayload(), job_id: 'sync-912', job_type: 'approved_treatment_plan_sync', status, records_written: status === 'completed' ? 1 : 0, records_failed: 0, warnings_count: 0 }
 }

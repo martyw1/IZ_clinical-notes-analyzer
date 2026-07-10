@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict
 from app.v2.api.deps import DbSession, ManagerUser
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.services.audit_store import record_audit_event
-from app.v2.services.manual_file_parser import ManualFileParseError, aggregate_from_manual_file
+from app.v2.services.manual_file_parser import aggregate_from_manual_file
+from app.v2.services.manual_file_types import ManualFileParseError, ManualFilePatientIdCorrectionRequired
 from app.v2.services.manual_source_file_store import (
     ManualSourceFileArchiveInput,
     archive_manual_source_file,
@@ -32,6 +33,7 @@ class ManualTreatmentPlanImportOut(BaseModel):
     encrypted_at_rest: bool
     source_file_archived: bool = False
     source_file_id: str | None = None
+    patient_id_correction_applied: bool = False
 
 
 class ManualSourceFileDeleteOut(BaseModel):
@@ -45,14 +47,20 @@ class ManualSourceFileDeleteOut(BaseModel):
 @dataclass(frozen=True, slots=True)
 class ManualFileUploadInput:
     patient_id: str
+    confirm_patient_id_correction: bool
     file: UploadFile
 
 
 def manual_file_upload_input(
     file: Annotated[UploadFile, File()],
     patient_id: Annotated[str, Form()] = "",
+    confirm_patient_id_correction: Annotated[bool, Form()] = False,
 ) -> ManualFileUploadInput:
-    return ManualFileUploadInput(patient_id=patient_id, file=file)
+    return ManualFileUploadInput(
+        patient_id=patient_id,
+        confirm_patient_id_correction=confirm_patient_id_correction,
+        file=file,
+    )
 
 
 @router.post(
@@ -98,7 +106,14 @@ def import_treatment_plan_file(
 ) -> ManualTreatmentPlanImportOut:
     raw_bytes = payload.file.file.read()
     try:
-        parsed = aggregate_from_manual_file(raw_bytes, payload.patient_id, payload.file.filename or "")
+        parsed = aggregate_from_manual_file(
+            raw_bytes,
+            payload.patient_id,
+            payload.file.filename or "",
+            payload.confirm_patient_id_correction,
+        )
+    except ManualFilePatientIdCorrectionRequired as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
     except ManualFileParseError as exc:
         raise HTTPException(status_code=400, detail=exc.detail) from exc
     row = save_treatment_plan_aggregate(db, parsed.aggregate, user)
@@ -126,6 +141,19 @@ def import_treatment_plan_file(
             "redaction_status": source_file.redaction_status,
         },
     )
+    if parsed.patient_id_correction_applied:
+        record_audit_event(
+            db,
+            action="manual_upload.patient_id.corrected",
+            actor=user,
+            target_entity_type="treatment_plan",
+            target_entity_id=row.patient_id,
+            details={
+                "patient_id_correction_applied": True,
+                "source_patient_id_present": True,
+                "correction_confirmed": True,
+            },
+        )
     record_audit_event(
         db,
         action="manual_upload.treatment_plan_file.imported",
@@ -139,6 +167,7 @@ def import_treatment_plan_file(
             "parsed_fields_count": parsed.parsed_fields_count,
             "source_file_archived": True,
             "source_file_id": source_file.document_id,
+            "patient_id_correction_applied": parsed.patient_id_correction_applied,
         },
     )
     return ManualTreatmentPlanImportOut(
@@ -150,6 +179,7 @@ def import_treatment_plan_file(
         encrypted_at_rest=True,
         source_file_archived=True,
         source_file_id=source_file.document_id,
+        patient_id_correction_applied=parsed.patient_id_correction_applied,
     )
 
 

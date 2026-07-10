@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
-from app.v2.models import TreatmentPlanImport, User, utc_now
-from app.v2.services.manager_action_store import manager_override_dicts_for_patient, manager_review_dicts_for_patient
+from app.v2.models import AppSetting, TreatmentPlanImport, User, utc_now
+from app.v2.services.manager_action_store import (
+    manager_override_dicts_for_patient,
+    manager_review_dicts_for_patient,
+    open_correction_counts_by_patient,
+)
 from app.v2.services.manual_source_file_store import source_documents_for_patient
 from app.v2.services.secure_storage import decrypt_text_secret, encrypt_text_secret
+from app.v2.services.timeliness import TimelinessRules, evaluate_treatment_plan_timing
 
 TREATMENT_PLAN_STATUS_ORDER: Final = (
     "Missing Data",
@@ -45,10 +51,12 @@ def list_treatment_plan_imports(db: Session) -> tuple[TreatmentPlanImport, ...]:
 
 
 def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem, ...]:
-    return tuple(_queue_item_from_import(row) for row in list_treatment_plan_imports(db))
+    correction_counts = open_correction_counts_by_patient(db)
+    return tuple(_queue_item_from_import(row, correction_counts.get(row.patient_id, 0)) for row in list_treatment_plan_imports(db))
 
 
 def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate, actor: User) -> TreatmentPlanImport:
+    aggregate = _with_timeliness_evaluation(db, aggregate)
     encrypted_payload = encrypt_text_secret(aggregate.model_dump_json())
     existing = db.execute(select(TreatmentPlanImport).where(TreatmentPlanImport.patient_id == aggregate.patient_id)).scalar_one_or_none()
     row = existing or TreatmentPlanImport(patient_id=aggregate.patient_id, encrypted_payload=encrypted_payload)
@@ -73,6 +81,28 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
     return row
 
 
+def _with_timeliness_evaluation(db: Session, aggregate: TreatmentPlanAggregate) -> TreatmentPlanAggregate:
+    settings = db.execute(select(AppSetting)).scalar_one()
+    evaluation = evaluate_treatment_plan_timing(
+        aggregate,
+        TimelinessRules(
+            master_due_days=settings.treatment_plan_master_due_days,
+            php_review_interval_days=settings.treatment_plan_php_review_interval_days,
+            iop_op_review_interval_days=settings.treatment_plan_iop_op_review_interval_days,
+            loc_change_window_days=settings.treatment_plan_loc_change_window_days,
+            loc_change_window_validated=settings.treatment_plan_loc_change_window_validated,
+        ),
+        date.today(),
+    )
+    return aggregate.model_copy(
+        update={
+            "overall_status": evaluation.status,
+            "overall_status_reason": evaluation.reason,
+            "data_quality_warnings": aggregate.data_quality_warnings + (evaluation.reason,),
+        }
+    )
+
+
 def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> TreatmentPlanAggregate | None:
     row = db.execute(select(TreatmentPlanImport).where(TreatmentPlanImport.patient_id == patient_id)).scalar_one_or_none()
     if row is None:
@@ -91,7 +121,7 @@ def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> Treatm
     )
 
 
-def _queue_item_from_import(row: TreatmentPlanImport) -> TreatmentPlanQueueItem:
+def _queue_item_from_import(row: TreatmentPlanImport, returned_criteria_count: int) -> TreatmentPlanQueueItem:
     return TreatmentPlanQueueItem(
         patient_id=row.patient_id,
         patient_display_label=row.patient_display_label,
@@ -100,7 +130,7 @@ def _queue_item_from_import(row: TreatmentPlanImport) -> TreatmentPlanQueueItem:
         next_due_date=row.next_due_date,
         status=row.overall_status,
         missing_criteria_count=row.missing_criteria_count,
-        returned_criteria_count=row.returned_criteria_count,
+        returned_criteria_count=returned_criteria_count,
         source_mode=row.source_mode,
         content_completeness_summary=_int_map(row.content_summary_json),
         warnings=_string_tuple(row.warnings_json),

@@ -67,7 +67,7 @@ def build_manual_aggregate(parsed: ParsedManualFields) -> TreatmentPlanAggregate
         loc_change_due_date="unvalidated_configurable",
         overall_status="Needs Review",
         overall_status_reason="Manual text-like upload parsed into the V2 aggregate; manager review remains required.",
-        data_quality_warnings=("Raw file parser is limited to text, Markdown, CSV, and TSV in this checkpoint.",),
+        data_quality_warnings=_data_quality_warnings(parsed),
         source_evidence=(
             evidence_ref(
                 "manual-upload-file",
@@ -131,13 +131,15 @@ def _content_snapshot(parsed: ParsedManualFields) -> TreatmentPlanContentSnapsho
 
 
 def _observed_fields(parsed: ParsedManualFields) -> tuple[TreatmentPlanObservedField, ...]:
-    rows = (
+    rows = [
         ("reason_for_admission", parsed.reason_for_admission, "content_snapshot.reason_for_admission", True),
         ("initial_client_needs", parsed.initial_client_needs, "content_snapshot.initial_client_needs", True),
         ("family_education_needs", parsed.family_education_needs, "content_snapshot.family_education_needs", True),
         ("intervention_description", parsed.intervention_description, _intervention_path(), True),
         ("signature_datetime", parsed.signature_datetime, "content_snapshot.signatures[0].signature_datetime", True),
-    )
+    ]
+    if parsed.patient_id_correction_applied:
+        rows.append(("patient_id_assignment", "Manual patient ID correction confirmed.", "patient_id", True))
     return tuple(
         TreatmentPlanObservedField(
             field_path=field_path,
@@ -151,6 +153,13 @@ def _observed_fields(parsed: ParsedManualFields) -> tuple[TreatmentPlanObservedF
         )
         for field_path, value, mapped_app_field, used_by_checklist in rows
     )
+
+
+def _data_quality_warnings(parsed: ParsedManualFields) -> tuple[str, ...]:
+    parser_warning = "Manual parser accepts labeled fields only; scanned/non-extractable PDFs and multi-document binders require review."
+    if not parsed.patient_id_correction_applied:
+        return (parser_warning,)
+    return (parser_warning, "Patient ID correction was confirmed before this manual file was imported.")
 
 
 def _snapshot_summary(parsed: ParsedManualFields) -> dict[str, JsonValue]:

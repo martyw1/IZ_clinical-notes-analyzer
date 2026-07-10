@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,7 +16,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-def current_user(token: Annotated[str, Depends(oauth2_scheme)], db: DbSession) -> User:
+def current_user(request: Request, token: Annotated[str, Depends(oauth2_scheme)], db: DbSession) -> User:
     username = decode_access_token(token)
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -27,6 +27,8 @@ def current_user(token: Annotated[str, Depends(oauth2_scheme)], db: DbSession) -
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account inactive")
     if user.is_locked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account locked")
+    if user.must_reset_password and request.url.path not in {"/api/users/me", "/api/users/me/change-password"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Password change is required before accessing the workspace")
     return user
 
 

@@ -51,6 +51,29 @@ describe('V2 active app shell', () => {
     expect(within(nav).queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'Treatment Plans' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Corrections' })).toBeInTheDocument()
+  })
+
+  it('gives counselors an actionable correction queue without manager controls', async () => {
+    const fetchMock = setupFetch({ role: 'counselor' })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /return for correction/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /save override/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Corrections' }))
+    expect(await screen.findByText('Open Returns')).toBeInTheDocument()
+    expect(screen.getByText(/Manager note: Confirm the current LOC source\./i)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Resolution note'), { target: { value: 'Updated synthetic source record.' } })
+    fireEvent.click(screen.getByRole('button', { name: /submit correction/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Correction submitted for manager review.')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v2/treatment-plans/812/correction-submissions',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
   })
 
   it('renders dashboard and treatment-plan detail from V2 APIs', async () => {
@@ -75,6 +98,7 @@ describe('V2 active app shell', () => {
     expect(screen.getByText('Source File Archive')).toBeInTheDocument()
     expect(screen.getByText('manual_treatment_plan_file')).toBeInTheDocument()
     expect(screen.getByText('encrypted_original_file')).toBeInTheDocument()
+    expect(screen.getByText('Data Quality Warnings')).toBeInTheDocument()
     expect(screen.queryByText(/client name|Marleigh|Johnson/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /save override/i }))
@@ -141,14 +165,60 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
     expect(await screen.findByText(/client secret configured/i)).toBeInTheDocument()
     expect(screen.queryByDisplayValue('new-secret-value')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /pull openapi definition/i }))
+    expect(await screen.findByText('Mock Treatment Plan API: 3 operations available.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /test saved oauth connectivity/i }))
+    expect(await screen.findByText(/token obtained and discarded after verification/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Enable API testing'))
+    fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
+    fireEvent.click(screen.getByLabelText('R3/Alleva sync approval recorded'))
+    fireEvent.click(screen.getByLabelText('Endpoint mapping validated'))
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /run approved treatment-plan sync/i }))
+    expect(await screen.findByText('Treatment-plan sync completed: 1 imported, 0 skipped.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Users' }))
     expect(await screen.findByText('Local Administrator')).toBeInTheDocument()
     expect(screen.getByText('Counselor User')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'newcounselor' } })
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'New Counselor' } })
+    fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'TemporaryPass1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create user' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('User created; password change is required')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
     expect(screen.queryByText('new-secret-value')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /verify hash chain/i }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Hash chain verified across 3 events.')
+  })
+
+  it('publishes a persisted draft workflow profile through the backend', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workflow Profiles' }))
+    expect(await screen.findByText('Clinical Timeliness Review')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Publish version 1' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Workflow profile version 1 published.')
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/workflow-definitions/7/versions/71/publish',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+  })
+
+  it('shows a backend validation error when creating a workflow profile fails', async () => {
+    setupFetch({ role: 'admin', workflowCreateFails: true })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workflow Profiles' }))
+    await screen.findByText('Clinical Timeliness Review')
+    fireEvent.change(screen.getByLabelText('Workflow key'), { target: { value: 'clinical_timeliness_review' } })
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Clinical Timeliness Review' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create workflow profile' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Workflow key already exists')
   })
 
   it('starts API harness jobs through the backend and renders bounded artifacts', async () => {
@@ -161,6 +231,10 @@ describe('V2 active app shell', () => {
     expect(await screen.findByText('completed')).toBeInTheDocument()
     expect(screen.getByText('all-treatment-plans.all-fields.redacted.jsonl')).toBeInTheDocument()
     expect(screen.queryByText(/signatureData.*base64/i)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/read-only operation path/i), { target: { value: '/health' } })
+    fireEvent.click(screen.getByRole('button', { name: /test read-only operation/i }))
+    expect(await screen.findByText(/Read-only operation completed\. 200 \| 24 bytes/i)).toBeInTheDocument()
   })
 
   it('imports normalized manual treatment-plan aggregate files through the backend', async () => {
@@ -192,5 +266,21 @@ describe('V2 active app shell', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file and archived encrypted source file.')
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/manual-uploads/treatment-plan-file', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }))
+  })
+
+  it('posts confirmed patient ID corrections for parsed treatment-plan files', async () => {
+    setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
+    fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
+    fireEvent.click(screen.getByLabelText(/I confirm this override corrects/i))
+    const file = new File(['Patient ID: 913\nIntervention: Synthetic correction review.'], 'manual-correction.txt', {
+      type: 'text/plain',
+    })
+    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, PDF, XLSX\)/i), { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: /upload and parse treatment-plan file/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file after confirmed Patient ID correction and archived encrypted source file.')
   })
 })

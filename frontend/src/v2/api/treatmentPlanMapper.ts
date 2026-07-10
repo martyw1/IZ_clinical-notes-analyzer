@@ -25,7 +25,7 @@ function toSourceMode(value: string): TreatmentPlanAggregate['sourceMode'] {
     case 'synthetic_fixture':
       return 'synthetic_fixture'
     default:
-      return 'synthetic_fixture'
+      return 'unavailable'
   }
 }
 
@@ -67,6 +67,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     familyEducationNeeds: readString(snapshot, 'family_education_needs', 'No family-education text returned.'),
     contentSectionsPresent: readStringList(record, 'content_sections_present'),
     contentSectionsMissing: readStringList(record, 'content_sections_missing'),
+    dataQualityWarnings: readStringList(record, 'data_quality_warnings'),
     criteria: readRecordList(record, 'criteria_results').map(mapCriterion),
     managerReviews: readRecordList(record, 'manager_reviews').map((review) => mapManagerReview(review)),
     overrides: readRecordList(record, 'overrides').map((review) => mapManagerReview(review, 'override', 'Override')),

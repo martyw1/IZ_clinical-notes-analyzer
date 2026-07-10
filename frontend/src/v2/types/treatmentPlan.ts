@@ -67,12 +67,13 @@ export type TreatmentPlanAggregate = {
   readonly admissionDate: string
   readonly dueDate: string
   readonly status: TreatmentPlanStatus
-  readonly sourceMode: 'manual_upload' | 'alleva_rest_api' | 'synthetic_fixture'
+  readonly sourceMode: 'manual_upload' | 'alleva_rest_api' | 'synthetic_fixture' | 'unavailable'
   readonly reasonForAdmission: string
   readonly initialClientNeeds: string
   readonly familyEducationNeeds: string
   readonly contentSectionsPresent: readonly string[]
   readonly contentSectionsMissing: readonly string[]
+  readonly dataQualityWarnings: readonly string[]
   readonly criteria: readonly CriterionResult[]
   readonly managerReviews: readonly ManagerReview[]
   readonly overrides: readonly ManagerReview[]

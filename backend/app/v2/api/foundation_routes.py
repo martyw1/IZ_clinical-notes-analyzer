@@ -14,16 +14,18 @@ from app.v2.api.models import (
     AppSettingsUpdate,
     AuditLogItemOut,
     AuditLogListOut,
+    AuditVerificationOut,
     LoginInput,
     TokenOut,
     UserCreate,
     UserOut,
     UserPasswordResetAdmin,
+    UserPasswordChange,
     UserUpdate,
 )
 from app.v2.models import AppSetting, AuditLog, User
 from app.v2.security import create_access_token, hash_password, password_policy_error, verify_password
-from app.v2.services.audit_store import JsonValue, record_audit_event
+from app.v2.services.audit_store import JsonValue, record_audit_event, verify_audit_chain
 from app.v2.services.secure_storage import encrypt_text_secret
 
 router = APIRouter()
@@ -85,6 +87,9 @@ def _api_config_out(row: AppSetting) -> ApiConfigurationOut:
         sync_limit=row.alleva_treatment_plan_sync_limit,
         timeout_seconds=row.emr_api_timeout_seconds,
         api_enabled=row.emr_api_enabled,
+        treatment_plan_sync_enabled=row.alleva_treatment_plan_sync_enabled,
+        treatment_plan_sync_approved=row.alleva_treatment_plan_sync_approved,
+        treatment_plan_endpoint_mapping_validated=row.alleva_treatment_plan_endpoint_mapping_validated,
     )
 
 
@@ -116,6 +121,26 @@ def login(payload: LoginInput, db: DbSession) -> TokenOut:
 
 @router.get("/api/users/me", response_model=UserOut)
 def current_profile(user: CurrentUser) -> UserOut:
+    return _user_out(user)
+
+
+@router.post("/api/users/me/change-password", response_model=UserOut)
+def change_current_password(payload: UserPasswordChange, user: CurrentUser, db: DbSession) -> UserOut:
+    if not verify_password(payload.current_password, user.password_hash):
+        record_audit_event(db, action="user.password.change.failed", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="New password must differ from the current password")
+    policy_error = password_policy_error(payload.new_password, username=user.username)
+    if policy_error:
+        raise HTTPException(status_code=400, detail=policy_error)
+    user.password_hash = hash_password(payload.new_password)
+    user.must_reset_password = False
+    user.failed_login_attempts = 0
+    user.is_locked = False
+    db.commit()
+    db.refresh(user)
+    record_audit_event(db, action="user.password.changed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
     return _user_out(user)
 
 
@@ -234,6 +259,9 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
         "sync_limit": "alleva_treatment_plan_sync_limit",
         "timeout_seconds": "emr_api_timeout_seconds",
         "api_enabled": "emr_api_enabled",
+        "treatment_plan_sync_enabled": "alleva_treatment_plan_sync_enabled",
+        "treatment_plan_sync_approved": "alleva_treatment_plan_sync_approved",
+        "treatment_plan_endpoint_mapping_validated": "alleva_treatment_plan_endpoint_mapping_validated",
     }
     for source, target in field_map.items():
         if source in payload.model_fields_set:
@@ -261,6 +289,12 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
 def audit_logs(_: AdminUser, db: DbSession, limit: int = 100) -> AuditLogListOut:
     rows = db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(max(1, min(limit, 500)))).scalars().all()
     return AuditLogListOut(items=tuple(_audit_item(row) for row in rows))
+
+
+@router.get("/api/audit/verify", response_model=AuditVerificationOut)
+def verify_audit_logs(_: AdminUser, db: DbSession) -> AuditVerificationOut:
+    valid, event_count, first_invalid_id = verify_audit_chain(db)
+    return AuditVerificationOut(valid=valid, event_count=event_count, first_invalid_id=first_invalid_id)
 
 
 def _audit_item(row: AuditLog) -> AuditLogItemOut:

@@ -49,7 +49,7 @@ flowchart TB
         MainAPI["Main API and app factory<br/>backend/app/main.py"]
         Routes["Active V2 routes<br/>backend/app/v2/api/routes.py"]
         Domain["Treatment-plan contracts<br/>backend/app/v2/domain/schemas.py"]
-        SampleData["Synthetic V2 aggregate<br/>backend/app/v2/services/sample_data.py"]
+        SampleData["Test-only synthetic fixture<br/>backend/app/v2/services/sample_data.py"]
         Jobs["Large API jobs and artifacts<br/>backend/app/v2/services/jobs.py<br/>backend/app/v2/services/job_artifacts.py"]
         DashboardData["Dashboard data<br/>backend/app/v2/services/dashboard_data.py"]
         Audit["Forensic audit logging<br/>backend/app/services/audit.py"]
@@ -92,7 +92,6 @@ flowchart TB
     Desktop --> MainAPI
     MainAPI --> Routes
     Routes --> Domain
-    Routes --> SampleData
     Routes --> Jobs
     Routes --> DashboardData
     Routes --> Audit
@@ -100,7 +99,6 @@ flowchart TB
     Domain --> RuleYaml
     Routes --> Checklist
     Version --> VersionFiles
-    SampleData --> EncryptedUploads
     MainAPI --> SQLite
     MainAPI --> Env
     Audit --> Logs
@@ -120,7 +118,7 @@ flowchart TB
     click MainAPI "backend/app/main.py" "Open main FastAPI app"
     click Routes "backend/app/v2/api/routes.py" "Open active V2 routes"
     click Domain "backend/app/v2/domain/schemas.py" "Open V2 contracts"
-    click SampleData "backend/app/v2/services/sample_data.py" "Open synthetic aggregate"
+    click SampleData "backend/app/v2/services/sample_data.py" "Open test-only synthetic fixture"
     click Jobs "backend/app/v2/services/jobs.py" "Open large job service"
     click DashboardData "backend/app/v2/services/dashboard_data.py" "Open dashboard data"
     click Audit "backend/app/services/audit.py" "Open audit service"
@@ -135,6 +133,7 @@ Diagram boundaries:
 
 - The normal runtime is one local FastAPI desktop service at `http://localhost:8000` serving the React UI and API.
 - Runtime data lives under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, not inside the source checkout.
+- Synthetic fixtures are not imported by active V2 routes or production pages; the default queue remains empty until persisted evidence is imported.
 - Alleva REST/OpenAPI/HL7 paths are readiness and operation-test paths only; live patient import remains disabled.
 - Optional LLM configuration exists but is disabled by default and is not the primary review path.
 - Docker/PostgreSQL artifacts are not ordinary Windows desktop requirements.

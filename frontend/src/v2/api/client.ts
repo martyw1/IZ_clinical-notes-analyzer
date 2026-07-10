@@ -3,9 +3,9 @@ import { readBoolean, readNumber, readRecord, readRecordList, readRecordListPayl
 import type { JsonRecord } from './json'
 import { request } from './request'
 import type {
+  ApiHarnessJob,
   ApiConfiguration,
   AppSettings,
-  AuditLogItem,
   DashboardData,
   LoginResult,
   ManualTreatmentPlanImportResult,
@@ -32,6 +32,14 @@ export async function login(username: string, password: string): Promise<LoginRe
 
 export async function getCurrentUser(token: string): Promise<UserProfile> {
   return mapUser(await readRecordPayload(await request('/api/users/me', { token })))
+}
+
+export async function changeCurrentPassword(token: string, currentPassword: string, newPassword: string): Promise<UserProfile> {
+  return mapUser(
+    await readRecordPayload(
+      await request('/api/users/me/change-password', { token, method: 'POST', body: { current_password: currentPassword, new_password: newPassword } }),
+    ),
+  )
 }
 
 export async function getNavigation(token: string): Promise<NavigationResult> {
@@ -75,9 +83,15 @@ export async function importTreatmentPlanAggregate(token: string, payload: JsonR
   return mapManualTreatmentPlanImportResult(result)
 }
 
-export async function importTreatmentPlanFile(token: string, file: File, patientId: string): Promise<ManualTreatmentPlanImportResult> {
+export async function importTreatmentPlanFile(
+  token: string,
+  file: File,
+  patientId: string,
+  confirmPatientIdCorrection: boolean,
+): Promise<ManualTreatmentPlanImportResult> {
   const formData = new FormData()
   formData.set('patient_id', patientId)
+  formData.set('confirm_patient_id_correction', String(confirmPatientIdCorrection))
   formData.set('file', file)
   const result = await readRecordPayload(
     await request('/api/v2/manual-uploads/treatment-plan-file', { token, method: 'POST', formBody: formData }),
@@ -95,6 +109,7 @@ function mapManualTreatmentPlanImportResult(record: Record<string, unknown>): Ma
     encryptedAtRest: readBoolean(record, 'encrypted_at_rest'),
     sourceFileArchived: readBoolean(record, 'source_file_archived'),
     sourceFileId: readString(record, 'source_file_id'),
+    patientIdCorrectionApplied: readBoolean(record, 'patient_id_correction_applied'),
   }
 }
 
@@ -158,6 +173,9 @@ export async function saveApiConfiguration(token: string, config: ApiConfigurati
           sync_limit: config.syncLimit,
           timeout_seconds: config.timeoutSeconds,
           api_enabled: config.apiEnabled,
+          treatment_plan_sync_enabled: config.treatmentPlanSyncEnabled,
+          treatment_plan_sync_approved: config.treatmentPlanSyncApproved,
+          treatment_plan_endpoint_mapping_validated: config.treatmentPlanEndpointMappingValidated,
         },
       }),
     ),
@@ -168,18 +186,46 @@ export async function listUsers(token: string): Promise<readonly UserProfile[]> 
   return (await readRecordListPayload(await request('/api/users', { token }))).map(mapUser)
 }
 
-export async function listAuditLogs(token: string): Promise<readonly AuditLogItem[]> {
-  const payload = await readRecordPayload(await request('/api/audit/logs', { token }))
-  return readRecordList(payload, 'items').map((item) => ({
-    eventId: readString(item, 'event_id'),
-    timestampUtc: readString(item, 'timestamp_utc'),
-    actorUsername: readString(item, 'actor_username'),
-    actorRole: readString(item, 'actor_role'),
-    action: readString(item, 'action'),
-    targetEntityType: readString(item, 'target_entity_type'),
-    targetEntityId: readString(item, 'target_entity_id'),
-    outcomeStatus: readString(item, 'outcome_status'),
-  }))
+export async function runApprovedAllevaTreatmentPlanSync(token: string): Promise<ApiHarnessJob> {
+  const payload = await readRecordPayload(await request('/api/v2/alleva-sync/run', { token, method: 'POST' }))
+  return {
+    jobId: readString(payload, 'job_id'),
+    status: readString(payload, 'status'),
+    progressPercent: readNumber(payload, 'progress_percent'),
+    recordsWritten: readNumber(payload, 'records_written'),
+    recordsFailed: readNumber(payload, 'records_failed'),
+    warningsCount: readNumber(payload, 'warnings_count'),
+    artifacts: [],
+  }
+}
+
+export async function getApprovedAllevaTreatmentPlanSyncJob(token: string, jobId: string): Promise<ApiHarnessJob> {
+  const payload = await readRecordPayload(await request(`/api/v2/alleva-sync/jobs/${jobId}`, { token }))
+  return {
+    jobId: readString(payload, 'job_id'),
+    status: readString(payload, 'status'),
+    progressPercent: readNumber(payload, 'progress_percent'),
+    recordsWritten: readNumber(payload, 'records_written'),
+    recordsFailed: readNumber(payload, 'records_failed'),
+    warningsCount: readNumber(payload, 'warnings_count'),
+    artifacts: [],
+  }
+}
+
+export async function createUser(token: string, username: string, fullName: string, role: UserRole, password: string): Promise<UserProfile> {
+  return mapUser(
+    await readRecordPayload(
+      await request('/api/users', { token, method: 'POST', body: { username, full_name: fullName, role, password } }),
+    ),
+  )
+}
+
+export async function resetUserPassword(token: string, userId: number, newPassword: string): Promise<UserProfile> {
+  return mapUser(
+    await readRecordPayload(
+      await request(`/api/users/${userId}/reset-password`, { token, method: 'POST', body: { new_password: newPassword, require_reset_on_login: true } }),
+    ),
+  )
 }
 
 function mapUser(record: Record<string, unknown>): UserProfile {
@@ -243,5 +289,8 @@ function mapApiConfiguration(record: Record<string, unknown>): ApiConfiguration 
     syncLimit: readNumber(record, 'sync_limit', 100),
     timeoutSeconds: readNumber(record, 'timeout_seconds', 10),
     apiEnabled: readBoolean(record, 'api_enabled'),
+    treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
+    treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),
+    treatmentPlanEndpointMappingValidated: readBoolean(record, 'treatment_plan_endpoint_mapping_validated'),
   }
 }

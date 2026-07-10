@@ -40,6 +40,7 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [rawFile, setRawFile] = useState<File | null>(null)
   const [rawPatientId, setRawPatientId] = useState('')
+  const [confirmPatientIdCorrection, setConfirmPatientIdCorrection] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isParsing, setIsParsing] = useState(false)
   const [message, setMessage] = useState('')
@@ -79,9 +80,10 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
     }
     setIsParsing(true)
     try {
-      const result = await importTreatmentPlanFile(token, rawFile, rawPatientId)
+      const result = await importTreatmentPlanFile(token, rawFile, rawPatientId, confirmPatientIdCorrection)
       const archived = result.sourceFileArchived ? ' and archived encrypted source file' : ''
-      setMessage(`Imported ${result.patientDisplayLabel} from parsed ${result.sourceMode} file${archived}.`)
+      const correction = result.patientIdCorrectionApplied ? ' after confirmed Patient ID correction' : ''
+      setMessage(`Imported ${result.patientDisplayLabel} from parsed ${result.sourceMode} file${correction}${archived}.`)
     } catch (importError) {
       setError(messageForError(importError))
     } finally {
@@ -119,6 +121,14 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
               placeholder='Required when the file omits Patient ID'
             />
           </label>
+          <label className='checkbox-row'>
+            <input
+              type='checkbox'
+              checked={confirmPatientIdCorrection}
+              onChange={(event) => setConfirmPatientIdCorrection(event.currentTarget.checked)}
+            />
+            I confirm this override corrects a different Patient ID detected in the file.
+          </label>
           <label>
             Treatment-plan file (TXT, CSV, TSV, MD, PDF, XLSX)
             <input
@@ -138,7 +148,7 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
         <div className='source-card-grid'>
           <article className='source-card'><h3>Accepted now</h3><p>V2 aggregate JSON plus text, Markdown, CSV, TSV, PDF, and XLSX files with labeled treatment-plan fields.</p></article>
           <article className='source-card'><h3>Stored safely</h3><p>Aggregate payloads and parsed source files are encrypted. Queue columns keep only patient ID and non-secret status metadata.</p></article>
-          <article className='source-card'><h3>Still pending</h3><p>Multi-document binders and patient correction UI remain documented blockers for later stations.</p></article>
+          <article className='source-card'><h3>Still pending</h3><p>Multi-document binders remain a documented blocker for a later station.</p></article>
         </div>
       </section>
     </div>

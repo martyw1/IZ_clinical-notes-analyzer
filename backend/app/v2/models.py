@@ -53,6 +53,9 @@ class AppSetting(Base):
     api_pagination_limit: Mapped[int] = mapped_column(Integer, default=100)
     alleva_treatment_plan_sync_limit: Mapped[int] = mapped_column(Integer, default=250)
     emr_api_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    alleva_treatment_plan_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    alleva_treatment_plan_sync_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    alleva_treatment_plan_endpoint_mapping_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
@@ -128,3 +131,64 @@ class TreatmentPlanManagerAction(Base):
     actor_username: Mapped[str] = mapped_column(String(80), default="")
     actor_role: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class ApiHarnessJobRecord(Base):
+    __tablename__ = "api_harness_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    job_type: Mapped[str] = mapped_column(String(80), index=True)
+    actor_id: Mapped[str] = mapped_column(String(80), default="")
+    actor_role: Mapped[str] = mapped_column(String(40), default="")
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0)
+    current_endpoint: Mapped[str] = mapped_column(String(160), default="")
+    current_page: Mapped[int] = mapped_column(Integer, default=0)
+    current_cursor: Mapped[str] = mapped_column(String(160), default="")
+    records_seen: Mapped[int] = mapped_column(Integer, default=0)
+    records_written: Mapped[int] = mapped_column(Integer, default=0)
+    records_failed: Mapped[int] = mapped_column(Integer, default=0)
+    warnings_count: Mapped[int] = mapped_column(Integer, default=0)
+    errors_count: Mapped[int] = mapped_column(Integer, default=0)
+    output_dir: Mapped[str] = mapped_column(String(500), default="")
+    redaction_mode: Mapped[str] = mapped_column(String(80), default="redacted")
+    raw_sensitive_mode_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class WorkflowProfile(Base):
+    __tablename__ = "workflow_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    current_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(80))
+    updated_by_user_id: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class WorkflowProfileVersion(Base):
+    __tablename__ = "workflow_profile_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workflow_profile_id: Mapped[int] = mapped_column(Integer, index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    definition_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
+    transition_rules_json: Mapped[str] = mapped_column(Text, default="[]")
+    version_notes: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

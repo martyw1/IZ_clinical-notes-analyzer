@@ -4,13 +4,16 @@ import { getCurrentUser, getNavigation, login } from './api/client'
 import type { UserProfile } from './api/types'
 import { AppShell } from './components/AppShell'
 import { ApiHarnessPage } from './pages/ApiHarnessPage'
+import { CorrectionsPage } from './pages/CorrectionsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForensicLogsPage } from './pages/ForensicLogsPage'
 import { HelpPage } from './pages/HelpPage'
 import { ManualUploadPage } from './pages/ManualUploadPage'
+import { PasswordResetPage } from './pages/PasswordResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage'
 import { UsersPage } from './pages/UsersPage'
+import { WorkflowProfilesPage } from './pages/WorkflowProfilesPage'
 
 const tokenStorageKey = 'iz-cna-v2-access-token'
 
@@ -34,10 +37,14 @@ function pageFor(view: string, token: string, user: UserProfile) {
       return <TreatmentPlansPage token={token} user={user} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} />
+    case 'Corrections':
+      return <CorrectionsPage token={token} />
     case 'API Testing Harness':
       return <ApiHarnessPage token={token} />
     case 'Users':
       return <UsersPage token={token} />
+    case 'Workflow Profiles':
+      return <WorkflowProfilesPage token={token} />
     case 'Forensic Logs':
       return <ForensicLogsPage token={token} />
     case 'Settings':
@@ -62,7 +69,8 @@ export function AppV2() {
     let cancelled = false
     async function restoreSession(token: string) {
       try {
-        const [user, navigation] = await Promise.all([getCurrentUser(token), getNavigation(token)])
+        const user = await getCurrentUser(token)
+        const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(token)
         if (!cancelled) setSession({ token, user, navigationItems: navigation.items })
       } catch (error) {
         sessionStorage.removeItem(tokenStorageKey)
@@ -84,7 +92,8 @@ export function AppV2() {
     const password = String(form.get('password') ?? '')
     try {
       const loginResult = await login(username, password)
-      const [user, navigation] = await Promise.all([getCurrentUser(loginResult.accessToken), getNavigation(loginResult.accessToken)])
+      const user = await getCurrentUser(loginResult.accessToken)
+      const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(loginResult.accessToken)
       sessionStorage.setItem(tokenStorageKey, loginResult.accessToken)
       setActiveView(navigation.items[0] ?? 'Status Dashboard')
       setSession({ token: loginResult.accessToken, user, navigationItems: navigation.items })
@@ -100,6 +109,12 @@ export function AppV2() {
     sessionStorage.removeItem(tokenStorageKey)
     setSession(null)
     setActiveView('Status Dashboard')
+  }
+
+  async function refreshSessionUser() {
+    if (!session) return
+    const [user, navigation] = await Promise.all([getCurrentUser(session.token), getNavigation(session.token)])
+    setSession({ ...session, user, navigationItems: navigation.items })
   }
 
   if (!session) {
@@ -127,6 +142,8 @@ export function AppV2() {
       </main>
     )
   }
+
+  if (session.user.mustResetPassword) return <PasswordResetPage token={session.token} onChanged={refreshSessionUser} />
 
   return (
     <AppShell

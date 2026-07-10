@@ -50,7 +50,7 @@ def record_audit_event(
     hash_payload = json.dumps(
         {
             "event_id": event_id,
-            "timestamp_utc": timestamp.isoformat(),
+            "timestamp_utc": _timestamp_for_hash(timestamp),
             "actor_id": actor_id,
             "actor_username": actor_username,
             "actor_role": actor_role,
@@ -84,6 +84,17 @@ def record_audit_event(
     return row
 
 
+def verify_audit_chain(db: Session) -> tuple[bool, int, int | None]:
+    rows = db.execute(select(AuditLog).order_by(AuditLog.id.asc())).scalars().all()
+    previous_hash = ""
+    for row in rows:
+        expected = _event_hash(row, previous_hash)
+        if row.prev_hash != previous_hash or row.hash != expected:
+            return False, len(rows), row.id
+        previous_hash = row.hash
+    return True, len(rows), None
+
+
 def _is_blocked_key(key: str) -> bool:
     normalized = key.lower()
     return any(fragment in normalized for fragment in BLOCKED_DETAIL_FRAGMENTS)
@@ -94,3 +105,31 @@ def _redact_text(value: str) -> str:
     if any(fragment in lowered for fragment in ("secret", "bearer ", "password", "token")):
         return "[redacted]"
     return value
+
+
+def _event_hash(row: AuditLog, previous_hash: str) -> str:
+    hash_payload = json.dumps(
+        {
+            "event_id": row.event_id,
+            "timestamp_utc": _timestamp_for_hash(row.timestamp_utc),
+            "actor_id": row.actor_id,
+            "actor_username": row.actor_username,
+            "actor_role": row.actor_role,
+            "action": row.action,
+            "target_entity_type": row.target_entity_type,
+            "target_entity_id": row.target_entity_id,
+            "outcome_status": row.outcome_status,
+            "details_json": row.details_json,
+            "prev_hash": previous_hash,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(f"{previous_hash}|{hash_payload}".encode("utf-8")).hexdigest()
+
+
+def _timestamp_for_hash(timestamp: datetime) -> str:
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    else:
+        timestamp = timestamp.astimezone(timezone.utc)
+    return timestamp.isoformat()

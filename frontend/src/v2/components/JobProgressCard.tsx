@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getApiHarnessJob, listApiHarnessArtifacts, startApiHarnessJob } from '../api/jobs'
+import { cancelApiHarnessJob, getApiHarnessJob, listApiHarnessArtifacts, startApiHarnessJob } from '../api/jobs'
 import { ApiRequestError } from '../api/json'
 import type { ApiHarnessArtifact, ApiHarnessJob } from '../api/types'
 
@@ -18,6 +18,7 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
   const [artifacts, setArtifacts] = useState<readonly ApiHarnessArtifact[]>([])
   const [error, setError] = useState('')
   const [isStarting, setIsStarting] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const status = job?.status ?? 'idle'
   const progress = job?.progressPercent ?? 0
 
@@ -25,7 +26,9 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
     setError('')
     setIsStarting(true)
     try {
-      const completed = await pollJob(await startApiHarnessJob(token))
+      const started = await startApiHarnessJob(token)
+      setJob(started)
+      const completed = await pollJob(started)
       setJob(completed)
       setArtifacts(completed.artifacts.length ? completed.artifacts : await listApiHarnessArtifacts(token, completed.jobId))
     } catch (startError) {
@@ -40,8 +43,21 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
     for (let attempt = 0; attempt < 20 && !isTerminalStatus(current.status); attempt += 1) {
       await sleep(120)
       current = await getApiHarnessJob(token, current.jobId)
+      setJob(current)
     }
     return current
+  }
+
+  async function cancelJob() {
+    if (!job) return
+    setIsCancelling(true)
+    try {
+      setJob(await cancelApiHarnessJob(token, job.jobId))
+    } catch (cancelError) {
+      setError(messageForError(cancelError))
+    } finally {
+      setIsCancelling(false)
+    }
   }
 
   return (
@@ -72,8 +88,8 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
         <button type='button' onClick={startJob} disabled={isStarting}>
           {isStarting ? 'Starting large job...' : 'Start large job'}
         </button>
-        <button type='button' className='secondary-button' disabled>
-          Cancel in backend queue
+        <button type='button' className='secondary-button' onClick={() => void cancelJob()} disabled={!job || isCancelling || isTerminalStatus(status)}>
+          {isCancelling ? 'Cancelling job...' : 'Cancel in backend queue'}
         </button>
       </div>
       {error && <p role='alert' className='error-banner'>{error}</p>}

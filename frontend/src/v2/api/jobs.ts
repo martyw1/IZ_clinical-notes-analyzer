@@ -18,6 +18,12 @@ export async function getApiHarnessJob(token: string, jobId: string): Promise<Ap
   return mapJob(await readRecordPayload(await request(`/api/v2/api-harness/jobs/${jobId}`, { token })))
 }
 
+export async function cancelApiHarnessJob(token: string, jobId: string): Promise<ApiHarnessJob> {
+  return mapJob(
+    await readRecordPayload(await request(`/api/v2/api-harness/jobs/${jobId}/cancel`, { token, method: 'POST' })),
+  )
+}
+
 export async function listApiHarnessArtifacts(token: string, jobId: string): Promise<readonly ApiHarnessArtifact[]> {
   return (await readRecordListPayload(await request(`/api/v2/api-harness/jobs/${jobId}/artifacts`, { token }))).map(mapArtifact)
 }

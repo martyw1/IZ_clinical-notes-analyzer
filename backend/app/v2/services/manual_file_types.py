@@ -11,16 +11,22 @@ class ManualFileParseError(Exception):
         self.detail = detail
 
 
+class ManualFilePatientIdCorrectionRequired(ManualFileParseError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class ManualFileAggregateSource:
     aggregate: TreatmentPlanAggregate
     source_format: str
     parsed_fields_count: int
+    patient_id_correction_applied: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ParsedManualFields:
     patient_id: str
+    patient_id_correction_applied: bool
     level_of_care: str
     admission_date: str
     due_date: str

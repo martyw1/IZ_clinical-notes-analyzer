@@ -66,6 +66,11 @@ class UserPasswordResetAdmin(V2Model):
     require_reset_on_login: bool = True
 
 
+class UserPasswordChange(V2Model):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=1)
+
+
 class DashboardSourceCardOut(V2Model):
     label: str
     status: str
@@ -131,6 +136,9 @@ class ApiConfigurationUpdate(V2Model):
     sync_limit: int | None = Field(default=None, ge=1, le=5000)
     timeout_seconds: int = 10
     api_enabled: bool = False
+    treatment_plan_sync_enabled: bool = False
+    treatment_plan_sync_approved: bool = False
+    treatment_plan_endpoint_mapping_validated: bool = False
 
 
 class ApiConfigurationOut(V2Model):
@@ -147,6 +155,15 @@ class ApiConfigurationOut(V2Model):
     sync_limit: int
     timeout_seconds: int
     api_enabled: bool
+    treatment_plan_sync_enabled: bool
+    treatment_plan_sync_approved: bool
+    treatment_plan_endpoint_mapping_validated: bool
+
+
+class AllevaTreatmentPlanSyncOut(V2Model):
+    status: Literal["completed"]
+    imported_patient_count: int
+    skipped_plan_count: int
 
 
 class ManagerActionInput(V2Model):
@@ -154,6 +171,25 @@ class ManagerActionInput(V2Model):
     action: Literal["approve", "return_for_correction", "override", "comment"]
     comment: str = ""
     override_reason: str = ""
+
+
+class CorrectionSubmissionInput(V2Model):
+    criterion_id: str
+    comment: str = Field(min_length=1)
+
+
+class CorrectionQueueItemOut(V2Model):
+    patient_id: str
+    patient_display_label: str
+    criterion_id: str
+    criterion_title: str
+    return_comment: str
+    returned_by_username: str
+    returned_at: str
+
+
+class CorrectionQueueOut(V2Model):
+    items: tuple[CorrectionQueueItemOut, ...]
 
 
 class ApiHarnessJobStart(V2Model):
@@ -198,7 +234,27 @@ class PullDefinitionsOut(V2Model):
     status: Literal["ok"]
     definition_summary: DefinitionSummaryOut
     redaction_status: Literal["safe_summary_only"]
-    request_keys: tuple[str, ...]
+
+
+class OAuthConnectivityOut(V2Model):
+    status: Literal["ok", "failure"]
+    token_auth_style: Literal["body", "basic"]
+    message: str
+    token_type: str = ""
+    expires_in: int | None = None
+
+
+class OperationTestInput(V2Model):
+    path: str = Field(min_length=1, max_length=500)
+
+
+class OperationTestOut(V2Model):
+    status: Literal["ok", "failure"]
+    message: str
+    status_code: int | None = None
+    content_type: str = ""
+    response_bytes: int = 0
+    response_truncated: bool = False
 
 
 class AuditLogItemOut(V2Model):
@@ -218,3 +274,32 @@ class AuditLogItemOut(V2Model):
 
 class AuditLogListOut(V2Model):
     items: tuple[AuditLogItemOut, ...]
+
+
+class AuditVerificationOut(V2Model):
+    valid: bool
+    event_count: int
+    first_invalid_id: int | None = None
+
+
+class WorkflowProfileCreate(V2Model):
+    workflow_key: str = Field(min_length=3, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    display_name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
+
+
+class WorkflowProfileVersionOut(V2Model):
+    id: int
+    version: int
+    status: Literal["draft", "published", "archived"]
+    version_notes: str
+
+
+class WorkflowProfileOut(V2Model):
+    id: int
+    workflow_key: str
+    display_name: str
+    description: str
+    is_active: bool
+    current_version: WorkflowProfileVersionOut | None
+    versions: tuple[WorkflowProfileVersionOut, ...]

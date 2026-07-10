@@ -5,8 +5,9 @@ from io import StringIO
 from pathlib import Path
 from typing import Final
 
-from fastapi import APIRouter, Body, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 
 from app.core.config import BUILD_CHANNEL, settings
 from app.services.version import JsonValue, build_version_payload
@@ -14,29 +15,24 @@ from app.v2.api.deps import AdminUser, CurrentUser, DbSession, ManagerUser
 from app.v2.api.models import (
     ApiHarnessJobStart,
     DashboardOut,
-    DefinitionSummaryOut,
     ManagerActionInput,
-    PullDefinitionsInput,
-    PullDefinitionsOut,
     ReadinessCheck,
     ReadinessOut,
-    SampleOpenApiInfo,
-    SampleOpenApiOperation,
-    SampleOpenApiOut,
-    SampleOpenApiPathItem,
     TreatmentPlanListOut,
 )
 from app.v2.domain.schemas import ApiHarnessJob, JobPreview, TreatmentPlanAggregate
+from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
-from app.v2.services.jobs import job_service
-from app.v2.services.manager_action_store import save_manager_action_record
+from app.v2.services.jobs import HarnessConnection, job_service
+from app.v2.services.manager_action_store import open_correction_counts_by_patient, save_manager_action_record
 from app.v2.services.treatment_plan_store import (
     TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
     list_treatment_plan_queue_items,
     treatment_plan_aggregate_for_patient,
 )
+from app.v2.services.secure_storage import decrypt_text_secret
 
 router = APIRouter()
 SPREADSHEET_FORMULA_PREFIXES: Final = ("=", "+", "-", "@")
@@ -53,7 +49,10 @@ def health() -> dict[str, str]:
 
 
 @router.get("/api/readiness")
-def readiness() -> ReadinessOut:
+def readiness(db: DbSession) -> ReadinessOut:
+    profile = _app_setting(db)
+    api_status = "ok" if profile.api_client_secret and profile.emr_api_enabled else "warn"
+    api_message = "Encrypted credentials are saved and API testing is enabled." if api_status == "ok" else "Configure encrypted API credentials and enable API testing before connectivity checks."
     return ReadinessOut(
         status="warn",
         runtime="v2",
@@ -61,7 +60,8 @@ def readiness() -> ReadinessOut:
             ReadinessCheck(name="local_app_data", status="ok", path=str(settings.local_app_data_dir)),
             ReadinessCheck(name="database", status="ok", path=str(settings.sqlite_db_path)),
             ReadinessCheck(name="build_channel", status="ok", value=BUILD_CHANNEL),
-            ReadinessCheck(name="loc_change_blocker", status="warn", message="LOC-change update window remains unvalidated."),
+            ReadinessCheck(name="api_profile", status=api_status, message=api_message),
+            ReadinessCheck(name="loc_change_blocker", status="ok" if profile.treatment_plan_loc_change_window_validated else "warn", message="LOC-change update window remains unvalidated." if not profile.treatment_plan_loc_change_window_validated else "LOC-change update window is validated."),
         ),
     )
 
@@ -71,43 +71,13 @@ def version() -> dict[str, JsonValue]:
     return build_version_payload()
 
 
-@router.get("/api/workflow-definitions")
-def workflow_definitions(_: CurrentUser) -> list[dict[str, JsonValue]]:
-    return [
-        {
-            "workflow_key": "treatment_plan_tracking_v2",
-            "display_name": "Treatment Plan Tracking V2",
-            "status": "published",
-            "version": 2,
-            "loc_change_blocker": "unvalidated",
-        }
-    ]
-
-
-@router.get("/api/api-configuration/sample-openapi.json")
-def sample_openapi() -> SampleOpenApiOut:
-    return SampleOpenApiOut(
-        openapi="3.1.0",
-        info=SampleOpenApiInfo(title="Connectivity Test Definition", version="2.0.0-beta.1"),
-        paths={"/clients": SampleOpenApiPathItem(get=SampleOpenApiOperation(operation_id="listClients"))},
-    )
-
-
-@router.post("/api/api-configuration/pull-definitions")
-def pull_definitions(_: AdminUser, payload: PullDefinitionsInput = Body()) -> PullDefinitionsOut:
-    return PullDefinitionsOut(
-        status="ok",
-        definition_summary=DefinitionSummaryOut(title="Connectivity Test Definition", operation_count=1),
-        redaction_status="safe_summary_only",
-        request_keys=tuple(sorted(payload.model_fields_set)),
-    )
-
-
 @router.get("/api/v2/navigation")
 def navigation(user: CurrentUser) -> dict[str, JsonValue]:
     items = ["Status Dashboard", "Treatment Plans", "Manual Upload"]
+    if user.role == "counselor":
+        items.append("Corrections")
     if user.role == "admin":
-        items.extend(["API Testing Harness", "Users", "Forensic Logs", "Settings"])
+        items.extend(["API Testing Harness", "Users", "Workflow Profiles", "Forensic Logs", "Settings"])
     if user.role in {"office_manager", "manager"}:
         items.extend(["Forensic Logs"])
     items.append("Help")
@@ -116,7 +86,18 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
 
 @router.get("/api/v2/dashboard", response_model=DashboardOut)
 def dashboard(_: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
-    return dashboard_payload(list_treatment_plan_imports(db))
+    profile = _app_setting(db)
+    return dashboard_payload(
+        list_treatment_plan_imports(db),
+        api_configured=bool(profile.api_client_secret),
+        api_enabled=profile.emr_api_enabled,
+        loc_change_window_validated=profile.treatment_plan_loc_change_window_validated,
+        returned_count=sum(open_correction_counts_by_patient(db).values()),
+    )
+
+
+def _app_setting(db: DbSession) -> AppSetting:
+    return db.execute(select(AppSetting)).scalar_one()
 
 
 @router.get("/api/v2/treatment-plans", response_model=TreatmentPlanListOut)
@@ -153,7 +134,18 @@ def treatment_plan_detail(patient_id: str, user: CurrentUser, db: DbSession) -> 
 
 
 @router.post("/api/v2/treatment-plans/{patient_id}/manager-actions")
-def save_manager_action(patient_id: str, payload: ManagerActionInput, user: ManagerUser, db: DbSession) -> dict[str, JsonValue]:
+def save_manager_action(patient_id: str, payload: ManagerActionInput, user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
+    if user.role not in {"admin", "office_manager", "manager"}:
+        record_audit_event(
+            db,
+            action=f"manager.criterion.{payload.action}.denied",
+            actor=user,
+            target_entity_type="treatment_plan_criterion",
+            target_entity_id=f"{patient_id}:{payload.criterion_id}",
+            outcome_status="denied",
+            details={"criterion_id": payload.criterion_id, "action": payload.action},
+        )
+        raise HTTPException(status_code=403, detail="Manager access required")
     if payload.action == "override" and not payload.override_reason.strip():
         raise HTTPException(status_code=400, detail="Override reason is required")
     if treatment_plan_aggregate_for_patient(db, patient_id) is None:
@@ -185,10 +177,19 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Mana
 
 
 @router.post("/api/v2/api-harness/jobs")
-def create_api_harness_job(payload: ApiHarnessJobStart, _: AdminUser) -> ApiHarnessJob:
+def create_api_harness_job(payload: ApiHarnessJobStart, actor: AdminUser, db: DbSession) -> ApiHarnessJob:
     if payload.job_type != "pull_all_treatment_plans_all_fields":
         raise HTTPException(status_code=400, detail="Unsupported V2 job type")
-    return job_service.create_all_fields_job(actor_id="1", actor_role="admin")
+    profile = _app_setting(db)
+    if not profile.emr_api_enabled:
+        raise HTTPException(status_code=409, detail="Enable API testing before starting the configured harness job.")
+    connection = HarnessConnection(
+        api_base_url=profile.api_base_url, token_url=profile.api_oauth_token_url, client_id=profile.api_client_id,
+        client_secret=decrypt_text_secret(profile.api_client_secret), scope=profile.api_scopes,
+        token_auth_style=profile.api_token_auth_style, timeout_seconds=profile.emr_api_timeout_seconds,
+        page_size=profile.api_pagination_limit,
+    )
+    return job_service.create_all_fields_job(connection, actor_id=str(actor.id), actor_role=actor.role)
 
 
 @router.get("/api/v2/api-harness/jobs")

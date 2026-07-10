@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import event, select
+from sqlalchemy import event, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine
 
 from app.core.config import settings
-from app.v2.models import AppSetting, Base, User
+from app.v2.models import ApiHarnessJobRecord, AppSetting, Base, User, utc_now
 from app.v2.security import hash_password
 
 is_sqlite_database = settings.database_url.startswith("sqlite")
@@ -33,10 +33,27 @@ if is_sqlite_database:
 def init_database() -> None:
     settings.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    _ensure_app_settings_columns()
     with SessionLocal() as db:
+        _mark_interrupted_jobs_stale(db)
         _ensure_bootstrap_admin(db)
         _ensure_app_settings(db)
         db.commit()
+
+
+def _ensure_app_settings_columns() -> None:
+    if not is_sqlite_database:
+        return
+    existing = {column["name"] for column in inspect(engine).get_columns("app_settings")}
+    definitions = {
+        "alleva_treatment_plan_sync_enabled": "BOOLEAN NOT NULL DEFAULT 0",
+        "alleva_treatment_plan_sync_approved": "BOOLEAN NOT NULL DEFAULT 0",
+        "alleva_treatment_plan_endpoint_mapping_validated": "BOOLEAN NOT NULL DEFAULT 0",
+    }
+    with engine.begin() as connection:
+        for name, definition in definitions.items():
+            if name not in existing:
+                connection.execute(text(f"ALTER TABLE app_settings ADD COLUMN {name} {definition}"))
 
 
 def _ensure_bootstrap_admin(db: Session) -> None:
@@ -63,6 +80,14 @@ def _ensure_app_settings(db: Session) -> None:
     if existing:
         return
     db.add(AppSetting())
+
+
+def _mark_interrupted_jobs_stale(db: Session) -> None:
+    rows = db.execute(select(ApiHarnessJobRecord).where(ApiHarnessJobRecord.status.in_(("queued", "running", "writing")))).scalars()
+    for row in rows:
+        row.status = "stale_or_interrupted"
+        row.failed_at = utc_now()
+        row.updated_at = utc_now()
 
 
 def get_db() -> Iterator[Session]:

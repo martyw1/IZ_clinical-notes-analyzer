@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ManagerActionPayload } from '../api/types'
 import { EvidencePanel } from './EvidencePanel'
+import { DataQualityWarningsPanel } from './DataQualityWarningsPanel'
 import { RawFieldExplorer } from './RawFieldExplorer'
 import { StatusBadge } from './StatusBadge'
-import { SourceFileArchivePanel } from './SourceFileArchivePanel'
-import type { CriterionResult, ManagerReview, SourceDocument, TreatmentPlanAggregate } from '../types/treatmentPlan'
+import { SourceFileArchiveControls } from './SourceFileArchiveControls'
+import type { CriterionResult, ManagerReview, TreatmentPlanAggregate } from '../types/treatmentPlan'
 
 type TreatmentPlanDetailViewerProps = {
   readonly plan: TreatmentPlanAggregate
+  readonly canManage: boolean
   readonly onManagerAction: (payload: ManagerActionPayload) => Promise<void>
   readonly onDownloadSourceDocument: (sourceFileId: string) => Promise<void>
   readonly onDeleteSourceDocument: (sourceFileId: string) => Promise<void>
@@ -24,6 +26,7 @@ function managerReviewKey(review: ManagerReview, index: number): string {
 
 export function TreatmentPlanDetailViewer({
   plan,
+  canManage,
   onManagerAction,
   onDownloadSourceDocument,
   onDeleteSourceDocument,
@@ -34,9 +37,6 @@ export function TreatmentPlanDetailViewer({
   const [overrideReason, setOverrideReason] = useState('')
   const [actionMessage, setActionMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const [sourceArchiveMessage, setSourceArchiveMessage] = useState('')
-  const [downloadingSourceFileId, setDownloadingSourceFileId] = useState('')
-  const [deletingSourceFileId, setDeletingSourceFileId] = useState('')
   const filteredCriteria = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return plan.criteria
@@ -47,9 +47,6 @@ export function TreatmentPlanDetailViewer({
   useEffect(() => {
     setSelectedCriterionId(plan.criteria[0]?.criterionId ?? null)
     setActionMessage('')
-    setSourceArchiveMessage('')
-    setDownloadingSourceFileId('')
-    setDeletingSourceFileId('')
   }, [plan.patientId])
 
   const saveReturn = async () => {
@@ -92,34 +89,6 @@ export function TreatmentPlanDetailViewer({
     }
   }
 
-  async function downloadSourceDocument(document: SourceDocument) {
-    setDownloadingSourceFileId(document.sourceFileId)
-    setSourceArchiveMessage('')
-    try {
-      await onDownloadSourceDocument(document.sourceFileId)
-      setSourceArchiveMessage('Source file download started.')
-    } catch (error) {
-      setSourceArchiveMessage(messageForError(error))
-    } finally {
-      setDownloadingSourceFileId('')
-    }
-  }
-
-  async function deleteSourceDocument(document: SourceDocument) {
-    const confirmed = window.confirm('Delete archived source file? The treatment-plan aggregate remains, but the original uploaded source bytes will be removed.')
-    if (!confirmed) return
-    setDeletingSourceFileId(document.sourceFileId)
-    setSourceArchiveMessage('')
-    try {
-      await onDeleteSourceDocument(document.sourceFileId)
-      setSourceArchiveMessage('Archived source file deleted.')
-    } catch (error) {
-      setSourceArchiveMessage(messageForError(error))
-    } finally {
-      setDeletingSourceFileId('')
-    }
-  }
-
   return (
     <div className='detail-grid'>
       <section className='panel'>
@@ -132,8 +101,8 @@ export function TreatmentPlanDetailViewer({
         </div>
         <div className='summary-grid'>
           <span>Current LOC: {plan.currentLevelOfCare}</span>
-          <span>Admission: {plan.admissionDate}</span>
-          <span>Next due: {plan.dueDate}</span>
+          <span>Admission: <time dateTime={plan.admissionDate}>{plan.admissionDate}</time></span>
+          <span>Next due: <time dateTime={plan.dueDate}>{plan.dueDate}</time></span>
           <span>Source: {plan.sourceMode}</span>
         </div>
         <label>
@@ -200,7 +169,7 @@ export function TreatmentPlanDetailViewer({
           ))}
         </div>
         {selectedCriterion ? <EvidencePanel criterion={selectedCriterion} /> : <p className='muted'>No checklist criteria returned for this plan.</p>}
-        <div className='manager-actions'>
+        {canManage ? <div className='manager-actions'>
           <label>
             Manager comment
             <textarea value={comment} onChange={(event) => setComment(event.target.value)} />
@@ -214,7 +183,7 @@ export function TreatmentPlanDetailViewer({
             <button type='button' className='secondary-button' onClick={saveOverride} disabled={isSaving || !selectedCriterion}>Save override</button>
           </div>
           {actionMessage && <p role='status'>{actionMessage}</p>}
-        </div>
+        </div> : <p className='muted'>Manager review actions are available to manager and admin roles.</p>}
       </section>
 
       <section className='panel'>
@@ -253,14 +222,14 @@ export function TreatmentPlanDetailViewer({
         <p>Used, missing, unmapped, and unused content are separated so managers can see what the checklist did and did not evaluate.</p>
       </section>
 
-      <SourceFileArchivePanel
+      <DataQualityWarningsPanel warnings={plan.dataQualityWarnings} />
+
+      {canManage ? <SourceFileArchiveControls
+        patientId={plan.patientId}
         sourceDocuments={plan.sourceDocuments}
-        archiveMessage={sourceArchiveMessage}
-        downloadingSourceFileId={downloadingSourceFileId}
-        deletingSourceFileId={deletingSourceFileId}
-        onDownloadSourceDocument={(document) => void downloadSourceDocument(document)}
-        onDeleteSourceDocument={(document) => void deleteSourceDocument(document)}
-      />
+        onDownloadSourceDocument={onDownloadSourceDocument}
+        onDeleteSourceDocument={onDeleteSourceDocument}
+      /> : <section className='panel'><h2>Source File Archive</h2><p className='muted'>Source-file archive controls are available to manager and admin roles.</p></section>}
 
       <RawFieldExplorer plan={plan} />
     </div>

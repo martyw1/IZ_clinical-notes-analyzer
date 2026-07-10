@@ -11,6 +11,7 @@ from app.v2.services.manual_file_extractors import extract_manual_file
 from app.v2.services.manual_file_types import (
     ManualFileAggregateSource,
     ManualFileParseError,
+    ManualFilePatientIdCorrectionRequired,
     ParsedManualFields,
 )
 
@@ -46,17 +47,24 @@ def aggregate_from_manual_file(
     raw_bytes: bytes,
     fallback_patient_id: str,
     filename: str,
+    confirm_patient_id_correction: bool = False,
 ) -> ManualFileAggregateSource:
     if len(raw_bytes) > MAX_UPLOAD_BYTES:
         raise ManualFileParseError("Manual treatment-plan files are limited to 512 KiB for the local desktop beta.")
     suffix = Path(filename).suffix.lower()
     extracted = extract_manual_file(raw_bytes, filename)
     fields = _fields_from_text_like_file(extracted.raw_text, suffix)
-    parsed = _parsed_fields(fields, fallback_patient_id.strip(), extracted.raw_text)
+    parsed = _parsed_fields(
+        fields,
+        fallback_patient_id.strip(),
+        extracted.raw_text,
+        confirm_patient_id_correction,
+    )
     return ManualFileAggregateSource(
         aggregate=build_manual_aggregate(parsed),
         source_format=extracted.source_format,
         parsed_fields_count=_non_empty_field_count(fields),
+        patient_id_correction_applied=parsed.patient_id_correction_applied,
     )
 
 
@@ -97,12 +105,28 @@ def _canonical_key(raw_key: str) -> str:
     return FIELD_ALIASES.get(normalized, "")
 
 
-def _parsed_fields(fields: Mapping[str, str], fallback_patient_id: str, raw_text: str) -> ParsedManualFields:
-    patient_id = fields.get("patient_id", "").strip() or fallback_patient_id
+def _parsed_fields(
+    fields: Mapping[str, str],
+    fallback_patient_id: str,
+    raw_text: str,
+    confirm_patient_id_correction: bool,
+) -> ParsedManualFields:
+    detected_patient_id = fields.get("patient_id", "").strip()
+    patient_id_correction_applied = bool(
+        detected_patient_id
+        and fallback_patient_id
+        and detected_patient_id != fallback_patient_id
+    )
+    if patient_id_correction_applied and not confirm_patient_id_correction:
+        raise ManualFilePatientIdCorrectionRequired(
+            "Patient ID correction confirmation is required because the file Patient ID differs from the override."
+        )
+    patient_id = fallback_patient_id if patient_id_correction_applied else detected_patient_id or fallback_patient_id
     if not patient_id:
         raise ManualFileParseError("Patient ID is required in the file or the Patient ID override field.")
     return ParsedManualFields(
         patient_id=patient_id,
+        patient_id_correction_applied=patient_id_correction_applied,
         level_of_care=fields.get("current_level_of_care", "Unknown"),
         admission_date=fields.get("admission_date", "Unknown"),
         due_date=fields.get("date_clock_due_date", "Unknown"),
