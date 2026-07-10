@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timezone
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
-from app.v2.models import AppSetting, TreatmentPlanImport, User, utc_now
+from app.v2.models import AppSetting, User, utc_now
 from app.v2.services.manager_action_store import (
     manager_override_dicts_for_patient,
     manager_review_dicts_for_patient,
@@ -45,9 +46,33 @@ class TreatmentPlanQueueItem:
     warnings: tuple[str, ...]
 
 
-def list_treatment_plan_imports(db: Session) -> tuple[TreatmentPlanImport, ...]:
-    result = db.execute(select(TreatmentPlanImport).order_by(TreatmentPlanImport.updated_at.desc()))
-    return tuple(result.scalars().all())
+@dataclass(frozen=True, slots=True)
+class StoredTreatmentPlan:
+    patient_id: str
+    patient_display_label: str
+    plan_id: str
+    source_mode: str
+    current_level_of_care: str
+    admission_date: str
+    next_due_date: str
+    overall_status: str
+    missing_criteria_count: int
+    content_summary_json: str
+    warnings_json: str
+    encrypted_payload: str
+
+
+def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
+    rows = db.execute(
+        text(
+            """SELECT p.canonical_client_id,v.normalized_snapshot_encrypted
+            FROM patients p JOIN treatment_plan_versions v ON v.patient_id=p.id
+            WHERE v.id=(SELECT latest.id FROM treatment_plan_versions latest
+                WHERE latest.patient_id=p.id ORDER BY latest.version_ordinal DESC,latest.id DESC LIMIT 1)
+            ORDER BY v.imported_at DESC,v.id DESC"""
+        )
+    ).all()
+    return tuple(_stored_plan(str(row[0]), row[1]) for row in rows)
 
 
 def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem, ...]:
@@ -55,30 +80,64 @@ def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem
     return tuple(_queue_item_from_import(row, correction_counts.get(row.patient_id, 0)) for row in list_treatment_plan_imports(db))
 
 
-def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate, actor: User) -> TreatmentPlanImport:
+def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate, actor: User) -> StoredTreatmentPlan:
     aggregate = _with_timeliness_evaluation(db, aggregate)
-    encrypted_payload = encrypt_text_secret(aggregate.model_dump_json())
-    existing = db.execute(select(TreatmentPlanImport).where(TreatmentPlanImport.patient_id == aggregate.patient_id)).scalar_one_or_none()
-    row = existing or TreatmentPlanImport(patient_id=aggregate.patient_id, encrypted_payload=encrypted_payload)
-    row.patient_display_label = aggregate.patient_display_label
-    row.plan_id = aggregate.content_snapshot.plan_id
-    row.source_mode = aggregate.source_mode
-    row.current_level_of_care = aggregate.current_level_of_care
-    row.admission_date = aggregate.admission_date
-    row.next_due_date = aggregate.date_clock_due_date
-    row.overall_status = aggregate.overall_status
-    row.missing_criteria_count = aggregate.evidence_coverage_summary.criteria_missing_evidence
-    row.returned_criteria_count = _returned_criteria_count(aggregate)
-    row.content_summary_json = _content_summary_json(aggregate)
-    row.warnings_json = json.dumps(list(aggregate.data_quality_warnings), sort_keys=True)
-    row.content_hash = aggregate.content_snapshot.content_hash
-    row.encrypted_payload = encrypted_payload
-    row.created_by_user_id = str(actor.id)
-    row.updated_at = utc_now()
-    db.add(row)
+    payload_json = aggregate.model_dump_json()
+    encrypted_payload = encrypt_text_secret(payload_json)
+    content_sha256 = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+    evidence_sha256 = hashlib.sha256(
+        f"{aggregate.patient_id}:{aggregate.source_mode}:{aggregate.content_snapshot.plan_id}:{content_sha256}".encode("utf-8")
+    ).hexdigest()
+    now = utc_now().astimezone(timezone.utc).isoformat()
+    facility_id = int(db.execute(text("SELECT id FROM facilities WHERE facility_key='r3-default'")).scalar_one())
+    db.execute(
+        text(
+            """INSERT OR IGNORE INTO patients(
+                facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at
+            ) VALUES(:facility_id,:client_id,:source_system,'active',:seen_at,:seen_at)"""
+        ),
+        {"facility_id": facility_id, "client_id": aggregate.patient_id, "source_system": aggregate.source_mode, "seen_at": now},
+    )
+    patient_id = int(
+        db.execute(
+            text(
+                "SELECT id FROM patients WHERE facility_id=:facility_id AND source_system=:source_system AND canonical_client_id=:client_id"
+            ),
+            {"facility_id": facility_id, "source_system": aggregate.source_mode, "client_id": aggregate.patient_id},
+        ).scalar_one()
+    )
+    latest = db.execute(
+        text(
+            "SELECT id,version_ordinal FROM treatment_plan_versions WHERE patient_id=:patient_id ORDER BY version_ordinal DESC,id DESC LIMIT 1"
+        ),
+        {"patient_id": patient_id},
+    ).first()
+    version_ordinal = int(latest[1]) + 1 if latest else 1
+    supersedes_version_id = int(latest[0]) if latest else None
+    db.execute(
+        text(
+            """INSERT OR IGNORE INTO treatment_plan_versions(
+                patient_id,source_system,source_record_id,version_ordinal,admission_date,source_next_review_due,
+                normalized_snapshot_encrypted,content_sha256,evidence_sha256,imported_at,supersedes_version_id
+            ) VALUES(:patient_id,:source_system,:source_record_id,:version_ordinal,:admission_date,:next_due,
+                :payload,:content_sha256,:evidence_sha256,:imported_at,:supersedes_version_id)"""
+        ),
+        {
+            "patient_id": patient_id,
+            "source_system": aggregate.source_mode,
+            "source_record_id": aggregate.content_snapshot.plan_id,
+            "version_ordinal": version_ordinal,
+            "admission_date": aggregate.admission_date,
+            "next_due": aggregate.date_clock_due_date,
+            "payload": encrypted_payload.encode("utf-8"),
+            "content_sha256": content_sha256,
+            "evidence_sha256": evidence_sha256,
+            "imported_at": now,
+            "supersedes_version_id": supersedes_version_id,
+        },
+    )
     db.commit()
-    db.refresh(row)
-    return row
+    return _stored_plan(aggregate.patient_id, encrypted_payload)
 
 
 def _with_timeliness_evaluation(db: Session, aggregate: TreatmentPlanAggregate) -> TreatmentPlanAggregate:
@@ -104,10 +163,18 @@ def _with_timeliness_evaluation(db: Session, aggregate: TreatmentPlanAggregate) 
 
 
 def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> TreatmentPlanAggregate | None:
-    row = db.execute(select(TreatmentPlanImport).where(TreatmentPlanImport.patient_id == patient_id)).scalar_one_or_none()
-    if row is None:
+    encrypted_payload = db.execute(
+        text(
+            """SELECT v.normalized_snapshot_encrypted FROM patients p
+            JOIN treatment_plan_versions v ON v.patient_id=p.id
+            WHERE p.canonical_client_id=:client_id
+            ORDER BY v.imported_at DESC,v.version_ordinal DESC,v.id DESC LIMIT 1"""
+        ),
+        {"client_id": patient_id},
+    ).scalar_one_or_none()
+    if encrypted_payload is None:
         return None
-    aggregate = TreatmentPlanAggregate.model_validate_json(decrypt_text_secret(row.encrypted_payload))
+    aggregate = TreatmentPlanAggregate.model_validate_json(decrypt_text_secret(_encrypted_text(encrypted_payload)))
     source_documents = source_documents_for_patient(db, patient_id)
     persisted_reviews = manager_review_dicts_for_patient(db, patient_id)
     if not persisted_reviews and not source_documents:
@@ -121,7 +188,7 @@ def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> Treatm
     )
 
 
-def _queue_item_from_import(row: TreatmentPlanImport, returned_criteria_count: int) -> TreatmentPlanQueueItem:
+def _queue_item_from_import(row: StoredTreatmentPlan, returned_criteria_count: int) -> TreatmentPlanQueueItem:
     return TreatmentPlanQueueItem(
         patient_id=row.patient_id,
         patient_display_label=row.patient_display_label,
@@ -162,3 +229,26 @@ def _string_tuple(raw_json: str) -> tuple[str, ...]:
     if not isinstance(payload, list):
         return ()
     return tuple(value for value in payload if isinstance(value, str))
+
+
+def _stored_plan(patient_id: str, encrypted_payload: str | bytes) -> StoredTreatmentPlan:
+    payload = _encrypted_text(encrypted_payload)
+    aggregate = TreatmentPlanAggregate.model_validate_json(decrypt_text_secret(payload))
+    return StoredTreatmentPlan(
+        patient_id=patient_id,
+        patient_display_label=aggregate.patient_display_label,
+        plan_id=aggregate.content_snapshot.plan_id,
+        source_mode=aggregate.source_mode,
+        current_level_of_care=aggregate.current_level_of_care,
+        admission_date=aggregate.admission_date,
+        next_due_date=aggregate.date_clock_due_date,
+        overall_status=aggregate.overall_status,
+        missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,
+        content_summary_json=_content_summary_json(aggregate),
+        warnings_json=json.dumps(list(aggregate.data_quality_warnings), sort_keys=True),
+        encrypted_payload=payload,
+    )
+
+
+def _encrypted_text(value: str | bytes) -> str:
+    return value.decode("utf-8") if isinstance(value, bytes) else value

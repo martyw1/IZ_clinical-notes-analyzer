@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 
 from app.core.config import settings
 from app.v2.models import ApiHarnessJobRecord, AppSetting, Base, User, utc_now
+from app.v2.migrations.runner import MigrationRequest, run_migrations
 from app.v2.security import hash_password
 
 is_sqlite_database = settings.database_url.startswith("sqlite")
@@ -35,9 +36,20 @@ def init_database() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_app_settings_columns()
     with SessionLocal() as db:
-        _mark_interrupted_jobs_stale(db)
         _ensure_bootstrap_admin(db)
         _ensure_app_settings(db)
+        db.commit()
+    engine.dispose()
+    run_migrations(
+        MigrationRequest(
+            database_path=settings.sqlite_db_path,
+            local_app_data_dir=settings.local_app_data_dir,
+            encryption_secret=settings.effective_data_encryption_secret,
+            app_build=f"{settings.app_version}:{settings.build_channel}",
+        )
+    )
+    with SessionLocal() as db:
+        _mark_interrupted_jobs_stale(db)
         db.commit()
 
 

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Protocol
 
-from app.v2.models import TreatmentPlanImport
+
+class DashboardTreatmentPlan(Protocol):
+    overall_status: str
+    missing_criteria_count: int
 
 JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
 
 
 def dashboard_payload(
-    treatment_plans: Sequence[TreatmentPlanImport],
+    treatment_plans: Sequence[DashboardTreatmentPlan],
     *,
     api_configured: bool,
     api_enabled: bool,
@@ -52,7 +56,7 @@ def dashboard_payload(
     }
 
 
-def _count_status(treatment_plans: Sequence[TreatmentPlanImport], status: str) -> int:
+def _count_status(treatment_plans: Sequence[DashboardTreatmentPlan], status: str) -> int:
     return sum(1 for row in treatment_plans if row.overall_status == status)
 
 
