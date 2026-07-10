@@ -45,6 +45,15 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
         if path == "/treatment-plans":
             self._respond({"items": [{"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"}]})
             return
+        if path == "/treatment-plans/plan-912/diagnoses":
+            self._respond({"items": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}]})
+            return
+        if path == "/treatment-plans/plan-912/reviews":
+            self._respond({"items": [{"id": "review-912"}]})
+            return
+        if path == "/treatment-plans/plan-912/reviews/review-912":
+            self._respond({"id": "review-912", "reviewDate": "2026-06-15"})
+            return
         self._respond({"id": "plan-912", "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": "Synthetic clinical problem."}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
 
     def log_message(self, _format: str, *_args: str | int | float | None) -> None:
@@ -80,6 +89,32 @@ def _mock_alleva_server(*, block_clients: bool = False) -> Iterator[tuple[str, _
         assert not thread.is_alive()
 
 
+def _approve_synthetic_contract(client, headers) -> None:
+    approved = client.post(
+        "/api/v2/alleva-sync/contracts",
+        headers=headers,
+        json={
+            "contract_version": "synthetic-wire-contract-v1",
+            "effective_at": "2026-07-10T00:00:00+00:00",
+            "vendor_documentation_url": "https://vendor.invalid/docs/synthetic",
+            "test_population_reference": "synthetic-wire-population",
+            "oauth": {"token_auth_style": "body", "scope": "plans.read"},
+            "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100},
+            "rate_limit": {"maximum_requests_per_minute": 60, "retry_after_seconds": 1},
+            "attachments": {"mode": "metadata_only", "download_allowed": False},
+            "endpoints": {
+                "clients": {"path": "/clients", "parameters": {}, "field_mappings": {"client_id": "clientId"}},
+                "treatment_plans": {"path": "/treatment-plans", "parameters": {}, "field_mappings": {"client_id": "clientId", "plan_id": "id"}},
+                "treatment_plan_detail": {"path": "/treatment-plans/{plan_id}", "parameters": {}, "field_mappings": {"signature_date": "staffSignatureDate"}},
+                "diagnoses": {"path": "/treatment-plans/{plan_id}/diagnoses", "parameters": {}, "field_mappings": {"description": "diagnosisDescription"}},
+                "reviews": {"path": "/treatment-plans/{plan_id}/reviews", "parameters": {}, "field_mappings": {"review_id": "id"}},
+                "review_detail": {"path": "/treatment-plans/{plan_id}/reviews/{review_id}", "parameters": {}, "field_mappings": {"review_date": "reviewDate"}},
+            },
+        },
+    )
+    assert approved.status_code == 201, approved.text
+
+
 def test_alleva_sync_is_blocked_until_explicit_approval_and_mapping_are_saved(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -110,6 +145,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
             },
         )
         assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers)
         started = client.post("/api/v2/alleva-sync/run", headers=headers)
         assert started.status_code == 202
         job_id = started.json()["job_id"]
@@ -128,7 +164,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert detail.json()["content_snapshot"]["problems"][0]["problem_description"] == "Synthetic clinical problem."
         assert {criterion["source_endpoint"] for criterion in detail.json()["criteria_results"]} == {"Alleva REST"}
         assert {field["source_endpoint"] for field in detail.json()["content_snapshot"]["observed_fields"]} == {"Alleva REST"}
-        assert state.paths == ["/token", "/clients?limit=100&offset=0", "/treatment-plans?limit=100&offset=0", "/treatment-plans/plan-912"]
+        assert state.paths == ["/token", "/clients?limit=100&offset=0", "/treatment-plans?limit=100&offset=0", "/treatment-plans/plan-912", "/treatment-plans/plan-912/diagnoses", "/treatment-plans/plan-912/reviews", "/treatment-plans/plan-912/reviews/review-912"]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
@@ -156,6 +192,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
             },
         )
         assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers)
         started = client.post("/api/v2/alleva-sync/run", headers=headers)
         assert started.status_code == 202
         job_id = started.json()["job_id"]
@@ -203,6 +240,7 @@ def test_unexpected_sync_worker_failure_reaches_a_terminal_audited_state(tmp_pat
         },
     )
     assert configured.status_code == 200
+    _approve_synthetic_contract(client, headers)
     started = client.post("/api/v2/alleva-sync/run", headers=headers)
     assert started.status_code == 202
     job_id = started.json()["job_id"]

@@ -288,6 +288,8 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
     treatment_plan_sync_enabled: syncEnabled,
     treatment_plan_sync_approved: syncEnabled,
     treatment_plan_endpoint_mapping_validated: syncEnabled,
+    active_contract_version: syncEnabled ? 'synthetic-ui-contract-v1' : null,
+    active_contract_effective_at: syncEnabled ? '2026-07-10T00:00:00+00:00' : null,
   }
 }
 

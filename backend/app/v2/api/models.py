@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -176,6 +178,102 @@ class ApiConfigurationOut(V2Model):
     treatment_plan_sync_enabled: bool
     treatment_plan_sync_approved: bool
     treatment_plan_endpoint_mapping_validated: bool
+    active_contract_version: str | None = None
+    active_contract_effective_at: datetime | None = None
+
+
+class AllevaEndpointContract(V2Model):
+    path: str = Field(min_length=1, max_length=500)
+    parameters: dict[str, str]
+    field_mappings: dict[str, str]
+
+
+class AllevaOAuthContract(V2Model):
+    token_auth_style: Literal["body", "basic"]
+    scope: str = Field(min_length=1, max_length=500)
+
+
+class AllevaPaginationContract(V2Model):
+    limit_parameter: str = Field(min_length=1, max_length=80)
+    offset_parameter: str = Field(min_length=1, max_length=80)
+    maximum_page_size: int = Field(ge=1, le=5000)
+
+
+class AllevaRateLimitContract(V2Model):
+    maximum_requests_per_minute: int = Field(ge=1, le=10000)
+    retry_after_seconds: int = Field(ge=1, le=300)
+
+
+class AllevaAttachmentsContract(V2Model):
+    mode: Literal["metadata_only", "disabled"]
+    download_allowed: Literal[False]
+
+
+class AllevaContractApprovalIn(V2Model):
+    contract_version: str = Field(min_length=1, max_length=120)
+    effective_at: datetime
+    vendor_documentation_url: str = Field(min_length=1, max_length=500)
+    test_population_reference: str = Field(min_length=1, max_length=200)
+    oauth: AllevaOAuthContract
+    pagination: AllevaPaginationContract
+    rate_limit: AllevaRateLimitContract
+    attachments: AllevaAttachmentsContract
+    endpoints: dict[str, AllevaEndpointContract]
+
+
+class AllevaContractApprovalOut(V2Model):
+    contract_version: str
+    contract_sha256: str
+    effective_at: datetime
+    approved_at: datetime
+    active_contract_version: str | None = None
+    active_contract_effective_at: datetime | None = None
+
+
+class AllevaEndpointContract(V2Model):
+    path: str = Field(min_length=1, max_length=500)
+    parameters: dict[str, str]
+    field_mappings: dict[str, str]
+
+
+class AllevaOAuthContract(V2Model):
+    token_auth_style: Literal["body", "basic"]
+    scope: str = Field(min_length=1, max_length=500)
+
+
+class AllevaPaginationContract(V2Model):
+    limit_parameter: str = Field(min_length=1, max_length=80)
+    offset_parameter: str = Field(min_length=1, max_length=80)
+    maximum_page_size: int = Field(ge=1, le=5000)
+
+
+class AllevaRateLimitContract(V2Model):
+    maximum_requests_per_minute: int = Field(ge=1, le=10000)
+    retry_after_seconds: int = Field(ge=1, le=300)
+
+
+class AllevaAttachmentsContract(V2Model):
+    mode: Literal["metadata_only", "disabled"]
+    download_allowed: Literal[False]
+
+
+class AllevaContractApprovalIn(V2Model):
+    contract_version: str = Field(min_length=1, max_length=120)
+    effective_at: datetime
+    vendor_documentation_url: str = Field(min_length=1, max_length=500)
+    test_population_reference: str = Field(min_length=1, max_length=200)
+    oauth: AllevaOAuthContract
+    pagination: AllevaPaginationContract
+    rate_limit: AllevaRateLimitContract
+    attachments: AllevaAttachmentsContract
+    endpoints: dict[str, AllevaEndpointContract]
+
+
+class AllevaContractApprovalOut(V2Model):
+    contract_version: str
+    contract_sha256: str
+    effective_at: datetime
+    approved_at: datetime
 
 
 class AllevaTreatmentPlanSyncOut(V2Model):

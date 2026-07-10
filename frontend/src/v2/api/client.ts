@@ -330,5 +330,7 @@ function mapApiConfiguration(record: Record<string, unknown>): ApiConfiguration 
     treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
     treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),
     treatmentPlanEndpointMappingValidated: readBoolean(record, 'treatment_plan_endpoint_mapping_validated'),
+    activeContractVersion: readString(record, 'active_contract_version'),
+    activeContractEffectiveAt: readString(record, 'active_contract_effective_at'),
   }
 }

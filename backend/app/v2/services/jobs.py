@@ -15,6 +15,7 @@ from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob, JobPreview
 from app.v2.models import ApiHarnessJobRecord, AppSetting, User
 from app.v2.services.job_runner import fetch_paged_records
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
+from app.v2.services.alleva_contracts import ApprovedAllevaContract
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.job_store import record_as_job_values, save_job
 from app.v2.services.job_view import public_job
@@ -87,6 +88,7 @@ class ApiHarnessJobService:
         self._jobs: dict[str, MutableJob] = {}
         self._connections: dict[str, HarnessConnection] = {}
         self._sync_actor_ids: dict[str, int] = {}
+        self._sync_contracts: dict[str, ApprovedAllevaContract] = {}
         self._lock = threading.Lock()
 
     def create_all_fields_job(self, connection: HarnessConnection, actor_id: str = "admin", actor_role: str = "admin") -> ApiHarnessJob:
@@ -136,7 +138,7 @@ class ApiHarnessJobService:
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
-    def create_treatment_plan_sync_job(self, actor_id: int, actor_role: str) -> ApiHarnessJob:
+    def create_treatment_plan_sync_job(self, actor_id: int, actor_role: str, contract: ApprovedAllevaContract) -> ApiHarnessJob:
         job_id = f"sync-{uuid4().hex[:12]}"
         output_dir = settings.api_harness_runs_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -152,6 +154,7 @@ class ApiHarnessJobService:
         with self._lock:
             self._jobs[job_id] = job
             self._sync_actor_ids[job_id] = actor_id
+            self._sync_contracts[job_id] = contract
         save_job(job)
         log_event(action="alleva.treatment_plan_sync.job.created", entity_type="api_harness_job", entity_reference=job_id, actor_id=str(actor_id), actor_role=actor_role)
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
@@ -242,8 +245,12 @@ class ApiHarnessJobService:
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             sync_actor_id = self._sync_actor_ids.pop(job_id, None)
+            sync_contract = self._sync_contracts.pop(job_id, None)
         if sync_actor_id is not None:
-            self._run_treatment_plan_sync_job(job_id, sync_actor_id)
+            if sync_contract is None:
+                self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
+                return
+            self._run_treatment_plan_sync_job(job_id, sync_actor_id, sync_contract)
             return
         output_dir = self._output_dir(job_id)
         self._set(job_id, status="running", started_at=_now(), progress_percent=5)
@@ -266,7 +273,7 @@ class ApiHarnessJobService:
             details={"job_id": job_id, "records_seen": len(rows), "records_written": len(rows), "artifact_names": [a.name for a in self.artifacts(job_id)]},
         )
 
-    def _run_treatment_plan_sync_job(self, job_id: str, actor_id: int) -> None:
+    def _run_treatment_plan_sync_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract) -> None:
         self._set(job_id, status="running", started_at=_now(), progress_percent=5, current_endpoint="GET /clients")
         with SessionLocal() as db:
             profile = db.execute(select(AppSetting)).scalar_one()
@@ -279,6 +286,7 @@ class ApiHarnessJobService:
                     db,
                     profile,
                     actor,
+                    contract,
                     is_cancelled=lambda: self.get_job(job_id).cancel_requested,
                 )
             except AllevaSyncCancelled:

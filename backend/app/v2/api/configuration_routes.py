@@ -16,6 +16,7 @@ from app.v2.api.models import (
 )
 from app.v2.models import AppSetting, AuditLog
 from app.v2.services.audit_store import JsonValue, record_audit_event, verify_audit_chain
+from app.v2.services.alleva_contracts import active_contract
 from app.v2.services.secure_storage import encrypt_text_secret
 
 router = APIRouter()
@@ -26,7 +27,7 @@ def _settings_row(db: DbSession) -> AppSetting:
     return row
 
 
-def _api_config_out(row: AppSetting) -> ApiConfigurationOut:
+def _api_config_out(row: AppSetting, contract_version: str | None = None, effective_at: datetime | None = None) -> ApiConfigurationOut:
     configured = bool(row.api_client_secret)
     return ApiConfigurationOut(
         vendor_name=row.emr_vendor_name,
@@ -45,12 +46,15 @@ def _api_config_out(row: AppSetting) -> ApiConfigurationOut:
         treatment_plan_sync_enabled=row.alleva_treatment_plan_sync_enabled,
         treatment_plan_sync_approved=row.alleva_treatment_plan_sync_approved,
         treatment_plan_endpoint_mapping_validated=row.alleva_treatment_plan_endpoint_mapping_validated,
+        active_contract_version=contract_version,
+        active_contract_effective_at=effective_at,
     )
 
 
 @router.get("/api/api-configuration", response_model=ApiConfigurationOut)
 def get_api_configuration(_: AdminUser, db: DbSession) -> ApiConfigurationOut:
-    return _api_config_out(_settings_row(db))
+    contract = active_contract(db)
+    return _api_config_out(_settings_row(db), contract.contract_version if contract else None, contract.effective_at if contract else None)
 
 
 @router.patch("/api/api-configuration", response_model=ApiConfigurationOut)
@@ -95,7 +99,8 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
             "client_secret_configured": bool(row.api_client_secret),
         },
     )
-    return _api_config_out(row)
+    contract = active_contract(db)
+    return _api_config_out(row, contract.contract_version if contract else None, contract.effective_at if contract else None)
 
 
 @router.get("/api/audit/logs", response_model=AuditLogListOut)

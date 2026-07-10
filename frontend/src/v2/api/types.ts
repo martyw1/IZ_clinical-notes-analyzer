@@ -104,6 +104,8 @@ export type ApiConfiguration = {
   readonly treatmentPlanSyncEnabled: boolean
   readonly treatmentPlanSyncApproved: boolean
   readonly treatmentPlanEndpointMappingValidated: boolean
+  readonly activeContractVersion: string
+  readonly activeContractEffectiveAt: string
 }
 
 export type OpenApiDefinitionSummary = {

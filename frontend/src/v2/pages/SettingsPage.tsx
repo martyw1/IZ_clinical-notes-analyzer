@@ -92,9 +92,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
 
   const syncReady = apiConfig.apiEnabled
     && apiConfig.treatmentPlanSyncEnabled
-    && apiConfig.treatmentPlanSyncApproved
-    && apiConfig.treatmentPlanEndpointMappingValidated
     && apiConfig.clientSecretConfigured
+    && Boolean(apiConfig.activeContractVersion)
   const syncActive = syncJob !== null && !isTerminalSyncStatus(syncJob.status)
 
   async function handleRunSync() {
@@ -233,18 +232,20 @@ export function SettingsPage({ token }: SettingsPageProps) {
         </label>
         <label className='checkbox-row'>
           <input type='checkbox' checked={apiConfig.treatmentPlanSyncApproved} onChange={(event) => setApiConfig({ ...apiConfig, treatmentPlanSyncApproved: event.target.checked })} />
-          R3/Alleva sync approval recorded
+          Sync intent recorded (does not authorize execution)
         </label>
         <label className='checkbox-row'>
           <input type='checkbox' checked={apiConfig.treatmentPlanEndpointMappingValidated} onChange={(event) => setApiConfig({ ...apiConfig, treatmentPlanEndpointMappingValidated: event.target.checked })} />
-          Endpoint mapping validated
+          Mapping intent recorded (does not authorize execution)
         </label>
         <dl className='summary-grid'>
           <div><dt>API key</dt><dd>{apiConfig.apiKeyConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>Client secret</dt><dd>{apiConfig.clientSecretConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>API testing</dt><dd>{apiConfig.apiEnabled ? 'enabled' : 'disabled'}</dd></div>
+          <div><dt>Approved contract</dt><dd>{apiConfig.activeContractVersion || 'not recorded'}</dd></div>
           <div><dt>Approved sync</dt><dd>{syncReady ? 'ready to run' : 'gated'}</dd></div>
         </dl>
+        <p className='muted'>A versioned contract with all six endpoint mappings, OAuth, pagination, rate-limit, attachment, vendor-documentation, test-population, approver, and effective-date evidence is required. These checkboxes are intent only.</p>
         <button type='button' onClick={handleSaveApiConfiguration}>Save API configuration</button>
         <button type='button' className='secondary-button' onClick={handlePullDefinition} disabled={isPullingDefinition}>
           {isPullingDefinition ? 'Pulling OpenAPI definition...' : 'Pull OpenAPI definition'}
@@ -252,7 +253,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
         <button type='button' className='secondary-button' onClick={handleTestConnectivity} disabled={isTestingConnectivity}>
           {isTestingConnectivity ? 'Testing OAuth connectivity...' : 'Test saved OAuth connectivity'}
         </button>
-        <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run approved read-only treatment-plan sync' : 'Save enabled API configuration, recorded approval, validated mapping, and a client secret before sync can run.'}>
+        <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run approved read-only treatment-plan sync' : 'A saved encrypted secret, explicit enablement, and an effective versioned approval contract are required before sync can run.'}>
           {isRunningSync ? 'Running treatment-plan sync...' : 'Run approved treatment-plan sync'}
         </button>
         {syncJob && !isTerminalSyncStatus(syncJob.status) && (

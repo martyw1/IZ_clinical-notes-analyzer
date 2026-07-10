@@ -12,6 +12,7 @@ from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.models import AppSetting, User
 from app.v2.services.manual_file_aggregate import build_manual_aggregate
 from app.v2.services.manual_file_types import ParsedManualFields
+from app.v2.services.alleva_contracts import ApprovedAllevaContract
 from app.v2.services.oauth_connectivity import request_client_credentials
 from app.v2.services.secure_storage import decrypt_text_secret
 from app.v2.services.treatment_plan_store import save_treatment_plan_aggregate
@@ -35,16 +36,16 @@ class AllevaSyncResult:
     skipped_plan_count: int
 
 
-def run_treatment_plan_sync(db: Session, profile: AppSetting, actor: User, is_cancelled: Callable[[], bool] = lambda: False) -> AllevaSyncResult:
+def run_treatment_plan_sync(db: Session, profile: AppSetting, actor: User, contract: ApprovedAllevaContract, is_cancelled: Callable[[], bool] = lambda: False) -> AllevaSyncResult:
     if is_cancelled():
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before it started.")
     token = _oauth_token(profile)
     headers = {"accept": "application/json", "authorization": f"Bearer {token}"}
     try:
         with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=True) as client:
-            clients = _paged_records(client, profile, "/clients", headers, is_cancelled)
-            plans = _paged_records(client, profile, "/treatment-plans", headers, is_cancelled)
-            imported, skipped = _save_client_aggregates(db, client, profile, actor, clients, plans, headers, is_cancelled)
+            clients = _paged_records(client, profile, _endpoint_path(contract, "clients"), headers, is_cancelled)
+            plans = _paged_records(client, profile, _endpoint_path(contract, "treatment_plans"), headers, is_cancelled)
+            imported, skipped = _save_client_aggregates(db, client, profile, actor, contract, clients, plans, headers, is_cancelled)
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
     return AllevaSyncResult(imported_patient_count=imported, skipped_plan_count=skipped)
@@ -96,6 +97,7 @@ def _save_client_aggregates(
     client: httpx.Client,
     profile: AppSetting,
     actor: User,
+    contract: ApprovedAllevaContract,
     clients: tuple[dict[str, object], ...],
     plans: tuple[dict[str, object], ...],
     headers: dict[str, str],
@@ -114,7 +116,7 @@ def _save_client_aggregates(
             skipped += 1
             continue
         plan_id = _first_text(plan, "id", "treatmentPlanId")
-        detail = _plan_detail(client, profile, plan_id, headers) if plan_id else plan
+        detail = _plan_detail(client, profile, contract, plan_id, headers) if plan_id else plan
         aggregate = _aggregate_from_payload(patient_id, client_payload, plan, detail, plan_id)
         save_treatment_plan_aggregate(db, aggregate, actor)
         imported += 1
@@ -134,13 +136,34 @@ def _plan_for_patient(plans: tuple[dict[str, object], ...], patient_id: str) -> 
     return None
 
 
-def _plan_detail(client: httpx.Client, profile: AppSetting, plan_id: str, headers: dict[str, str]) -> dict[str, object]:
-    response = client.get(urljoin(f"{profile.api_base_url.rstrip('/')}/", f"treatment-plans/{plan_id}"), headers=headers)
+def _plan_detail(client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, plan_id: str, headers: dict[str, str]) -> dict[str, object]:
+    response = client.get(urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")), headers=headers)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("Expected an API treatment-plan detail object.")
+    diagnoses = _endpoint_records(client, profile, contract, "diagnoses", headers, plan_id=plan_id)
+    reviews = _endpoint_records(client, profile, contract, "reviews", headers, plan_id=plan_id)
+    payload["diagnoses"] = diagnoses or payload.get("diagnoses", [])
+    if reviews:
+        review_id = _first_text(reviews[0], "id", "reviewId")
+        if review_id:
+            payload["review_detail"] = _endpoint_json(client, profile, contract, "review_detail", headers, plan_id=plan_id, review_id=review_id)
     return payload
+
+
+def _endpoint_path(contract: ApprovedAllevaContract, endpoint_key: str, **values: str) -> str:
+    return contract.payload.endpoints[endpoint_key].path.format(**values)
+
+
+def _endpoint_json(client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str], **values: str) -> object:
+    response = client.get(urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def _endpoint_records(client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str], **values: str) -> list[dict[str, object]]:
+    return _records(_endpoint_json(client, profile, contract, endpoint_key, headers, **values))
 
 
 def _aggregate_from_payload(
