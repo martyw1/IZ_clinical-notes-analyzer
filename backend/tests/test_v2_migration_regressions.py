@@ -47,6 +47,22 @@ def test_no_pending_migration_rejects_required_schema_drift(tmp_path) -> None:
         run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
 
 
+def test_no_pending_migration_rejects_weakened_same_name_partial_unique_index(tmp_path) -> None:
+    # Given: a current database whose required partial unique index is replaced by a weaker same-name index.
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute("DROP INDEX uq_patient_assignments_active")
+        connection.execute(
+            "CREATE INDEX uq_patient_assignments_active ON patient_assignments(counselor_user_id,patient_id)"
+        )
+        connection.commit()
+
+    # When/Then: exact index semantics verification rejects changed uniqueness, order, and predicate.
+    with pytest.raises(MigrationStateError, match="structure"):
+        run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+
+
 def test_dry_run_does_not_checkpoint_or_modify_wal_files(tmp_path) -> None:
     # Given: a legacy WAL database with committed bytes still present in its WAL file.
     database_path = create_legacy_database(tmp_path)
@@ -116,7 +132,12 @@ def test_backfill_recursively_removes_patient_name_aliases_before_reencryption(t
         payload = _decrypt_legacy_text(str(stored))
         plan = payload["treatment_plans"][0]
         plan["patientName"] = "PRIVACY-CANARY-NAME"
-        plan["nested"] = {"patient_display_label": "PRIVACY-CANARY-NAME", "safe": "retained"}
+        plan["nested"] = {
+            "patient_display_label": "PRIVACY-CANARY-NAME",
+            "patient_full_name": "PRIVACY-CANARY-NAME",
+            "clientFullName": "PRIVACY-CANARY-NAME",
+            "safe": "retained",
+        }
         connection.execute(
             "UPDATE treatment_plan_imports SET encrypted_payload=?",
             (encrypted_text(json.dumps(payload, sort_keys=True)),),
@@ -133,6 +154,30 @@ def test_backfill_recursively_removes_patient_name_aliases_before_reencryption(t
     assert "PRIVACY-CANARY-NAME" not in json.dumps(migrated)
     assert "patientName" not in migrated
     assert migrated["nested"] == {"safe": "retained"}
+
+
+def test_migration_neutralizes_legacy_plaintext_patient_identity_everywhere(tmp_path) -> None:
+    # Given: a legacy plaintext display label containing an identity canary.
+    database_path = create_legacy_database(tmp_path)
+    canary = "PLAINTEXT-PATIENT-NAME-CANARY"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute("UPDATE treatment_plan_imports SET patient_display_label=?", (canary,))
+        connection.commit()
+
+    # When: migration backfills the immutable clinical ledger.
+    report = run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+
+    # Then: only the safe patient-ID label remains and no storage or report output exposes the canary.
+    with closing(sqlite3.connect(database_path)) as connection:
+        label = connection.execute(
+            "SELECT patient_display_label FROM treatment_plan_imports WHERE patient_id='synthetic-client-200'"
+        ).fetchone()
+        stored_values = _sqlite_storage_bytes(connection)
+    encoded_canary = canary.encode("utf-8")
+    assert label == ("Patient ID synthetic-client-200",)
+    assert all(encoded_canary not in value for value in stored_values)
+    assert encoded_canary not in database_path.read_bytes()
+    assert canary not in repr(report)
 
 
 def test_every_persisted_boolean_has_symmetric_insert_and_update_protection(tmp_path) -> None:
@@ -181,3 +226,22 @@ def _decrypt_legacy_text(stored: str) -> dict[str, JsonValue]:
 
 def _decrypt_snapshot(stored: bytes) -> dict[str, JsonValue]:
     return json.loads(_fernet().decrypt(stored[7:]))
+
+
+def _sqlite_storage_bytes(connection: sqlite3.Connection) -> tuple[bytes, ...]:
+    tables = tuple(
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    )
+    values: list[bytes] = []
+    for table in tables:
+        quoted = table.replace('"', '""')
+        for row in connection.execute(f'SELECT * FROM "{quoted}"'):
+            values.extend(_stored_bytes(value) for value in row if isinstance(value, (str, bytes)))
+    return tuple(values)
+
+
+def _stored_bytes(value: str | bytes) -> bytes:
+    return value if isinstance(value, bytes) else value.encode("utf-8")

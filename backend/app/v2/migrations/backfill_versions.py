@@ -5,14 +5,16 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
+from typing import assert_never
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.v2.migrations.backfill_types import BackfillError, JsonPrimitive, JsonValue, encrypt_bytes, fernet_key, iso_text
 
 PATIENT_NAME_ALIASES = frozenset(
-    {"patientname", "clientname", "fullname", "displayname", "patientdisplaylabel", "firstname", "lastname", "givenname", "surname"}
+    {"fullname", "displayname", "firstname", "lastname", "givenname", "surname"}
 )
+PATIENT_SUBJECT_NAME_ALIASES = PATIENT_NAME_ALIASES | {"name", "displaylabel"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,7 +202,7 @@ def _scrub_record(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {
         key: _scrub_value(item)
         for key, item in value.items()
-        if _normalized_key(key) not in PATIENT_NAME_ALIASES
+        if not _is_patient_name_alias(key)
     }
 
 
@@ -212,7 +214,20 @@ def _scrub_value(value: JsonValue) -> JsonValue:
             return [_scrub_value(item) for item in items]
         case None | bool() | int() | float() | str():
             return value
+        case unreachable:
+            assert_never(unreachable)
 
 
 def _normalized_key(key: str) -> str:
     return "".join(character for character in key.casefold() if character.isalnum())
+
+
+def _is_patient_name_alias(key: str) -> bool:
+    normalized = _normalized_key(key)
+    if normalized in PATIENT_NAME_ALIASES:
+        return True
+    return any(
+        normalized == f"{subject}{alias}"
+        for subject in ("patient", "client")
+        for alias in PATIENT_SUBJECT_NAME_ALIASES
+    )

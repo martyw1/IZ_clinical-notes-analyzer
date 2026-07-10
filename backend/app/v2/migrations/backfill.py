@@ -52,6 +52,9 @@ def backfill_legacy_tables(connection: sqlite3.Connection, encryption_secret: st
     relations = RelationBackfill(connection, encryption_secret, local_app_data_dir, admin_id, facility_id, plan_versions_by_patient, now)
     _backfill_documents(relations)
     _backfill_manager_actions(relations)
+    connection.execute(
+        "UPDATE treatment_plan_imports SET patient_display_label='Patient ID ' || patient_id"
+    )
 
 
 def _backfill_documents(context: RelationBackfill) -> None:

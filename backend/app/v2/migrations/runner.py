@@ -17,7 +17,7 @@ from app.v2.migrations.backup import (
     validate_sqlite_file,
 )
 from app.v2.migrations.backfill import backfill_legacy_tables
-from app.v2.migrations.errors import MigrationStateError
+from app.v2.migrations.errors import MigrationInterruptionError, MigrationPathError, MigrationStateError
 from app.v2.migrations.lifecycle_types import (
     ApplyRequest,
     MigrationFailpoint,
@@ -154,6 +154,7 @@ def _run_dry_migration(request: MigrationRequest, database_path: Path, root: Pat
 
 def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> None:
     connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("PRAGMA secure_delete=ON")
     connection.execute("BEGIN IMMEDIATE")
     try:
         existing_user_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('users')")}
@@ -202,7 +203,7 @@ def _validated_paths(database_path: Path, local_app_data_dir: Path) -> tuple[Pat
     root = local_app_data_dir.resolve()
     resolved_database = database_path.resolve()
     if not resolved_database.is_relative_to(root):
-        raise ValueError("database path must resolve inside local application data")
+        raise MigrationPathError("database path must resolve inside local application data")
     if not resolved_database.is_file():
         raise FileNotFoundError(resolved_database)
     return resolved_database, root
@@ -224,4 +225,4 @@ def _file_sha256(path: Path) -> str:
 
 def _interrupt(actual: MigrationFailpoint | None, expected: MigrationFailpoint) -> None:
     if actual == expected:
-        raise RuntimeError("injected migration interruption")
+        raise MigrationInterruptionError("injected migration interruption")

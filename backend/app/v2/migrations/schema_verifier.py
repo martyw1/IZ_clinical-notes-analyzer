@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.v2.migrations.errors import MigrationStateError
 from app.v2.migrations.registry import MIGRATIONS
+from app.v2.migrations.schema_contract import verify_required_schema
 
 LEGACY_COLUMNS = {
     "users": {"id", "username", "role", "password_hash"},
@@ -43,29 +44,6 @@ CURRENT_COLUMNS = {
     "sync_failures": {"id", "job_id", "error_class", "retryable", "attempt"},
     "reconciliation_outcomes": {"id", "job_id", "patient_id", "source_kind", "source_record_id", "outcome"},
 }
-
-REQUIRED_INDEXES = {
-    "uq_patient_assignments_active",
-    "uq_diagnosis_plan_hash",
-    "uq_diagnosis_review_hash",
-    "uq_manager_disposition_event",
-}
-
-V1_TRIGGERS = {
-    "treatment_plan_versions_no_update", "treatment_plan_versions_no_delete",
-    "treatment_review_versions_no_update", "treatment_review_versions_no_delete",
-    "manager_dispositions_no_update", "manager_dispositions_no_delete",
-    "users_role_insert_check", "users_role_update_check",
-    "users_boolean_insert_check", "users_boolean_update_check",
-    "app_settings_boolean_update_check",
-}
-
-V2_TRIGGERS = {
-    "app_settings_boolean_insert_check",
-    "api_harness_jobs_boolean_insert_check", "api_harness_jobs_boolean_update_check",
-    "workflow_profiles_boolean_insert_check", "workflow_profiles_boolean_update_check",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationCount:
@@ -109,11 +87,7 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
             "source_sha256", "target_sha256", "verified_at",
         }
     _verify_columns(connection, required_columns)
-    indexes = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    triggers = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
-    required_triggers = V1_TRIGGERS | (V2_TRIGGERS if expected_version >= 2 else set())
-    if not REQUIRED_INDEXES <= indexes or not required_triggers <= triggers:
-        raise MigrationStateError("required database structure is missing indexes or triggers")
+    verify_required_schema(connection, expected_version)
     if expected_version >= 2:
         _verify_reconciliation(connection)
 
