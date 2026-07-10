@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.v2.models import ApiHarnessJobRecord, AppSetting, Base, User, utc_now
 from app.v2.migrations.runner import MigrationRequest, run_migrations
 from app.v2.security import hash_password
+from app.v2.services.evaluation_store import reevaluate_all_plan_versions
 
 is_sqlite_database = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False, "timeout": 30} if is_sqlite_database else {}
@@ -50,6 +51,8 @@ def init_database() -> None:
     )
     with SessionLocal() as db:
         _mark_interrupted_jobs_stale(db)
+        _ensure_admin_facilities(db)
+        reevaluate_all_plan_versions(db, "startup")
         db.commit()
 
 
@@ -80,9 +83,10 @@ def _ensure_bootstrap_admin(db: Session) -> None:
             password_hash=hash_password(settings.bootstrap_admin_password),
             role="admin",
             is_active=True,
-            must_reset_password=False,
+            must_reset_password=True,
             failed_login_attempts=0,
             is_locked=False,
+            auth_state="bootstrap_required",
         )
     )
 
@@ -100,6 +104,18 @@ def _mark_interrupted_jobs_stale(db: Session) -> None:
         row.status = "stale_or_interrupted"
         row.failed_at = utc_now()
         row.updated_at = utc_now()
+
+
+def _ensure_admin_facilities(db: Session) -> None:
+    db.execute(
+        text(
+            """INSERT OR IGNORE INTO user_facilities(user_id,facility_id,assigned_by_user_id,assigned_at)
+            SELECT administrator.id,facility.id,administrator.id,:assigned_at
+            FROM users administrator CROSS JOIN facilities facility
+            WHERE administrator.role='admin' AND facility.is_active=1"""
+        ),
+        {"assigned_at": utc_now().isoformat()},
+    )
 
 
 def get_db() -> Iterator[Session]:

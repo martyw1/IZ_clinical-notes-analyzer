@@ -1,57 +1,36 @@
 [CmdletBinding()]
 param(
-    [string]$Value = ''
+    [string]$Value = '',
+    [string]$AppDataRoot = (Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer')
 )
 
 $ErrorActionPreference = 'Stop'
-$AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
 $EnvFile = Join-Path $AppDataRoot '.env'
-
-function New-RandomValue {
-    param([int]$Length = 24)
-    $alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_!@#$%+=' 
-    $bytes = New-Object byte[] $Length
-    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $rng.GetBytes($bytes) }
-    finally {
-        if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() }
-    }
-    return -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
-}
+$RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$PythonExe = Join-Path $RootDir 'backend\.venv\Scripts\python.exe'
 
 if (!(Test-Path $EnvFile)) {
     throw "Local settings file was not found at $EnvFile. Start the app once to create local settings, then run this utility again."
 }
 
 if (!$Value) {
-    $Value = New-RandomValue -Length 24
+    $secureValue = Read-Host 'Enter a temporary administrator password' -AsSecureString
+    $credential = [System.Net.NetworkCredential]::new('', $secureValue)
+    $Value = $credential.Password
 }
-
-$lines = Get-Content -Path $EnvFile
-$foundValue = $false
-$foundReset = $false
-$updated = foreach ($line in $lines) {
-    if ($line -match '^BOOTSTRAP_ADMIN_PASSWORD=') {
-        $foundValue = $true
-        "BOOTSTRAP_ADMIN_PASSWORD=$Value"
-    }
-    elseif ($line -match '^RESET_BOOTSTRAP_ADMIN_ON_STARTUP=') {
-        $foundReset = $true
-        'RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true'
-    }
-    else { $line }
+if (!(Test-Path $PythonExe)) {
+    throw "Backend runtime was not found at $PythonExe."
 }
-if (-not $foundValue) { $updated += "BOOTSTRAP_ADMIN_PASSWORD=$Value" }
-if (-not $foundReset) { $updated += 'RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true' }
-
-$backup = "$EnvFile.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-Copy-Item -Path $EnvFile -Destination $backup -Force
-$updated | Set-Content -Path $EnvFile -Encoding UTF8
+$env:IZ_CNA_ENV_FILE = $EnvFile
+$env:IZ_CNA_LOCAL_APP_DATA_DIR = $AppDataRoot
+$env:PYTHONPATH = Join-Path $RootDir 'backend'
+$Value | & $PythonExe -m app.v2.local_admin_recovery
+if ($LASTEXITCODE -ne 0) {
+    throw 'Local administrator recovery failed.'
+}
 
 Write-Host ''
-Write-Host 'Local admin access value updated.' -ForegroundColor Green
+Write-Host 'Local administrator recovery completed and audited.' -ForegroundColor Green
 Write-Host 'Username: admin'
-Write-Host "New value: $Value"
 Write-Host ''
-Write-Host 'Restart the app, then sign in locally as admin.'
-Write-Host "Backup created: $backup"
+Write-Host 'Sign in with the temporary password, then complete the required password change.'

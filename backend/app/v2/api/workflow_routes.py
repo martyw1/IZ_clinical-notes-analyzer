@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.v2.api.deps import AdminUser, DbSession, ManagerUser
+from app.v2.api.deps import AdminUser, DbSession
 from app.v2.api.models import WorkflowProfileCreate, WorkflowProfileOut, WorkflowProfileVersionOut
 from app.v2.models import WorkflowProfile, WorkflowProfileVersion
 from app.v2.services.audit_store import record_audit_event
@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/api/workflow-definitions", response_model=tuple[WorkflowProfileOut, ...])
-def list_workflow_profiles(_: ManagerUser, db: DbSession) -> tuple[WorkflowProfileOut, ...]:
+def list_workflow_profiles(_: AdminUser, db: DbSession) -> tuple[WorkflowProfileOut, ...]:
     profiles = db.execute(select(WorkflowProfile).where(WorkflowProfile.is_active.is_(True)).order_by(WorkflowProfile.display_name)).scalars().all()
     return tuple(_profile_out(profile, db) for profile in profiles)
 

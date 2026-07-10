@@ -50,7 +50,7 @@ def test_return_for_correction_creates_a_counselor_queue_item_and_submission_res
     returned = client.post(
         "/api/v2/treatment-plans/951/manager-actions",
         headers=admin_headers,
-        json={"criterion_id": "confirm_current_loc", "action": "return_for_correction", "comment": "Confirm the current LOC source.", "override_reason": ""},
+        json={"criterion_id": "confirm_current_loc", "action": "return_for_correction", "comment": "Confirm the current LOC source.", "override_reason": "", "assigned_counselor_username": "counselor"},
     )
     assert returned.status_code == 200
 
@@ -68,6 +68,27 @@ def test_return_for_correction_creates_a_counselor_queue_item_and_submission_res
         }
     ]
 
+    other = client.post(
+        "/api/users",
+        headers=admin_headers,
+        json={"username": "other-counselor", "full_name": "Other Synthetic Counselor", "role": "counselor", "password": "OtherCounselorPass1"},
+    )
+    assert other.status_code == 200
+    other_login = client.post("/api/auth/login", json={"username": "other-counselor", "password": "OtherCounselorPass1"})
+    other_headers = {"Authorization": f"Bearer {other_login.json()['access_token']}"}
+    assert client.post(
+        "/api/users/me/change-password",
+        headers=other_headers,
+        json={"current_password": "OtherCounselorPass1", "new_password": "OtherCounselorPass2"},
+    ).status_code == 200
+    assert client.get("/api/v2/corrections", headers=other_headers).json()["items"] == []
+    cross_counselor = client.post(
+        "/api/v2/treatment-plans/951/correction-submissions",
+        headers=other_headers,
+        json={"criterion_id": "confirm_current_loc", "comment": "Cross-counselor submission must fail."},
+    )
+    assert cross_counselor.status_code == 403
+
     denied = client.post(
         "/api/v2/treatment-plans/951/manager-actions",
         headers=counselor_headers,
@@ -75,7 +96,7 @@ def test_return_for_correction_creates_a_counselor_queue_item_and_submission_res
     )
     assert denied.status_code == 403
     audit = client.get("/api/audit/logs", headers=admin_headers).json()["items"]
-    assert any(item["action"] == "manager.criterion.override.denied" and item["outcome_status"] == "denied" for item in audit)
+    assert any(item["action"] == "authorization.denied" and item["outcome_status"] == "denied" for item in audit)
 
     submitted = client.post(
         "/api/v2/treatment-plans/951/correction-submissions",

@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import hashlib
+from dataclasses import dataclass
 from typing import Final
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.v2.domain.schemas import JsonValue
-from app.v2.models import TreatmentPlanManagerAction, User
+from app.v2.models import TreatmentPlanManagerAction, User, utc_now
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectionAssignmentError(RuntimeError):
+    reason: str
+
+    def __str__(self) -> str:
+        return self.reason
 
 ACTION_STATUS_LABELS: Final = {
     "approve": "Approved",
@@ -96,6 +106,116 @@ def correction_is_open(db: Session, *, patient_id: str, criterion_id: str) -> bo
         correction["patient_id"] == patient_id and correction["criterion_id"] == criterion_id
         for correction in open_correction_dicts(db)
     )
+
+
+def save_returned_correction_work_item(
+    db: Session,
+    *,
+    patient_id: str,
+    criterion_id: str,
+    counselor_username: str,
+    actor: User,
+) -> None:
+    rows = db.execute(
+        text(
+            """SELECT DISTINCT plan.id,counselor.id FROM treatment_plan_versions plan
+            JOIN patients patient ON patient.id=plan.patient_id
+            JOIN users counselor ON counselor.role='counselor'
+            LEFT JOIN patient_assignments assignment
+                ON assignment.patient_id=patient.id AND assignment.counselor_user_id=counselor.id
+                AND assignment.is_active=1
+            WHERE patient.canonical_client_id=:patient_id
+                AND ((:username<>'' AND counselor.username=:username) OR (:username='' AND assignment.patient_id IS NOT NULL))
+            ORDER BY plan.version_ordinal DESC,plan.id DESC LIMIT 2"""
+        ),
+        {"username": counselor_username, "patient_id": patient_id},
+    ).all()
+    if len(rows) != 1:
+        raise CorrectionAssignmentError("Exactly one assigned counselor is required")
+    row = rows[0]
+    created_at = utc_now().isoformat()
+    disposition = db.execute(
+        text(
+            """INSERT INTO manager_dispositions(
+                plan_version_id,criterion_id,status,comment,actor_user_id,created_at
+            ) VALUES(:plan_version_id,:criterion_id,'return_for_correction','',:actor_id,:created_at)"""
+        ),
+        {
+            "plan_version_id": int(row[0]),
+            "criterion_id": criterion_id,
+            "actor_id": actor.id,
+            "created_at": created_at,
+        },
+    )
+    idempotency_key = hashlib.sha256(
+        f"{row[0]}:{criterion_id}:{row[1]}:{created_at}".encode("utf-8")
+    ).hexdigest()
+    db.execute(
+        text(
+            """INSERT INTO correction_work_items(
+                plan_version_id,criterion_id,disposition_id,assigned_counselor_user_id,status,opened_at,idempotency_key
+            ) VALUES(:plan_version_id,:criterion_id,:disposition_id,:counselor_id,'open',:opened_at,:idempotency_key)"""
+        ),
+        {
+            "plan_version_id": int(row[0]),
+            "criterion_id": criterion_id,
+            "disposition_id": int(disposition.lastrowid),
+            "counselor_id": int(row[1]),
+            "opened_at": created_at,
+            "idempotency_key": idempotency_key,
+        },
+    )
+    db.commit()
+
+
+def correction_work_item_is_open_for(
+    db: Session,
+    *,
+    patient_id: str,
+    criterion_id: str,
+    counselor_user_id: int,
+) -> bool:
+    row = db.execute(
+        text(
+            """SELECT correction.id FROM correction_work_items correction
+            JOIN treatment_plan_versions plan ON plan.id=correction.plan_version_id
+            JOIN patients patient ON patient.id=plan.patient_id
+            WHERE patient.canonical_client_id=:patient_id AND correction.criterion_id=:criterion_id
+                AND correction.assigned_counselor_user_id=:counselor_id
+                AND correction.status IN ('open','returned') LIMIT 1"""
+        ),
+        {"patient_id": patient_id, "criterion_id": criterion_id, "counselor_id": counselor_user_id},
+    ).first()
+    return row is not None
+
+
+def close_correction_work_item(
+    db: Session,
+    *,
+    patient_id: str,
+    criterion_id: str,
+    counselor_user_id: int,
+) -> None:
+    db.execute(
+        text(
+            """UPDATE correction_work_items SET status='submitted',closed_at=:closed_at
+            WHERE id IN (
+                SELECT correction.id FROM correction_work_items correction
+                JOIN treatment_plan_versions plan ON plan.id=correction.plan_version_id
+                JOIN patients patient ON patient.id=plan.patient_id
+                WHERE patient.canonical_client_id=:patient_id AND correction.criterion_id=:criterion_id
+                    AND correction.assigned_counselor_user_id=:counselor_id
+                    AND correction.status IN ('open','returned')
+            )"""
+        ),
+        {
+            "closed_at": utc_now().isoformat(),
+            "patient_id": patient_id,
+            "criterion_id": criterion_id,
+            "counselor_id": counselor_user_id,
+        },
+    )
+    db.commit()
 
 
 def _manager_review_dict(row: TreatmentPlanManagerAction) -> dict[str, JsonValue]:

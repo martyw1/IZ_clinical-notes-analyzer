@@ -20,9 +20,21 @@ def _fresh_client(tmp_path: Path, monkeypatch) -> TestClient:
 
 
 def _auth_headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/api/auth/login", json={"username": "admin", "password": "StrongLocalPass1"})
+    password = "StrongLocalPass1"
+    response = client.post("/api/auth/login", json={"username": "admin", "password": password})
+    if response.status_code == 401:
+        password = "StrongLocalActivePass2"
+        response = client.post("/api/auth/login", json={"username": "admin", "password": password})
     assert response.status_code == 200
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    if response.json().get("must_reset_password"):
+        changed = client.post(
+            "/api/users/me/change-password",
+            headers=headers,
+            json={"current_password": password, "new_password": "StrongLocalActivePass2"},
+        )
+        assert changed.status_code == 200
+    return headers
 
 
 def test_manual_upload_patient_id_mismatch_requires_confirmed_correction(tmp_path, monkeypatch) -> None:

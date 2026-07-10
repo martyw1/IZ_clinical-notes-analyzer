@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, ConfigDict
 
 from app.v2.api.deps import DbSession, ManagerUser
+from app.v2.authorization import patient_scope, require_patient_manager
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.manual_file_parser import aggregate_from_manual_file
@@ -73,6 +74,8 @@ def import_treatment_plan_aggregate(
     user: ManagerUser,
     db: DbSession,
 ) -> ManualTreatmentPlanImportOut:
+    if patient_scope(db, aggregate.patient_id) is not None:
+        require_patient_manager(db, user, aggregate.patient_id)
     if aggregate.source_mode != "manual_upload":
         raise HTTPException(status_code=400, detail="Manual aggregate uploads must use source_mode=manual_upload")
     row = save_treatment_plan_aggregate(db, aggregate, user)
@@ -116,6 +119,8 @@ def import_treatment_plan_file(
         raise HTTPException(status_code=409, detail=exc.detail) from exc
     except ManualFileParseError as exc:
         raise HTTPException(status_code=400, detail=exc.detail) from exc
+    if patient_scope(db, parsed.aggregate.patient_id) is not None:
+        require_patient_manager(db, user, parsed.aggregate.patient_id)
     row = save_treatment_plan_aggregate(db, parsed.aggregate, user)
     source_file = archive_manual_source_file(
         db,
@@ -193,6 +198,7 @@ def delete_treatment_plan_source_document(
     user: ManagerUser,
     db: DbSession,
 ) -> ManualSourceFileDeleteOut:
+    require_patient_manager(db, user, patient_id)
     try:
         deleted = delete_manual_source_file(db, patient_id, source_file_id)
     except FileNotFoundError as exc:
@@ -221,6 +227,7 @@ def download_treatment_plan_source_document(
     user: ManagerUser,
     db: DbSession,
 ) -> Response:
+    require_patient_manager(db, user, patient_id)
     try:
         download = download_manual_source_file(db, patient_id, source_file_id)
     except FileNotFoundError as exc:

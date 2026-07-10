@@ -7,6 +7,7 @@ type FetchState = {
   readonly role: Role
   readonly failLogin?: boolean
   readonly workflowCreateFails?: boolean
+  readonly mustResetPassword?: boolean
 }
 
 export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Workflow Profiles', 'Forensic Logs', 'Settings', 'Help'] as const
@@ -14,16 +15,17 @@ export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual U
 const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
-  const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false
+  const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let passwordResetRequired = state.mustResetPassword ?? false
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const path = pathFrom(input)
 
     if (path === '/api/auth/login' && method === 'POST') {
       if (state.failLogin) return jsonResponse({ detail: 'Invalid credentials' }, 401)
-      return jsonResponse({ access_token: 'token-from-backend', token_type: 'bearer', must_reset_password: false })
+      return jsonResponse({ access_token: 'token-from-backend', token_type: 'bearer', must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     }
-    if (path === '/api/users/me') return jsonResponse(userPayload(state.role))
+    if (path === '/api/users/me/change-password' && method === 'POST') { passwordResetRequired = false; return jsonResponse({ ...userPayload(state.role), auth_state: 'active', must_reset_password: false }) }
+    if (path === '/api/users/me') return jsonResponse({ ...userPayload(state.role), must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     if (path === '/api/v2/navigation') return jsonResponse({ items: state.role === 'admin' ? adminNavigation : counselorNavigation, active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return jsonResponse(dashboardPayload())
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload())
@@ -61,6 +63,9 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/users' && method === 'POST') return jsonResponse({ ...userPayload('counselor'), username: 'newcounselor', full_name: 'New Counselor', must_reset_password: true })
     if (path === '/api/users/2/reset-password' && method === 'POST') return jsonResponse({ ...userPayload('counselor'), must_reset_password: true })
     if (path === '/api/users') return jsonResponse([userPayload('admin'), userPayload('counselor')])
+    if (path === '/api/facilities') return jsonResponse([{ id: 10, facility_key: 'r3-default', display_name: 'R3 Default Facility', timezone: 'America/New_York', is_active: true }])
+    if (path === '/api/users/2/facilities/10' && method === 'PUT') return jsonResponse([10])
+    if (path === '/api/patient-assignments/812/counselor' && method === 'PUT') return jsonResponse({ patient_id: '812', counselor_username: 'counselor', is_active: true })
     if (path === '/api/workflow-definitions' && method === 'POST' && state.workflowCreateFails) return jsonResponse({ detail: 'Workflow key already exists' }, 409)
     if (path === '/api/workflow-definitions') return jsonResponse([workflowProfilePayload(workflowProfileStatus)])
     if (path === '/api/workflow-definitions/7/versions/71/publish' && method === 'POST') {
@@ -109,6 +114,9 @@ function userPayload(role: Role) {
     is_active: true,
     is_locked: false,
     must_reset_password: false,
+    auth_state: 'active',
+    locked_until: null,
+    facility_ids: role === 'admin' ? [10] : [],
     last_login_at: null,
     created_at: '2026-07-08T09:00:00Z',
   }

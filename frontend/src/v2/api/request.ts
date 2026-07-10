@@ -2,7 +2,7 @@ import { ApiRequestError, readRecordPayload, readString } from './json'
 
 type RequestOptions = {
   readonly token?: string
-  readonly method?: 'DELETE' | 'GET' | 'POST' | 'PATCH'
+  readonly method?: 'DELETE' | 'GET' | 'POST' | 'PUT' | 'PATCH'
   readonly body?: Record<string, unknown>
   readonly formBody?: FormData
 }

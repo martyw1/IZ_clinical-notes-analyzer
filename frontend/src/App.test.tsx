@@ -19,6 +19,22 @@ afterEach(() => {
 })
 
 describe('V2 active app shell', () => {
+  it('requires first-run password change before rendering the workspace', async () => {
+    const fetchMock = setupFetch({ role: 'admin', mustResetPassword: true })
+    render(<App />)
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'SyntheticBootstrapPass123' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+
+    expect(await screen.findByRole('heading', { name: 'Set a new password' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /primary navigation/i })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'SyntheticBootstrapPass123' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'SyntheticActivePass456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Update password' }))
+
+    await screen.findByRole('navigation', { name: /primary navigation/i })
+    expect(fetchMock).toHaveBeenCalledWith('/api/users/me/change-password', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('rejects invalid credentials without entering the app shell', async () => {
     setupFetch({ role: 'admin', failLogin: true })
     render(<App />)
@@ -185,6 +201,14 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'TemporaryPass1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create user' }))
     expect(await screen.findByRole('status')).toHaveTextContent('User created; password change is required')
+    fireEvent.change(screen.getByLabelText('Facility assignment user'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Facility'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign facility' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Facility assigned.')
+    fireEvent.change(screen.getByLabelText('Patient ID assignment'), { target: { value: '812' } })
+    fireEvent.change(screen.getByLabelText('Counselor assignment'), { target: { value: 'counselor' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Patient assigned to counselor.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()

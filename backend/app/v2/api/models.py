@@ -18,6 +18,7 @@ class TokenOut(V2Model):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     must_reset_password: bool = False
+    auth_state: Literal["password_change_required", "active"]
 
 
 class ReadinessCheck(V2Model):
@@ -42,6 +43,9 @@ class UserOut(V2Model):
     is_active: bool
     is_locked: bool = False
     must_reset_password: bool = False
+    auth_state: Literal["bootstrap_required", "password_change_required", "active", "locked_until"]
+    locked_until: str | None = None
+    facility_ids: tuple[int, ...] = ()
     last_login_at: str | None = None
     created_at: str | None = None
 
@@ -69,6 +73,20 @@ class UserPasswordResetAdmin(V2Model):
 class UserPasswordChange(V2Model):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=1)
+
+
+class FacilityOut(V2Model):
+    id: int
+    facility_key: str
+    display_name: str
+    timezone: str
+    is_active: bool
+
+
+class AssignmentOut(V2Model):
+    patient_id: str
+    counselor_username: str
+    is_active: bool
 
 
 class DashboardSourceCardOut(V2Model):
@@ -171,6 +189,7 @@ class ManagerActionInput(V2Model):
     action: Literal["approve", "return_for_correction", "override", "comment"]
     comment: str = ""
     override_reason: str = ""
+    assigned_counselor_username: str = ""
 
 
 class CorrectionSubmissionInput(V2Model):

@@ -1,6 +1,7 @@
 import type { TreatmentPlanStatus } from '../types/treatmentPlan'
 
 export type UserRole = 'admin' | 'office_manager' | 'counselor' | 'viewer'
+export type AuthState = 'bootstrap_required' | 'password_change_required' | 'active' | 'locked_until'
 
 export type UserProfile = {
   readonly id: number
@@ -10,11 +11,23 @@ export type UserProfile = {
   readonly isActive: boolean
   readonly isLocked: boolean
   readonly mustResetPassword: boolean
+  readonly authState: AuthState
+  readonly lockedUntil: string
+  readonly facilityIds: readonly number[]
 }
 
 export type LoginResult = {
   readonly accessToken: string
   readonly mustResetPassword: boolean
+  readonly authState: 'password_change_required' | 'active'
+}
+
+export type Facility = {
+  readonly id: number
+  readonly facilityKey: string
+  readonly displayName: string
+  readonly timezone: string
+  readonly isActive: boolean
 }
 
 export type NavigationResult = {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { createUser, listUsers, resetUserPassword } from '../api/client'
+import { assignPatient, assignUserFacility, createUser, listFacilities, listUsers, resetUserPassword } from '../api/client'
 import { ApiRequestError } from '../api/json'
-import type { UserProfile } from '../api/types'
+import type { Facility, UserProfile } from '../api/types'
 
 type UsersPageProps = {
   readonly token: string
@@ -15,6 +15,7 @@ function messageForError(error: unknown): string {
 
 export function UsersPage({ token }: UsersPageProps) {
   const [users, setUsers] = useState<readonly UserProfile[]>([])
+  const [facilities, setFacilities] = useState<readonly Facility[]>([])
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
@@ -22,8 +23,11 @@ export function UsersPage({ token }: UsersPageProps) {
     let cancelled = false
     async function loadUsers() {
       try {
-        const payload = await listUsers(token)
-        if (!cancelled) setUsers(payload)
+        const [userPayload, facilityPayload] = await Promise.all([listUsers(token), listFacilities(token)])
+        if (!cancelled) {
+          setUsers(userPayload)
+          setFacilities(facilityPayload)
+        }
       } catch (loadError) {
         if (!cancelled) setError(messageForError(loadError))
       }
@@ -62,6 +66,21 @@ export function UsersPage({ token }: UsersPageProps) {
     } catch (resetError) { setMessage(messageForError(resetError)) }
   }
 
+  async function assignFacility(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    await assignUserFacility(token, Number(form.get('facilityUserId')), Number(form.get('facilityId')))
+    await refreshUsers()
+    setMessage('Facility assigned.')
+  }
+
+  async function assignPatientToCounselor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    await assignPatient(token, String(form.get('patientId') ?? ''), String(form.get('counselorUsername') ?? ''))
+    setMessage('Patient assigned to counselor.')
+  }
+
   return (
     <section className='panel'>
       <p className='eyebrow'>Users</p>
@@ -73,6 +92,18 @@ export function UsersPage({ token }: UsersPageProps) {
         <label>Temporary password<input name='password' type='password' autoComplete='new-password' /></label>
         <button type='submit'>Create user</button>
       </form>
+      <form onSubmit={assignFacility} className='settings-form'>
+        <h3>Facility assignment</h3>
+        <label>Facility assignment user<select name='facilityUserId'>{users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></label>
+        <label>Facility<select name='facilityId'>{facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.displayName}</option>)}</select></label>
+        <button type='submit'>Assign facility</button>
+      </form>
+      <form onSubmit={assignPatientToCounselor} className='settings-form'>
+        <h3>Patient assignment</h3>
+        <label>Patient ID assignment<input name='patientId' /></label>
+        <label>Counselor assignment<select name='counselorUsername'>{users.filter((user) => user.role === 'counselor').map((user) => <option key={user.id} value={user.username}>{user.username}</option>)}</select></label>
+        <button type='submit'>Assign patient</button>
+      </form>
       <table>
         <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Password reset</th><th>Action</th></tr></thead>
         <tbody>
@@ -80,7 +111,7 @@ export function UsersPage({ token }: UsersPageProps) {
             <tr key={user.id}>
               <td>{user.fullName}</td>
               <td>{user.role}</td>
-              <td>{user.isActive && !user.isLocked ? 'active' : 'blocked'}</td>
+              <td>{user.authState}</td>
               <td>{user.mustResetPassword ? 'required' : 'not required'}</td>
               <td><button type='button' className='secondary-button' onClick={() => void resetPassword(user)} disabled={user.username === 'admin'}>Reset password</button></td>
             </tr>
