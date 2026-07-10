@@ -4,7 +4,7 @@ Initial date: 2026-06-04
 
 Latest update: 2026-07-10
 
-Scope: historical S1 cleanup records plus later main-branch legacy Docker/PostgreSQL removal records.
+Scope: historical cleanup records, legacy Docker/PostgreSQL removal records, and S1 ordinary repository/release containment.
 
 ## 2026-07-10 S0 Incident Containment (No Removals)
 
@@ -15,6 +15,21 @@ The authoritative exposure categories, counts, blob IDs, credential commit metad
 The S0 verifier is pinned to the approved pre-removal baseline commit and exact six-object metadata inventory. It must not derive its expected exposure set from current `HEAD`; otherwise an empty, incomplete, extra, or substituted inventory could be reported as successful after later containment work.
 
 Ordinary current-tree/release-scope removal is deferred to S1 and must be logged here only after the S0 gate passes. Any later current-tree deletion is containment, not Git-history remediation. Destructive history rewriting and any coordinated remote update remain separately gated by credential rotation, downstream-owner inventory, evidence retention, and explicit user approval.
+
+## 2026-07-10 S1 Ordinary Repository And Release Containment
+
+After the pinned S0 verifier passed against baseline commit `2f2b656d2d13fca48c56ea6f33d63b83c2cd9d21`, the six confirmed current-tree clinical-export artifacts were removed as one path category without opening, printing, or copying their filenames or contents. The removal target was resolved to an absolute path, verified to be a non-symbolic-link descendant of this worktree, and matched the exact six tracked-item count before the confined recursive removal.
+
+Safety and reference proof:
+
+- The approved S0 record classifies all six objects as clinical exports, records their metadata-only object IDs and sizes, and requires their ordinary current-tree/release removal at this gate.
+- A metadata-only current-tree count matched all six tracked artifacts before removal.
+- A repository reference search excluding the artifact category found only the S0 incident record and its pinned metadata verifier. No active backend, frontend, configuration, launch, test, or packaging consumer referenced the removed category.
+- Existing Windows packaging already excluded export directories. The shared scanner now also rejects the category in staged/untracked repository candidates, copied release trees, and release zip entries without reporting matched paths.
+
+This is ordinary current-tree and release-scope containment only. The six objects remain reachable in Git history until the separately documented rotation, downstream-owner, evidence-retention, explicit-approval, coordinated-rewrite, and post-rewrite gates are satisfied. No history rewrite or force-push occurred.
+
+Ignore and scan hardening now covers clinical exports, local credentials/configuration, databases, logs, uploads, reports, caches, virtual environments, dependency trees, and local `.omo` evidence/ledger data. Synthetic canaries exercise each category plus malformed paths, dirty and stale repository state, misleading success output, and privacy-safe error reporting. Evidence is stored only under ignored `.omo/evidence/task-1b-v2-production-readiness/` and is never packaged.
 
 ## Policy
 

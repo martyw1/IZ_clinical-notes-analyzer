@@ -3,13 +3,20 @@ __pycache__/
 .DS_Store
 .venv/
 node_modules/
+.cache/
 frontend/dist/
 dist/
 *.db
 *.sqlite
 *.sqlite3
 .env
+.env.*
+!.env.example
+!**/.env.example
+*.local.*
 uploads/
+exports/
+reports/
 logs/
 *.log
 *.tmp
@@ -19,12 +26,15 @@ coverage/
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.omo/
 frontend/coverage/
 frontend/test-results/
 frontend/playwright-report/
 frontend/.agents/
 
 .venv-*
+venv/
 backend/.venv/
 backend/.venv-*
 
@@ -36,4 +46,7 @@ backend/.venv-*
 /walkthroughs/
 
 .alleva.local.ps1
+App Credentials Info.md
+Test-AllevaApi.ps1
 alleva-api-test-logs/
+api-connectivity-reports/

@@ -14,6 +14,7 @@ $AppDir = Join-Path $PackageDir 'app'
 $VenvDir = Join-Path $RootDir 'backend\.venv'
 $VenvPython = Join-Path $VenvDir 'Scripts\python.exe'
 $LatestPathsFile = Join-Path $ReleaseRoot 'latest-release-paths.txt'
+. (Join-Path $RootDir 'scripts\release-safety.ps1')
 
 function Write-Step($Message) {
     Write-Host "[setup] $Message"
@@ -134,6 +135,7 @@ function Copy-RepoContent {
         'node_modules',
         '.pytest_cache',
         '.tmp',
+        '.cache',
         'test-results',
         'playwright-report',
         '.mypy_cache',
@@ -142,12 +144,16 @@ function Copy-RepoContent {
         'logs',
         'uploads',
         'exports',
+        'reports',
+        'venv',
         'api-connectivity-reports',
         'alleva-api-test-logs'
     )
     $excludeFiles = @(
+        '.git',
         '.env',
         '.env.*',
+        '*.local.*',
         '.alleva.local.ps1',
         'App Credentials Info.md',
         'Test-AllevaApi.ps1',
@@ -324,63 +330,7 @@ function Assert-RelativePathAllowed {
         [string]$RelativePath,
         [string]$Source
     )
-    $relative = ($RelativePath -replace '/', '\').Trim('\')
-    if (-not $relative) { return }
-    $lower = $relative.ToLowerInvariant()
-    $parts = @($lower.Split([char[]]@('\', '/'), [System.StringSplitOptions]::RemoveEmptyEntries))
-    $fileName = [System.IO.Path]::GetFileName($lower)
-    $forbiddenDirs = @(
-        '.git',
-        '.codegraph',
-        '.omo',
-        '.codex',
-        '.github',
-        '.agents',
-        '.tmp',
-        'test-results',
-        'playwright-report',
-        '.venv',
-        'node_modules',
-        '.pytest_cache',
-        '.mypy_cache',
-        '.ruff_cache',
-        'htmlcov',
-        'coverage',
-        'logs',
-        'uploads',
-        'exports',
-        'api-connectivity-reports',
-        'alleva-api-test-logs',
-        'example-treatment-plans',
-        '__pycache__'
-    )
-    foreach ($part in $parts) {
-        if ($forbiddenDirs -contains $part) {
-            throw "$Source contains forbidden folder '$part' at $relative."
-        }
-    }
-    if ($lower -match '(^|\\)backend\\\.venv($|\\)') {
-        throw "$Source contains backend\.venv at $relative."
-    }
-    if (
-        $fileName -eq '.env' -or
-        $fileName.StartsWith('.env.') -or
-        $fileName -eq '.alleva.local.ps1' -or
-        $fileName -eq 'app credentials info.md' -or
-        $fileName -eq 'test-allevaapi.ps1' -or
-        $fileName -like '*credential*' -or
-        $fileName -like '*secret*' -or
-        $fileName -like '*token*' -or
-        $fileName -like '*.sqlite' -or
-        $fileName -like '*.sqlite3' -or
-        $fileName -like '*.db' -or
-        $fileName -like '*.log' -or
-        $fileName -like '*.tmp' -or
-        $fileName -like '*.bak' -or
-        $fileName -like '*.pyc'
-    ) {
-        throw "$Source contains forbidden file at $relative."
-    }
+    Assert-SafeRelativePath -RelativePath $RelativePath -Source $Source
 }
 
 function Assert-NoForbiddenReleaseItems {
@@ -853,6 +803,8 @@ try {
     Ensure-BackendBuildEnvironment
     Invoke-BackendTests
     Invoke-FrontendBuild
+    Assert-NoForbiddenRepositoryIndexItems -RepositoryRoot $RootDir -AllowDirty
+    Write-Ok 'Repository staged/untracked safety scan passed.'
 
     Write-Build "Creating release package at $PackageDir"
     New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
