@@ -25,7 +25,8 @@ def correction_queue(user: CurrentUser, db: DbSession) -> CorrectionQueueOut:
         deny(db, user, family="correction_queue")
     allowed_ids = accessible_patient_ids(db, user)
     items = []
-    for correction in open_correction_dicts(db):
+    assigned_counselor_user_id = user.id if user.role == Role.COUNSELOR.value else None
+    for correction in open_correction_dicts(db, assigned_counselor_user_id=assigned_counselor_user_id):
         if str(correction["patient_id"]) not in allowed_ids:
             continue
         aggregate = treatment_plan_aggregate_for_patient(db, str(correction["patient_id"]))
@@ -37,6 +38,7 @@ def correction_queue(user: CurrentUser, db: DbSession) -> CorrectionQueueOut:
         )
         items.append(
             CorrectionQueueItemOut(
+                work_item_id=int(correction["work_item_id"]), plan_version_id=int(correction["plan_version_id"]),
                 patient_id=str(correction["patient_id"]), patient_display_label=aggregate.patient_display_label,
                 criterion_id=str(correction["criterion_id"]), criterion_title=title,
                 return_comment=str(correction["return_comment"]), returned_by_username=str(correction["returned_by_username"]),
@@ -55,17 +57,19 @@ def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
     if not correction_work_item_is_open_for(
         db,
+        work_item_id=payload.work_item_id,
         patient_id=patient_id,
         criterion_id=payload.criterion_id,
         counselor_user_id=user.id,
     ):
-        raise HTTPException(status_code=409, detail="No open correction return exists for this criterion")
+        deny(db, user, family="correction_submission", target_id=patient_id)
     saved = save_manager_action_record(
         db, patient_id=patient_id, criterion_id=payload.criterion_id, action="correction_submitted",
         comment=payload.comment.strip(), override_reason="", actor=user,
     )
     close_correction_work_item(
         db,
+        work_item_id=payload.work_item_id,
         patient_id=patient_id,
         criterion_id=payload.criterion_id,
         counselor_user_id=user.id,

@@ -11,18 +11,20 @@ from sqlalchemy.orm import Session
 from app.v2.db import get_db
 from app.v2.authorization import Role, require_role
 from app.v2.models import User
-from app.v2.security import decode_access_token
+from app.v2.security import decode_access_token, password_epoch
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 DbSession = Annotated[Session, Depends(get_db)]
 
 
 def current_user(request: Request, token: Annotated[str, Depends(oauth2_scheme)], db: DbSession) -> User:
-    username = decode_access_token(token)
-    if not username:
+    token_subject = decode_access_token(token)
+    if not token_subject:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    user = db.execute(select(User).where(User.username == token_subject.username)).scalar_one_or_none()
     if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if token_subject.password_epoch != password_epoch(user.password_changed_at):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account inactive")

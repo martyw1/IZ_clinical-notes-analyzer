@@ -40,7 +40,12 @@ def _create_user(client: TestClient, headers: dict[str, str], username: str, rol
         json={"current_password": "SyntheticTemporaryPass123", "new_password": "SyntheticActivePass456"},
     )
     assert changed.status_code == 200, changed.text
-    return int(created.json()["id"]), user_headers
+    active_login = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": "SyntheticActivePass456"},
+    )
+    assert active_login.status_code == 200, active_login.text
+    return int(created.json()["id"]), {"Authorization": f"Bearer {active_login.json()['access_token']}"}
 
 
 def test_first_run_transitions_bootstrap_to_password_change_to_active(tmp_path: Path, monkeypatch) -> None:
@@ -66,8 +71,14 @@ def test_first_run_transitions_bootstrap_to_password_change_to_active(tmp_path: 
     # Then: the account is active and both transitions are audited.
     assert changed.status_code == 200
     assert changed.json()["auth_state"] == "active"
-    assert client.get("/api/v2/dashboard", headers=headers).status_code == 200
-    audit = client.get("/api/audit/logs", headers=headers).json()["items"]
+    fresh = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "SyntheticActivePass456"},
+    )
+    assert fresh.status_code == 200
+    active_headers = {"Authorization": f"Bearer {fresh.json()['access_token']}"}
+    assert client.get("/api/v2/dashboard", headers=active_headers).status_code == 200
+    audit = client.get("/api/audit/logs", headers=active_headers).json()["items"]
     actions = {item["action"] for item in audit}
     assert {"auth.bootstrap.completed", "user.password.changed"} <= actions
 
@@ -302,6 +313,73 @@ def test_local_recovery_unlocks_admin_and_requires_password_change(tmp_path: Pat
 
     with SessionLocal() as db:
         assert db.query(AuditLog).filter(AuditLog.action == "auth.local_admin.recovered").count() == 1
+
+
+def test_self_password_change_invalidates_the_pre_rotation_bearer(tmp_path: Path, monkeypatch) -> None:
+    # Given: the bootstrap administrator has a bearer issued for the temporary password.
+    client = _fresh_client(tmp_path, monkeypatch)
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "StrongLocalPass1"},
+    )
+    assert login.status_code == 200
+    stale_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    # When: the administrator changes the password.
+    changed = client.post(
+        "/api/users/me/change-password",
+        headers=stale_headers,
+        json={"current_password": "StrongLocalPass1", "new_password": "SyntheticRotatedPass456"},
+    )
+    assert changed.status_code == 200
+
+    # Then: the pre-rotation bearer is rejected and a fresh login works.
+    assert client.get("/api/users/me", headers=stale_headers).status_code == 401
+    fresh = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "SyntheticRotatedPass456"},
+    )
+    assert fresh.status_code == 200
+    fresh_headers = {"Authorization": f"Bearer {fresh.json()['access_token']}"}
+    assert client.get("/api/users/me", headers=fresh_headers).status_code == 200
+    assert "password_changed_at" not in fresh.json()
+    assert "password_hash" not in fresh.json()
+
+
+def test_admin_reset_and_local_recovery_invalidate_pre_rotation_bearers(tmp_path: Path, monkeypatch) -> None:
+    # Given: active administrator and viewer sessions.
+    client = _fresh_client(tmp_path, monkeypatch)
+    admin_headers = _auth_headers(client)
+    viewer_id, viewer_headers = _create_user(client, admin_headers, "rotation-viewer", "viewer")
+
+    # When: an administrator resets the viewer password without requiring another reset.
+    reset = client.post(
+        f"/api/users/{viewer_id}/reset-password",
+        headers=admin_headers,
+        json={"new_password": "SyntheticAdminReset789", "require_reset_on_login": False},
+    )
+    assert reset.status_code == 200
+
+    # Then: the old viewer bearer is invalid and the reset credential obtains a valid session.
+    assert client.get("/api/users/me", headers=viewer_headers).status_code == 401
+    assert client.post(
+        "/api/auth/login",
+        json={"username": "rotation-viewer", "password": "SyntheticAdminReset789"},
+    ).status_code == 200
+
+    # When: the local recovery boundary replaces the administrator password.
+    from app.v2.local_admin_recovery import recover_local_admin
+
+    recover_local_admin("SyntheticRecoveryRotate8")
+
+    # Then: the old admin bearer is invalid and only a fresh recovery login succeeds.
+    assert client.get("/api/users/me", headers=admin_headers).status_code == 401
+    recovered = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "SyntheticRecoveryRotate8"},
+    )
+    assert recovered.status_code == 200
+    assert recovered.json()["auth_state"] == "password_change_required"
 
 
 def test_startup_and_rule_setting_updates_trigger_all_version_reevaluation(tmp_path: Path, monkeypatch) -> None:

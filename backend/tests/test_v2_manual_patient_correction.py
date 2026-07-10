@@ -34,7 +34,12 @@ def _auth_headers(client: TestClient) -> dict[str, str]:
             json={"current_password": password, "new_password": "StrongLocalActivePass2"},
         )
         assert changed.status_code == 200
-    return headers
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "StrongLocalActivePass2"},
+        )
+        assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def test_manual_upload_patient_id_mismatch_requires_confirmed_correction(tmp_path, monkeypatch) -> None:

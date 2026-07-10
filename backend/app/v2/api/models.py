@@ -193,11 +193,14 @@ class ManagerActionInput(V2Model):
 
 
 class CorrectionSubmissionInput(V2Model):
+    work_item_id: int
     criterion_id: str
     comment: str = Field(min_length=1)
 
 
 class CorrectionQueueItemOut(V2Model):
+    work_item_id: int
+    plan_version_id: int
     patient_id: str
     patient_display_label: str
     criterion_id: str

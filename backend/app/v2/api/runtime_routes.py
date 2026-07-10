@@ -164,6 +164,7 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Curr
                 db,
                 patient_id=patient_id,
                 criterion_id=payload.criterion_id,
+                comment=payload.comment,
                 counselor_username=payload.assigned_counselor_username.strip(),
                 actor=user,
             )

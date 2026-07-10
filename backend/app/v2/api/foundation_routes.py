@@ -120,7 +120,7 @@ def login(payload: LoginInput, db: DbSession) -> TokenOut:
         user.auth_state = "password_change_required"
         user.must_reset_password = True
     db.commit()
-    token = create_access_token(user.username)
+    token = create_access_token(user.username, user.password_changed_at)
     if user.auth_state == "password_change_required" and user.password_changed_at is None:
         record_audit_event(db, action="auth.bootstrap.completed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
     record_audit_event(db, action="auth.login.success", actor=user, target_entity_type="user", target_entity_id=str(user.id))
@@ -226,6 +226,7 @@ def admin_reset_password(user_id: int, payload: UserPasswordResetAdmin, actor: A
     if policy_error:
         raise HTTPException(status_code=400, detail=policy_error)
     target.password_hash = hash_password(payload.new_password)
+    target.password_changed_at = _utc_now()
     target.must_reset_password = payload.require_reset_on_login
     target.failed_login_attempts = 0
     target.is_locked = False

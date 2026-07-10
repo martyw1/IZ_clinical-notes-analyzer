@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -33,6 +34,7 @@ def recover_local_admin(new_password: str) -> None:
         if administrator is None or administrator.role != "admin":
             raise LocalAdminRecoveryError("Local administrator account is unavailable")
         administrator.password_hash = hash_password(new_password)
+        administrator.password_changed_at = datetime.now(timezone.utc)
         administrator.must_reset_password = True
         administrator.auth_state = "password_change_required"
         administrator.failed_login_attempts = 0

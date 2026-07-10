@@ -78,18 +78,37 @@ def manager_override_dicts_for_patient(db: Session, patient_id: str) -> tuple[di
     )
 
 
-def open_correction_dicts(db: Session) -> tuple[dict[str, JsonValue], ...]:
+def open_correction_dicts(
+    db: Session,
+    *,
+    assigned_counselor_user_id: int | None = None,
+) -> tuple[dict[str, JsonValue], ...]:
     rows = db.execute(
-        select(TreatmentPlanManagerAction).order_by(TreatmentPlanManagerAction.created_at.asc(), TreatmentPlanManagerAction.id.asc())
-    ).scalars()
-    latest_by_criterion: dict[tuple[str, str], TreatmentPlanManagerAction] = {}
-    for row in rows:
-        if row.action in WORKFLOW_STATE_ACTIONS:
-            latest_by_criterion[(row.patient_id, row.criterion_id)] = row
+        text(
+            """SELECT correction.id,correction.plan_version_id,patient.canonical_client_id,correction.criterion_id,
+            disposition.comment,manager.username,correction.opened_at
+            FROM correction_work_items correction
+            JOIN treatment_plan_versions plan ON plan.id=correction.plan_version_id
+            JOIN patients patient ON patient.id=plan.patient_id
+            JOIN manager_dispositions disposition ON disposition.id=correction.disposition_id
+            JOIN users manager ON manager.id=disposition.actor_user_id
+            WHERE correction.status IN ('open','returned')
+                AND (:counselor_id IS NULL OR correction.assigned_counselor_user_id=:counselor_id)
+            ORDER BY correction.opened_at ASC,correction.id ASC"""
+        ),
+        {"counselor_id": assigned_counselor_user_id},
+    ).all()
     return tuple(
-        _open_correction_dict(row)
-        for row in latest_by_criterion.values()
-        if row.action == "return_for_correction"
+        {
+            "work_item_id": int(row[0]),
+            "plan_version_id": int(row[1]),
+            "patient_id": str(row[2]),
+            "criterion_id": str(row[3]),
+            "return_comment": str(row[4]),
+            "returned_by_username": str(row[5]),
+            "returned_at": str(row[6]),
+        }
+        for row in rows
     )
 
 
@@ -113,6 +132,7 @@ def save_returned_correction_work_item(
     *,
     patient_id: str,
     criterion_id: str,
+    comment: str,
     counselor_username: str,
     actor: User,
 ) -> None:
@@ -138,11 +158,12 @@ def save_returned_correction_work_item(
         text(
             """INSERT INTO manager_dispositions(
                 plan_version_id,criterion_id,status,comment,actor_user_id,created_at
-            ) VALUES(:plan_version_id,:criterion_id,'return_for_correction','',:actor_id,:created_at)"""
+            ) VALUES(:plan_version_id,:criterion_id,'return_for_correction',:comment,:actor_id,:created_at)"""
         ),
         {
             "plan_version_id": int(row[0]),
             "criterion_id": criterion_id,
+            "comment": comment,
             "actor_id": actor.id,
             "created_at": created_at,
         },
@@ -171,6 +192,7 @@ def save_returned_correction_work_item(
 def correction_work_item_is_open_for(
     db: Session,
     *,
+    work_item_id: int,
     patient_id: str,
     criterion_id: str,
     counselor_user_id: int,
@@ -180,11 +202,12 @@ def correction_work_item_is_open_for(
             """SELECT correction.id FROM correction_work_items correction
             JOIN treatment_plan_versions plan ON plan.id=correction.plan_version_id
             JOIN patients patient ON patient.id=plan.patient_id
-            WHERE patient.canonical_client_id=:patient_id AND correction.criterion_id=:criterion_id
+            WHERE correction.id=:work_item_id AND patient.canonical_client_id=:patient_id
+                AND correction.criterion_id=:criterion_id
                 AND correction.assigned_counselor_user_id=:counselor_id
                 AND correction.status IN ('open','returned') LIMIT 1"""
         ),
-        {"patient_id": patient_id, "criterion_id": criterion_id, "counselor_id": counselor_user_id},
+        {"work_item_id": work_item_id, "patient_id": patient_id, "criterion_id": criterion_id, "counselor_id": counselor_user_id},
     ).first()
     return row is not None
 
@@ -192,6 +215,7 @@ def correction_work_item_is_open_for(
 def close_correction_work_item(
     db: Session,
     *,
+    work_item_id: int,
     patient_id: str,
     criterion_id: str,
     counselor_user_id: int,
@@ -203,13 +227,15 @@ def close_correction_work_item(
                 SELECT correction.id FROM correction_work_items correction
                 JOIN treatment_plan_versions plan ON plan.id=correction.plan_version_id
                 JOIN patients patient ON patient.id=plan.patient_id
-                WHERE patient.canonical_client_id=:patient_id AND correction.criterion_id=:criterion_id
+                WHERE correction.id=:work_item_id AND patient.canonical_client_id=:patient_id
+                    AND correction.criterion_id=:criterion_id
                     AND correction.assigned_counselor_user_id=:counselor_id
                     AND correction.status IN ('open','returned')
             )"""
         ),
         {
             "closed_at": utc_now().isoformat(),
+            "work_item_id": work_item_id,
             "patient_id": patient_id,
             "criterion_id": criterion_id,
             "counselor_id": counselor_user_id,
