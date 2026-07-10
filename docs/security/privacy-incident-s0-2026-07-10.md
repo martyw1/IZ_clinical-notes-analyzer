@@ -14,8 +14,8 @@ The S0 baseline was captured from commit `2f2b656d2d13fca48c56ea6f33d63b83c2cd9d
 
 | Metadata category | Count | Blob/object IDs and sizes in bytes |
 |---|---:|---|
-| `clinical-export.csv` | 3 | `3d9421c09e105ffa390ff928c6a754b9b7bf8a18` (17,221,041); `8256a4a96ab456dc7fec031102e1eefa0d0a3aa6` (25,276,811); `8330c56c5787f6f03ef4014e138e7a0466dd82ff` (17,017) |
-| `clinical-export.json` | 3 | `31a3e84f84e24403faa9b8b602c421831fb02cf3` (22,180); `834487cd94a8b1f55826435915433ca998cafe32` (155,287); `857bc65d3bb244c4811a118dc07f2e64d06b5304` (24,382) |
+| `clinical-export.csv` | 3 | `3d9421c09e105ffa390ff928c6a754b9b7bf8a18` (17,221,041); `8330c56c5787f6f03ef4014e138e7a0466dd82ff` (17,017); `857bc65d3bb244c4811a118dc07f2e64d06b5304` (24,382) |
+| `clinical-export.json` | 3 | `31a3e84f84e24403faa9b8b602c421831fb02cf3` (22,180); `8256a4a96ab456dc7fec031102e1eefa0d0a3aa6` (25,276,811); `834487cd94a8b1f55826435915433ca998cafe32` (155,287) |
 
 The six object IDs above are the complete unique blob set found for this path category across the reachable local history at the baseline. The commits that touched the tracked export category are:
 
@@ -88,6 +88,8 @@ Run the repository-owned verifier from Windows PowerShell:
 The verifier:
 
 - uses `git ls-tree`, `git status`, and `git rev-parse` only as metadata sources;
+- reads tree metadata from the approved baseline commit `2f2b656d2d13fca48c56ea6f33d63b83c2cd9d21`, never from the moving current `HEAD`;
+- requires exact equality with the six approved category/object-ID/size tuples in this record; successful-but-empty, incomplete, extra, duplicated, or substituted well-formed inventories fail closed;
 - never calls `git show`, `git cat-file blob`, `Get-Content`, `type`, or another content-reading command for the export category;
 - suppresses every matched path and every matched value;
 - outputs only schema/status fields, category counts, blob IDs/sizes, commit hashes, and canary results;
@@ -97,4 +99,4 @@ Before using output as evidence, independently scan it for original path fragmen
 
 ## Verification Status
 
-S0 verification proves only that the baseline and procedure are metadata-only and reproducible. It does not prove rotation, downstream containment, current-tree removal, history rewrite, remote garbage collection, or production-release readiness. Those remain gated as described above.
+S0 verification proves only that the approved baseline commit and exact approved metadata inventory are present, metadata-only, and reproducible. It intentionally remains valid after separately logged S1 current-tree removal because it never substitutes current `HEAD` for the preserved baseline. It does not prove rotation, downstream containment, current-tree removal, history rewrite, remote garbage collection, or production-release readiness. Those remain gated as described above.

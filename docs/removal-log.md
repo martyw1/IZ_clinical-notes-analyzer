@@ -12,6 +12,8 @@ S0 preserved metadata-only evidence for tracked clinical-export artifacts and cr
 
 The authoritative exposure categories, counts, blob IDs, credential commit metadata, rotation requirement, downstream-owner inventory, remediation gates, and verification procedure are recorded in `docs/security/privacy-incident-s0-2026-07-10.md`.
 
+The S0 verifier is pinned to the approved pre-removal baseline commit and exact six-object metadata inventory. It must not derive its expected exposure set from current `HEAD`; otherwise an empty, incomplete, extra, or substituted inventory could be reported as successful after later containment work.
+
 Ordinary current-tree/release-scope removal is deferred to S1 and must be logged here only after the S0 gate passes. Any later current-tree deletion is containment, not Git-history remediation. Destructive history rewriting and any coordinated remote update remain separately gated by credential rotation, downstream-owner inventory, evidence retention, and explicit user approval.
 
 ## Policy
