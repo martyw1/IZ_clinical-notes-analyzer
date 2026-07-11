@@ -75,6 +75,7 @@ ENVIRONMENT=development
 BACKEND_PORT=$Port
 DATABASE_BACKEND=sqlite
 LOCAL_SQLITE_DB_PATH=$AppDataRoot\api-config-test.sqlite3
+IZ_CNA_LOCAL_APP_DATA_DIR=$AppDataRoot
 DATABASE_URL=
 SECRET_KEY=$(New-RandomSecret 64)
 DATA_ENCRYPTION_KEY=$(New-RandomSecret 64)
@@ -91,12 +92,23 @@ LLM_ENABLED=false
 EMR_API_ENABLED=false
 "@ | Set-Content -Path $EnvFile -Encoding UTF8
 
-    $env:IZ_CNA_ENV_FILE = $EnvFile
+    $previousEnvFile = $env:IZ_CNA_ENV_FILE
+    try {
+        Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
     $env:PYTHONPATH = Join-Path $RootDir 'backend'
 
     Write-Step 'Running focused backend V2 API harness tests.'
-    & $python -m pytest (Join-Path $RootDir 'backend\tests\test_v2_runtime.py') -q
+    $focusedTests = @(
+        Join-Path $RootDir 'backend\tests\test_v2_runtime_readiness.py'
+        Join-Path $RootDir 'backend\tests\test_v2_oauth_connectivity.py'
+        Join-Path $RootDir 'backend\tests\test_v2_openapi_pull.py'
+        Join-Path $RootDir 'backend\tests\test_v2_operation_test.py'
+        Join-Path $RootDir 'backend\tests\test_v2_harness_job_persistence.py'
+    )
+    & $python -m pytest $focusedTests -q
     if ($LASTEXITCODE -ne 0) { throw 'V2 API harness unit tests failed.' }
+
+    $env:IZ_CNA_ENV_FILE = $EnvFile
 
     Write-Step "Starting desktop app test server on $BaseUrl ."
     $appDir = Join-Path $RootDir 'backend'
@@ -122,11 +134,22 @@ EMR_API_ENABLED=false
         $loginBody = @{ username = 'admin'; password = $adminPassword } | ConvertTo-Json
         $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body $loginBody
         $headers = @{ Authorization = "Bearer $($login.access_token)" }
+        if ($login.must_reset_password) {
+            Write-Step 'Completing bootstrap administrator password change.'
+            $activeAdminPassword = New-RandomSecret 24
+            $passwordChangeBody = @{ current_password = $adminPassword; new_password = $activeAdminPassword } | ConvertTo-Json
+            Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/users/me/change-password" -Headers $headers -ContentType 'application/json' -Body $passwordChangeBody | Out-Null
+            $adminPassword = $activeAdminPassword
+            $loginBody = @{ username = 'admin'; password = $adminPassword } | ConvertTo-Json
+            $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body $loginBody
+            $headers = @{ Authorization = "Bearer $($login.access_token)" }
+        }
 
         Write-Step 'Saving API configuration and encrypted API key placeholder.'
         $configBody = @{
             vendor_name = 'Local Test API'
             api_base_url = $BaseUrl
+            openapi_url = "$BaseUrl/api/api-configuration/sample-openapi.json"
             api_key = (New-RandomSecret 20)
             timeout_seconds = 5
             api_enabled = $false
@@ -135,48 +158,27 @@ EMR_API_ENABLED=false
         if (-not $config.api_key_configured) { throw 'Saved API key was not reported as configured.' }
 
         Write-Step 'Pulling local sample API definition through the in-app tester.'
-        $definitionBody = @{
-            swagger_ui_url = "$BaseUrl/api/api-configuration/sample-openapi.json"
-            openapi_url = "$BaseUrl/api/api-configuration/sample-openapi.json"
-            api_base_url = $BaseUrl
-            use_saved_api_key = $true
-            api_key_header_name = 'x-api-key'
-            client_id = 'ClientId'
-            timeout_seconds = 5
-        } | ConvertTo-Json
-        $definition = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/api-configuration/pull-definitions" -Headers $headers -ContentType 'application/json' -Body $definitionBody
+        $definition = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/api-configuration/pull-definitions" -Headers $headers
         if ($definition.status -ne 'ok') { throw "API definition pull did not pass: $($definition | ConvertTo-Json -Depth 8)" }
         if ($definition.definition_summary.title -notmatch 'Connectivity Test Definition') { throw 'API definition summary was not returned as expected.' }
-        if ($definition.request_keys -notcontains 'client_id') { throw 'API definition pull did not include the ClientId request key.' }
+        if ($definition.definition_summary.operation_count -ne 1 -or $definition.redaction_status -ne 'safe_summary_only') { throw "API definition pull did not return the expected safe summary: $($definition | ConvertTo-Json -Depth 8)" }
 
-        Write-Step 'Starting bounded Pull ALL Treatment Plans job.'
-        $jobBody = @{ job_type = 'pull_all_treatment_plans_all_fields' } | ConvertTo-Json
-        $job = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v2/api-harness/jobs" -Headers $headers -ContentType 'application/json' -Body $jobBody
-        if (!$job.job_id) { throw "V2 API harness job did not return a job_id: $($job | ConvertTo-Json -Depth 8)" }
-
-        $jobState = $job
-        for ($i = 0; $i -lt 30; $i++) {
-            $jobState = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)" -Headers $headers -TimeoutSec 10
-            if ($jobState.status -eq 'completed' -or $jobState.status -eq 'completed_with_warnings' -or $jobState.status -eq 'failed') { break }
-            Start-Sleep -Milliseconds 250
-        }
-        if ($jobState.status -ne 'completed') { throw "V2 API harness job did not complete: $($jobState | ConvertTo-Json -Depth 8)" }
-
-        $preview = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)/preview" -Headers $headers -TimeoutSec 10
-        if ($preview.max_records -ne 25 -or $preview.max_fields -ne 50) { throw "V2 API harness preview was not bounded: $($preview | ConvertTo-Json -Depth 8)" }
-
-        $artifacts = Invoke-RestMethod -Uri "$BaseUrl/api/v2/api-harness/jobs/$($job.job_id)/artifacts" -Headers $headers -TimeoutSec 10
-        $artifactNames = @($artifacts | ForEach-Object { $_.name })
-        foreach ($expectedArtifact in @('all-treatment-plans.all-fields.redacted.jsonl', 'all-treatment-plans.flattened-fields.tsv', 'all-treatment-plans.observed-schema.json')) {
-            if ($artifactNames -notcontains $expectedArtifact) {
-                throw "V2 API harness artifacts did not include $expectedArtifact. Found: $($artifactNames -join ', ')"
-            }
-        }
+        Write-Step 'Verifying the local API profile leaves live harness execution disabled.'
+        if ($config.api_enabled) { throw 'Local API configuration unexpectedly enabled live harness execution.' }
 
         Write-Step 'API configuration local smoke test passed.'
     }
     finally {
         if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -Force }
+    }
+    }
+    finally {
+        if ($null -eq $previousEnvFile) {
+            Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:IZ_CNA_ENV_FILE = $previousEnvFile
+        }
     }
 }
 catch {

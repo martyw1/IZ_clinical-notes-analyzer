@@ -98,6 +98,7 @@ ENVIRONMENT=development
 BACKEND_PORT=$Port
 DATABASE_BACKEND=sqlite
 LOCAL_SQLITE_DB_PATH=$AppDataRoot\test-clinical-notes-analyzer.sqlite3
+IZ_CNA_LOCAL_APP_DATA_DIR=$AppDataRoot
 DATABASE_URL=
 SECRET_KEY=$secretKey
 DATA_ENCRYPTION_KEY=$encryptionKey
@@ -114,12 +115,16 @@ LLM_ENABLED=false
 EMR_API_ENABLED=false
 "@ | Set-Content -Path $EnvFile -Encoding UTF8
 
-    $env:IZ_CNA_ENV_FILE = $EnvFile
+    $previousEnvFile = $env:IZ_CNA_ENV_FILE
+    try {
+        Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
     $env:PYTHONPATH = Join-Path $RootDir 'backend'
 
     Write-Step 'Running backend unit tests.'
     & $python -m pytest (Join-Path $RootDir 'backend\tests') -q
     if ($LASTEXITCODE -ne 0) { throw 'Backend unit tests failed.' }
+
+    $env:IZ_CNA_ENV_FILE = $EnvFile
 
     $appDir = Join-Path $RootDir 'backend'
     $uvicornArgs = "-m uvicorn app.main:app --app-dir `"$appDir`" --host 127.0.0.1 --port $Port"
@@ -146,6 +151,14 @@ EMR_API_ENABLED=false
         Write-Step 'Checking login and authenticated profile call.'
         $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body (@{ username='admin'; password=$adminPassword } | ConvertTo-Json)
         $headers = @{ Authorization = "Bearer $($login.access_token)" }
+        if ($login.must_reset_password) {
+            Write-Step 'Completing bootstrap administrator password change.'
+            $activeAdminPassword = New-Secret 24
+            Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/users/me/change-password" -Headers $headers -ContentType 'application/json' -Body (@{ current_password=$adminPassword; new_password=$activeAdminPassword } | ConvertTo-Json) | Out-Null
+            $adminPassword = $activeAdminPassword
+            $login = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/auth/login" -ContentType 'application/json' -Body (@{ username='admin'; password=$adminPassword } | ConvertTo-Json)
+            $headers = @{ Authorization = "Bearer $($login.access_token)" }
+        }
         Invoke-RestMethod -Uri "$BaseUrl/api/users/me" -Headers $headers -TimeoutSec 10 | Out-Null
 
         Write-Step 'Checking workflow profile API.'
@@ -155,6 +168,15 @@ EMR_API_ENABLED=false
     }
     finally {
         if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -Force }
+    }
+    }
+    finally {
+        if ($null -eq $previousEnvFile) {
+            Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:IZ_CNA_ENV_FILE = $previousEnvFile
+        }
     }
 }
 catch {

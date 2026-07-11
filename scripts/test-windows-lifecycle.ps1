@@ -7,6 +7,8 @@ $BackupScript = Join-Path $RepositoryRoot 'scripts\backup-local-data.ps1'
 $RestoreScript = Join-Path $RepositoryRoot 'scripts\restore-local-data.ps1'
 $BuildScript = Join-Path $RepositoryRoot 'scripts\build-windows-installer.ps1'
 $StopScript = Join-Path $RepositoryRoot 'scripts\stop-windows-local.ps1'
+$LocalStackSmokeScript = Join-Path $RepositoryRoot 'scripts\test-local-app-stack.ps1'
+$ApiConfigurationSmokeScript = Join-Path $RepositoryRoot 'scripts\test-api-configuration-local.ps1'
 
 function Assert-True {
     param([bool]$Condition, [string]$Label)
@@ -46,6 +48,21 @@ try {
     $stopText = Get-Content -LiteralPath $StopScript -Raw
     Assert-True -Condition ($stopText -match 'Test-IsBundledRuntime') -Label 'stop_recognizes_bundled_runtime'
     Assert-True -Condition ($stopText -match 'runtime\\IZClinicalNotesAnalyzer\.exe') -Label 'stop_validates_bundled_runtime_path'
+    $localStackSmokeText = Get-Content -LiteralPath $LocalStackSmokeScript -Raw
+    Assert-True -Condition ($localStackSmokeText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue') -Label 'local_stack_tests_clear_smoke_environment'
+    Assert-True -Condition ($localStackSmokeText -match 'IZ_CNA_LOCAL_APP_DATA_DIR=\$AppDataRoot') -Label 'local_stack_server_root_matches_synthetic_database'
+    Assert-True -Condition ($localStackSmokeText -match '/api/users/me/change-password') -Label 'local_stack_completes_bootstrap_password_change'
+    $apiConfigurationSmokeText = Get-Content -LiteralPath $ApiConfigurationSmokeScript -Raw
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue') -Label 'api_configuration_tests_clear_smoke_environment'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'IZ_CNA_LOCAL_APP_DATA_DIR=\$AppDataRoot') -Label 'api_configuration_server_root_matches_synthetic_database'
+    Assert-True -Condition ($apiConfigurationSmokeText -notmatch 'test_v2_runtime\.py') -Label 'api_configuration_avoids_removed_runtime_test'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'test_v2_runtime_readiness\.py') -Label 'api_configuration_targets_active_runtime_test'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'test_v2_openapi_pull\.py') -Label 'api_configuration_targets_active_openapi_test'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'test_v2_harness_job_persistence\.py') -Label 'api_configuration_targets_active_harness_test'
+    Assert-True -Condition ($apiConfigurationSmokeText -match '/api/users/me/change-password') -Label 'api_configuration_completes_bootstrap_password_change'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'openapi_url = \"\$BaseUrl/api/api-configuration/sample-openapi\.json\"') -Label 'api_configuration_saves_local_sample_openapi_url'
+    Assert-True -Condition ($apiConfigurationSmokeText -notmatch 'request_keys') -Label 'api_configuration_uses_current_openapi_response_contract'
+    Assert-True -Condition ($apiConfigurationSmokeText -notmatch '\$BaseUrl/api/v2/api-harness/jobs') -Label 'api_configuration_keeps_live_harness_job_gated'
 }
 finally {
     $env:LOCALAPPDATA = $previousLocalAppData
