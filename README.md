@@ -161,14 +161,16 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For Version 2.0 Beta it writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For the current Version 2.0 Beta (`2.0.0-beta.2`), it writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip`
+
+The `2.0.0-beta.1` output names recorded in earlier validation reports are historical evidence, not current beta.2 installation instructions.
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`.
+1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.

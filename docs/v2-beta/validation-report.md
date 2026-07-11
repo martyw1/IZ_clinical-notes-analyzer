@@ -6,11 +6,11 @@ This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It re
 
 The procedure is maintained in `release-readiness-2026-07-11.md` and requires a fresh `%TEMP%` `IZ_CNA_LOCAL_APP_DATA_DIR`, no loaded local credentials/production `.env`, and no clinical export or production local-data reuse.
 
-Validation recorded on 2026-07-08 for branch `codex/v2-beta-local-rebuild`.
+The retained 2026-07-08 evidence below is historical `2.0.0-beta.1` evidence. It does not validate a `2.0.0-beta.2` release folder, zip, or footer. A completed beta.2 final-validation run must record `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2` artifacts and a matching `2.0.0-beta.2` footer before it can be treated as beta.2 evidence.
 
-## Final Command Evidence
+## Historical beta.1 command evidence (2026-07-08)
 
-The installer build evidence below was rerun after the final typed-response and route-size cleanup.
+The historical beta.1 installer build evidence below was rerun after the final typed-response and route-size cleanup.
 
 | Command | Result | Important output |
 |---|---|---|
@@ -23,7 +23,7 @@ The installer build evidence below was rerun after the final typed-response and 
 | `.\scripts\test-api-configuration-local.ps1` | Pass | Runs V2 backend tests, starts `app.desktop_main:app`, loads API configuration page, saves redacted API config, pulls sample OpenAPI definition with `ClientId`, starts bounded Pull ALL job, verifies preview and required artifacts. |
 | `.\Build-IZ-Windows-Installer.cmd` | Pass | Backend tests, frontend tests/build, release required-file validation, release forbidden-file scan, and zip forbidden-file scan passed. |
 
-Release outputs:
+Historical beta.1 release outputs:
 
 - `dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`
 - `dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1.zip`
@@ -37,7 +37,7 @@ Release outputs:
 - Updated `scripts/test-api-configuration-local.ps1` from archived V1 test coverage to active V2 coverage, including bounded Pull ALL job artifacts and preview checks.
 - Split V2 API response models into `backend/app/v2/api/models.py` so the active route module stays under the route-size budget while preserving typed FastAPI response validation.
 
-## Browser And Computer Use QA
+## Historical beta.1 browser and computer use QA
 
 Playwright/Chrome assertions passed against the built local desktop app at `http://127.0.0.1:8030`.
 
@@ -51,7 +51,7 @@ Screenshots saved under:
 Assertions covered:
 
 - Login reaches active V2 app shell.
-- Header/footer show `Version 2.0 Beta`, `2.0.0-beta.1`, and `beta-local-desktop-v2`.
+- Historical UI assertion: header/footer showed `Version 2.0 Beta`, `2.0.0-beta.1`, and `beta-local-desktop-v2`.
 - Dashboard shows `Active runtime: V2`.
 - Treatment Plans status order is exactly `Missing Data`, `Needs Review`, `Incomplete`, `Within Window`, `Late`, `Conflicting Evidence`, `Unable to Evaluate`.
 - Treatment Plans uses `Patient ID 307` and did not render patient-name-like text.
