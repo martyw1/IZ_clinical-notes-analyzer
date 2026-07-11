@@ -278,6 +278,19 @@ function mapAuthState(value: string): UserProfile['authState'] {
   }
 }
 
+export async function resumeApprovedAllevaTreatmentPlanSync(token: string, jobId: string): Promise<ApiHarnessJob> {
+  const payload = await readRecordPayload(await request(`/api/v2/alleva-sync/jobs/${jobId}/resume`, { token, method: 'POST' }))
+  return {
+    jobId: readString(payload, 'job_id'),
+    status: readString(payload, 'status'),
+    progressPercent: readNumber(payload, 'progress_percent'),
+    recordsWritten: readNumber(payload, 'records_written'),
+    recordsFailed: readNumber(payload, 'records_failed'),
+    warningsCount: readNumber(payload, 'warnings_count'),
+    artifacts: [],
+  }
+}
+
 function mapRole(value: string): UserRole {
   switch (value) {
     case 'admin':

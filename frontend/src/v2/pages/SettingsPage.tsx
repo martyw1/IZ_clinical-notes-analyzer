@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getApiConfiguration, getApprovedAllevaTreatmentPlanSyncJob, getSettings, runApprovedAllevaTreatmentPlanSync, saveApiConfiguration, saveSettings } from '../api/client'
+import { getApiConfiguration, getApprovedAllevaTreatmentPlanSyncJob, getSettings, resumeApprovedAllevaTreatmentPlanSync, runApprovedAllevaTreatmentPlanSync, saveApiConfiguration, saveSettings } from '../api/client'
 import { pullOpenApiDefinition } from '../api/openapiClient'
 import { testSavedOAuthConnectivity } from '../api/connectivityClient'
 import { cancelApiHarnessJob } from '../api/jobs'
@@ -124,6 +124,23 @@ export function SettingsPage({ token }: SettingsPageProps) {
       setMessage('Treatment-plan sync cancellation requested.')
     } catch (cancelError) {
       setMessage(messageForError(cancelError))
+    }
+  }
+
+  async function handleResumeSync() {
+    if (!syncJob) return
+    setIsRunningSync(true)
+    setMessage('')
+    try {
+      const resumed = await resumeApprovedAllevaTreatmentPlanSync(token, syncJob.jobId)
+      setSyncJob(resumed)
+      const completed = await pollSyncJob(resumed)
+      setSyncJob(completed)
+      setMessage(`Treatment-plan sync ${completed.status}: ${completed.recordsWritten} imported, ${completed.recordsFailed} skipped.`)
+    } catch (resumeError) {
+      setMessage(messageForError(resumeError))
+    } finally {
+      setIsRunningSync(false)
     }
   }
 
@@ -259,6 +276,11 @@ export function SettingsPage({ token }: SettingsPageProps) {
         {syncJob && !isTerminalSyncStatus(syncJob.status) && (
           <button type='button' className='secondary-button' onClick={handleCancelSync}>
             Cancel treatment-plan sync
+          </button>
+        )}
+        {syncJob && ['failed', 'cancelled', 'stale_or_interrupted'].includes(syncJob.status) && (
+          <button type='button' className='secondary-button' onClick={handleResumeSync} disabled={isRunningSync}>
+            Resume treatment-plan sync safely
           </button>
         )}
         {definitionSummary && <p role='status'>{definitionSummary}</p>}

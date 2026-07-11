@@ -268,6 +268,7 @@ def test_non_admin_is_denied_across_configuration_harness_sync_audit_and_workflo
         ("GET", "/api/v2/api-harness/jobs/missing/preview", None),
         ("POST", "/api/v2/alleva-sync/run", None),
         ("GET", "/api/v2/alleva-sync/jobs/missing", None),
+        ("POST", "/api/v2/alleva-sync/jobs/missing/resume", None),
         ("GET", "/api/audit/logs", None),
         ("GET", "/api/audit/verify", None),
         ("GET", "/api/workflow-definitions", None),

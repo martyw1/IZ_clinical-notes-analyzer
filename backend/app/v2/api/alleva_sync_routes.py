@@ -75,6 +75,25 @@ def alleva_sync_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
     return job
 
 
+@router.post("/api/v2/alleva-sync/jobs/{job_id}/resume", response_model=ApiHarnessJob, status_code=202)
+def resume_alleva_sync(job_id: str, actor: AdminUser, db: DbSession) -> ApiHarnessJob:
+    try:
+        resumed = job_service.resume_treatment_plan_sync_job(job_id, actor.id, actor.role)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Sync job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Sync job cannot be resumed") from exc
+    record_audit_event(
+        db,
+        action="alleva.treatment_plan_sync.resumed",
+        actor=actor,
+        target_entity_type="integration_sync",
+        target_entity_id=resumed.job_id,
+        details={"resumed_from_job_id": job_id},
+    )
+    return resumed
+
+
 def _sync_blockers(profile: AppSetting, contract: ApprovedAllevaContract | None) -> tuple[str, ...]:
     blockers = []
     if not profile.emr_api_enabled:

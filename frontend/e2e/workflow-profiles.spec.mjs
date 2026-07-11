@@ -64,7 +64,7 @@ test('admin enables the approved sync gates and sees a mocked synced treatment p
     if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Workflow Profiles', 'Forensic Logs', 'Settings', 'Help'], active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/settings') return respond({ organization_name: 'R3 Recovery Services', facility_timezone: 'America/New_York', treatment_plan_master_due_days: 30, treatment_plan_php_review_interval_days: 30, treatment_plan_iop_op_review_interval_days: 90, treatment_plan_loc_change_window_days: 7, treatment_plan_loc_change_window_validated: false })
-    if (path === '/api/api-configuration') return respond({ vendor_name: 'Mock Alleva', api_base_url: 'http://mock.invalid', openapi_url: 'http://mock.invalid/openapi.json', token_url: 'http://mock.invalid/token', client_id: 'mock-client', api_key_configured: syncEnabled, client_secret_configured: true, token_auth_style: 'body', scopes: '', pagination_limit: 100, sync_limit: 100, timeout_seconds: 10, api_enabled: syncEnabled, treatment_plan_sync_enabled: syncEnabled, treatment_plan_sync_approved: syncEnabled, treatment_plan_endpoint_mapping_validated: syncEnabled })
+    if (path === '/api/api-configuration') return respond({ vendor_name: 'Mock Alleva', api_base_url: 'http://mock.invalid', openapi_url: 'http://mock.invalid/openapi.json', token_url: 'http://mock.invalid/token', client_id: 'mock-client', api_key_configured: syncEnabled, client_secret_configured: true, token_auth_style: 'body', scopes: '', pagination_limit: 100, sync_limit: 100, timeout_seconds: 10, api_enabled: syncEnabled, treatment_plan_sync_enabled: syncEnabled, treatment_plan_sync_approved: syncEnabled, treatment_plan_endpoint_mapping_validated: syncEnabled, active_contract_version: 'synthetic-browser-contract-v1' })
     if (path === '/api/v2/alleva-sync/run' && method === 'POST') return respond({ job_id: 'sync-browser-912', status: 'queued', progress_percent: 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] })
     if (path === '/api/v2/alleva-sync/jobs/sync-browser-912') { syncCompleted = true; return respond({ job_id: 'sync-browser-912', status: 'completed', progress_percent: 100, records_written: 1, records_failed: 0, warnings_count: 0, artifacts: [] }) }
     if (path === '/api/v2/treatment-plans') return respond({ items: syncCompleted ? [{ patient_id: '912', patient_display_label: 'Patient ID 912', current_level_of_care: 'PHP', admission_date: '2026-06-01', next_due_date: '2026-07-01', status: 'Needs Review', missing_criteria_count: 0, returned_criteria_count: 0, source_mode: 'alleva_rest_api', content_completeness_summary: {}, warnings: [] }] : [], status_order: ['Needs Review'] })
@@ -91,8 +91,9 @@ test('admin enables the approved sync gates and sees a mocked synced treatment p
   await page.screenshot({ path: testInfo.outputPath('approved-sync-treatment-plan.png') })
 })
 
-test('admin can cancel a queued approved treatment-plan sync', async ({ page }) => {
+test('admin can cancel a queued approved treatment-plan sync', async ({ page }, testInfo) => {
   let cancellationRequested = false
+  let syncResumed = false
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
@@ -102,9 +103,11 @@ test('admin can cancel a queued approved treatment-plan sync', async ({ page }) 
     if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Treatment Plans', 'Settings'], active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/settings') return respond({ organization_name: 'R3 Recovery Services', facility_timezone: 'America/New_York', treatment_plan_master_due_days: 30, treatment_plan_php_review_interval_days: 30, treatment_plan_iop_op_review_interval_days: 90, treatment_plan_loc_change_window_days: 7, treatment_plan_loc_change_window_validated: false })
-    if (path === '/api/api-configuration') return respond({ vendor_name: 'Mock Alleva', api_base_url: 'http://mock.invalid', openapi_url: 'http://mock.invalid/openapi.json', token_url: 'http://mock.invalid/token', client_id: 'mock-client', api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: '', pagination_limit: 100, sync_limit: 100, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true, treatment_plan_endpoint_mapping_validated: true })
+    if (path === '/api/api-configuration') return respond({ vendor_name: 'Mock Alleva', api_base_url: 'http://mock.invalid', openapi_url: 'http://mock.invalid/openapi.json', token_url: 'http://mock.invalid/token', client_id: 'mock-client', api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: '', pagination_limit: 100, sync_limit: 100, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true, treatment_plan_endpoint_mapping_validated: true, active_contract_version: 'synthetic-browser-contract-v1' })
     if (path === '/api/v2/alleva-sync/run' && method === 'POST') return respond({ job_id: 'sync-browser-cancel', status: 'queued', progress_percent: 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] })
-    if (path === '/api/v2/api-harness/jobs/sync-browser-cancel/cancel' && method === 'POST') { cancellationRequested = true; return respond({ job_id: 'sync-browser-cancel', status: 'queued', progress_percent: 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] }) }
+    if (path === '/api/v2/api-harness/jobs/sync-browser-cancel/cancel' && method === 'POST') { cancellationRequested = true; return respond({ job_id: 'sync-browser-cancel', status: 'cancelled', progress_percent: 100, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] }) }
+    if (path === '/api/v2/alleva-sync/jobs/sync-browser-cancel/resume' && method === 'POST') { syncResumed = true; return respond({ job_id: 'sync-browser-resumed', status: 'queued', progress_percent: 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] }) }
+    if (path === '/api/v2/alleva-sync/jobs/sync-browser-resumed') return respond({ job_id: 'sync-browser-resumed', status: syncResumed ? 'completed' : 'queued', progress_percent: syncResumed ? 100 : 0, records_written: 1, records_failed: 0, warnings_count: 0, artifacts: [] })
     if (path === '/api/v2/alleva-sync/jobs/sync-browser-cancel') return respond({ job_id: 'sync-browser-cancel', status: cancellationRequested ? 'cancelled' : 'queued', progress_percent: cancellationRequested ? 100 : 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] })
     return respond({ detail: `Unexpected ${method} ${path}` })
   })
@@ -118,4 +121,7 @@ test('admin can cancel a queued approved treatment-plan sync', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Cancel treatment-plan sync' })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel treatment-plan sync' }).click()
   await expect(page.getByText('Treatment-plan sync cancelled: 0 imported, 0 skipped.')).toBeVisible()
+  await page.getByRole('button', { name: 'Resume treatment-plan sync safely' }).click()
+  await expect(page.getByText('Treatment-plan sync completed: 1 imported, 0 skipped.')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('approved-sync-resumed.png') })
 })

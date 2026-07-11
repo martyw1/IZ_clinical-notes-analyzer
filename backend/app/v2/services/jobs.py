@@ -15,7 +15,15 @@ from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob, JobPreview
 from app.v2.models import ApiHarnessJobRecord, AppSetting, User
 from app.v2.services.job_runner import fetch_paged_records
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
-from app.v2.services.alleva_contracts import ApprovedAllevaContract, create_sync_ledger, update_sync_ledger
+from app.v2.services.alleva_contracts import (
+    ApprovedAllevaContract,
+    contract_bound_to_sync_job,
+    create_sync_ledger,
+    record_sync_checkpoint,
+    record_sync_failure,
+    set_sync_cancellation_requested,
+    update_sync_ledger,
+)
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.job_store import record_as_job_values, save_job
 from app.v2.services.job_view import public_job
@@ -138,7 +146,13 @@ class ApiHarnessJobService:
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
-    def create_treatment_plan_sync_job(self, actor_id: int, actor_role: str, contract: ApprovedAllevaContract) -> ApiHarnessJob:
+    def create_treatment_plan_sync_job(
+        self,
+        actor_id: int,
+        actor_role: str,
+        contract: ApprovedAllevaContract,
+        resumed_from_job_id: str | None = None,
+    ) -> ApiHarnessJob:
         job_id = f"sync-{uuid4().hex[:12]}"
         output_dir = settings.api_harness_runs_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -157,10 +171,24 @@ class ApiHarnessJobService:
             self._sync_contracts[job_id] = contract
         save_job(job)
         with SessionLocal() as db:
-            create_sync_ledger(db, job_id, actor_id, contract, created)
+            create_sync_ledger(db, job_id, actor_id, contract, created, resumed_from_job_id)
         log_event(action="alleva.treatment_plan_sync.job.created", entity_type="api_harness_job", entity_reference=job_id, actor_id=str(actor_id), actor_role=actor_role)
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
+
+    def resume_treatment_plan_sync_job(self, job_id: str, actor_id: int, actor_role: str) -> ApiHarnessJob:
+        with SessionLocal() as db:
+            original = db.execute(
+                select(ApiHarnessJobRecord).where(ApiHarnessJobRecord.job_id == job_id)
+            ).scalar_one_or_none()
+            contract = contract_bound_to_sync_job(db, job_id)
+        if original is None or original.job_type != "approved_treatment_plan_sync":
+            raise KeyError(job_id)
+        if original.status not in {"cancelled", "failed", "stale_or_interrupted"}:
+            raise ValueError("Only a terminal sync job can be resumed.")
+        if contract is None:
+            raise ValueError("The sync job's approved contract is unavailable.")
+        return self.create_treatment_plan_sync_job(actor_id, actor_role, contract, resumed_from_job_id=job_id)
 
     def list_jobs(self) -> tuple[ApiHarnessJob, ...]:
         with SessionLocal() as db:
@@ -191,6 +219,9 @@ class ApiHarnessJobService:
                 raise KeyError(job_id)
             job = replace(MutableJob(**record_as_job_values(row)), cancel_requested=True, updated_at=_now())
         save_job(job)
+        if job.job_type == "approved_treatment_plan_sync":
+            with SessionLocal() as db:
+                set_sync_cancellation_requested(db, job_id)
         log_event(action="api_harness.job.cancel_requested", entity_type="api_harness_job", entity_reference=job_id)
         return self.get_job(job_id)
 
@@ -290,12 +321,23 @@ class ApiHarnessJobService:
                     actor,
                     contract,
                     is_cancelled=lambda: self.get_job(job_id).cancel_requested,
+                    on_page=lambda endpoint_key, page_number, cursor_hash, response_hash, record_count: self._record_checkpoint(job_id, endpoint_key, page_number, cursor_hash, response_hash, record_count),
+                    sync_job_id=job_id,
                 )
             except AllevaSyncCancelled:
                 record_audit_event(db, action="alleva.treatment_plan_sync.cancelled", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="cancelled")
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
                 return
             except AllevaSyncError as exc:
+                record_sync_failure(
+                    db,
+                    job_id,
+                    type(exc).__name__,
+                    "Sync request failed before completion.",
+                    False,
+                    1,
+                    _now(),
+                )
                 record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
@@ -304,6 +346,15 @@ class ApiHarnessJobService:
                 while trace and trace.tb_next:
                     trace = trace.tb_next
                 error_origin = trace.tb_frame.f_code.co_name if trace else "unknown"
+                record_sync_failure(
+                    db,
+                    job_id,
+                    type(exc).__name__,
+                    "Sync worker failed before completion.",
+                    False,
+                    1,
+                    _now(),
+                )
                 record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__, "error_origin": error_origin})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
@@ -337,6 +388,18 @@ class ApiHarnessJobService:
             terminal = updated.completed_at or updated.cancelled_at or updated.failed_at
             with SessionLocal() as db:
                 update_sync_ledger(db, updated.job_id, updated.status, terminal, counters)
+
+    def _record_checkpoint(self, job_id: str, endpoint_key: str, page_number: int, cursor_hash: str, response_hash: str, record_count: int) -> None:
+        with SessionLocal() as db:
+            record_sync_checkpoint(db, job_id, endpoint_key, page_number, cursor_hash, response_hash, _now())
+        current = self.get_job(job_id)
+        self._set(
+            job_id,
+            current_endpoint=f"GET /{endpoint_key}",
+            current_page=page_number,
+            records_seen=current.records_seen + record_count,
+            progress_percent=min(90, max(current.progress_percent, 10 + current.records_seen + record_count)),
+        )
 
     def _output_dir(self, job_id: str) -> Path:
         with self._lock:
