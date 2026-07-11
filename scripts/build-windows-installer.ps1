@@ -678,6 +678,18 @@ function Assert-RequiredPackageItem {
     }
 }
 
+function Invoke-Robocopy {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [string]$Label
+    )
+    robocopy $Source $Destination /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    $robocopyExitCode = [int]$LASTEXITCODE
+    if ($robocopyExitCode -gt 7) { throw "$Label failed with robocopy exit code $robocopyExitCode" }
+    $global:LASTEXITCODE = 0
+}
+
 Assert-RequiredPackageItem 'app\backend'
 Assert-RequiredPackageItem 'app\frontend\dist\index.html'
 Assert-RequiredPackageItem 'app\scripts\preflight-windows.ps1'
@@ -694,11 +706,9 @@ if (Test-Path -LiteralPath $LocalDataDir) {
 
 Write-InstallStep "Installing app files to $InstallRoot"
 New-Item -ItemType Directory -Path $InstallRoot, $StartMenuDir -Force | Out-Null
-robocopy $SourceAppDir $InstallRoot /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -gt 7) { throw "Install copy failed with robocopy exit code $LASTEXITCODE" }
+Invoke-Robocopy -Source $SourceAppDir -Destination $InstallRoot -Label 'Install copy'
 Copy-Item -LiteralPath (Join-Path $PackageDir 'release-manifest.json') -Destination (Join-Path $InstallRoot 'release-manifest.json') -Force
-robocopy (Join-Path $PackageDir 'installer') $InstalledInstallerDir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -gt 7) { throw "Installer helper copy failed with robocopy exit code $LASTEXITCODE" }
+Invoke-Robocopy -Source (Join-Path $PackageDir 'installer') -Destination $InstalledInstallerDir -Label 'Installer helper copy'
 
 @"
 @echo off
@@ -767,6 +777,7 @@ Write-Host "Local data folder: $LocalDataDir"
 Write-Host "Start Menu shortcut: $StartShortcut"
 if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime\IZClinicalNotesAnalyzer.exe'))) { throw 'The bundled runtime is missing after install.' }
 Write-InstallOk 'Install complete. Use the Start Menu shortcut or Desktop shortcut to launch the app.'
+exit 0
 '@ | Set-Content -Path (Join-Path $installerDir 'install-windows-release.ps1') -Encoding UTF8
 
 @'

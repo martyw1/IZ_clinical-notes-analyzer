@@ -11,10 +11,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
 $LocalDataDir = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
-$DocumentsDir = [Environment]::GetFolderPath('MyDocuments')
 if (-not $OutputRoot) {
-    if ([string]::IsNullOrWhiteSpace($DocumentsDir)) { $DocumentsDir = Join-Path $env:USERPROFILE 'Documents' }
-    $OutputRoot = Join-Path $DocumentsDir 'IZ Clinical Notes Analyzer Backups'
+    if ([string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        throw 'USERPROFILE is required to select the default backup location. Provide -OutputRoot to choose a backup folder explicitly.'
+    }
+    $OutputRoot = Join-Path $env:USERPROFILE 'Documents\IZ Clinical Notes Analyzer Backups'
 }
 
 function Assert-PathInside {

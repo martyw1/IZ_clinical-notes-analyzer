@@ -18,9 +18,12 @@ function Assert-True {
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-lifecycle-$([Guid]::NewGuid().ToString('N'))"
 $previousLocalAppData = $env:LOCALAPPDATA
+$previousUserProfile = $env:USERPROFILE
+$defaultBackup = $null
 try {
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
     $env:LOCALAPPDATA = Join-Path $tempRoot 'LocalAppData'
+    $env:USERPROFILE = Join-Path $tempRoot 'UserProfile'
     $localData = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
     $backupOutput = Join-Path $tempRoot 'backup-output'
     New-Item -ItemType Directory -Path $localData -Force | Out-Null
@@ -39,11 +42,20 @@ try {
     Assert-True -Condition ((Get-Content -LiteralPath (Join-Path $localData 'synthetic-state.txt') -Raw).Trim() -eq 'before-upgrade-synthetic-state') -Label 'restore_replaces_mutated_data'
     Assert-True -Condition ((Get-Content -LiteralPath (Join-Path $localData '.env') -Raw).Trim() -eq 'SYNTHETIC_ONLY=true') -Label 'restore_preserves_encryption_material'
 
+    $defaultBackup = & $BackupScript -AssumeYes -NoStop -PassThru
+    $expectedBackupDirectory = Join-Path $env:USERPROFILE 'Documents\IZ Clinical Notes Analyzer Backups'
+    Assert-True -Condition ($LASTEXITCODE -eq 0) -Label 'default_profile_backup_command_succeeds'
+    Assert-True -Condition ($defaultBackup -and (Test-Path -LiteralPath $defaultBackup.Path)) -Label 'default_profile_backup_file_created'
+    Assert-True -Condition ([IO.Path]::GetDirectoryName([string]$defaultBackup.Path).Equals($expectedBackupDirectory, [StringComparison]::OrdinalIgnoreCase)) -Label 'default_profile_backup_stays_inside_synthetic_documents'
+
     $buildText = Get-Content -LiteralPath $BuildScript -Raw
     Assert-True -Condition ($buildText -match 'Restore-IZ-Clinical-Notes-Analyzer\.cmd') -Label 'release_contains_restore_command'
     Assert-True -Condition ($buildText -match 'backup-local-data\.ps1' -and $buildText -match 'Pre-upgrade encrypted backup') -Label 'installer_performs_pre_upgrade_backup'
     Assert-True -Condition ($buildText -match 'app\\runtime') -Label 'release_requires_runtime_payload'
     Assert-True -Condition ($buildText -match '--collect-all passlib') -Label 'runtime_collects_dynamic_passlib_handlers'
+    Assert-True -Condition ($buildText -match 'function Invoke-Robocopy') -Label 'installer_normalizes_robocopy_success_codes'
+    Assert-True -Condition ($buildText -match '\$robocopyExitCode -gt 7') -Label 'installer_rejects_only_robocopy_failure_codes'
+    Assert-True -Condition ($buildText -match '\$global:LASTEXITCODE = 0') -Label 'installer_returns_zero_after_robocopy_success'
     Assert-True -Condition ($buildText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE') -Label 'backend_tests_isolate_preflight_environment'
     $stopText = Get-Content -LiteralPath $StopScript -Raw
     Assert-True -Condition ($stopText -match 'Test-IsBundledRuntime') -Label 'stop_recognizes_bundled_runtime'
@@ -67,6 +79,10 @@ try {
     Assert-True -Condition ($apiConfigurationSmokeText -notmatch '\$BaseUrl/api/v2/api-harness/jobs') -Label 'api_configuration_keeps_live_harness_job_gated'
 }
 finally {
+    if ($defaultBackup -and (Test-Path -LiteralPath $defaultBackup.Path)) {
+        Remove-Item -LiteralPath $defaultBackup.Path -Force
+    }
     $env:LOCALAPPDATA = $previousLocalAppData
+    $env:USERPROFILE = $previousUserProfile
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
 }
