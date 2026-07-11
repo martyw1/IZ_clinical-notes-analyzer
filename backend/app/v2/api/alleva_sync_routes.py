@@ -8,7 +8,7 @@ from app.v2.api.models import AllevaContractApprovalIn, AllevaContractApprovalOu
 from app.v2.domain.schemas import ApiHarnessJob
 from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
-from app.v2.services.alleva_contracts import active_contract, approve_contract
+from app.v2.services.alleva_contracts import ApprovedAllevaContract, active_contract, approve_contract
 from app.v2.services.jobs import job_service
 
 router = APIRouter()
@@ -18,7 +18,7 @@ router = APIRouter()
 def run_alleva_sync(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
     profile = db.execute(select(AppSetting)).scalar_one()
     contract = active_contract(db)
-    blockers = _sync_blockers(profile, contract is not None)
+    blockers = _sync_blockers(profile, contract)
     if blockers:
         record_audit_event(
             db,
@@ -75,14 +75,18 @@ def alleva_sync_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
     return job
 
 
-def _sync_blockers(profile: AppSetting, has_approved_contract: bool) -> tuple[str, ...]:
+def _sync_blockers(profile: AppSetting, contract: ApprovedAllevaContract | None) -> tuple[str, ...]:
     blockers = []
     if not profile.emr_api_enabled:
         blockers.append("API testing is not enabled")
     if not profile.alleva_treatment_plan_sync_enabled:
         blockers.append("treatment-plan sync is not enabled")
-    if not has_approved_contract:
+    if contract is None:
         blockers.append("an approved versioned contract is required")
+    elif profile.api_base_url != contract.payload.api_base_url or profile.api_oauth_token_url != contract.payload.oauth.token_url:
+        blockers.append("saved connection settings do not match the approved contract")
+    elif profile.api_token_auth_style != contract.payload.oauth.token_auth_style or profile.api_scopes != contract.payload.oauth.scope:
+        blockers.append("saved OAuth settings do not match the approved contract")
     if not profile.api_client_secret:
         blockers.append("encrypted client secret is not configured")
     return tuple(blockers)

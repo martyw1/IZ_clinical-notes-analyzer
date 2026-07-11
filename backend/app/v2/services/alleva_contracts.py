@@ -8,6 +8,7 @@ from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from app.v2.api.models import AllevaContractApprovalIn
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
@@ -50,12 +51,29 @@ def active_contract(db: Session) -> ApprovedAllevaContract | None:
     row = db.execute(text(statement), {"now": datetime.now(timezone.utc).isoformat()}).mappings().one_or_none()
     if row is None or not isinstance(row["encrypted_contract_json"], bytes):
         return None
-    canonical = decrypt_bytes(row["encrypted_contract_json"])
-    if hashlib.sha256(canonical).hexdigest() != row["contract_sha256"]:
+    try:
+        canonical = decrypt_bytes(row["encrypted_contract_json"])
+        if hashlib.sha256(canonical).hexdigest() != row["contract_sha256"]:
+            return None
+        payload = AllevaContractApprovalIn.model_validate_json(canonical)
+        _validate_contract(payload)
+    except (HTTPException, ValueError, json.JSONDecodeError):
         return None
-    payload = AllevaContractApprovalIn.model_validate_json(canonical)
-    _validate_contract(payload)
     return ApprovedAllevaContract(int(row["id"]), str(row["contract_version"]), str(row["contract_sha256"]), datetime.fromisoformat(str(row["effective_at"])), datetime.fromisoformat(str(row["approved_at"])), payload)
+
+
+def create_sync_ledger(db: Session, external_job_id: str, actor_id: int, contract: ApprovedAllevaContract, started_at: str) -> None:
+    counters = json.dumps({"contract_version": contract.contract_version, "contract_sha256": contract.contract_sha256}, sort_keys=True)
+    db.execute(
+        text("INSERT INTO sync_jobs(external_job_id,requested_by_user_id,approval_record_id,status,idempotency_key,cancel_requested,started_at,counters_json) VALUES(:job_id,:actor_id,:approval_id,'queued',:job_id,0,:started_at,:counters)"),
+        {"job_id": external_job_id, "actor_id": actor_id, "approval_id": contract.approval_id, "started_at": started_at, "counters": counters},
+    )
+    db.commit()
+
+
+def update_sync_ledger(db: Session, external_job_id: str, status: str, completed_at: str | None, counters: str) -> None:
+    db.execute(text("UPDATE sync_jobs SET status=:status,completed_at=:completed_at,counters_json=:counters WHERE external_job_id=:job_id"), {"job_id": external_job_id, "status": status, "completed_at": completed_at, "counters": counters})
+    db.commit()
 
 
 def _validate_contract(payload: AllevaContractApprovalIn) -> None:

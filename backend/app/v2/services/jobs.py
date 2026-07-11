@@ -15,7 +15,7 @@ from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob, JobPreview
 from app.v2.models import ApiHarnessJobRecord, AppSetting, User
 from app.v2.services.job_runner import fetch_paged_records
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
-from app.v2.services.alleva_contracts import ApprovedAllevaContract
+from app.v2.services.alleva_contracts import ApprovedAllevaContract, create_sync_ledger, update_sync_ledger
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.job_store import record_as_job_values, save_job
 from app.v2.services.job_view import public_job
@@ -156,6 +156,8 @@ class ApiHarnessJobService:
             self._sync_actor_ids[job_id] = actor_id
             self._sync_contracts[job_id] = contract
         save_job(job)
+        with SessionLocal() as db:
+            create_sync_ledger(db, job_id, actor_id, contract, created)
         log_event(action="alleva.treatment_plan_sync.job.created", entity_type="api_harness_job", entity_reference=job_id, actor_id=str(actor_id), actor_role=actor_role)
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
@@ -293,12 +295,16 @@ class ApiHarnessJobService:
                 record_audit_event(db, action="alleva.treatment_plan_sync.cancelled", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="cancelled")
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
                 return
-            except AllevaSyncError:
-                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure")
+            except AllevaSyncError as exc:
+                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
-            except Exception:
-                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure")
+            except Exception as exc:
+                trace = exc.__traceback__
+                while trace and trace.tb_next:
+                    trace = trace.tb_next
+                error_origin = trace.tb_frame.f_code.co_name if trace else "unknown"
+                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__, "error_origin": error_origin})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
             record_audit_event(
@@ -326,6 +332,11 @@ class ApiHarnessJobService:
             updated = replace(job, updated_at=_now(), **changes)
             self._jobs[job_id] = updated
         save_job(updated)
+        if updated.job_type == "approved_treatment_plan_sync":
+            counters = json.dumps({"records_seen": updated.records_seen, "records_written": updated.records_written, "records_failed": updated.records_failed, "warnings_count": updated.warnings_count, "errors_count": updated.errors_count}, sort_keys=True)
+            terminal = updated.completed_at or updated.cancelled_at or updated.failed_at
+            with SessionLocal() as db:
+                update_sync_ledger(db, updated.job_id, updated.status, terminal, counters)
 
     def _output_dir(self, job_id: str) -> Path:
         with self._lock:

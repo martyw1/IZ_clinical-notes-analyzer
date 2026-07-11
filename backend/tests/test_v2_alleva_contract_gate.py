@@ -8,11 +8,12 @@ from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 def _complete_contract() -> dict[str, object]:
     return {
         "contract_version": "synthetic-alleva-v1",
+        "api_base_url": "https://vendor.invalid",
         "effective_at": "2026-07-10T00:00:00+00:00",
         "vendor_documentation_url": "https://vendor.invalid/docs/synthetic-alleva-v1",
         "test_population_reference": "synthetic-test-population-v1",
-        "oauth": {"token_auth_style": "body", "scope": "treatment-plans.read"},
-        "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100},
+        "oauth": {"token_url": "https://vendor.invalid/token", "token_auth_style": "body", "scope": "treatment-plans.read"},
+        "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100, "maximum_records": 100, "maximum_response_bytes": 1048576},
         "rate_limit": {"maximum_requests_per_minute": 60, "retry_after_seconds": 1},
         "attachments": {"mode": "metadata_only", "download_allowed": False},
         "endpoints": {
@@ -60,3 +61,21 @@ def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert "synthetic-contract-secret" not in str(audit)
     assert "patient-name-canary" not in str(audit)
+
+
+def test_corrupt_contract_is_redacted_and_safely_denied(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    approved = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=_complete_contract())
+    assert approved.status_code == 201
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "UPDATE alleva_contract_approvals SET encrypted_contract_json=? WHERE contract_version=?",
+            (b"not-an-encrypted-contract-patient-name-canary", "synthetic-alleva-v1"),
+        )
+        database.commit()
+    denied = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert denied.status_code == 409
+    assert "contract" in denied.json()["detail"].lower()
+    assert "patient-name-canary" not in denied.text

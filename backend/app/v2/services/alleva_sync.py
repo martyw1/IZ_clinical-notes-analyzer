@@ -39,27 +39,27 @@ class AllevaSyncResult:
 def run_treatment_plan_sync(db: Session, profile: AppSetting, actor: User, contract: ApprovedAllevaContract, is_cancelled: Callable[[], bool] = lambda: False) -> AllevaSyncResult:
     if is_cancelled():
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before it started.")
-    token = _oauth_token(profile)
+    token = _oauth_token(profile, contract)
     headers = {"accept": "application/json", "authorization": f"Bearer {token}"}
     try:
         with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=True) as client:
-            clients = _paged_records(client, profile, _endpoint_path(contract, "clients"), headers, is_cancelled)
-            plans = _paged_records(client, profile, _endpoint_path(contract, "treatment_plans"), headers, is_cancelled)
+            clients = _paged_records(client, profile, contract, "clients", headers, is_cancelled)
+            plans = _paged_records(client, profile, contract, "treatment_plans", headers, is_cancelled)
             imported, skipped = _save_client_aggregates(db, client, profile, actor, contract, clients, plans, headers, is_cancelled)
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
     return AllevaSyncResult(imported_patient_count=imported, skipped_plan_count=skipped)
 
 
-def _oauth_token(profile: AppSetting) -> str:
+def _oauth_token(profile: AppSetting, contract: ApprovedAllevaContract) -> str:
     if not profile.api_client_secret:
         raise AllevaSyncError("Encrypted Alleva client secret is not configured.")
     _, token = request_client_credentials(
-        token_url=profile.api_oauth_token_url,
+        token_url=contract.payload.oauth.token_url,
         client_id=profile.api_client_id,
         client_secret=decrypt_text_secret(profile.api_client_secret),
-        scope=profile.api_scopes,
-        token_auth_style=profile.api_token_auth_style,
+        scope=contract.payload.oauth.scope,
+        token_auth_style=contract.payload.oauth.token_auth_style,
         timeout_seconds=profile.emr_api_timeout_seconds,
     )
     if not token:
@@ -67,16 +67,20 @@ def _oauth_token(profile: AppSetting) -> str:
     return token
 
 
-def _paged_records(client: httpx.Client, profile: AppSetting, path: str, headers: dict[str, str], is_cancelled: Callable[[], bool]) -> tuple[dict[str, object], ...]:
+def _paged_records(client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str], is_cancelled: Callable[[], bool]) -> tuple[dict[str, object], ...]:
     records: list[dict[str, object]] = []
     offset = 0
-    page_size = max(1, min(profile.api_pagination_limit, 500))
-    limit = max(1, min(profile.alleva_treatment_plan_sync_limit, MAX_SYNC_ROWS))
+    pagination = contract.payload.pagination
+    page_size = pagination.maximum_page_size
+    limit = min(pagination.maximum_records, MAX_SYNC_ROWS)
     while len(records) < limit:
         if is_cancelled():
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
-        response = client.get(urljoin(f"{profile.api_base_url.rstrip('/')}/", path.lstrip("/")), params={"limit": min(page_size, limit - len(records)), "offset": offset}, headers=headers)
+        response = client.get(urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key).lstrip("/")), params={pagination.limit_parameter: min(page_size, limit - len(records)), pagination.offset_parameter: offset}, headers=headers)
         response.raise_for_status()
+        response_size = int(response.headers.get("content-length", "0"))
+        if response_size > pagination.maximum_response_bytes:
+            raise ValueError("API page exceeded the approved response-size limit.")
         page = _records(response.json())
         records.extend(page)
         if len(page) < page_size:

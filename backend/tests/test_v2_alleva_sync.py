@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -89,17 +90,18 @@ def _mock_alleva_server(*, block_clients: bool = False) -> Iterator[tuple[str, _
         assert not thread.is_alive()
 
 
-def _approve_synthetic_contract(client, headers) -> None:
+def _approve_synthetic_contract(client, headers, api_base_url: str = "https://api.allevasoft.com", token_url: str = "https://api.allevasoft.com/connect/token") -> None:
     approved = client.post(
         "/api/v2/alleva-sync/contracts",
         headers=headers,
         json={
             "contract_version": "synthetic-wire-contract-v1",
+            "api_base_url": api_base_url,
             "effective_at": "2026-07-10T00:00:00+00:00",
             "vendor_documentation_url": "https://vendor.invalid/docs/synthetic",
             "test_population_reference": "synthetic-wire-population",
-            "oauth": {"token_auth_style": "body", "scope": "plans.read"},
-            "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100},
+            "oauth": {"token_url": token_url, "token_auth_style": "body", "scope": "plans.read"},
+            "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100, "maximum_records": 100, "maximum_response_bytes": 1048576},
             "rate_limit": {"maximum_requests_per_minute": 60, "retry_after_seconds": 1},
             "attachments": {"mode": "metadata_only", "download_allowed": False},
             "endpoints": {
@@ -138,6 +140,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
                 "token_url": f"{base_url}/token",
                 "client_id": "mock-client",
                 "client_secret": "mock-secret",
+                "scopes": "plans.read",
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
@@ -145,10 +148,19 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
             },
         )
         assert configured.status_code == 200
-        _approve_synthetic_contract(client, headers)
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
         started = client.post("/api/v2/alleva-sync/run", headers=headers)
         assert started.status_code == 202
         job_id = started.json()["job_id"]
+        database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+        with sqlite3.connect(database_path) as database:
+            ledger = database.execute(
+                "SELECT contract_version,contract_sha256 FROM sync_jobs JOIN alleva_contract_approvals ON approval_record_id=alleva_contract_approvals.id WHERE external_job_id=?",
+                (job_id,),
+            ).fetchone()
+        assert ledger is not None
+        assert ledger[0] == "synthetic-wire-contract-v1"
+        assert len(ledger[1]) == 64
         synced = started
         for _ in range(40):
             synced = client.get(f"/api/v2/alleva-sync/jobs/{job_id}", headers=headers)
@@ -185,6 +197,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
                 "token_url": f"{base_url}/token",
                 "client_id": "mock-client",
                 "client_secret": "mock-secret",
+                "scopes": "plans.read",
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
@@ -192,7 +205,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
             },
         )
         assert configured.status_code == 200
-        _approve_synthetic_contract(client, headers)
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
         started = client.post("/api/v2/alleva-sync/run", headers=headers)
         assert started.status_code == 202
         job_id = started.json()["job_id"]
@@ -233,6 +246,7 @@ def test_unexpected_sync_worker_failure_reaches_a_terminal_audited_state(tmp_pat
         headers=headers,
         json={
             "client_secret": "mock-secret",
+            "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
@@ -240,7 +254,7 @@ def test_unexpected_sync_worker_failure_reaches_a_terminal_audited_state(tmp_pat
         },
     )
     assert configured.status_code == 200
-    _approve_synthetic_contract(client, headers)
+    _approve_synthetic_contract(client, headers, "https://api.allevasoft.com", "https://authorization.allevasoft.com/connect/token")
     started = client.post("/api/v2/alleva-sync/run", headers=headers)
     assert started.status_code == 202
     job_id = started.json()["job_id"]
