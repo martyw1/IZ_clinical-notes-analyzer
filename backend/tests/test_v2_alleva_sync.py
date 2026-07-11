@@ -136,6 +136,53 @@ def test_alleva_sync_is_blocked_until_explicit_approval_and_mapping_are_saved(tm
     assert "sync" in response.json()["detail"].lower()
 
 
+@pytest.mark.parametrize(
+    ("column", "value"),
+    (("expires_at", "2000-01-01T00:00:00+00:00"), ("revoked_at", "2026-07-10T00:00:00+00:00")),
+)
+def test_expired_or_revoked_contract_blocks_sync_before_worker_starts(
+    tmp_path,
+    monkeypatch,
+    column: str,
+    value: str,
+) -> None:
+    # Given: a locally approved synthetic contract whose approval is no longer active.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    configured = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "client_secret": "mock-secret",
+            "scopes": "plans.read",
+            "api_enabled": True,
+            "treatment_plan_sync_enabled": True,
+            "treatment_plan_sync_approved": True,
+            "treatment_plan_endpoint_mapping_validated": True,
+        },
+    )
+    assert configured.status_code == 200
+    _approve_synthetic_contract(client, headers)
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    with sqlite3.connect(database_path) as database:
+        database.execute(f"UPDATE alleva_contract_approvals SET {column}=?", (value,))
+        database.commit()
+
+    import app.v2.api.alleva_sync_routes as alleva_sync_routes
+
+    def worker_must_not_start(*_args, **_kwargs):
+        raise AssertionError("contract gate must reject before the sync worker can reach OAuth or an API endpoint")
+
+    monkeypatch.setattr(alleva_sync_routes.job_service, "create_treatment_plan_sync_job", worker_must_not_start)
+
+    # When: an administrator invokes the real sync route.
+    response = client.post("/api/v2/alleva-sync/run", headers=headers)
+
+    # Then: the route safe-denies before it can create a worker or make a network request.
+    assert response.status_code == 409
+    assert "approved versioned contract" in response.json()["detail"]
+
+
 def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregate(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)

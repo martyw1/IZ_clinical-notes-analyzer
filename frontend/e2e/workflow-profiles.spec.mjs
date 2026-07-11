@@ -1,35 +1,23 @@
 import { expect, test } from '@playwright/test'
 
 const bootstrapUsername = process.env.IZ_CNA_E2E_ADMIN_USERNAME ?? 'e2eadmin'
-const bootstrapPassword = process.env.IZ_CNA_E2E_ADMIN_PASSWORD ?? 'E2eAdminPass1'
+const bootstrapPassword = process.env.IZ_CNA_E2E_ADMIN_PASSWORD ?? 'E2eActivePass456'
 
-test('admin creates and publishes a persisted workflow profile', async ({ page }, testInfo) => {
-  const workflowKey = `e2e-clinical-${crypto.randomUUID().slice(0, 8)}`
+test('admin sees workflow profiles withheld and opens supported controls', async ({ page }, testInfo) => {
   await page.goto('/')
   await page.getByLabel('Username').fill(bootstrapUsername)
   await page.getByLabel('Password').fill(bootstrapPassword)
   await page.getByRole('button', { name: 'Sign in' }).click()
 
-  await page.getByRole('button', { name: 'Workflow Profiles' }).click()
-  await page.getByLabel('Workflow key').fill(workflowKey)
-  await page.getByLabel('Display name').fill('E2E Clinical Timeliness Review')
-  await page.getByLabel('Description').fill('Synthetic workflow lifecycle verification.')
-  await page.getByRole('button', { name: 'Create workflow profile' }).click()
-
-  await expect(page.getByRole('status')).toHaveText('Workflow profile created as draft version 1.')
-  await page.getByRole('button', { name: 'Publish version 1' }).click()
-  await expect(page.getByRole('status')).toHaveText('Workflow profile version 1 published.')
-  const workflowRow = page.getByRole('row').filter({ hasText: workflowKey })
-  await expect(workflowRow.getByText('Version 1: published')).toBeVisible()
-
-  await page.screenshot({ path: testInfo.outputPath('workflow-profiles-desktop.png') })
-  await page.setViewportSize({ width: 375, height: 812 })
-  await expect(workflowRow.getByText('Version 1: published')).toBeVisible()
-  await workflowRow.getByText('Version 1: published').scrollIntoViewIfNeeded()
-  await page.screenshot({ path: testInfo.outputPath('workflow-profiles-mobile.png') })
+  await expect(page.getByRole('button', { name: 'Workflow Profiles' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByRole('heading', { name: 'Local V2 controls' })).toBeVisible()
+  await page.getByRole('button', { name: 'API Testing Harness' }).click()
+  await expect(page.getByRole('heading', { name: 'Alleva/OpenAPI testing' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('supported-admin-controls.png') })
 })
 
-test('admin uploads a treatment plan and sees its persisted late status', async ({ page }, testInfo) => {
+test('admin uploads a treatment plan and sees its persisted missing-data status', async ({ page }, testInfo) => {
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
   const dueDate = yesterday.toISOString().slice(0, 10)
@@ -48,8 +36,8 @@ test('admin uploads a treatment plan and sees its persisted late status', async 
   await expect(page.getByRole('status')).toContainText('Imported Patient ID 915')
   await page.getByRole('button', { name: 'Treatment Plans' }).click()
   await expect(page.getByRole('heading', { name: 'Patient ID 915' })).toBeVisible()
-  await expect(page.getByText('Late', { exact: true }).first()).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath('manual-upload-late-status.png') })
+  await expect(page.getByText('Missing Data', { exact: true }).first()).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('manual-upload-missing-data-status.png') })
 })
 
 test('admin enables the approved sync gates and sees a mocked synced treatment plan', async ({ page }, testInfo) => {
