@@ -126,6 +126,10 @@ def _sync_blockers(profile: AppSetting, contract: ApprovedAllevaContract | None)
         blockers.append("API testing is not enabled")
     if not profile.alleva_treatment_plan_sync_enabled:
         blockers.append("treatment-plan sync is not enabled")
+    if not profile.alleva_treatment_plan_sync_approved:
+        blockers.append("R3/Alleva approval is not recorded")
+    if not profile.alleva_treatment_plan_endpoint_mapping_validated:
+        blockers.append("the treatment-plan endpoint mapping is not validated")
     if contract is None:
         blockers.append("an approved versioned contract is required")
     elif profile.api_base_url != contract.payload.api_base_url or profile.api_oauth_token_url != contract.payload.oauth.token_url:

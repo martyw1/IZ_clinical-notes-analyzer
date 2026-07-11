@@ -35,6 +35,10 @@ def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_
         headers=headers,
         json={
             "client_secret": "synthetic-contract-secret",
+            "api_base_url": "https://vendor.invalid",
+            "token_url": "https://vendor.invalid/token",
+            "token_auth_style": "body",
+            "scopes": "treatment-plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
@@ -49,6 +53,27 @@ def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_
     assert approved.status_code == 201, approved.text
     assert approved.json()["contract_version"] == "synthetic-alleva-v1"
     assert approved.json()["contract_sha256"]
+    approval_removed = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "treatment_plan_sync_approved": False,
+            "treatment_plan_endpoint_mapping_validated": False,
+        },
+    )
+    assert approval_removed.status_code == 200
+    missing_external_gate = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert missing_external_gate.status_code == 409
+    assert "R3/Alleva approval" in missing_external_gate.json()["detail"]
+    restored = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "treatment_plan_sync_approved": True,
+            "treatment_plan_endpoint_mapping_validated": True,
+        },
+    )
+    assert restored.status_code == 200
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
         encrypted = database.execute(

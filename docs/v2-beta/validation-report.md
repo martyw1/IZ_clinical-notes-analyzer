@@ -21,7 +21,7 @@ Validation used an isolated synthetic local-data profile and no tenant credentia
 | Packaged CMD launcher | Pass — readiness success and timeout-failure behavior verified |
 | PyInstaller package, required-file validation, release-folder and ZIP forbidden-file scans | Pass |
 
-Generated artifact: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip` (34,577,040 bytes), SHA-256 `6DED1A2F5C443C3714A496180B82A8879C2D37D7A356D304D7CBA74BCCAE1215`.
+Generated artifact: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip` (34,577,929 bytes), SHA-256 `22B75852D9A1D87855FD3E761AF4A2D67684F1A49BD785A0E5E13311BFEE8C6F`.
 
 ## Historical beta.1 command evidence (2026-07-08)
 

@@ -4,24 +4,29 @@ set "APP_ROOT=%~dp0.."
 set "RUNTIME_EXE=%APP_ROOT%\runtime\IZClinicalNotesAnalyzer.exe"
 set "IZ_CNA_ENV_FILE=%LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env"
 set "IZ_CNA_PORT=8000"
+if exist "%IZ_CNA_ENV_FILE%" (
+    for /f "usebackq tokens=1,* delims==" %%A in ("%IZ_CNA_ENV_FILE%") do (
+        if /I "%%A"=="BACKEND_PORT" set "IZ_CNA_PORT=%%B"
+    )
+)
 if not exist "%RUNTIME_EXE%" (
     echo [fail] The bundled IZ Clinical Notes Analyzer runtime is missing.
     exit /b 1
 )
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), 8000); try { $listener.Start(); exit 0 } catch { exit 1 } finally { $listener.Stop() }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$port = 0; if (-not [int]::TryParse($env:IZ_CNA_PORT, [ref]$port) -or $port -lt 1 -or $port -gt 65535) { exit 2 }; $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $port); try { $listener.Start(); exit 0 } catch { exit 1 } finally { $listener.Stop() }"
 if errorlevel 1 (
-    echo [fail] Port 8000 is already in use. Stop the existing local app before starting another instance.
+    echo [fail] Port %IZ_CNA_PORT% is already in use or invalid. Stop the existing local app before starting another instance.
     exit /b 1
 )
 start "" /b "%RUNTIME_EXE%"
 echo Waiting for the local runtime readiness check...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$deadline = (Get-Date).AddSeconds(30); do { try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/readiness' -TimeoutSec 2; if ($response.StatusCode -eq 200 -and $response.Content -match '\"status\"') { exit 0 } } catch { } Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$deadline = (Get-Date).AddSeconds(30); do { try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:%IZ_CNA_PORT%/api/readiness' -TimeoutSec 2; if ($response.StatusCode -eq 200 -and $response.Content -match '\"status\"') { exit 0 } } catch { } Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
 if errorlevel 1 (
     echo [fail] Readiness check failed. The app did not become available within 30 seconds.
     echo Review the startup log under %LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs.
     exit /b 1
 )
 echo IZ Clinical Notes Analyzer is starting in the background.
-echo Readiness: http://127.0.0.1:8000/api/readiness
-echo Version: http://127.0.0.1:8000/api/version
+echo Readiness: http://127.0.0.1:%IZ_CNA_PORT%/api/readiness
+echo Version: http://127.0.0.1:%IZ_CNA_PORT%/api/version
 exit /b 0
