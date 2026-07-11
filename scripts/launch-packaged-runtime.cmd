@@ -8,6 +8,11 @@ if not exist "%RUNTIME_EXE%" (
     echo [fail] The bundled IZ Clinical Notes Analyzer runtime is missing.
     exit /b 1
 )
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), 8000); try { $listener.Start(); exit 0 } catch { exit 1 } finally { $listener.Stop() }"
+if errorlevel 1 (
+    echo [fail] Port 8000 is already in use. Stop the existing local app before starting another instance.
+    exit /b 1
+)
 start "" /b "%RUNTIME_EXE%"
 echo Waiting for the local runtime readiness check...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$deadline = (Get-Date).AddSeconds(30); do { try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/readiness' -TimeoutSec 2; if ($response.StatusCode -eq 200 -and $response.Content -match '\"status\"') { exit 0 } } catch { } Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"

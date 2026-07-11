@@ -50,6 +50,7 @@ def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success() 
     # Then: it probes the documented readiness endpoint and returns failure on timeout.
     assert "/api/readiness" in launcher_contents
     assert "Readiness check failed" in launcher_contents
+    assert "Port 8000 is already in use" in launcher_contents
     assert "exit /b 1" in launcher_contents
 
 
@@ -63,6 +64,10 @@ def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() 
     # Then: it waits for the readiness contract before reporting background startup.
     assert "Wait-ForReadiness" in launcher_contents
     assert "Startup readiness check failed" in launcher_contents
+    assert "Get-ConfiguredPort" in launcher_contents
+    assert "Assert-PortAvailable -Port $port" in launcher_contents
+    assert "Wait-ForReadiness -Process $process -Port $port" in launcher_contents
+    assert "$ready = $false" in launcher_contents
 
 
 def test_windows_checkout_launcher_passes_enabled_switches_without_string_boolean_values() -> None:
