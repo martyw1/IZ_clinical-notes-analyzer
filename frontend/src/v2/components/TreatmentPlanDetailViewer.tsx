@@ -119,7 +119,7 @@ export function TreatmentPlanDetailViewer({
           <span>Admission: <time dateTime={plan.admissionDate}>{plan.admissionDate}</time></span>
           <span>Next due: <time dateTime={plan.dueDate}>{plan.dueDate}</time></span>
           <span>Source due: {plan.sourceDueDate}</span>
-          <span>LOC-change clock: {plan.locChangeDueDate}</span>
+          <span className='summary-grid__item--wrappable'>LOC-change clock: {plan.locChangeDueDate}</span>
           <span>Evaluated: {plan.evaluationDate} ({plan.facilityTimezone})</span>
           <span>Checklist/rules: {plan.checklistVersion} / {plan.rulesVersion}</span>
           <span>Source: {plan.sourceMode}</span>

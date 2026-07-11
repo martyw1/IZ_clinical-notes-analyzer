@@ -105,6 +105,7 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
 
     expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(screen.getByText(/LOC-change clock:/)).toHaveClass('summary-grid__item--wrappable')
     expect(screen.getByText('Diagnoses')).toBeInTheDocument()
     expect(screen.getByText('Behavioral Definitions')).toBeInTheDocument()
     expect(screen.getByText('Goals')).toBeInTheDocument()
