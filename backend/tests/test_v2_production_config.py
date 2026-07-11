@@ -5,6 +5,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+def test_resolve_repository_root_uses_frozen_bundle_data_root(tmp_path: Path) -> None:
+    # Given: a PyInstaller extraction location and a source-style module path.
+    bundled_root = tmp_path / "frozen-bundle"
+    module_path = tmp_path / "source" / "backend" / "app" / "core" / "config.py"
+
+    # When: packaged-runtime configuration resolves its resource root.
+    from app.core.config import resolve_repository_root
+
+    actual = resolve_repository_root(module_path, bundled_root)
+
+    # Then: deterministic rules are read from the bundled data directory.
+    assert actual == bundled_root
+
 
 def _config_probe(env_file: Path, overrides: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()

@@ -25,6 +25,7 @@ function Get-ForbiddenReleaseCategory {
         if ($part -in @('logs', 'alleva-api-test-logs')) { return 'log' }
     }
 
+    if ($fileName -eq '.debug-journal.md') { return 'local_evidence' }
     if ($fileName -eq '.env.example') { return $null }
     if ($fileName -eq '.env' -or $fileName.StartsWith('.env.') -or $fileName -eq '.alleva.local.ps1' -or $fileName -like '*.local.*') {
         return 'local_config'

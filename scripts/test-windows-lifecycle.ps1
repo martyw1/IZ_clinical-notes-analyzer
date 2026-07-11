@@ -6,6 +6,7 @@ $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $BackupScript = Join-Path $RepositoryRoot 'scripts\backup-local-data.ps1'
 $RestoreScript = Join-Path $RepositoryRoot 'scripts\restore-local-data.ps1'
 $BuildScript = Join-Path $RepositoryRoot 'scripts\build-windows-installer.ps1'
+$StopScript = Join-Path $RepositoryRoot 'scripts\stop-windows-local.ps1'
 
 function Assert-True {
     param([bool]$Condition, [string]$Label)
@@ -40,6 +41,11 @@ try {
     Assert-True -Condition ($buildText -match 'Restore-IZ-Clinical-Notes-Analyzer\.cmd') -Label 'release_contains_restore_command'
     Assert-True -Condition ($buildText -match 'backup-local-data\.ps1' -and $buildText -match 'Pre-upgrade encrypted backup') -Label 'installer_performs_pre_upgrade_backup'
     Assert-True -Condition ($buildText -match 'app\\runtime') -Label 'release_requires_runtime_payload'
+    Assert-True -Condition ($buildText -match '--collect-all passlib') -Label 'runtime_collects_dynamic_passlib_handlers'
+    Assert-True -Condition ($buildText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE') -Label 'backend_tests_isolate_preflight_environment'
+    $stopText = Get-Content -LiteralPath $StopScript -Raw
+    Assert-True -Condition ($stopText -match 'Test-IsBundledRuntime') -Label 'stop_recognizes_bundled_runtime'
+    Assert-True -Condition ($stopText -match 'runtime\\IZClinicalNotesAnalyzer\.exe') -Label 'stop_validates_bundled_runtime_path'
 }
 finally {
     $env:LOCALAPPDATA = $previousLocalAppData

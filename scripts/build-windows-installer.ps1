@@ -166,7 +166,8 @@ function Copy-RepoContent {
         '*.log',
         '*.tmp',
         '*.bak',
-        '*.pyc'
+        '*.pyc',
+        '.debug-journal.md'
     )
     robocopy $RootDir $Destination /MIR /XD $excludeDirs /XF $excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
@@ -254,8 +255,18 @@ function Invoke-BackendTests {
         return
     }
     Write-Step 'Running backend tests...'
-    $env:PYTHONPATH = Join-Path $RootDir 'backend'
-    Invoke-CheckedCommand -Command { & $VenvPython -m pytest (Join-Path $RootDir 'backend\tests') -q } -FailureMessage 'Backend tests failed.'
+    $previousEnvFile = $env:IZ_CNA_ENV_FILE
+    try {
+        Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
+        $env:PYTHONPATH = Join-Path $RootDir 'backend'
+        Invoke-CheckedCommand -Command { & $VenvPython -m pytest (Join-Path $RootDir 'backend\tests') -q } -FailureMessage 'Backend tests failed.'
+    } finally {
+        if ($null -eq $previousEnvFile) {
+            Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
+        } else {
+            $env:IZ_CNA_ENV_FILE = $previousEnvFile
+        }
+    }
     Write-Ok 'Backend tests passed.'
 }
 
@@ -340,6 +351,7 @@ function Build-DesktopRuntime {
                 --add-data "$(Join-Path $RootDir 'frontend\dist');app\static" `
                 --add-data "$(Join-Path $RootDir 'config');config" `
                 --collect-submodules app `
+                --collect-all passlib `
                 --distpath $runtimeDir `
                 --workpath (Join-Path $runtimeBuildRoot 'work') `
                 --specpath (Join-Path $runtimeBuildRoot 'spec') `

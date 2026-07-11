@@ -34,6 +34,7 @@ Assert-True -Condition $buildScript.Contains("'.omo'") -Label 'baseline_evidence
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\exports\canary.csv') -eq 'clinical_export') -Label 'baseline_export_path_rejected'
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\uploads\canary.txt') -eq 'upload') -Label 'baseline_upload_path_rejected'
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\node_modules\canary.js') -eq 'dependencies') -Label 'baseline_dependency_path_rejected'
+Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath '.debug-journal.md') -eq 'local_evidence') -Label 'debug_journal_rejected'
 Assert-True -Condition ($null -eq (Get-ForbiddenReleaseCategory -RelativePath '.env.example')) -Label 'safe_env_template_allowed'
 
 Write-Output 'baseline_scanner_characterization=PASS'

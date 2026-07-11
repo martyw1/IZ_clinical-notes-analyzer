@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -8,7 +9,16 @@ from typing import Final
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
 APP_VERSION: Final = "2.0.0-beta.1"
 BUILD_CHANNEL: Final = "beta-local-desktop-v2"
-REPO_ROOT: Final = Path(__file__).resolve().parents[3]
+
+
+def resolve_repository_root(module_path: Path, bundled_data_root: Path | None) -> Path:
+    if bundled_data_root is not None:
+        return bundled_data_root
+    return module_path.resolve().parents[3]
+
+
+_bundled_data_root = getattr(sys, "_MEIPASS", None) if getattr(sys, "frozen", False) else None
+REPO_ROOT: Final = resolve_repository_root(Path(__file__), Path(_bundled_data_root) if _bundled_data_root else None)
 RESTRICTED_ENVIRONMENTS: Final = frozenset({"production", "local-client"})
 UNSAFE_SECURITY_VALUES: Final = frozenset(
     {

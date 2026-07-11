@@ -14,6 +14,7 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ScriptsDir = Join-Path $RootDir 'scripts'
 $BackendDir = Join-Path $RootDir 'backend'
 $FrontendDir = Join-Path $RootDir 'frontend'
+$BundledRuntime = Join-Path $RootDir 'runtime\IZClinicalNotesAnalyzer.exe'
 $StartCmd = Join-Path $ScriptsDir 'Start-IZ-Clinical-Notes-Analyzer.cmd'
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
 
@@ -137,6 +138,15 @@ function Test-IsAppUvicorn {
     return ($isPythonLike -and $hasUvicorn -and $hasAppTarget -and $hasAppDir -and $hasRepoBackend)
 }
 
+function Test-IsBundledRuntime {
+    param([string]$Name, [string]$ExecutablePath)
+
+    return (
+        $Name -eq 'izclinicalnotesanalyzer.exe' -and
+        $ExecutablePath -eq (ConvertTo-NormalizedText $BundledRuntime)
+    )
+}
+
 function Test-IsFrontendVite {
     param([string]$Name, [string]$CommandLine)
 
@@ -190,6 +200,11 @@ function Get-AppProcessTargets {
             $priority = [Math]::Min($priority, 20)
         }
 
+        if (Test-IsBundledRuntime -Name $name -ExecutablePath $executablePath) {
+            $reasons += 'bundled Windows runtime at this app installation path'
+            $priority = [Math]::Min($priority, 20)
+        }
+
         if (Test-IsFrontendVite -Name $name -CommandLine $commandLine) {
             $reasons += 'repo frontend Vite development or preview server'
             $priority = [Math]::Min($priority, 30)
@@ -222,6 +237,7 @@ function Show-ProcessScope {
     Write-Host '  - powershell.exe or pwsh.exe running scripts\startup-windows-local.ps1'
     Write-Host '  - python.exe or pythonw.exe running Uvicorn for app.desktop_main:app from this repo backend'
     Write-Host '  - python.exe or pythonw.exe running Uvicorn for app.main:app from this repo backend smoke tests'
+    Write-Host '  - IZClinicalNotesAnalyzer.exe running from this app installation runtime folder'
     Write-Host '  - node.exe running this repo frontend Vite dev or preview server, if present'
     Write-Host ''
     Write-Host 'Guardrails: this does not close browser windows, clear patient data, delete uploads,'
