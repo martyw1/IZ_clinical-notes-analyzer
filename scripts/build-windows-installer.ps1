@@ -325,6 +325,34 @@ function Invoke-FrontendBuild {
     Write-Ok 'Frontend build complete.'
 }
 
+function Build-DesktopRuntime {
+    param([string]$TargetPackageDir)
+    $runtimeDir = Join-Path $TargetPackageDir 'app\runtime'
+    $runtimeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-runtime-$([System.Guid]::NewGuid().ToString('N'))"
+    $entryPoint = Join-Path $RootDir 'backend\app\desktop_runtime.py'
+    if (-not (Test-Path -LiteralPath $entryPoint)) { throw "Desktop runtime entry point is missing: $entryPoint" }
+    New-Item -ItemType Directory -Path $runtimeDir, $runtimeBuildRoot -Force | Out-Null
+    try {
+        Write-Build 'Bundling the self-contained Windows desktop runtime...'
+        Invoke-CheckedCommand -Command {
+            & $VenvPython -m PyInstaller --noconfirm --clean --onefile --noconsole --name IZClinicalNotesAnalyzer `
+                --paths (Join-Path $RootDir 'backend') `
+                --add-data "$(Join-Path $RootDir 'frontend\dist');app\static" `
+                --add-data "$(Join-Path $RootDir 'config');config" `
+                --collect-submodules app `
+                --distpath $runtimeDir `
+                --workpath (Join-Path $runtimeBuildRoot 'work') `
+                --specpath (Join-Path $runtimeBuildRoot 'spec') `
+                $entryPoint
+        } -FailureMessage 'Bundled Windows runtime build failed.'
+    } finally {
+        if (Test-Path -LiteralPath $runtimeBuildRoot) { Remove-Item -LiteralPath $runtimeBuildRoot -Recurse -Force }
+    }
+    $runtimeExe = Join-Path $runtimeDir 'IZClinicalNotesAnalyzer.exe'
+    if (-not (Test-Path -LiteralPath $runtimeExe)) { throw 'Bundled Windows runtime was not produced.' }
+    Write-Ok 'Self-contained Windows desktop runtime is present.'
+}
+
 function Assert-RelativePathAllowed {
     param(
         [string]$RelativePath,
@@ -350,6 +378,7 @@ function Assert-ReleaseRequiredItems {
         'app\frontend',
         'app\frontend\dist',
         'app\frontend\dist\index.html',
+        'app\runtime\IZClinicalNotesAnalyzer.exe',
         'app\docs\patient-treatment-plan-handling.md',
         'app\docs\beta-client-test-run-guide.md',
         'app\scripts',
@@ -358,6 +387,7 @@ function Assert-ReleaseRequiredItems {
         'Stop-IZ-Clinical-Notes-Analyzer.cmd',
         'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd',
         'Backup-IZ-Clinical-Notes-Analyzer.cmd',
+        'Restore-IZ-Clinical-Notes-Analyzer.cmd',
         'Uninstall-IZ-Clinical-Notes-Analyzer.cmd',
         'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd',
         'release-manifest.json'
@@ -392,6 +422,7 @@ function Write-InstallerFiles {
     $stopCmd = Join-Path $TargetPackageDir 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
     $diagnosticsCmd = Join-Path $TargetPackageDir 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
     $backupCmd = Join-Path $TargetPackageDir 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
+    $restoreCmd = Join-Path $TargetPackageDir 'Restore-IZ-Clinical-Notes-Analyzer.cmd'
     $uninstallCmd = Join-Path $TargetPackageDir 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
     $completeUninstallCmd = Join-Path $TargetPackageDir 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
 
@@ -435,7 +466,7 @@ cd /d "%PACKAGE_DIR%"
 title IZ Clinical Notes Analyzer
 echo Starting IZ Clinical Notes Analyzer...
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%app\scripts\start-windows-local.ps1" -AssumeYes %*
+call "%PACKAGE_DIR%app\scripts\launch-packaged-runtime.cmd" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo.
@@ -518,6 +549,15 @@ exit /b %EXIT_CODE%
 @echo off
 setlocal
 set "PACKAGE_DIR=%~dp0"
+title Restore IZ Clinical Notes Analyzer
+call "%PACKAGE_DIR%app\scripts\Restore-IZ-Clinical-Notes-Analyzer.cmd" %*
+exit /b %ERRORLEVEL%
+"@ | Set-Content -Path $restoreCmd -Encoding ASCII
+
+@"
+@echo off
+setlocal
+set "PACKAGE_DIR=%~dp0"
 set "NO_PAUSE="
 for %%A in (%*) do (
     if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
@@ -579,15 +619,17 @@ $SourceAppDir = Join-Path $PackageDir 'app'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer'
 $StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer'
 $DesktopDir = [Environment]::GetFolderPath('Desktop')
-$Launcher = Join-Path $InstallRoot 'scripts\Start-IZ-Clinical-Notes-Analyzer.cmd'
+$Launcher = Join-Path $InstallRoot 'scripts\launch-packaged-runtime.cmd'
 $StopLauncher = Join-Path $InstallRoot 'scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd'
 $DiagnosticsLauncher = Join-Path $InstallRoot 'scripts\Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
 $BackupLauncher = Join-Path $InstallRoot 'scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd'
+$RestoreLauncher = Join-Path $InstallRoot 'scripts\Restore-IZ-Clinical-Notes-Analyzer.cmd'
 $InstalledInstallerDir = Join-Path $InstallRoot 'installer'
 $StartShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer.lnk'
 $StopShortcut = Join-Path $StartMenuDir 'Stop IZ Clinical Notes Analyzer.lnk'
 $DiagnosticsShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer Diagnostics.lnk'
 $BackupShortcut = Join-Path $StartMenuDir 'Backup IZ Clinical Notes Analyzer.lnk'
+$RestoreShortcut = Join-Path $StartMenuDir 'Restore IZ Clinical Notes Analyzer.lnk'
 $UninstallShortcut = Join-Path $StartMenuDir 'Uninstall IZ Clinical Notes Analyzer.lnk'
 $CompleteUninstallShortcut = Join-Path $StartMenuDir 'Complete Uninstall IZ Clinical Notes Analyzer.lnk'
 $DesktopStartShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer.lnk'
@@ -626,6 +668,16 @@ function Assert-RequiredPackageItem {
 Assert-RequiredPackageItem 'app\backend'
 Assert-RequiredPackageItem 'app\frontend\dist\index.html'
 Assert-RequiredPackageItem 'app\scripts\preflight-windows.ps1'
+Assert-RequiredPackageItem 'app\runtime\IZClinicalNotesAnalyzer.exe'
+
+if (Test-Path -LiteralPath $LocalDataDir) {
+    $existingStopScript = Join-Path $InstallRoot 'scripts\stop-windows-local.ps1'
+    if (Test-Path -LiteralPath $existingStopScript) { & $existingStopScript -NoRestartPrompt -NoPause }
+    Write-InstallStep 'Creating verified Pre-upgrade encrypted backup'
+    $preUpgradeBackup = & (Join-Path $SourceAppDir 'scripts\backup-local-data.ps1') -AssumeYes -NoStop -PassThru
+    if (-not $preUpgradeBackup -or -not (Test-Path -LiteralPath $preUpgradeBackup.Path)) { throw 'Pre-upgrade encrypted backup failed. Existing data was not modified.' }
+    Write-InstallOk "Pre-upgrade encrypted backup: $($preUpgradeBackup.Path)"
+}
 
 Write-InstallStep "Installing app files to $InstallRoot"
 New-Item -ItemType Directory -Path $InstallRoot, $StartMenuDir -Force | Out-Null
@@ -690,6 +742,7 @@ New-Shortcut -ShortcutPath $StartShortcut -TargetPath $Launcher -WorkingDirector
 New-Shortcut -ShortcutPath $StopShortcut -TargetPath $StopLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,27"
 New-Shortcut -ShortcutPath $DiagnosticsShortcut -TargetPath $DiagnosticsLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,23"
 New-Shortcut -ShortcutPath $BackupShortcut -TargetPath $BackupLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,258"
+New-Shortcut -ShortcutPath $RestoreShortcut -TargetPath $RestoreLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,167"
 New-Shortcut -ShortcutPath $UninstallShortcut -TargetPath $Uninstaller -WorkingDirectory $InstallRoot
 New-Shortcut -ShortcutPath $CompleteUninstallShortcut -TargetPath $CompleteUninstaller -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,131"
 New-Shortcut -ShortcutPath $DesktopStartShortcut -TargetPath $Launcher -WorkingDirectory $InstallRoot
@@ -699,9 +752,7 @@ New-Shortcut -ShortcutPath $DesktopBackupShortcut -TargetPath $BackupLauncher -W
 Write-InstallOk "Installed IZ Clinical Notes Analyzer to $InstallRoot"
 Write-Host "Local data folder: $LocalDataDir"
 Write-Host "Start Menu shortcut: $StartShortcut"
-Write-InstallStep 'Running first-time preflight after install'
-& (Join-Path $InstallRoot 'scripts\preflight-windows.ps1') -AssumeYes
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime\IZClinicalNotesAnalyzer.exe'))) { throw 'The bundled runtime is missing after install.' }
 Write-InstallOk 'Install complete. Use the Start Menu shortcut or Desktop shortcut to launch the app.'
 '@ | Set-Content -Path (Join-Path $installerDir 'install-windows-release.ps1') -Encoding UTF8
 
@@ -811,6 +862,7 @@ try {
     Remove-GeneratedDirectory -Path $PackageDir -Parent $ReleaseRoot -Label 'Release package directory'
     New-Item -ItemType Directory -Path $AppDir -Force | Out-Null
     Copy-RepoContent -Destination $AppDir
+    Build-DesktopRuntime -TargetPackageDir $PackageDir
     Write-InstallerFiles -TargetPackageDir $PackageDir
 
     $manifest = [ordered]@{
@@ -825,12 +877,15 @@ try {
         stop_command = 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
         diagnostics_command = 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
         backup_command = 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
+        restore_command = 'Restore-IZ-Clinical-Notes-Analyzer.cmd'
         uninstall_command = 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
         complete_uninstall_command = 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
         treatment_plan_handling_reference = 'app\docs\patient-treatment-plan-handling.md'
         beta_client_test_run_guide = 'app\docs\beta-client-test-run-guide.md'
         treatment_plan_compliance_engine = 'local deterministic timeliness and checklist evaluation'
         frontend_dist_validated = $true
+        bundled_runtime = 'app\runtime\IZClinicalNotesAnalyzer.exe'
+        backup_encryption = 'DPAPI current-user + AES-256-CBC + HMAC-SHA-256'
         forbidden_file_scan = 'passed'
     }
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PackageDir 'release-manifest.json') -Encoding UTF8
