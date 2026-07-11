@@ -22,6 +22,7 @@ from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
 from app.v2.services.clinical_evidence_store import persist_clinical_evidence
 from app.v2.services.evaluation_store import PlanEvaluationTarget, latest_evaluated_aggregate, persist_plan_evaluation
 from app.v2.services.migrated_treatment_plan import assemble_treatment_plan_aggregate
+from app.v2.services.alleva_contracts import SyncImportProvenance
 
 TREATMENT_PLAN_STATUS_ORDER: Final = (
     "Missing Data",
@@ -86,7 +87,12 @@ def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem
     return tuple(_queue_item_from_import(row, correction_counts.get(row.patient_id, 0)) for row in list_treatment_plan_imports(db))
 
 
-def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate, actor: User) -> StoredTreatmentPlan:
+def save_treatment_plan_aggregate(
+    db: Session,
+    aggregate: TreatmentPlanAggregate,
+    actor: User,
+    sync_provenance: SyncImportProvenance | None = None,
+) -> StoredTreatmentPlan:
     aggregate = aggregate.model_copy(update={"patient_display_label": f"Patient ID {aggregate.patient_id}"})
     payload_json = aggregate.model_dump_json()
     encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
@@ -124,9 +130,11 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
         text(
             """INSERT OR IGNORE INTO treatment_plan_versions(
                 patient_id,source_system,source_record_id,version_ordinal,plan_date,signature_date,admission_date,source_next_review_due,
-                normalized_snapshot_encrypted,content_sha256,evidence_sha256,imported_at,supersedes_version_id
+                normalized_snapshot_encrypted,content_sha256,evidence_sha256,imported_at,supersedes_version_id,
+                sync_job_id,approval_record_id,contract_version,contract_sha256
             ) VALUES(:patient_id,:source_system,:source_record_id,:version_ordinal,:plan_date,:signature_date,:admission_date,:next_due,
-                :payload,:content_sha256,:evidence_sha256,:imported_at,:supersedes_version_id)"""
+                :payload,:content_sha256,:evidence_sha256,:imported_at,:supersedes_version_id,
+                :sync_job_id,:approval_record_id,:contract_version,:contract_sha256)"""
         ),
         {
             "patient_id": patient_id,
@@ -142,6 +150,7 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
             "evidence_sha256": evidence_sha256,
             "imported_at": now,
             "supersedes_version_id": supersedes_version_id,
+            **_provenance_values(sync_provenance),
         },
     )
     plan_version_id = int(db.execute(
@@ -155,12 +164,12 @@ def save_treatment_plan_aggregate(db: Session, aggregate: TreatmentPlanAggregate
         },
     ).scalar_one())
     trigger = "sync" if aggregate.source_mode == "alleva_rest_api" else "import"
-    evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), trigger)
-    events = persist_clinical_evidence(db, aggregate, patient_id, now)
+    evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), trigger, sync_provenance=sync_provenance)
+    events = persist_clinical_evidence(db, aggregate, patient_id, plan_version_id, now, sync_provenance)
     if events.loc_change:
-        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "loc_change")
+        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "loc_change", sync_provenance=sync_provenance)
     if events.new_review:
-        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "new_review")
+        evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "new_review", sync_provenance=sync_provenance)
     db.commit()
     return _stored_plan(evaluated)
 
@@ -245,3 +254,14 @@ def _stored_plan(aggregate: TreatmentPlanAggregate) -> StoredTreatmentPlan:
 def _signature_date(aggregate: TreatmentPlanAggregate) -> str | None:
     dates = tuple(item.signature_datetime for item in aggregate.content_snapshot.signatures if item.signature_datetime.strip())
     return max(dates, default=None)
+
+
+def _provenance_values(provenance: SyncImportProvenance | None) -> dict[str, int | str | None]:
+    if provenance is None:
+        return {"sync_job_id": None, "approval_record_id": None, "contract_version": None, "contract_sha256": None}
+    return {
+        "sync_job_id": provenance.sync_job_id,
+        "approval_record_id": provenance.approval_record_id,
+        "contract_version": provenance.contract_version,
+        "contract_sha256": provenance.contract_sha256,
+    }

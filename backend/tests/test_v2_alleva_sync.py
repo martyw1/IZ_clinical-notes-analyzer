@@ -111,7 +111,7 @@ def _approve_synthetic_contract(client, headers, api_base_url: str = "https://ap
             "test_population_reference": "synthetic-wire-population",
             "oauth": {"token_url": token_url, "token_auth_style": "body", "scope": "plans.read"},
             "pagination": {"limit_parameter": "limit", "offset_parameter": "offset", "maximum_page_size": 100, "maximum_records": 100, "maximum_response_bytes": 1048576},
-            "rate_limit": {"maximum_requests_per_minute": 60, "retry_after_seconds": 1},
+            "rate_limit": {"maximum_requests_per_minute": 10_000, "retry_after_seconds": 1},
             "attachments": {"mode": "metadata_only", "download_allowed": False},
             "endpoints": {
                 "clients": {"path": "/clients", "parameters": {}, "field_mappings": {"client_id": "clientId"}},
@@ -180,10 +180,18 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert synced.json()["status"] == "completed"
         with sqlite3.connect(database_path) as database:
             checkpoints = database.execute(
-                "SELECT endpoint_key,page_number FROM sync_checkpoints JOIN sync_jobs ON sync_checkpoints.job_id=sync_jobs.id WHERE external_job_id=? ORDER BY endpoint_key",
+                "SELECT endpoint_key,page_number,encrypted_records_json FROM sync_checkpoints JOIN sync_jobs ON sync_checkpoints.job_id=sync_jobs.id WHERE external_job_id=? ORDER BY endpoint_key",
                 (job_id,),
             ).fetchall()
-        assert checkpoints == [("clients", 0), ("treatment_plans", 0)]
+            provenance = {
+                table: database.execute(
+                    f"SELECT sync_job_id,approval_record_id,contract_version,contract_sha256 FROM {table} WHERE sync_job_id IS NOT NULL"
+                ).fetchall()
+                for table in ("treatment_plan_versions", "treatment_review_versions", "diagnosis_snapshots", "evaluation_runs")
+            }
+        assert [(endpoint_key, page_number) for endpoint_key, page_number, _ in checkpoints] == [("clients", 0), ("treatment_plans", 0)]
+        assert all(isinstance(payload, bytes) and b"Synthetic" not in payload for _, _, payload in checkpoints)
+        assert all(rows and all(row[0] is not None and row[1] is not None and row[2] == "synthetic-wire-contract-v1" and len(row[3]) == 64 for row in rows) for rows in provenance.values())
         assert synced.json()["records_written"] == 1
         detail = client.get("/api/v2/treatment-plans/912", headers=headers)
         assert detail.status_code == 200

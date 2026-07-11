@@ -16,6 +16,7 @@ from app.v2.services.deterministic_evaluator import EvaluationBundle, evaluate_p
 from app.v2.services.evaluation_projection import apply_evaluation
 from app.v2.services.rule_package import DeterministicRulePackage, load_rule_package
 from app.v2.services.migrated_treatment_plan import PlanVersionRow, RecordAggregateSource, record_aggregate
+from app.v2.services.alleva_contracts import SyncImportProvenance
 
 EvaluationTrigger = Literal[
     "sync", "import", "correction", "rule_config", "loc_change", "new_review",
@@ -46,13 +47,14 @@ def persist_plan_evaluation(
     *,
     instant: datetime | None = None,
     package: DeterministicRulePackage | None = None,
+    sync_provenance: SyncImportProvenance | None = None,
 ) -> TreatmentPlanAggregate:
     loaded_package = package or load_rule_package()
     app_settings = db.execute(select(AppSetting)).scalar_one()
     evaluated_at = instant or datetime.now(timezone.utc)
     evaluation_date = facility_local_date(evaluated_at, app_settings.facility_timezone)
     bundle = evaluate_plan_version(aggregate, loaded_package, evaluation_date, app_settings.facility_timezone)
-    run_id = _evaluation_run(db, target, bundle, trigger, evaluated_at)
+    run_id = _evaluation_run(db, target, bundle, trigger, evaluated_at, sync_provenance)
     _criterion_rows(db, run_id, target, bundle)
     db.flush()
     return apply_evaluation(aggregate, bundle)
@@ -142,12 +144,14 @@ def _evaluation_run(
     bundle: EvaluationBundle,
     trigger: EvaluationTrigger,
     evaluated_at: datetime,
+    sync_provenance: SyncImportProvenance | None,
 ) -> int:
     parameters = {
         "plan_version_id": target.plan_version_id, "checklist_version": bundle.checklist_version,
         "rules_version": bundle.rules_version, "evaluation_date": bundle.evaluation_date,
         "facility_timezone": bundle.facility_timezone, "evidence_sha256": target.evidence_sha256,
         "trigger_kind": trigger, "created_at": evaluated_at.astimezone(timezone.utc).isoformat(),
+        **_provenance_values(sync_provenance),
     }
     existing = db.execute(
         text(
@@ -171,9 +175,11 @@ def _evaluation_run(
         text(
             """INSERT INTO evaluation_runs(
                 plan_version_id,checklist_version,rules_version,evaluation_date,facility_timezone,
-                evidence_sha256,trigger_kind,run_sequence,created_at
+                evidence_sha256,trigger_kind,run_sequence,created_at,
+                sync_job_id,approval_record_id,contract_version,contract_sha256
             ) VALUES(:plan_version_id,:checklist_version,:rules_version,:evaluation_date,:facility_timezone,
-                :evidence_sha256,:trigger_kind,:run_sequence,:created_at)"""
+                :evidence_sha256,:trigger_kind,:run_sequence,:created_at,
+                :sync_job_id,:approval_record_id,:contract_version,:contract_sha256)"""
         ),
         parameters | {"run_sequence": run_sequence},
     )
@@ -207,3 +213,14 @@ def _criterion_rows(db: Session, run_id: int, target: PlanEvaluationTarget, bund
                 "evidence_sha256": result_hash,
             },
         )
+
+
+def _provenance_values(provenance: SyncImportProvenance | None) -> dict[str, int | str | None]:
+    if provenance is None:
+        return {"sync_job_id": None, "approval_record_id": None, "contract_version": None, "contract_sha256": None}
+    return {
+        "sync_job_id": provenance.sync_job_id,
+        "approval_record_id": provenance.approval_record_id,
+        "contract_version": provenance.contract_version,
+        "contract_sha256": provenance.contract_sha256,
+    }

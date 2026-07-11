@@ -55,7 +55,7 @@ test('admin uploads a treatment plan and sees its persisted late status', async 
 test('admin enables the approved sync gates and sees a mocked synced treatment plan', async ({ page }, testInfo) => {
   let syncEnabled = false
   let syncCompleted = false
-  await page.route('**/api/**', async (route) => {
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
     const respond = async (payload) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) })
@@ -79,8 +79,8 @@ test('admin enables the approved sync gates and sees a mocked synced treatment p
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByLabel('Enable API testing').check()
   await page.getByLabel('Enable treatment-plan sync').check()
-  await page.getByLabel('R3/Alleva sync approval recorded').check()
-  await page.getByLabel('Endpoint mapping validated').check()
+  await page.getByLabel('Sync intent recorded (does not authorize execution)').check()
+  await page.getByLabel('Mapping intent recorded (does not authorize execution)').check()
   syncEnabled = true
   await page.getByRole('button', { name: 'Save API configuration' }).click()
   await page.getByRole('button', { name: 'Run approved treatment-plan sync' }).click()
@@ -94,7 +94,7 @@ test('admin enables the approved sync gates and sees a mocked synced treatment p
 test('admin can cancel a queued approved treatment-plan sync', async ({ page }, testInfo) => {
   let cancellationRequested = false
   let syncResumed = false
-  await page.route('**/api/**', async (route) => {
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
     const respond = async (payload) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) })

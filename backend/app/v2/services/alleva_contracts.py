@@ -26,6 +26,23 @@ class ApprovedAllevaContract:
     payload: AllevaContractApprovalIn
 
 
+@dataclass(frozen=True, slots=True)
+class SyncCheckpointPage:
+    endpoint_key: str
+    page_number: int
+    cursor_hash: str
+    response_shape_sha256: str
+    records: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SyncImportProvenance:
+    sync_job_id: int
+    approval_record_id: int
+    contract_version: str
+    contract_sha256: str
+
+
 def approve_contract(db: Session, payload: AllevaContractApprovalIn, approver_user_id: int) -> ApprovedAllevaContract:
     _validate_contract(payload)
     canonical = json.dumps(payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -114,6 +131,23 @@ def create_sync_ledger(
     db.commit()
 
 
+def sync_import_provenance(db: Session, external_job_id: str) -> SyncImportProvenance:
+    row = db.execute(
+        text(
+            "SELECT sync_jobs.id,sync_jobs.approval_record_id,approval.contract_version,approval.contract_sha256 "
+            "FROM sync_jobs JOIN alleva_contract_approvals AS approval ON approval.id=sync_jobs.approval_record_id "
+            "WHERE sync_jobs.external_job_id=:job_id"
+        ),
+        {"job_id": external_job_id},
+    ).mappings().one()
+    return SyncImportProvenance(
+        int(row["id"]),
+        int(row["approval_record_id"]),
+        str(row["contract_version"]),
+        str(row["contract_sha256"]),
+    )
+
+
 def update_sync_ledger(db: Session, external_job_id: str, status: str, completed_at: str | None, counters: str) -> None:
     row = db.execute(
         text("SELECT counters_json FROM sync_jobs WHERE external_job_id=:job_id"),
@@ -133,10 +167,72 @@ def update_sync_ledger(db: Session, external_job_id: str, status: str, completed
     db.commit()
 
 
-def record_sync_checkpoint(db: Session, external_job_id: str, endpoint_key: str, page_number: int, cursor_hash: str, response_shape_sha256: str, committed_at: str) -> None:
+def record_sync_checkpoint(
+    db: Session,
+    external_job_id: str,
+    endpoint_key: str,
+    page_number: int,
+    cursor_hash: str,
+    response_shape_sha256: str,
+    records: tuple[dict[str, object], ...],
+    committed_at: str,
+) -> None:
+    encrypted_records = encrypt_bytes(json.dumps(records, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     db.execute(
-        text("INSERT OR IGNORE INTO sync_checkpoints(job_id,endpoint_key,page_number,cursor_hash,response_shape_sha256,committed_at) SELECT id,:endpoint_key,:page_number,:cursor_hash,:response_shape_sha256,:committed_at FROM sync_jobs WHERE external_job_id=:job_id"),
-        {"job_id": external_job_id, "endpoint_key": endpoint_key, "page_number": page_number, "cursor_hash": cursor_hash, "response_shape_sha256": response_shape_sha256, "committed_at": committed_at},
+        text(
+            "INSERT INTO sync_checkpoints(job_id,endpoint_key,page_number,cursor_hash,response_shape_sha256,"
+            "encrypted_records_json,committed_at) SELECT id,:endpoint_key,:page_number,:cursor_hash,"
+            ":response_shape_sha256,:encrypted_records,:committed_at FROM sync_jobs WHERE external_job_id=:job_id "
+            "ON CONFLICT(job_id,endpoint_key,page_number,cursor_hash) DO UPDATE SET "
+            "response_shape_sha256=excluded.response_shape_sha256,encrypted_records_json=excluded.encrypted_records_json,"
+            "committed_at=excluded.committed_at"
+        ),
+        {"job_id": external_job_id, "endpoint_key": endpoint_key, "page_number": page_number, "cursor_hash": cursor_hash, "response_shape_sha256": response_shape_sha256, "encrypted_records": encrypted_records, "committed_at": committed_at},
+    )
+    db.commit()
+
+
+def load_sync_checkpoint_pages(db: Session, external_job_id: str, endpoint_key: str) -> tuple[SyncCheckpointPage, ...]:
+    rows = db.execute(
+        text(
+            "SELECT endpoint_key,page_number,cursor_hash,response_shape_sha256,encrypted_records_json "
+            "FROM sync_checkpoints JOIN sync_jobs ON sync_checkpoints.job_id=sync_jobs.id "
+            "WHERE sync_jobs.external_job_id=:job_id AND sync_checkpoints.endpoint_key=:endpoint_key "
+            "ORDER BY sync_checkpoints.page_number,sync_checkpoints.id"
+        ),
+        {"job_id": external_job_id, "endpoint_key": endpoint_key},
+    ).mappings()
+    pages: list[SyncCheckpointPage] = []
+    for row in rows:
+        encrypted_records = row["encrypted_records_json"]
+        if not isinstance(encrypted_records, bytes):
+            raise ValueError("Sync checkpoint is missing encrypted records required for resume.")
+        decoded = json.loads(decrypt_bytes(encrypted_records))
+        if not isinstance(decoded, list) or not all(isinstance(record, dict) for record in decoded):
+            raise ValueError("Sync checkpoint records are invalid.")
+        pages.append(
+            SyncCheckpointPage(
+                str(row["endpoint_key"]),
+                int(row["page_number"]),
+                str(row["cursor_hash"]),
+                str(row["response_shape_sha256"]),
+                tuple(record for record in decoded if isinstance(record, dict)),
+            )
+        )
+    return tuple(pages)
+
+
+def copy_sync_checkpoints(db: Session, source_job_id: str, destination_job_id: str) -> None:
+    db.execute(
+        text(
+            "INSERT OR IGNORE INTO sync_checkpoints(job_id,endpoint_key,page_number,cursor_hash,response_shape_sha256,"
+            "encrypted_records_json,committed_at) SELECT destination.id,checkpoint.endpoint_key,checkpoint.page_number,"
+            "checkpoint.cursor_hash,checkpoint.response_shape_sha256,checkpoint.encrypted_records_json,checkpoint.committed_at "
+            "FROM sync_checkpoints AS checkpoint JOIN sync_jobs AS source ON source.id=checkpoint.job_id "
+            "JOIN sync_jobs AS destination ON destination.external_job_id=:destination_job_id "
+            "WHERE source.external_job_id=:source_job_id"
+        ),
+        {"source_job_id": source_job_id, "destination_job_id": destination_job_id},
     )
     db.commit()
 
