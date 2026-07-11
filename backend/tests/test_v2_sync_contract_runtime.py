@@ -65,6 +65,23 @@ def test_contract_rate_ceiling_waits_before_exceeding_approved_request_rate() ->
     assert max(waits) <= 0.1
 
 
+def test_contract_rate_ceiling_never_sleeps_negative_when_clock_advances_between_reads() -> None:
+    from app.v2.services.alleva_sync import ApprovedRequestRateLimiter
+
+    timestamps = iter((0.0, 29.95, 30.01, 30.01, 30.01))
+    waits: list[float] = []
+
+    def sleep_for(seconds: float) -> None:
+        waits.append(seconds)
+        assert seconds >= 0.0
+
+    limiter = ApprovedRequestRateLimiter(2, clock=lambda: next(timestamps), sleep=sleep_for)
+    limiter.acquire(lambda: False)
+    limiter.acquire(lambda: False)
+
+    assert waits == []
+
+
 def test_resumed_page_fetch_starts_after_persisted_checkpoint_without_offset_zero_replay() -> None:
     from app.v2.services.alleva_contracts import SyncCheckpointPage
     from app.v2.services.alleva_sync import _paged_records

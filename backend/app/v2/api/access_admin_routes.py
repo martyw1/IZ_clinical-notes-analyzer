@@ -60,7 +60,6 @@ def assign_user_facility(user_id: int, facility_id: int, actor: AdminUser, db: D
             "assigned_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    db.commit()
     record_audit_event(
         db,
         action="user.facility.assigned",
@@ -68,7 +67,9 @@ def assign_user_facility(user_id: int, facility_id: int, actor: AdminUser, db: D
         target_entity_type="user",
         target_entity_id=str(target.id),
         details={"facility_id": facility_id},
+        commit=False,
     )
+    db.commit()
     return facility_ids_for_user(db, target.id)
 
 
@@ -99,7 +100,6 @@ def assign_patient(
         ),
         {"patient_id": int(patient[0]), "counselor_id": int(counselor[0]), "actor_id": actor.id, "assigned_at": now},
     )
-    db.commit()
     record_audit_event(
         db,
         action="patient.assignment.created",
@@ -107,5 +107,7 @@ def assign_patient(
         target_entity_type="patient",
         target_entity_id=patient_id,
         details={"counselor_user_id": int(counselor[0])},
+        commit=False,
     )
+    db.commit()
     return AssignmentOut(patient_id=patient_id, counselor_username=counselor_username, is_active=True)

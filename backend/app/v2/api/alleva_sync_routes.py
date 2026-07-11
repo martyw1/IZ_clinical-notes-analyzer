@@ -8,7 +8,7 @@ from app.v2.api.models import AllevaContractApprovalIn, AllevaContractApprovalOu
 from app.v2.domain.schemas import ApiHarnessJob
 from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
-from app.v2.services.alleva_contracts import ApprovedAllevaContract, active_contract, approve_contract
+from app.v2.services.alleva_contracts import ApprovedAllevaContract, active_contract, approve_contract, contract_bound_to_sync_job
 from app.v2.services.jobs import job_service
 
 router = APIRouter()
@@ -77,8 +77,33 @@ def alleva_sync_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
 
 @router.post("/api/v2/alleva-sync/jobs/{job_id}/resume", response_model=ApiHarnessJob, status_code=202)
 def resume_alleva_sync(job_id: str, actor: AdminUser, db: DbSession) -> ApiHarnessJob:
+    profile = db.execute(select(AppSetting)).scalar_one()
+    contract = active_contract(db)
+    historical_contract = contract_bound_to_sync_job(db, job_id)
+    blockers = list(_sync_blockers(profile, contract))
+    if historical_contract is None:
+        blockers.append("the historical sync job has no valid approved contract")
+    elif contract is not None and (
+        historical_contract.approval_id != contract.approval_id
+        or historical_contract.contract_sha256 != contract.contract_sha256
+    ):
+        blockers.append("the active approved contract does not match the historical sync job")
+    if blockers:
+        record_audit_event(
+            db,
+            action="alleva.treatment_plan_sync.resume.blocked",
+            actor=actor,
+            target_entity_type="integration_sync",
+            target_entity_id=job_id,
+            outcome_status="blocked",
+            details={"blocker_count": len(blockers)},
+        )
+        db.commit()
+        raise HTTPException(status_code=409, detail=f"Alleva treatment-plan sync resume is blocked: {', '.join(blockers)}")
+    if contract is None:
+        raise HTTPException(status_code=409, detail="Alleva treatment-plan sync resume is blocked: an approved versioned contract is required")
     try:
-        resumed = job_service.resume_treatment_plan_sync_job(job_id, actor.id, actor.role)
+        resumed = job_service.resume_treatment_plan_sync_job(job_id, actor.id, actor.role, contract)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Sync job not found") from exc
     except ValueError as exc:
@@ -91,6 +116,7 @@ def resume_alleva_sync(job_id: str, actor: AdminUser, db: DbSession) -> ApiHarne
         target_entity_id=resumed.job_id,
         details={"resumed_from_job_id": job_id},
     )
+    db.commit()
     return resumed
 
 

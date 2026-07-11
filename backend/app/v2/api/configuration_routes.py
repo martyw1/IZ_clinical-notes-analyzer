@@ -85,8 +85,6 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
     if secret:
         row.api_client_secret = encrypt_text_secret(secret)
     row.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(row)
     record_audit_event(
         db,
         action="settings.api_profile.saved",
@@ -98,7 +96,10 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
             "api_base_url": row.api_base_url,
             "client_secret_configured": bool(row.api_client_secret),
         },
+        commit=False,
     )
+    db.commit()
+    db.refresh(row)
     contract = active_contract(db)
     return _api_config_out(row, contract.contract_version if contract else None, contract.effective_at if contract else None)
 

@@ -452,6 +452,74 @@ def test_interrupted_sync_can_resume_as_an_idempotent_safe_replay_bound_to_origi
     assert json.loads(counters_json)["resumed_from_job_id"] == original_job_id
 
 
+@pytest.mark.parametrize("invalid_state", ("revoked_contract", "mismatched_configuration"))
+def test_resume_revalidates_active_contract_and_configuration_before_worker_starts(tmp_path, monkeypatch, invalid_state: str) -> None:
+    # Given: a terminal synthetic sync job that was created with a valid approved contract.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+
+    import app.v2.services.jobs as jobs
+
+    def fail_sync(*_args, **_kwargs):
+        raise RuntimeError("synthetic interruption")
+
+    monkeypatch.setattr(jobs, "run_treatment_plan_sync", fail_sync)
+    configured = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "api_base_url": "https://api.allevasoft.com",
+            "token_url": "https://authorization.allevasoft.com/connect/token",
+            "client_secret": "mock-secret",
+            "scopes": "plans.read",
+            "api_enabled": True,
+            "treatment_plan_sync_enabled": True,
+            "treatment_plan_sync_approved": True,
+            "treatment_plan_endpoint_mapping_validated": True,
+        },
+    )
+    assert configured.status_code == 200
+    _approve_synthetic_contract(client, headers, configured.json()["api_base_url"], configured.json()["token_url"])
+    original = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert original.status_code == 202
+    original_job_id = original.json()["job_id"]
+    for _ in range(40):
+        if client.get(f"/api/v2/alleva-sync/jobs/{original_job_id}", headers=headers).json()["status"] == "failed":
+            break
+        sleep(0.05)
+    assert client.get(f"/api/v2/alleva-sync/jobs/{original_job_id}", headers=headers).json()["status"] == "failed"
+
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    if invalid_state == "revoked_contract":
+        with sqlite3.connect(database_path) as database:
+            database.execute("UPDATE alleva_contract_approvals SET revoked_at=?", ("2026-07-11T00:00:00+00:00",))
+            database.commit()
+    else:
+        changed = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={"api_base_url": "https://changed.invalid"},
+        )
+        assert changed.status_code == 200
+
+    import app.v2.api.alleva_sync_routes as alleva_sync_routes
+
+    calls: list[str] = []
+
+    def worker_must_not_start(job_id: str, _actor_id: int, _actor_role: str):
+        calls.append(job_id)
+        return alleva_sync_routes.job_service.get_job(job_id)
+
+    monkeypatch.setattr(alleva_sync_routes.job_service, "resume_treatment_plan_sync_job", worker_must_not_start)
+
+    # When: an administrator resumes the historical job after its live authorization state changes.
+    resumed = client.post(f"/api/v2/alleva-sync/jobs/{original_job_id}/resume", headers=headers)
+
+    # Then: the active gate denies before another worker or network call can start.
+    assert resumed.status_code == 409
+    assert calls == []
+
+
 def test_sync_reconciles_active_inactive_discharged_deleted_and_missing_clients(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)

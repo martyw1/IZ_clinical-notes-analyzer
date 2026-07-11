@@ -17,7 +17,6 @@ from app.v2.services.job_runner import fetch_paged_records
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
 from app.v2.services.alleva_contracts import (
     ApprovedAllevaContract,
-    contract_bound_to_sync_job,
     copy_sync_checkpoints,
     create_sync_ledger,
     record_sync_checkpoint,
@@ -182,18 +181,21 @@ class ApiHarnessJobService:
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
-    def resume_treatment_plan_sync_job(self, job_id: str, actor_id: int, actor_role: str) -> ApiHarnessJob:
+    def resume_treatment_plan_sync_job(
+        self,
+        job_id: str,
+        actor_id: int,
+        actor_role: str,
+        contract: ApprovedAllevaContract,
+    ) -> ApiHarnessJob:
         with SessionLocal() as db:
             original = db.execute(
                 select(ApiHarnessJobRecord).where(ApiHarnessJobRecord.job_id == job_id)
             ).scalar_one_or_none()
-            contract = contract_bound_to_sync_job(db, job_id)
         if original is None or original.job_type != "approved_treatment_plan_sync":
             raise KeyError(job_id)
         if original.status not in {"cancelled", "failed", "stale_or_interrupted"}:
             raise ValueError("Only a terminal sync job can be resumed.")
-        if contract is None:
-            raise ValueError("The sync job's approved contract is unavailable.")
         return self.create_treatment_plan_sync_job(actor_id, actor_role, contract, resumed_from_job_id=job_id)
 
     def list_jobs(self) -> tuple[ApiHarnessJob, ...]:

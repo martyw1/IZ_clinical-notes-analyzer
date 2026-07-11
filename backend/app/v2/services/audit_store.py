@@ -42,6 +42,7 @@ def record_audit_event(
     target_entity_id: str = "",
     outcome_status: str = "success",
     details: dict[str, JsonValue] | None = None,
+    commit: bool = True,
 ) -> AuditLog:
     with _AUDIT_CHAIN_LOCK:
         return _record_audit_event(
@@ -52,6 +53,7 @@ def record_audit_event(
             target_entity_id=target_entity_id,
             outcome_status=outcome_status,
             details=details,
+            commit=commit,
         )
 
 
@@ -64,6 +66,7 @@ def _record_audit_event(
     target_entity_id: str = "",
     outcome_status: str = "success",
     details: dict[str, JsonValue] | None = None,
+    commit: bool = True,
 ) -> AuditLog:
     safe_details = redact_json(details or {})
     details_json = json.dumps(safe_details, sort_keys=True)
@@ -105,8 +108,10 @@ def _record_audit_event(
         hash=event_hash,
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    db.flush()
+    if commit:
+        db.commit()
+        db.refresh(row)
     return row
 
 

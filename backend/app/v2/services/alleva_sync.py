@@ -73,7 +73,9 @@ class ApprovedRequestRateLimiter:
             while self.clock() < deadline:
                 if is_cancelled():
                     raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled while waiting for the approved rate limit.")
-                self.sleep(min(0.1, deadline - self.clock()))
+                remaining_delay = deadline - self.clock()
+                if remaining_delay > 0.0:
+                    self.sleep(min(0.1, remaining_delay))
         self._last_request_at = self.clock()
 
 
