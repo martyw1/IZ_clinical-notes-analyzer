@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +20,7 @@ class TokenOut(V2Model):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     must_reset_password: bool = False
+    auth_state: Literal["password_change_required", "active"]
 
 
 class ReadinessCheck(V2Model):
@@ -42,6 +45,9 @@ class UserOut(V2Model):
     is_active: bool
     is_locked: bool = False
     must_reset_password: bool = False
+    auth_state: Literal["bootstrap_required", "password_change_required", "active", "locked_until"]
+    locked_until: str | None = None
+    facility_ids: tuple[int, ...] = ()
     last_login_at: str | None = None
     created_at: str | None = None
 
@@ -71,6 +77,20 @@ class UserPasswordChange(V2Model):
     new_password: str = Field(min_length=1)
 
 
+class FacilityOut(V2Model):
+    id: int
+    facility_key: str
+    display_name: str
+    timezone: str
+    is_active: bool
+
+
+class AssignmentOut(V2Model):
+    patient_id: str
+    counselor_username: str
+    is_active: bool
+
+
 class DashboardSourceCardOut(V2Model):
     label: str
     status: str
@@ -78,6 +98,7 @@ class DashboardSourceCardOut(V2Model):
 
 
 class DashboardOut(V2Model):
+    refreshed_at: str
     source_cards: tuple[DashboardSourceCardOut, ...]
     metrics: dict[str, int]
     blockers: tuple[str, ...]
@@ -158,6 +179,58 @@ class ApiConfigurationOut(V2Model):
     treatment_plan_sync_enabled: bool
     treatment_plan_sync_approved: bool
     treatment_plan_endpoint_mapping_validated: bool
+    active_contract_version: str | None = None
+    active_contract_effective_at: datetime | None = None
+
+
+class AllevaEndpointContract(V2Model):
+    path: str = Field(min_length=1, max_length=500)
+    parameters: dict[str, str]
+    field_mappings: dict[str, str]
+
+
+class AllevaOAuthContract(V2Model):
+    token_url: str = Field(min_length=1, max_length=500)
+    token_auth_style: Literal["body", "basic"]
+    scope: str = Field(min_length=1, max_length=500)
+
+
+class AllevaPaginationContract(V2Model):
+    limit_parameter: str = Field(min_length=1, max_length=80)
+    offset_parameter: str = Field(min_length=1, max_length=80)
+    maximum_page_size: int = Field(ge=1, le=5000)
+    maximum_records: int = Field(ge=1, le=5000)
+    maximum_response_bytes: int = Field(ge=1, le=10_000_000)
+
+
+class AllevaRateLimitContract(V2Model):
+    maximum_requests_per_minute: int = Field(ge=1, le=10000)
+    retry_after_seconds: int = Field(ge=1, le=300)
+
+
+class AllevaAttachmentsContract(V2Model):
+    mode: Literal["metadata_only", "disabled"]
+    download_allowed: Literal[False]
+
+
+class AllevaContractApprovalIn(V2Model):
+    contract_version: str = Field(min_length=1, max_length=120)
+    api_base_url: str = Field(min_length=1, max_length=500)
+    effective_at: datetime
+    vendor_documentation_url: str = Field(min_length=1, max_length=500)
+    test_population_reference: str = Field(min_length=1, max_length=200)
+    oauth: AllevaOAuthContract
+    pagination: AllevaPaginationContract
+    rate_limit: AllevaRateLimitContract
+    attachments: AllevaAttachmentsContract
+    endpoints: dict[str, AllevaEndpointContract]
+
+
+class AllevaContractApprovalOut(V2Model):
+    contract_version: str
+    contract_sha256: str
+    effective_at: datetime
+    approved_at: datetime
 
 
 class AllevaTreatmentPlanSyncOut(V2Model):
@@ -171,14 +244,18 @@ class ManagerActionInput(V2Model):
     action: Literal["approve", "return_for_correction", "override", "comment"]
     comment: str = ""
     override_reason: str = ""
+    assigned_counselor_username: str = ""
 
 
 class CorrectionSubmissionInput(V2Model):
+    work_item_id: int
     criterion_id: str
     comment: str = Field(min_length=1)
 
 
 class CorrectionQueueItemOut(V2Model):
+    work_item_id: int
+    plan_version_id: int
     patient_id: str
     patient_display_label: str
     criterion_id: str
@@ -280,6 +357,8 @@ class AuditVerificationOut(V2Model):
     valid: bool
     event_count: int
     first_invalid_id: int | None = None
+    privacy_mode: str
+    retention_hook: str
 
 
 class WorkflowProfileCreate(V2Model):

@@ -55,11 +55,19 @@ def evaluate_treatment_plan_timing(
             reason="The supplied next-review due date is not an ISO calendar date.",
             missing_fields=(),
         )
-    status: ReviewStatus = "Late" if due_date < evaluation_date else "Within Window"
+    days_until_due = (due_date - evaluation_date).days
+    if days_until_due < 0:
+        status: ReviewStatus = "Overdue"
+    elif days_until_due <= 1:
+        status = "Urgent"
+    elif days_until_due <= 7:
+        status = "Due Soon"
+    else:
+        status = "Current/Compliant"
     return TimelinessEvaluation(
         status=status,
         due_date=due_date.isoformat(),
-        reason="The trusted next-review due date has passed." if status == "Late" else "The trusted next-review due date has not passed.",
+        reason=f"The source due date is {days_until_due} facility-local calendar day(s) from evaluation.",
         missing_fields=(),
     )
 

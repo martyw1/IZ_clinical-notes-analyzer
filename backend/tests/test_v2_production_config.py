@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+
+def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(monkeypatch) -> None:
+    # Given: PyInstaller --noconsole runs with sys.stdout unavailable to Uvicorn's default formatter.
+    monkeypatch.delenv("IZ_CNA_PORT", raising=False)
+    from app import desktop_runtime
+
+    # When: the frozen desktop runtime starts the local Uvicorn server.
+    with patch.object(desktop_runtime.uvicorn, "run") as run:
+        desktop_runtime.main()
+
+    # Then: it does not install the formatter that calls sys.stdout.isatty().
+    run.assert_called_once_with(
+        "app.desktop_main:app",
+        host="127.0.0.1",
+        port=8000,
+        access_log=False,
+        log_config=None,
+    )
+
+
+def test_windows_release_installer_initializes_packaged_runtime_configuration() -> None:
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+    preflight_script = Path(__file__).resolve().parents[2] / "scripts" / "preflight-windows.ps1"
+
+    assert "-InitializePackagedRuntime" in build_script.read_text(encoding="utf-8")
+    assert "[switch]$InitializePackagedRuntime" in preflight_script.read_text(encoding="utf-8")
+
+
+def test_windows_release_build_excludes_local_pip_cache() -> None:
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+
+    assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
+
+
+def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success() -> None:
+    # Given: a packaged launcher starts its runtime in the background.
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "launch-packaged-runtime.cmd"
+
+    # When: the launcher contract is inspected.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    # Then: it probes the documented readiness endpoint and returns failure on timeout.
+    assert "/api/readiness" in launcher_contents
+    assert "Readiness check failed" in launcher_contents
+    assert "BACKEND_PORT" in launcher_contents
+    assert "127.0.0.1:%IZ_CNA_PORT%" in launcher_contents
+    assert "configured local port is invalid or already in use" in launcher_contents
+    assert "exit /b 1" in launcher_contents
+
+
+def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() -> None:
+    # Given: the source-checkout wrapper launches startup PowerShell in the background.
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
+
+    # When: the checkout launcher contract is inspected.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    # Then: it waits for the readiness contract before reporting background startup.
+    assert "Wait-ForReadiness" in launcher_contents
+    assert "Startup readiness check failed" in launcher_contents
+    assert "Get-ConfiguredPort" in launcher_contents
+    assert "Assert-PortAvailable -Port $port" in launcher_contents
+    assert "Wait-ForReadiness -Process $process -Port $port" in launcher_contents
+    assert "$ready = $false" in launcher_contents
+
+
+def test_windows_checkout_launcher_passes_enabled_switches_without_string_boolean_values() -> None:
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    assert "-SkipFrontendBuild:$skipFrontendValue" not in launcher_contents
+    assert "-AssumeYes:$assumeYesValue" not in launcher_contents
+    assert "if ($SkipFrontendBuild) { $arguments += ' -SkipFrontendBuild' }" in launcher_contents
+    assert "if ($AssumeYes) { $arguments += ' -AssumeYes' }" in launcher_contents
+
+
+def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() -> None:
+    # Given: the Windows installer bundles desktop_runtime.py, which resolves the ASGI app dynamically.
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+
+    # When: the PyInstaller invocation is read from the release build script.
+    build_script_contents = build_script.read_text(encoding="utf-8")
+
+    # Then: the dynamically imported ASGI entrypoint is explicitly collected for frozen execution.
+    assert "--hidden-import app.desktop_main" in build_script_contents
+
+
+def test_resolve_repository_root_uses_frozen_bundle_data_root(tmp_path: Path) -> None:
+    # Given: a PyInstaller extraction location and a source-style module path.
+    bundled_root = tmp_path / "frozen-bundle"
+    module_path = tmp_path / "source" / "backend" / "app" / "core" / "config.py"
+
+    # When: packaged-runtime configuration resolves its resource root.
+    from app.core.config import resolve_repository_root
+
+    actual = resolve_repository_root(module_path, bundled_root)
+
+    # Then: deterministic rules are read from the bundled data directory.
+    assert actual == bundled_root
+
+
+def _config_probe(env_file: Path, overrides: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    for key in tuple(environment):
+        if key.startswith("IZ_CNA_") or key in {
+            "ENVIRONMENT",
+            "SECRET_KEY",
+            "DATA_ENCRYPTION_KEY",
+            "BOOTSTRAP_ADMIN_USERNAME",
+            "BOOTSTRAP_ADMIN_PASSWORD",
+            "LOCAL_SQLITE_DB_PATH",
+        }:
+            environment.pop(key)
+    environment["IZ_CNA_ENV_FILE"] = str(env_file)
+    environment.update(overrides or {})
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from app.core.config import settings; "
+                "print(settings.environment, settings.bootstrap_admin_username, "
+                "settings.local_sqlite_db_path, len(settings.secret_key), "
+                "len(settings.data_encryption_key))"
+            ),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_env_file_is_loaded_before_settings_and_generated_names_are_normalized(tmp_path: Path) -> None:
+    # Given: the exact unprefixed names generated by Windows preflight.
+    env_file = tmp_path / "generated.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "ENVIRONMENT=local-client",
+                "SECRET_KEY=synthetic-secret-key-12345678901234567890",
+                "DATA_ENCRYPTION_KEY=synthetic-data-key-12345678901234567890",
+                "LOCAL_SQLITE_DB_PATH=generated.sqlite3",
+                "BOOTSTRAP_ADMIN_USERNAME=localadmin",
+                "BOOTSTRAP_ADMIN_PASSWORD=SyntheticBootstrapPass123",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    # When: settings are imported in a fresh interpreter.
+    result = _config_probe(env_file)
+
+    # Then: the file values are available during global settings construction.
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "local-client localadmin generated.sqlite3 41 39"
+
+
+def test_process_environment_overrides_env_file(tmp_path: Path) -> None:
+    # Given: a safe file value and a safe explicit process override.
+    env_file = tmp_path / "generated.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "ENVIRONMENT=local-client",
+                "SECRET_KEY=synthetic-secret-key-12345678901234567890",
+                "DATA_ENCRYPTION_KEY=synthetic-data-key-12345678901234567890",
+                "BOOTSTRAP_ADMIN_USERNAME=admin",
+                "BOOTSTRAP_ADMIN_PASSWORD=SyntheticBootstrapPass123",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    # When: the process supplies the canonical prefixed administrator name.
+    result = _config_probe(env_file, {"IZ_CNA_BOOTSTRAP_ADMIN_USERNAME": "overrideadmin"})
+
+    # Then: explicit process configuration wins.
+    assert result.returncode == 0, result.stderr
+    assert "local-client overrideadmin" in result.stdout
+
+
+def test_local_client_fails_closed_for_default_or_missing_security_values(tmp_path: Path) -> None:
+    # Given: generated local-client configuration containing known unsafe defaults.
+    env_file = tmp_path / "unsafe.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "ENVIRONMENT=local-client",
+                "SECRET_KEY=change-me",
+                "DATA_ENCRYPTION_KEY=",
+                "BOOTSTRAP_ADMIN_USERNAME=admin",
+                "BOOTSTRAP_ADMIN_PASSWORD=change-me",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    # When: production settings are constructed.
+    result = _config_probe(env_file)
+
+    # Then: startup fails without echoing any supplied value.
+    assert result.returncode != 0
+    assert "unsafe production configuration" in result.stderr.lower()
+    assert "change-me" not in result.stderr

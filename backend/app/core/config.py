@@ -1,14 +1,96 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
-APP_VERSION: Final = "2.0.0-beta.1"
+APP_VERSION: Final = "2.0.0-beta.2"
 BUILD_CHANNEL: Final = "beta-local-desktop-v2"
-REPO_ROOT: Final = Path(__file__).resolve().parents[3]
+
+
+def resolve_repository_root(module_path: Path, bundled_data_root: Path | None) -> Path:
+    if bundled_data_root is not None:
+        return bundled_data_root
+    return module_path.resolve().parents[3]
+
+
+_bundled_data_root = getattr(sys, "_MEIPASS", None) if getattr(sys, "frozen", False) else None
+REPO_ROOT: Final = resolve_repository_root(Path(__file__), Path(_bundled_data_root) if _bundled_data_root else None)
+RESTRICTED_ENVIRONMENTS: Final = frozenset({"production", "local-client"})
+UNSAFE_SECURITY_VALUES: Final = frozenset(
+    {
+        "",
+        "admin",
+        "change-me",
+        "local-admin-pass1",
+        "password",
+        "password123",
+        "v2-local-development-secret",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigurationError(RuntimeError):
+    reason: str
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+def _load_env_file() -> None:
+    configured = os.environ.get("IZ_CNA_ENV_FILE", "").strip()
+    if not configured:
+        return
+    env_path = Path(configured).expanduser()
+    if not env_path.is_file():
+        raise ConfigurationError("Configured environment file is unavailable")
+    for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        normalized_name = name.strip()
+        if normalized_name:
+            os.environ.setdefault(normalized_name, value.strip().strip("\"'"))
+
+
+_load_env_file()
+
+
+def _env(canonical_name: str, generated_name: str, default: str = "") -> str:
+    canonical = os.environ.get(canonical_name)
+    if canonical is not None:
+        return canonical
+    return os.environ.get(generated_name, default)
+
+
+def _validate_restricted_configuration(candidate: Settings) -> None:
+    if candidate.environment.strip().lower() not in RESTRICTED_ENVIRONMENTS:
+        return
+    invalid_fields: list[str] = []
+    secret = candidate.secret_key.strip()
+    encryption_key = candidate.data_encryption_key.strip()
+    username = candidate.bootstrap_admin_username.strip()
+    password = candidate.bootstrap_admin_password.strip()
+    if len(secret) < 32 or secret.lower() in UNSAFE_SECURITY_VALUES:
+        invalid_fields.append("application secret")
+    if len(encryption_key) < 32 or encryption_key.lower() in UNSAFE_SECURITY_VALUES:
+        invalid_fields.append("data encryption secret")
+    if not username or username.lower() in UNSAFE_SECURITY_VALUES - {"admin"}:
+        invalid_fields.append("administrator username")
+    password_is_structured = any(character.isalpha() for character in password) and any(
+        character.isdigit() for character in password
+    )
+    if len(password) < 12 or password.lower() in UNSAFE_SECURITY_VALUES or not password_is_structured:
+        invalid_fields.append("administrator credential")
+    if invalid_fields:
+        raise ConfigurationError(
+            f"Unsafe production configuration: {', '.join(invalid_fields)} must be replaced"
+        )
 
 
 def _local_app_data_root() -> Path:
@@ -75,21 +157,27 @@ def build_settings() -> Settings:
         ).split(",")
         if origin.strip()
     )
-    return Settings(
+    candidate = Settings(
         app_name=APP_NAME,
         app_version=APP_VERSION,
         build_channel=BUILD_CHANNEL,
         environment=os.environ.get("ENVIRONMENT", "development"),
-        secret_key=os.environ.get("IZ_CNA_SECRET_KEY") or os.environ.get("SECRET_KEY", "v2-local-development-secret"),
-        data_encryption_key=os.environ.get("IZ_CNA_DATA_ENCRYPTION_KEY") or os.environ.get("DATA_ENCRYPTION_KEY", ""),
+        secret_key=_env("IZ_CNA_SECRET_KEY", "SECRET_KEY", "v2-local-development-secret"),
+        data_encryption_key=_env("IZ_CNA_DATA_ENCRYPTION_KEY", "DATA_ENCRYPTION_KEY"),
         access_token_expire_minutes=int(os.environ.get("IZ_CNA_ACCESS_TOKEN_EXPIRE_MINUTES", "60")),
-        local_sqlite_db_path=os.environ.get("IZ_CNA_LOCAL_SQLITE_DB_PATH", "clinical-notes-analyzer-v2.sqlite3"),
-        bootstrap_admin_username=os.environ.get("IZ_CNA_BOOTSTRAP_ADMIN_USERNAME", "admin"),
-        bootstrap_admin_password=os.environ.get("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "local-admin-pass1"),
+        local_sqlite_db_path=_env(
+            "IZ_CNA_LOCAL_SQLITE_DB_PATH", "LOCAL_SQLITE_DB_PATH", "clinical-notes-analyzer-v2.sqlite3"
+        ),
+        bootstrap_admin_username=_env("IZ_CNA_BOOTSTRAP_ADMIN_USERNAME", "BOOTSTRAP_ADMIN_USERNAME", "admin"),
+        bootstrap_admin_password=_env(
+            "IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD", "local-admin-pass1"
+        ),
         local_app_data_dir=_local_app_data_root(),
         allowed_hosts=allowed_hosts,
         frontend_origins=frontend_origins,
     )
+    _validate_restricted_configuration(candidate)
+    return candidate
 
 
 settings: Final = build_settings()

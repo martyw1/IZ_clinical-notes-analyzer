@@ -19,6 +19,22 @@ afterEach(() => {
 })
 
 describe('V2 active app shell', () => {
+  it('requires first-run password change before rendering the workspace', async () => {
+    const fetchMock = setupFetch({ role: 'admin', mustResetPassword: true })
+    render(<App />)
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'SyntheticBootstrapPass123' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+
+    expect(await screen.findByRole('heading', { name: 'Set a new password' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /primary navigation/i })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Current password'), { target: { value: 'SyntheticBootstrapPass123' } })
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'SyntheticActivePass456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Update password' }))
+
+    await screen.findByRole('navigation', { name: /primary navigation/i })
+    expect(fetchMock).toHaveBeenCalledWith('/api/users/me/change-password', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('rejects invalid credentials without entering the app shell', async () => {
     setupFetch({ role: 'admin', failLogin: true })
     render(<App />)
@@ -74,6 +90,8 @@ describe('V2 active app shell', () => {
       '/api/v2/treatment-plans/812/correction-submissions',
       expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
     )
+    const submission = fetchMock.mock.calls.find(([path]) => path === '/api/v2/treatment-plans/812/correction-submissions')
+    expect(submission?.[1]?.body).toContain('"work_item_id":71')
   })
 
   it('renders dashboard and treatment-plan detail from V2 APIs', async () => {
@@ -87,6 +105,7 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
 
     expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(screen.getByText(/LOC-change clock:/)).toHaveClass('summary-grid__item--wrappable')
     expect(screen.getByText('Diagnoses')).toBeInTheDocument()
     expect(screen.getByText('Behavioral Definitions')).toBeInTheDocument()
     expect(screen.getByText('Goals')).toBeInTheDocument()
@@ -171,8 +190,8 @@ describe('V2 active app shell', () => {
     expect(await screen.findByText(/token obtained and discarded after verification/i)).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Enable API testing'))
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
-    fireEvent.click(screen.getByLabelText('R3/Alleva sync approval recorded'))
-    fireEvent.click(screen.getByLabelText('Endpoint mapping validated'))
+    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
     fireEvent.click(await screen.findByRole('button', { name: /run approved treatment-plan sync/i }))
     expect(await screen.findByText('Treatment-plan sync completed: 1 imported, 0 skipped.')).toBeInTheDocument()
@@ -185,6 +204,14 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'TemporaryPass1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create user' }))
     expect(await screen.findByRole('status')).toHaveTextContent('User created; password change is required')
+    fireEvent.change(screen.getByLabelText('Facility assignment user'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Facility'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign facility' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Facility assigned.')
+    fireEvent.change(screen.getByLabelText('Patient ID assignment'), { target: { value: '812' } })
+    fireEvent.change(screen.getByLabelText('Counselor assignment'), { target: { value: 'counselor' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Patient assigned to counselor.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
@@ -193,32 +220,11 @@ describe('V2 active app shell', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Hash chain verified across 3 events.')
   })
 
-  it('publishes a persisted draft workflow profile through the backend', async () => {
-    const fetchMock = setupFetch()
+  it('hides workflow profiles from the operational navigation', async () => {
+    setupFetch()
     await signIn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Workflow Profiles' }))
-    expect(await screen.findByText('Clinical Timeliness Review')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Publish version 1' }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Workflow profile version 1 published.')
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/workflow-definitions/7/versions/71/publish',
-      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
-    )
-  })
-
-  it('shows a backend validation error when creating a workflow profile fails', async () => {
-    setupFetch({ role: 'admin', workflowCreateFails: true })
-    await signIn()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Workflow Profiles' }))
-    await screen.findByText('Clinical Timeliness Review')
-    fireEvent.change(screen.getByLabelText('Workflow key'), { target: { value: 'clinical_timeliness_review' } })
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Clinical Timeliness Review' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create workflow profile' }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Workflow key already exists')
+    expect(screen.queryByRole('button', { name: 'Workflow Profiles' })).not.toBeInTheDocument()
   })
 
   it('starts API harness jobs through the backend and renders bounded artifacts', async () => {
@@ -261,7 +267,7 @@ describe('V2 active app shell', () => {
     const file = new File(['Patient ID: 914\nIntervention: Weekly CBT skills practice.'], 'manual-text.txt', {
       type: 'text/plain',
     })
-    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, PDF, XLSX\)/i), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, text-extractable PDF, XLSX\)/i), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: /upload and parse treatment-plan file/i }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file and archived encrypted source file.')
@@ -278,7 +284,7 @@ describe('V2 active app shell', () => {
     const file = new File(['Patient ID: 913\nIntervention: Synthetic correction review.'], 'manual-correction.txt', {
       type: 'text/plain',
     })
-    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, PDF, XLSX\)/i), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, text-extractable PDF, XLSX\)/i), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: /upload and parse treatment-plan file/i }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file after confirmed Patient ID correction and archived encrypted source file.')

@@ -4,11 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-JsonPrimitive = str | int | float | bool | None
-JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
+type JsonPrimitive = str | int | float | bool | None
+type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
 
 SourceMode = Literal["manual_upload", "alleva_rest_api", "synthetic_fixture"]
+SignatureEvidenceRole = Literal["initial_plan", "master_plan", "review", "unknown"]
 ReviewStatus = Literal[
+    "Present",
     "Missing Data",
     "Needs Review",
     "Incomplete",
@@ -19,6 +21,10 @@ ReviewStatus = Literal[
     "Compliant",
     "Approved",
     "Not Applicable",
+    "Urgent",
+    "Due Soon",
+    "Current/Compliant",
+    "Overdue",
 ]
 JobStatus = Literal[
     "queued",
@@ -83,6 +89,8 @@ class TreatmentPlanSignatureMetadata(V2Model):
     signature_datetime: str
     signature_data_length: int
     signature_data_omitted_reason: str
+    evidence_role: SignatureEvidenceRole = "unknown"
+    source_json_path: str = "content_snapshot.signatures[*]"
 
 
 class TreatmentPlanObservedField(V2Model):
@@ -166,6 +174,7 @@ class TreatmentPlanAggregate(V2Model):
     admission_date: str
     loc_history: tuple[dict[str, JsonValue], ...]
     treatment_plans: tuple[dict[str, JsonValue], ...]
+    treatment_reviews: tuple[dict[str, JsonValue], ...] = ()
     active_treatment_plans: tuple[dict[str, JsonValue], ...]
     latest_created_active_plan: dict[str, JsonValue]
     has_multiple_active_plans: bool
@@ -190,6 +199,10 @@ class TreatmentPlanAggregate(V2Model):
     evidence_coverage_summary: TreatmentPlanEvidenceCoverage
     content_snapshot: TreatmentPlanContentSnapshot
     source_documents: tuple[SourceDocumentRef, ...] = ()
+    checklist_version: str = ""
+    rules_version: str = ""
+    evaluation_date: str = ""
+    facility_timezone: str = ""
 
 
 class ApiHarnessArtifact(V2Model):

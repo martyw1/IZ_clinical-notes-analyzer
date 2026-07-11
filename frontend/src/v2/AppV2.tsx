@@ -13,7 +13,6 @@ import { PasswordResetPage } from './pages/PasswordResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage'
 import { UsersPage } from './pages/UsersPage'
-import { WorkflowProfilesPage } from './pages/WorkflowProfilesPage'
 
 const tokenStorageKey = 'iz-cna-v2-access-token'
 
@@ -43,8 +42,6 @@ function pageFor(view: string, token: string, user: UserProfile) {
       return <ApiHarnessPage token={token} />
     case 'Users':
       return <UsersPage token={token} />
-    case 'Workflow Profiles':
-      return <WorkflowProfilesPage token={token} />
     case 'Forensic Logs':
       return <ForensicLogsPage token={token} />
     case 'Settings':

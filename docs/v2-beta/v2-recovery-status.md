@@ -1,5 +1,12 @@
 # V2 Beta Recovery Status
 
+## 2026-07-11 beta.2 release-readiness update
+
+- Version metadata is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`.
+- The active footer, `/api/version`, sample OpenAPI definition, package metadata, and Windows preflight are aligned with that version.
+- This is a prerelease-only documentation and metadata update. It does not claim live Alleva validation, credential/history remediation, signing, retention/legal-hold approval, or production release readiness.
+- Final verification must use the synthetic-only isolated environment described in `release-readiness-2026-07-11.md`.
+
 Date: 2026-07-09
 
 ## Completed checkpoint

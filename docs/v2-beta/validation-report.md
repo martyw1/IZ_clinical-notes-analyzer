@@ -1,10 +1,31 @@
 # V2 Validation Report
 
-Validation recorded on 2026-07-08 for branch `codex/v2-beta-local-rebuild`.
+## 2026-07-11 beta.2 release-readiness boundary
 
-## Final Command Evidence
+This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It records no new production, signing, retention, destructive-history, credential-rotation, or live Alleva validation claim. The required isolated synthetic-only validation run completed with redacted evidence; supervised approved non-PHI/test-record Alleva validation remains external.
 
-The installer build evidence below was rerun after the final typed-response and route-size cleanup.
+The procedure is maintained in `release-readiness-2026-07-11.md` and requires a fresh `%TEMP%` `IZ_CNA_LOCAL_APP_DATA_DIR`, no loaded local credentials/production `.env`, and no clinical export or production local-data reuse.
+
+The retained 2026-07-08 evidence below is historical `2.0.0-beta.1` evidence. The completed beta.2 run is recorded next; it validates the final synthetic package, ZIP, and current launcher behavior without making a production or live-sync claim.
+
+## Final beta.2 synthetic validation (2026-07-11)
+
+Validation used an isolated synthetic local-data profile and no tenant credentials, clinical exports, or production local data. Only redacted command outcomes are retained here.
+
+| Gate | Result |
+|---|---|
+| Windows preflight, V2 version/rules, and 42-step checklist | Pass |
+| Active backend suite | Pass — 156 passed; one known Starlette/httpx deprecation warning |
+| Frontend Vitest and production build | Pass — 15 tests and Vite build |
+| Source-checkout CMD launcher | Pass — fresh-profile startup returned success only after HTTP 200 readiness; occupied-port startup returned nonzero |
+| Packaged CMD launcher | Pass — readiness success and timeout-failure behavior verified |
+| PyInstaller package, required-file validation, release-folder and ZIP forbidden-file scans | Pass |
+
+Generated artifact: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip` (34,578,027 bytes), SHA-256 `26E9B89862BA68112B575C1CDCB62CE0ECFE46D4430AC3C6ED587AFA0C2EDFD3`.
+
+## Historical beta.1 command evidence (2026-07-08)
+
+The historical beta.1 installer build evidence below was rerun after the final typed-response and route-size cleanup.
 
 | Command | Result | Important output |
 |---|---|---|
@@ -17,7 +38,7 @@ The installer build evidence below was rerun after the final typed-response and 
 | `.\scripts\test-api-configuration-local.ps1` | Pass | Runs V2 backend tests, starts `app.desktop_main:app`, loads API configuration page, saves redacted API config, pulls sample OpenAPI definition with `ClientId`, starts bounded Pull ALL job, verifies preview and required artifacts. |
 | `.\Build-IZ-Windows-Installer.cmd` | Pass | Backend tests, frontend tests/build, release required-file validation, release forbidden-file scan, and zip forbidden-file scan passed. |
 
-Release outputs:
+Historical beta.1 release outputs:
 
 - `dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1`
 - `dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1.zip`
@@ -31,7 +52,7 @@ Release outputs:
 - Updated `scripts/test-api-configuration-local.ps1` from archived V1 test coverage to active V2 coverage, including bounded Pull ALL job artifacts and preview checks.
 - Split V2 API response models into `backend/app/v2/api/models.py` so the active route module stays under the route-size budget while preserving typed FastAPI response validation.
 
-## Browser And Computer Use QA
+## Historical beta.1 browser and computer use QA
 
 Playwright/Chrome assertions passed against the built local desktop app at `http://127.0.0.1:8030`.
 
@@ -45,7 +66,7 @@ Screenshots saved under:
 Assertions covered:
 
 - Login reaches active V2 app shell.
-- Header/footer show `Version 2.0 Beta`, `2.0.0-beta.1`, and `beta-local-desktop-v2`.
+- Historical UI assertion: header/footer showed `Version 2.0 Beta`, `2.0.0-beta.1`, and `beta-local-desktop-v2`.
 - Dashboard shows `Active runtime: V2`.
 - Treatment Plans status order is exactly `Missing Data`, `Needs Review`, `Incomplete`, `Within Window`, `Late`, `Conflicting Evidence`, `Unable to Evaluate`.
 - Treatment Plans uses `Patient ID 307` and did not render patient-name-like text.

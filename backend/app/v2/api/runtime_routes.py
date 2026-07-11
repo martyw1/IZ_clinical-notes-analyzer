@@ -25,7 +25,12 @@ from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
 from app.v2.services.jobs import HarnessConnection, job_service
-from app.v2.services.manager_action_store import open_correction_counts_by_patient, save_manager_action_record
+from app.v2.services.manager_action_store import (
+    CorrectionAssignmentError,
+    open_correction_counts_by_patient,
+    save_manager_action_record,
+    save_returned_correction_work_item,
+)
 from app.v2.services.treatment_plan_store import (
     TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
@@ -33,6 +38,7 @@ from app.v2.services.treatment_plan_store import (
     treatment_plan_aggregate_for_patient,
 )
 from app.v2.services.secure_storage import decrypt_text_secret
+from app.v2.authorization import accessible_patient_ids, require_patient_manager, require_patient_read
 
 router = APIRouter()
 SPREADSHEET_FORMULA_PREFIXES: Final = ("=", "+", "-", "@")
@@ -57,8 +63,8 @@ def readiness(db: DbSession) -> ReadinessOut:
         status="warn",
         runtime="v2",
         checks=(
-            ReadinessCheck(name="local_app_data", status="ok", path=str(settings.local_app_data_dir)),
-            ReadinessCheck(name="database", status="ok", path=str(settings.sqlite_db_path)),
+            ReadinessCheck(name="local_app_data", status="ok"),
+            ReadinessCheck(name="database", status="ok"),
             ReadinessCheck(name="build_channel", status="ok", value=BUILD_CHANNEL),
             ReadinessCheck(name="api_profile", status=api_status, message=api_message),
             ReadinessCheck(name="loc_change_blocker", status="ok" if profile.treatment_plan_loc_change_window_validated else "warn", message="LOC-change update window remains unvalidated." if not profile.treatment_plan_loc_change_window_validated else "LOC-change update window is validated."),
@@ -77,22 +83,23 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
     if user.role == "counselor":
         items.append("Corrections")
     if user.role == "admin":
-        items.extend(["API Testing Harness", "Users", "Workflow Profiles", "Forensic Logs", "Settings"])
-    if user.role in {"office_manager", "manager"}:
-        items.extend(["Forensic Logs"])
+        items.extend(["API Testing Harness", "Users", "Forensic Logs", "Settings"])
     items.append("Help")
     return {"items": items, "active_runtime": "v2"}
 
 
 @router.get("/api/v2/dashboard", response_model=DashboardOut)
-def dashboard(_: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
+def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     profile = _app_setting(db)
+    allowed_ids = accessible_patient_ids(db, user)
+    imports = tuple(item for item in list_treatment_plan_imports(db) if item.patient_id in allowed_ids)
+    correction_counts = open_correction_counts_by_patient(db)
     return dashboard_payload(
-        list_treatment_plan_imports(db),
+        imports,
         api_configured=bool(profile.api_client_secret),
         api_enabled=profile.emr_api_enabled,
         loc_change_window_validated=profile.treatment_plan_loc_change_window_validated,
-        returned_count=sum(open_correction_counts_by_patient(db).values()),
+        returned_count=sum(count for patient_id, count in correction_counts.items() if patient_id in allowed_ids),
     )
 
 
@@ -101,8 +108,9 @@ def _app_setting(db: DbSession) -> AppSetting:
 
 
 @router.get("/api/v2/treatment-plans", response_model=TreatmentPlanListOut)
-def treatment_plans(_: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
-    items = list_treatment_plan_queue_items(db)
+def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
+    allowed_ids = accessible_patient_ids(db, user)
+    items = tuple(item for item in list_treatment_plan_queue_items(db) if item.patient_id in allowed_ids)
     return {
         "items": [
             {
@@ -126,6 +134,7 @@ def treatment_plans(_: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
 
 @router.get("/api/v2/treatment-plans/{patient_id}")
 def treatment_plan_detail(patient_id: str, user: CurrentUser, db: DbSession) -> TreatmentPlanAggregate:
+    require_patient_read(db, user, patient_id)
     aggregate = treatment_plan_aggregate_for_patient(db, patient_id)
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
@@ -135,17 +144,7 @@ def treatment_plan_detail(patient_id: str, user: CurrentUser, db: DbSession) -> 
 
 @router.post("/api/v2/treatment-plans/{patient_id}/manager-actions")
 def save_manager_action(patient_id: str, payload: ManagerActionInput, user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
-    if user.role not in {"admin", "office_manager", "manager"}:
-        record_audit_event(
-            db,
-            action=f"manager.criterion.{payload.action}.denied",
-            actor=user,
-            target_entity_type="treatment_plan_criterion",
-            target_entity_id=f"{patient_id}:{payload.criterion_id}",
-            outcome_status="denied",
-            details={"criterion_id": payload.criterion_id, "action": payload.action},
-        )
-        raise HTTPException(status_code=403, detail="Manager access required")
+    require_patient_manager(db, user, patient_id)
     if payload.action == "override" and not payload.override_reason.strip():
         raise HTTPException(status_code=400, detail="Override reason is required")
     if treatment_plan_aggregate_for_patient(db, patient_id) is None:
@@ -158,7 +157,21 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Curr
         comment=payload.comment,
         override_reason=payload.override_reason,
         actor=user,
+        commit=False,
     )
+    if payload.action == "return_for_correction":
+        try:
+            save_returned_correction_work_item(
+                db,
+                patient_id=patient_id,
+                criterion_id=payload.criterion_id,
+                comment=payload.comment,
+                counselor_username=payload.assigned_counselor_username.strip(),
+                actor=user,
+                commit=False,
+            )
+        except CorrectionAssignmentError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     record_audit_event(
         db,
         action=f"manager.criterion.{payload.action}",
@@ -240,6 +253,7 @@ def api_harness_job_preview(job_id: str, _: AdminUser) -> JobPreview:
 
 @router.get("/api/v2/exports/{patient_id}/checklist-evidence.csv")
 def redacted_checklist_export(patient_id: str, user: ManagerUser, db: DbSession) -> Response:
+    require_patient_manager(db, user, patient_id)
     aggregate = treatment_plan_aggregate_for_patient(db, patient_id)
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")

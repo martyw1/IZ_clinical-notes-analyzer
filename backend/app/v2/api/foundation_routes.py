@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from app.v2.api.deps import AdminUser, CurrentUser, DbSession
 from app.v2.api.models import (
-    ApiConfigurationOut,
-    ApiConfigurationUpdate,
     AppSettingsOut,
     AppSettingsUpdate,
-    AuditLogItemOut,
-    AuditLogListOut,
-    AuditVerificationOut,
     LoginInput,
     TokenOut,
     UserCreate,
@@ -23,19 +17,30 @@ from app.v2.api.models import (
     UserPasswordChange,
     UserUpdate,
 )
-from app.v2.models import AppSetting, AuditLog, User
+from app.v2.models import AppSetting, User
+from app.v2.authorization import facility_ids_for_user
 from app.v2.security import create_access_token, hash_password, password_policy_error, verify_password
-from app.v2.services.audit_store import JsonValue, record_audit_event, verify_audit_chain
-from app.v2.services.secure_storage import encrypt_text_secret
+from app.v2.services.audit_store import record_audit_event
+from app.v2.services.evaluation_store import reevaluate_all_plan_versions
 
 router = APIRouter()
+RULE_SETTING_FIELDS = frozenset(
+    {
+        "facility_timezone",
+        "treatment_plan_master_due_days",
+        "treatment_plan_php_review_interval_days",
+        "treatment_plan_iop_op_review_interval_days",
+        "treatment_plan_loc_change_window_days",
+        "treatment_plan_loc_change_window_validated",
+    }
+)
 
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _user_out(user: User) -> UserOut:
+def _user_out(user: User, db: DbSession) -> UserOut:
     return UserOut(
         id=user.id,
         username=user.username,
@@ -44,6 +49,9 @@ def _user_out(user: User) -> UserOut:
         is_active=user.is_active,
         is_locked=user.is_locked,
         must_reset_password=user.must_reset_password,
+        auth_state=user.auth_state,
+        locked_until=user.locked_until.isoformat() if user.locked_until else None,
+        facility_ids=facility_ids_for_user(db, user.id),
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
         created_at=user.created_at.isoformat() if user.created_at else None,
     )
@@ -71,57 +79,57 @@ def _settings_out(row: AppSetting) -> AppSettingsOut:
     )
 
 
-def _api_config_out(row: AppSetting) -> ApiConfigurationOut:
-    configured = bool(row.api_client_secret)
-    return ApiConfigurationOut(
-        vendor_name=row.emr_vendor_name,
-        api_base_url=row.api_base_url,
-        openapi_url=row.openapi_url,
-        token_url=row.api_oauth_token_url,
-        client_id=row.api_client_id,
-        api_key_configured=configured,
-        client_secret_configured=configured,
-        token_auth_style=row.api_token_auth_style,
-        scopes=row.api_scopes,
-        pagination_limit=row.api_pagination_limit,
-        sync_limit=row.alleva_treatment_plan_sync_limit,
-        timeout_seconds=row.emr_api_timeout_seconds,
-        api_enabled=row.emr_api_enabled,
-        treatment_plan_sync_enabled=row.alleva_treatment_plan_sync_enabled,
-        treatment_plan_sync_approved=row.alleva_treatment_plan_sync_approved,
-        treatment_plan_endpoint_mapping_validated=row.alleva_treatment_plan_endpoint_mapping_validated,
-    )
-
-
 @router.post("/api/auth/login", response_model=TokenOut)
 def login(payload: LoginInput, db: DbSession) -> TokenOut:
     username = payload.username.strip()
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    now = _utc_now()
+    if user and user.auth_state == "locked_until":
+        locked_until = user.locked_until
+        if locked_until is not None and locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until is not None and now < locked_until:
+            record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="denied")
+            raise HTTPException(status_code=423, detail="Account temporarily locked")
+        user.is_locked = False
+        user.locked_until = None
+        user.auth_state = "password_change_required" if user.must_reset_password else "active"
+        user.failed_login_attempts = 0
+        db.commit()
     if not user or not verify_password(payload.password, user.password_hash):
         if user:
             user.failed_login_attempts += 1
             if user.failed_login_attempts >= 5:
                 user.is_locked = True
+                user.auth_state = "locked_until"
+                user.locked_until = now + timedelta(minutes=15)
             db.commit()
+            if user.auth_state == "locked_until":
+                record_audit_event(db, action="auth.lockout.started", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="denied", details={"duration_minutes": 15})
         record_audit_event(db, action="auth.login.failed", target_entity_type="user", target_entity_id=username, outcome_status="failure")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
         raise HTTPException(status_code=403, detail="Account inactive")
-    if user.is_locked:
+    if user.is_locked or user.auth_state == "locked_until":
         record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
         raise HTTPException(status_code=403, detail="Account locked")
     user.failed_login_attempts = 0
-    user.last_login_at = _utc_now()
+    user.last_login_at = now
+    if user.auth_state == "bootstrap_required":
+        user.auth_state = "password_change_required"
+        user.must_reset_password = True
     db.commit()
-    token = create_access_token(user.username)
+    token = create_access_token(user.username, user.password_changed_at)
+    if user.auth_state == "password_change_required" and user.password_changed_at is None:
+        record_audit_event(db, action="auth.bootstrap.completed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
     record_audit_event(db, action="auth.login.success", actor=user, target_entity_type="user", target_entity_id=str(user.id))
-    return TokenOut(access_token=token, must_reset_password=user.must_reset_password)
+    return TokenOut(access_token=token, must_reset_password=user.must_reset_password, auth_state=user.auth_state)
 
 
 @router.get("/api/users/me", response_model=UserOut)
-def current_profile(user: CurrentUser) -> UserOut:
-    return _user_out(user)
+def current_profile(user: CurrentUser, db: DbSession) -> UserOut:
+    return _user_out(user, db)
 
 
 @router.post("/api/users/me/change-password", response_model=UserOut)
@@ -138,16 +146,20 @@ def change_current_password(payload: UserPasswordChange, user: CurrentUser, db: 
     user.must_reset_password = False
     user.failed_login_attempts = 0
     user.is_locked = False
+    user.auth_state = "active"
+    user.locked_until = None
+    user.password_changed_at = _utc_now()
+    user.recovery_required = False
     db.commit()
     db.refresh(user)
     record_audit_event(db, action="user.password.changed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
-    return _user_out(user)
+    return _user_out(user, db)
 
 
 @router.get("/api/users", response_model=list[UserOut])
 def list_users(_: AdminUser, db: DbSession) -> list[UserOut]:
     users = db.execute(select(User).order_by(User.role.asc(), User.username.asc())).scalars().all()
-    return [_user_out(user) for user in users]
+    return [_user_out(user, db) for user in users]
 
 
 @router.post("/api/users", response_model=UserOut)
@@ -169,12 +181,13 @@ def create_user(payload: UserCreate, actor: AdminUser, db: DbSession) -> UserOut
         must_reset_password=True,
         failed_login_attempts=0,
         is_locked=False,
+        auth_state="password_change_required",
     )
     db.add(created)
     db.commit()
     db.refresh(created)
     record_audit_event(db, action="user.create", actor=actor, target_entity_type="user", target_entity_id=str(created.id), details={"username": created.username, "role": created.role})
-    return _user_out(created)
+    return _user_out(created, db)
 
 
 @router.patch("/api/users/{user_id}", response_model=UserOut)
@@ -199,7 +212,7 @@ def update_user(user_id: int, payload: UserUpdate, actor: AdminUser, db: DbSessi
     db.commit()
     db.refresh(target)
     record_audit_event(db, action="user.update", actor=actor, target_entity_type="user", target_entity_id=str(target.id))
-    return _user_out(target)
+    return _user_out(target, db)
 
 
 @router.post("/api/users/{user_id}/reset-password", response_model=UserOut)
@@ -213,17 +226,20 @@ def admin_reset_password(user_id: int, payload: UserPasswordResetAdmin, actor: A
     if policy_error:
         raise HTTPException(status_code=400, detail=policy_error)
     target.password_hash = hash_password(payload.new_password)
+    target.password_changed_at = _utc_now()
     target.must_reset_password = payload.require_reset_on_login
     target.failed_login_attempts = 0
     target.is_locked = False
+    target.locked_until = None
+    target.auth_state = "password_change_required" if payload.require_reset_on_login else "active"
     db.commit()
     db.refresh(target)
     record_audit_event(db, action="user.password.reset.admin", actor=actor, target_entity_type="user", target_entity_id=str(target.id))
-    return _user_out(target)
+    return _user_out(target, db)
 
 
 @router.get("/api/settings", response_model=AppSettingsOut)
-def get_settings(_: CurrentUser, db: DbSession) -> AppSettingsOut:
+def get_settings(_: AdminUser, db: DbSession) -> AppSettingsOut:
     return _settings_out(_settings_row(db))
 
 
@@ -235,82 +251,7 @@ def save_settings(payload: AppSettingsUpdate, actor: AdminUser, db: DbSession) -
     row.updated_at = _utc_now()
     db.commit()
     db.refresh(row)
+    if RULE_SETTING_FIELDS.intersection(payload.model_fields_set):
+        reevaluate_all_plan_versions(db, "rule_config")
     record_audit_event(db, action="settings.saved", actor=actor, target_entity_type="app_settings", target_entity_id=str(row.id), details={"fields": sorted(payload.model_fields_set)})
     return _settings_out(row)
-
-
-@router.get("/api/api-configuration", response_model=ApiConfigurationOut)
-def get_api_configuration(_: AdminUser, db: DbSession) -> ApiConfigurationOut:
-    return _api_config_out(_settings_row(db))
-
-
-@router.patch("/api/api-configuration", response_model=ApiConfigurationOut)
-def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db: DbSession) -> ApiConfigurationOut:
-    row = _settings_row(db)
-    field_map = {
-        "vendor_name": "emr_vendor_name",
-        "api_base_url": "api_base_url",
-        "openapi_url": "openapi_url",
-        "token_url": "api_oauth_token_url",
-        "client_id": "api_client_id",
-        "token_auth_style": "api_token_auth_style",
-        "scopes": "api_scopes",
-        "pagination_limit": "api_pagination_limit",
-        "sync_limit": "alleva_treatment_plan_sync_limit",
-        "timeout_seconds": "emr_api_timeout_seconds",
-        "api_enabled": "emr_api_enabled",
-        "treatment_plan_sync_enabled": "alleva_treatment_plan_sync_enabled",
-        "treatment_plan_sync_approved": "alleva_treatment_plan_sync_approved",
-        "treatment_plan_endpoint_mapping_validated": "alleva_treatment_plan_endpoint_mapping_validated",
-    }
-    for source, target in field_map.items():
-        if source in payload.model_fields_set:
-            value = getattr(payload, source)
-            if value is not None:
-                setattr(row, target, value)
-    secret = payload.client_secret if "client_secret" in payload.model_fields_set else payload.api_key
-    if secret:
-        row.api_client_secret = encrypt_text_secret(secret)
-    row.updated_at = _utc_now()
-    db.commit()
-    db.refresh(row)
-    record_audit_event(
-        db,
-        action="settings.api_profile.saved",
-        actor=actor,
-        target_entity_type="api_connection_profile",
-        target_entity_id=row.emr_vendor_name,
-        details={"vendor_name": row.emr_vendor_name, "api_base_url": row.api_base_url, "client_secret_configured": bool(row.api_client_secret)},
-    )
-    return _api_config_out(row)
-
-
-@router.get("/api/audit/logs", response_model=AuditLogListOut)
-def audit_logs(_: AdminUser, db: DbSession, limit: int = 100) -> AuditLogListOut:
-    rows = db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(max(1, min(limit, 500)))).scalars().all()
-    return AuditLogListOut(items=tuple(_audit_item(row) for row in rows))
-
-
-@router.get("/api/audit/verify", response_model=AuditVerificationOut)
-def verify_audit_logs(_: AdminUser, db: DbSession) -> AuditVerificationOut:
-    valid, event_count, first_invalid_id = verify_audit_chain(db)
-    return AuditVerificationOut(valid=valid, event_count=event_count, first_invalid_id=first_invalid_id)
-
-
-def _audit_item(row: AuditLog) -> AuditLogItemOut:
-    details = json.loads(row.details_json)
-    safe_details: dict[str, JsonValue] = details if isinstance(details, dict) else {}
-    return AuditLogItemOut(
-        event_id=row.event_id,
-        timestamp_utc=row.timestamp_utc.isoformat(),
-        actor_id=row.actor_id,
-        actor_username=row.actor_username,
-        actor_role=row.actor_role,
-        action=row.action,
-        target_entity_type=row.target_entity_type,
-        target_entity_id=row.target_entity_id,
-        outcome_status=row.outcome_status,
-        details=safe_details,
-        prev_hash=row.prev_hash,
-        hash=row.hash,
-    )

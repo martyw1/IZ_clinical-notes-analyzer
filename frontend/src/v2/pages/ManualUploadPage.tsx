@@ -130,7 +130,7 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
             I confirm this override corrects a different Patient ID detected in the file.
           </label>
           <label>
-            Treatment-plan file (TXT, CSV, TSV, MD, PDF, XLSX)
+            Treatment-plan file (TXT, CSV, TSV, MD, text-extractable PDF, XLSX)
             <input
               type='file'
               accept='.txt,.md,.csv,.tsv,.pdf,.xlsx,text/plain,text/markdown,text/csv,text/tab-separated-values,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -146,7 +146,7 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
         <p className='eyebrow'>Current boundary</p>
         <h2>Manual evidence import</h2>
         <div className='source-card-grid'>
-          <article className='source-card'><h3>Accepted now</h3><p>V2 aggregate JSON plus text, Markdown, CSV, TSV, PDF, and XLSX files with labeled treatment-plan fields.</p></article>
+          <article className='source-card'><h3>Accepted now</h3><p>V2 aggregate JSON plus text, Markdown, CSV, TSV, text-extractable PDF, and XLSX files with labeled treatment-plan fields. Image-only PDFs are rejected because no deterministic text evidence is available.</p></article>
           <article className='source-card'><h3>Stored safely</h3><p>Aggregate payloads and parsed source files are encrypted. Queue columns keep only patient ID and non-secret status metadata.</p></article>
           <article className='source-card'><h3>Still pending</h3><p>Multi-document binders remain a documented blocker for a later station.</p></article>
         </div>

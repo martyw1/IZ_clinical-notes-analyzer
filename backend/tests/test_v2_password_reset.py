@@ -19,6 +19,9 @@ def test_must_reset_user_is_blocked_until_current_password_is_changed(tmp_path, 
     changed = client.post("/api/users/me/change-password", headers=headers, json={"current_password": "InitialResetPass1", "new_password": "UpdatedResetPass2"})
     assert changed.status_code == 200
     assert changed.json()["must_reset_password"] is False
-    assert client.get("/api/v2/dashboard", headers=headers).status_code == 200
+    fresh = client.post("/api/auth/login", json={"username": "resetuser", "password": "UpdatedResetPass2"})
+    assert fresh.status_code == 200
+    fresh_headers = {"Authorization": f"Bearer {fresh.json()['access_token']}"}
+    assert client.get("/api/v2/dashboard", headers=fresh_headers).status_code == 200
     audit = client.get("/api/audit/logs", headers=admin_headers).json()["items"]
     assert any(item["action"] == "user.password.changed" for item in audit)

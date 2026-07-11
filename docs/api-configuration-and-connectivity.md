@@ -4,6 +4,10 @@ Date: 2026-06-30
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
+## V2 beta.2 contract and release boundary
+
+The active V2 prerelease is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. Saved credentials remain write-only and encrypted at rest; release validation must use synthetic fixtures and an isolated temporary local-app-data directory. Do not enter a production secret during release validation. Supervised R3/Alleva validation using approved non-PHI/test records remains an external gate, so beta.2 does not claim a live production connection or sync approval. See `docs/v2-beta/api-contract-alleva.md` and `docs/v2-beta/release-readiness-2026-07-11.md`.
+
 ## Where to open it
 
 When running the Windows local desktop runtime, open:

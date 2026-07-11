@@ -11,6 +11,8 @@ def test_admin_can_verify_the_persisted_audit_hash_chain(tmp_path, monkeypatch) 
     assert verification.json()["valid"] is True
     assert verification.json()["event_count"] >= 1
     assert verification.json()["first_invalid_id"] is None
+    assert verification.json()["privacy_mode"] == "redacted_minimum_necessary"
+    assert verification.json()["retention_hook"] == "local_policy_required"
 
 
 def test_audit_verification_identifies_the_first_modified_record(tmp_path, monkeypatch) -> None:

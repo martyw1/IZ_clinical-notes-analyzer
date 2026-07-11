@@ -343,6 +343,11 @@ dd,
   white-space: nowrap;
 }
 
+.summary-grid__item--wrappable {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .metric-tile dd {
   font-size: 1.35rem;
   font-weight: 700;

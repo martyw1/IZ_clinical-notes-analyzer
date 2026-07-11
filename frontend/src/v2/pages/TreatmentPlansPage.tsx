@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
-import { deleteTreatmentPlanSourceDocument, downloadTreatmentPlanSourceDocument } from '../api/downloads'
+import { deleteTreatmentPlanSourceDocument, downloadChecklistEvidenceExport, downloadTreatmentPlanSourceDocument } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
 import type { ManagerActionPayload, TreatmentPlanListData, TreatmentPlanListItem, UserProfile } from '../api/types'
 import { TreatmentPlanDetailViewer } from '../components/TreatmentPlanDetailViewer'
@@ -29,7 +29,17 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
   const [selectedPlan, setSelectedPlan] = useState<TreatmentPlanAggregate | null>(null)
   const [error, setError] = useState('')
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<TreatmentPlanStatus | null>(null)
+  const [refreshNumber, setRefreshNumber] = useState(0)
   const statusOrder = listData?.statusOrder.length ? listData.statusOrder : defaultStatusOrder
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return (listData?.items ?? []).filter((item) => (
+      (!statusFilter || item.status === statusFilter)
+      && (!normalizedQuery || item.patientId.toLowerCase().includes(normalizedQuery) || item.status.toLowerCase().includes(normalizedQuery))
+    ))
+  }, [listData?.items, query, statusFilter])
   const selectedSummary = useMemo(
     () => listData?.items.find((item) => item.patientId === selectedPatientId) ?? listData?.items[0] ?? null,
     [listData, selectedPatientId],
@@ -51,7 +61,7 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [refreshNumber, token])
 
   useEffect(() => {
     if (!selectedSummary) return
@@ -95,6 +105,11 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId))
   }
 
+  async function handleChecklistEvidenceExport() {
+    if (!selectedPlan) return
+    await downloadChecklistEvidenceExport(token, selectedPlan.patientId)
+  }
+
   if (error) {
     return <section className='panel error-banner' role='alert'>{error}</section>
   }
@@ -112,19 +127,14 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
           <p className='muted'>Signed in as {user.fullName}</p>
         </div>
         <label>
-          Evaluation date
-          <input type='date' defaultValue='2026-07-08' />
+          Search patient ID or status
+          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='Patient ID or status' />
         </label>
-        <label>
-          Search
-          <input placeholder='Patient ID or status' />
-        </label>
-        <button type='button' onClick={() => setSelectedPatientId(listData.items[0]?.patientId ?? '')}>Refresh</button>
-        <button type='button' className='secondary-button' disabled>Manual upload sync pending</button>
+        <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh queue</button>
       </section>
       <section className='status-strip' aria-label='Treatment Plans status strip'>
         {statusOrder.map((status) => (
-          <button key={status} type='button' className='status-segment'>
+          <button key={status} type='button' className='status-segment' aria-pressed={statusFilter === status} onClick={() => setStatusFilter((current) => current === status ? null : status)}>
             <StatusBadge status={status} />
             <span>{countStatus(listData.items, status)}</span>
           </button>
@@ -143,9 +153,9 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
               </tr>
             </thead>
             <tbody>
-              {listData.items.map((item) => (
+              {visibleItems.map((item) => (
                 <tr key={item.patientId}>
-                  <td data-label='Patient'><button type='button' className='link-button' onClick={() => setSelectedPatientId(item.patientId)}>{item.patientDisplayLabel}</button></td>
+                  <td data-label='Patient ID'><button type='button' className='link-button' onClick={() => setSelectedPatientId(item.patientId)}>{item.patientId}</button></td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>
                   <td data-label='Next due'>{item.nextDueDate}</td>
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
@@ -160,6 +170,7 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
             plan={selectedPlan}
             canManage={user.role === 'admin' || user.role === 'office_manager'}
             onManagerAction={handleManagerAction}
+            onExportChecklistEvidence={handleChecklistEvidenceExport}
             onDownloadSourceDocument={handleSourceDocumentDownload}
             onDeleteSourceDocument={handleSourceDocumentDelete}
           />

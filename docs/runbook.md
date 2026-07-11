@@ -4,6 +4,10 @@ Date: 2026-07-06
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
 
+## V2 beta.2 release boundary
+
+For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. This older operational runbook remains useful for shared Windows operations, but V2 release validation must follow `docs/v2-beta/release-readiness-2026-07-11.md`: a fresh isolated local-app-data directory and synthetic data only. Do not use a production operator profile, clinical export, saved API report, local credential, or upload for release testing. Live Alleva synchronization remains gated pending supervised approved validation; beta.2 is not a production declaration.
+
 ## Health endpoints
 
 - Backend direct: `GET /health`

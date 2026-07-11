@@ -19,6 +19,11 @@ export async function deleteTreatmentPlanSourceDocument(token: string, patientId
   )
 }
 
+export async function downloadChecklistEvidenceExport(token: string, patientId: string): Promise<void> {
+  const response = await request(`/api/v2/exports/${encodeURIComponent(patientId)}/checklist-evidence.csv`, { token })
+  triggerBrowserDownload(await response.blob(), filenameFromDisposition(response.headers.get('content-disposition')))
+}
+
 function filenameFromDisposition(header: string | null): string {
   if (!header) return SOURCE_DOWNLOAD_FALLBACK_FILENAME
   const filenamePart = header.split(';').map((part) => part.trim()).find((part) => part.toLowerCase().startsWith('filename='))

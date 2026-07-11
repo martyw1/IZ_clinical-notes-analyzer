@@ -7,6 +7,7 @@ import type {
   ApiConfiguration,
   AppSettings,
   DashboardData,
+  Facility,
   LoginResult,
   ManualTreatmentPlanImportResult,
   ManagerActionPayload,
@@ -27,6 +28,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   return {
     accessToken: readString(payload, 'access_token'),
     mustResetPassword: readBoolean(payload, 'must_reset_password'),
+    authState: readString(payload, 'auth_state') === 'password_change_required' ? 'password_change_required' : 'active',
   }
 }
 
@@ -54,6 +56,7 @@ export async function getDashboard(token: string): Promise<DashboardData> {
   const payload = await readRecordPayload(await request('/api/v2/dashboard', { token }))
   const metrics = readRecord(payload, 'metrics')
   return {
+    refreshedAt: readString(payload, 'refreshed_at'),
     sourceCards: readRecordList(payload, 'source_cards').map((card) => ({
       label: readString(card, 'label'),
       status: readString(card, 'status'),
@@ -186,6 +189,24 @@ export async function listUsers(token: string): Promise<readonly UserProfile[]> 
   return (await readRecordListPayload(await request('/api/users', { token }))).map(mapUser)
 }
 
+export async function listFacilities(token: string): Promise<readonly Facility[]> {
+  return (await readRecordListPayload(await request('/api/facilities', { token }))).map((record) => ({
+    id: readNumber(record, 'id'),
+    facilityKey: readString(record, 'facility_key'),
+    displayName: readString(record, 'display_name'),
+    timezone: readString(record, 'timezone'),
+    isActive: readBoolean(record, 'is_active'),
+  }))
+}
+
+export async function assignUserFacility(token: string, userId: number, facilityId: number): Promise<void> {
+  await request(`/api/users/${userId}/facilities/${facilityId}`, { token, method: 'PUT' })
+}
+
+export async function assignPatient(token: string, patientId: string, counselorUsername: string): Promise<void> {
+  await request(`/api/patient-assignments/${encodeURIComponent(patientId)}/${encodeURIComponent(counselorUsername)}`, { token, method: 'PUT' })
+}
+
 export async function runApprovedAllevaTreatmentPlanSync(token: string): Promise<ApiHarnessJob> {
   const payload = await readRecordPayload(await request('/api/v2/alleva-sync/run', { token, method: 'POST' }))
   return {
@@ -237,6 +258,37 @@ function mapUser(record: Record<string, unknown>): UserProfile {
     isActive: readBoolean(record, 'is_active'),
     isLocked: readBoolean(record, 'is_locked'),
     mustResetPassword: readBoolean(record, 'must_reset_password'),
+    authState: mapAuthState(readString(record, 'auth_state', 'active')),
+    lockedUntil: readString(record, 'locked_until'),
+    facilityIds: Array.isArray(record.facility_ids)
+      ? record.facility_ids.filter((value): value is number => typeof value === 'number')
+      : [],
+  }
+}
+
+function mapAuthState(value: string): UserProfile['authState'] {
+  switch (value) {
+    case 'bootstrap_required':
+      return 'bootstrap_required'
+    case 'password_change_required':
+      return 'password_change_required'
+    case 'locked_until':
+      return 'locked_until'
+    default:
+      return 'active'
+  }
+}
+
+export async function resumeApprovedAllevaTreatmentPlanSync(token: string, jobId: string): Promise<ApiHarnessJob> {
+  const payload = await readRecordPayload(await request(`/api/v2/alleva-sync/jobs/${jobId}/resume`, { token, method: 'POST' }))
+  return {
+    jobId: readString(payload, 'job_id'),
+    status: readString(payload, 'status'),
+    progressPercent: readNumber(payload, 'progress_percent'),
+    recordsWritten: readNumber(payload, 'records_written'),
+    recordsFailed: readNumber(payload, 'records_failed'),
+    warningsCount: readNumber(payload, 'warnings_count'),
+    artifacts: [],
   }
 }
 
@@ -292,5 +344,7 @@ function mapApiConfiguration(record: Record<string, unknown>): ApiConfiguration 
     treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
     treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),
     treatmentPlanEndpointMappingValidated: readBoolean(record, 'treatment_plan_endpoint_mapping_validated'),
+    activeContractVersion: readString(record, 'active_contract_version'),
+    activeContractEffectiveAt: readString(record, 'active_contract_effective_at'),
   }
 }

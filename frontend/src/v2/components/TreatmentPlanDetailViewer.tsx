@@ -11,6 +11,7 @@ type TreatmentPlanDetailViewerProps = {
   readonly plan: TreatmentPlanAggregate
   readonly canManage: boolean
   readonly onManagerAction: (payload: ManagerActionPayload) => Promise<void>
+  readonly onExportChecklistEvidence: () => Promise<void>
   readonly onDownloadSourceDocument: (sourceFileId: string) => Promise<void>
   readonly onDeleteSourceDocument: (sourceFileId: string) => Promise<void>
 }
@@ -28,6 +29,7 @@ export function TreatmentPlanDetailViewer({
   plan,
   canManage,
   onManagerAction,
+  onExportChecklistEvidence,
   onDownloadSourceDocument,
   onDeleteSourceDocument,
 }: TreatmentPlanDetailViewerProps) {
@@ -77,6 +79,19 @@ export function TreatmentPlanDetailViewer({
     }, 'Override saved with required reason and audit event.')
   }
 
+  const saveApproval = async () => {
+    if (!selectedCriterion) return
+    await saveAction({ criterionId: selectedCriterion.criterionId, action: 'approve', comment, overrideReason: '' }, 'Approval saved as a manager disposition.')
+  }
+
+  const saveComment = async () => {
+    if (!selectedCriterion || !comment.trim()) {
+      setActionMessage('Add a comment before saving it.')
+      return
+    }
+    await saveAction({ criterionId: selectedCriterion.criterionId, action: 'comment', comment, overrideReason: '' }, 'Manager comment saved without changing deterministic results.')
+  }
+
   async function saveAction(payload: ManagerActionPayload, successMessage: string) {
     setIsSaving(true)
     try {
@@ -95,7 +110,7 @@ export function TreatmentPlanDetailViewer({
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Selected Treatment Plan Detail</p>
-            <h2>{plan.patientDisplayLabel}</h2>
+            <h2>Patient ID {plan.patientId}</h2>
           </div>
           <StatusBadge status={plan.status} />
         </div>
@@ -103,6 +118,10 @@ export function TreatmentPlanDetailViewer({
           <span>Current LOC: {plan.currentLevelOfCare}</span>
           <span>Admission: <time dateTime={plan.admissionDate}>{plan.admissionDate}</time></span>
           <span>Next due: <time dateTime={plan.dueDate}>{plan.dueDate}</time></span>
+          <span>Source due: {plan.sourceDueDate}</span>
+          <span className='summary-grid__item--wrappable'>LOC-change clock: {plan.locChangeDueDate}</span>
+          <span>Evaluated: {plan.evaluationDate} ({plan.facilityTimezone})</span>
+          <span>Checklist/rules: {plan.checklistVersion} / {plan.rulesVersion}</span>
           <span>Source: {plan.sourceMode}</span>
         </div>
         <label>
@@ -179,6 +198,8 @@ export function TreatmentPlanDetailViewer({
             <input value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} />
           </label>
           <div className='button-row'>
+            <button type='button' className='secondary-button' onClick={saveApproval} disabled={isSaving || !selectedCriterion}>Approve criterion</button>
+            <button type='button' className='secondary-button' onClick={saveComment} disabled={isSaving || !selectedCriterion}>Save comment</button>
             <button type='button' onClick={saveReturn} disabled={isSaving || !selectedCriterion}>Return for correction</button>
             <button type='button' className='secondary-button' onClick={saveOverride} disabled={isSaving || !selectedCriterion}>Save override</button>
           </div>
@@ -212,11 +233,13 @@ export function TreatmentPlanDetailViewer({
       </section>
 
       <section className='panel'>
+        {canManage && <div className='button-row'><button type='button' className='secondary-button' onClick={() => void onExportChecklistEvidence()}>Export minimum-necessary checklist evidence</button></div>}
         <h2>Evidence Coverage Map</h2>
         <div className='summary-grid'>
           <span>Criteria total: {plan.evidenceCoverageSummary.criteriaTotal}</span>
           <span>With evidence: {plan.evidenceCoverageSummary.criteriaWithEvidence}</span>
           <span>Missing evidence: {plan.evidenceCoverageSummary.criteriaMissingEvidence}</span>
+          <span>Conflicting evidence: {plan.evidenceCoverageSummary.criteriaConflicting}</span>
           <span>Runtime-only fields: {plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span>
         </div>
         <p>Used, missing, unmapped, and unused content are separated so managers can see what the checklist did and did not evaluate.</p>

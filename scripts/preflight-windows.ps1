@@ -4,6 +4,7 @@ param(
     [switch]$AssumeYes,
     [switch]$SkipFrontendBuild,
     [switch]$SkipFrontendCheck,
+    [switch]$InitializePackagedRuntime,
     [string]$ReportPath = ''
 )
 
@@ -412,7 +413,7 @@ if actual_steps != expected_steps:
     raise SystemExit("Treatment Plan Checklist steps must be numbered 1 through 42.")
 
 version = build_version_payload()
-if version.get("version") != "2.0.0-beta.1" or version.get("release_channel") != "beta-local-desktop-v2":
+if version.get("version") != "2.0.0-beta.2" or version.get("release_channel") != "beta-local-desktop-v2":
     raise SystemExit("Active version metadata is not V2 beta.")
 if not v2_router.routes:
     raise SystemExit("V2 router has no active routes.")
@@ -431,15 +432,17 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 Add-Check 'repo' 'ok' 'Repository root located.' $RootDir
 Add-Check 'appdata' 'ok' 'Local AppData folders are writable.' $AppDataRoot
 Ensure-EnvFile
-$python = Ensure-Python
-Ensure-Venv -PythonExe $python
-if ($SkipFrontendCheck) {
-    Add-Check 'frontend_build' 'ok' 'Frontend build check deferred to the installer build script.' ''
-} else {
-    Ensure-Frontend
+if (-not $InitializePackagedRuntime) {
+    $python = Ensure-Python
+    Ensure-Venv -PythonExe $python
+    if ($SkipFrontendCheck) {
+        Add-Check 'frontend_build' 'ok' 'Frontend build check deferred to the installer build script.' ''
+    } else {
+        Ensure-Frontend
+    }
+    Test-BackendConfig
+    Test-Port
 }
-Test-BackendConfig
-Test-Port
 
 $failed = ($Results | Where-Object { $_.status -eq 'fail' }).Count
 $warnings = ($Results | Where-Object { $_.status -eq 'warn' }).Count

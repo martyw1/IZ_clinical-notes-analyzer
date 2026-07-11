@@ -1,6 +1,7 @@
 import type { TreatmentPlanStatus } from '../types/treatmentPlan'
 
 export type UserRole = 'admin' | 'office_manager' | 'counselor' | 'viewer'
+export type AuthState = 'bootstrap_required' | 'password_change_required' | 'active' | 'locked_until'
 
 export type UserProfile = {
   readonly id: number
@@ -10,11 +11,23 @@ export type UserProfile = {
   readonly isActive: boolean
   readonly isLocked: boolean
   readonly mustResetPassword: boolean
+  readonly authState: AuthState
+  readonly lockedUntil: string
+  readonly facilityIds: readonly number[]
 }
 
 export type LoginResult = {
   readonly accessToken: string
   readonly mustResetPassword: boolean
+  readonly authState: 'password_change_required' | 'active'
+}
+
+export type Facility = {
+  readonly id: number
+  readonly facilityKey: string
+  readonly displayName: string
+  readonly timezone: string
+  readonly isActive: boolean
 }
 
 export type NavigationResult = {
@@ -29,6 +42,7 @@ export type SourceCard = {
 }
 
 export type DashboardData = {
+  readonly refreshedAt: string
   readonly sourceCards: readonly SourceCard[]
   readonly metrics: Record<string, number>
   readonly blockers: readonly string[]
@@ -91,6 +105,8 @@ export type ApiConfiguration = {
   readonly treatmentPlanSyncEnabled: boolean
   readonly treatmentPlanSyncApproved: boolean
   readonly treatmentPlanEndpointMappingValidated: boolean
+  readonly activeContractVersion: string
+  readonly activeContractEffectiveAt: string
 }
 
 export type OpenApiDefinitionSummary = {
@@ -130,6 +146,8 @@ export type AuditVerification = {
   readonly valid: boolean
   readonly eventCount: number
   readonly firstInvalidId: number | null
+  readonly privacyMode: string
+  readonly retentionHook: string
 }
 
 export type ApiHarnessArtifact = {
@@ -158,6 +176,8 @@ export type ManagerActionPayload = {
 }
 
 export type CorrectionQueueItem = {
+  readonly workItemId: number
+  readonly planVersionId: number
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly criterionId: string
@@ -168,6 +188,7 @@ export type CorrectionQueueItem = {
 }
 
 export type CorrectionSubmissionPayload = {
+  readonly workItemId: number
   readonly criterionId: string
   readonly comment: string
 }

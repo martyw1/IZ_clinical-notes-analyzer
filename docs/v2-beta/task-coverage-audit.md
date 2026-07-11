@@ -1,11 +1,11 @@
 # V2 Beta Task Coverage Audit
 
-Audit recorded on 2026-07-08 against the V2 Beta PDF task list.
+Audit refreshed on 2026-07-11 against the V2 Beta PDF task list.
 
 | Task area | Status | Evidence |
 |---|---|---|
 | V1 archived outside active runtime | Covered | Active code lives in `backend/app/` and `frontend/src/`; V1 is archived under `deprecated/v1/`; active import scan has no `deprecated/v1` references. |
-| V2 version/readiness boundary | Covered | `VERSION`, `VERSION.json`, `/api/version`, UI footer, and readiness tests report `2.0.0-beta.1`, build `2026.07.08.1`, and `beta-local-desktop-v2`. |
+| V2 version/readiness boundary | Covered | `VERSION`, `VERSION.json`, `/api/version`, UI footer, sample OpenAPI metadata, and Windows preflight report `2.0.0-beta.2`, build `2026.07.11.1`, and `beta-local-desktop-v2`. |
 | Patient-name minimization | Covered for V2 beta fixture | Backend/frontend tests and browser QA verify `Patient ID 307` and no patient-name-like text in active V2 payload/UI. |
 | 42-step checklist | Covered for V2 beta fixture | Backend aggregate returns 42 criteria; frontend and browser QA render `42-STEP CHECKLIST`; coverage map shows 42 total. |
 | Deterministic status order | Covered | Frontend tests and browser QA verify exact order: Missing Data, Needs Review, Incomplete, Within Window, Late, Conflicting Evidence, Unable to Evaluate. |
@@ -29,4 +29,4 @@ Audit recorded on 2026-07-08 against the V2 Beta PDF task list.
 
 ## Bottom Line
 
-The active V2 beta local-desktop slice is validated and packageable. The remaining items are either intentionally blocked by external approval/requirements or explicitly deferred production hardening, not hidden test failures.
+The active V2 beta local-desktop slice is validated and packageable as a prerelease. It is not a production release: supervised approved live Alleva validation, credential rotation/downstream history-remediation approval, and signing/retention decisions remain external gates.

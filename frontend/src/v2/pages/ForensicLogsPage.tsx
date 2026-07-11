@@ -39,7 +39,7 @@ export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
   async function verifyChain() {
     try {
       const result = await verifyAuditLogs(token)
-      setVerification(result.valid ? `Hash chain verified across ${result.eventCount} events.` : `Hash chain verification failed at audit record ${result.firstInvalidId ?? 'unknown'}.`)
+      setVerification(result.valid ? `Hash chain verified across ${result.eventCount} events. Privacy: ${result.privacyMode}; retention hook: ${result.retentionHook}.` : `Hash chain verification failed at audit record ${result.firstInvalidId ?? 'unknown'}.`)
     } catch (verifyError) { setVerification(messageForError(verifyError)) }
   }
 

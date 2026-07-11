@@ -28,6 +28,7 @@ function messageForError(error: unknown): string {
 export function DashboardPage({ token }: DashboardPageProps) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
+  const [refreshNumber, setRefreshNumber] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -43,7 +44,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [refreshNumber, token])
 
   if (error) {
     return <section className='panel error-banner' role='alert'>{error}</section>
@@ -62,6 +63,10 @@ export function DashboardPage({ token }: DashboardPageProps) {
             <h2>Source readiness</h2>
           </div>
           <span className='runtime-pill'>Backend-backed</span>
+        </div>
+        <div className='button-row'>
+          <time dateTime={dashboard.refreshedAt}>Refreshed {new Date(dashboard.refreshedAt).toLocaleString()}</time>
+          <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh dashboard</button>
         </div>
         <div className='source-card-grid'>
           {dashboard.sourceCards.map((card) => (
