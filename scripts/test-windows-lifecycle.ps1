@@ -51,10 +51,12 @@ try {
     $localStackSmokeText = Get-Content -LiteralPath $LocalStackSmokeScript -Raw
     Assert-True -Condition ($localStackSmokeText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue') -Label 'local_stack_tests_clear_smoke_environment'
     Assert-True -Condition ($localStackSmokeText -match 'IZ_CNA_LOCAL_APP_DATA_DIR=\$AppDataRoot') -Label 'local_stack_server_root_matches_synthetic_database'
+    Assert-True -Condition ($localStackSmokeText -match 'Reset-SmokeDatabase -DatabasePath \$DatabasePath') -Label 'local_stack_resets_stale_synthetic_database'
     Assert-True -Condition ($localStackSmokeText -match '/api/users/me/change-password') -Label 'local_stack_completes_bootstrap_password_change'
     $apiConfigurationSmokeText = Get-Content -LiteralPath $ApiConfigurationSmokeScript -Raw
     Assert-True -Condition ($apiConfigurationSmokeText -match 'Remove-Item Env:\\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue') -Label 'api_configuration_tests_clear_smoke_environment'
     Assert-True -Condition ($apiConfigurationSmokeText -match 'IZ_CNA_LOCAL_APP_DATA_DIR=\$AppDataRoot') -Label 'api_configuration_server_root_matches_synthetic_database'
+    Assert-True -Condition ($apiConfigurationSmokeText -match 'Reset-SmokeDatabase -DatabasePath \$DatabasePath') -Label 'api_configuration_resets_stale_synthetic_database'
     Assert-True -Condition ($apiConfigurationSmokeText -notmatch 'test_v2_runtime\.py') -Label 'api_configuration_avoids_removed_runtime_test'
     Assert-True -Condition ($apiConfigurationSmokeText -match 'test_v2_runtime_readiness\.py') -Label 'api_configuration_targets_active_runtime_test'
     Assert-True -Condition ($apiConfigurationSmokeText -match 'test_v2_openapi_pull\.py') -Label 'api_configuration_targets_active_openapi_test'

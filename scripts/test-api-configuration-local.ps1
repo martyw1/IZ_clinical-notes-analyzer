@@ -7,12 +7,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer API Config Test'
+$DatabasePath = Join-Path $AppDataRoot 'api-config-test.sqlite3'
 $EnvFile = Join-Path $AppDataRoot '.env'
 $LogDir = Join-Path $AppDataRoot 'logs'
 $BaseUrl = "http://127.0.0.1:$Port"
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 function Write-Step($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" }
+
+function Reset-SmokeDatabase {
+    param([string]$DatabasePath)
+
+    foreach ($path in @($DatabasePath, "$DatabasePath-shm", "$DatabasePath-wal")) {
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Force
+        }
+    }
+}
 
 function New-RandomSecret([int]$Length) {
     $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
@@ -56,6 +67,7 @@ function Ensure-BackendVirtualEnvironment {
 
 try {
     Set-Location $RootDir
+    Reset-SmokeDatabase -DatabasePath $DatabasePath
     $python = Ensure-BackendVirtualEnvironment
     $pythonVersion = Assert-PythonVersion $python
     Write-Step "Using Python $pythonVersion at $python."
@@ -74,7 +86,7 @@ APP_NAME=IZ Clinical Notes Analyzer
 ENVIRONMENT=development
 BACKEND_PORT=$Port
 DATABASE_BACKEND=sqlite
-LOCAL_SQLITE_DB_PATH=$AppDataRoot\api-config-test.sqlite3
+LOCAL_SQLITE_DB_PATH=$DatabasePath
 IZ_CNA_LOCAL_APP_DATA_DIR=$AppDataRoot
 DATABASE_URL=
 SECRET_KEY=$(New-RandomSecret 64)
