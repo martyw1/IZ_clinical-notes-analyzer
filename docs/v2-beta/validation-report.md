@@ -2,11 +2,26 @@
 
 ## 2026-07-11 beta.2 release-readiness boundary
 
-This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It records no new production, signing, retention, destructive-history, credential-rotation, or live Alleva validation claim. The required final gate is an isolated synthetic-only validation run with redacted evidence; supervised approved non-PHI/test-record Alleva validation remains external.
+This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It records no new production, signing, retention, destructive-history, credential-rotation, or live Alleva validation claim. The required isolated synthetic-only validation run completed with redacted evidence; supervised approved non-PHI/test-record Alleva validation remains external.
 
 The procedure is maintained in `release-readiness-2026-07-11.md` and requires a fresh `%TEMP%` `IZ_CNA_LOCAL_APP_DATA_DIR`, no loaded local credentials/production `.env`, and no clinical export or production local-data reuse.
 
-The retained 2026-07-08 evidence below is historical `2.0.0-beta.1` evidence. It does not validate a `2.0.0-beta.2` release folder, zip, or footer. A completed beta.2 final-validation run must record `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2` artifacts and a matching `2.0.0-beta.2` footer before it can be treated as beta.2 evidence.
+The retained 2026-07-08 evidence below is historical `2.0.0-beta.1` evidence. The completed beta.2 run is recorded next; it validates the final synthetic package, ZIP, and current launcher behavior without making a production or live-sync claim.
+
+## Final beta.2 synthetic validation (2026-07-11)
+
+Validation used an isolated synthetic local-data profile and no tenant credentials, clinical exports, or production local data. Only redacted command outcomes are retained here.
+
+| Gate | Result |
+|---|---|
+| Windows preflight, V2 version/rules, and 42-step checklist | Pass |
+| Active backend suite | Pass — 156 passed; one known Starlette/httpx deprecation warning |
+| Frontend Vitest and production build | Pass — 15 tests and Vite build |
+| Source-checkout CMD launcher | Pass — fresh-profile startup returned success only after HTTP 200 readiness; occupied-port startup returned nonzero |
+| Packaged CMD launcher | Pass — readiness success and timeout-failure behavior verified |
+| PyInstaller package, required-file validation, release-folder and ZIP forbidden-file scans | Pass |
+
+Generated artifact: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip` (34,575,669 bytes), SHA-256 `AB7505FF0314A953176121683B8B1213620F13D39DC3582B05D2FB5CB4E938E0`.
 
 ## Historical beta.1 command evidence (2026-07-08)
 

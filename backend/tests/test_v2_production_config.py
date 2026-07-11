@@ -40,6 +40,41 @@ def test_windows_release_build_excludes_local_pip_cache() -> None:
     assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
 
 
+def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success() -> None:
+    # Given: a packaged launcher starts its runtime in the background.
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "launch-packaged-runtime.cmd"
+
+    # When: the launcher contract is inspected.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    # Then: it probes the documented readiness endpoint and returns failure on timeout.
+    assert "/api/readiness" in launcher_contents
+    assert "Readiness check failed" in launcher_contents
+    assert "exit /b 1" in launcher_contents
+
+
+def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() -> None:
+    # Given: the source-checkout wrapper launches startup PowerShell in the background.
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
+
+    # When: the checkout launcher contract is inspected.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    # Then: it waits for the readiness contract before reporting background startup.
+    assert "Wait-ForReadiness" in launcher_contents
+    assert "Startup readiness check failed" in launcher_contents
+
+
+def test_windows_checkout_launcher_passes_enabled_switches_without_string_boolean_values() -> None:
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
+    launcher_contents = launcher.read_text(encoding="utf-8")
+
+    assert "-SkipFrontendBuild:$skipFrontendValue" not in launcher_contents
+    assert "-AssumeYes:$assumeYesValue" not in launcher_contents
+    assert "if ($SkipFrontendBuild) { $arguments += ' -SkipFrontendBuild' }" in launcher_contents
+    assert "if ($AssumeYes) { $arguments += ' -AssumeYes' }" in launcher_contents
+
+
 def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() -> None:
     # Given: the Windows installer bundles desktop_runtime.py, which resolves the ASGI app dynamically.
     build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"

@@ -84,7 +84,7 @@ Required resolution evidence:
 
 ## Windows Packaging and Validation
 
-Status: V2 beta release-folder package validated; signed MSI/MSIX remains open.
+Status: beta.2 synthetic package and CMD-launcher validation passed on 2026-07-11. Signed MSI/MSIX remains open pending the R3 IT deployment decision.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 
