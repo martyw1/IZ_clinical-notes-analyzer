@@ -42,6 +42,7 @@ export type SourceCard = {
 }
 
 export type DashboardData = {
+  readonly refreshedAt: string
   readonly sourceCards: readonly SourceCard[]
   readonly metrics: Record<string, number>
   readonly blockers: readonly string[]
@@ -145,6 +146,8 @@ export type AuditVerification = {
   readonly valid: boolean
   readonly eventCount: number
   readonly firstInvalidId: number | null
+  readonly privacyMode: string
+  readonly retentionHook: string
 }
 
 export type ApiHarnessArtifact = {
@@ -173,6 +176,8 @@ export type ManagerActionPayload = {
 }
 
 export type CorrectionQueueItem = {
+  readonly workItemId: number
+  readonly planVersionId: number
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly criterionId: string
@@ -183,6 +188,7 @@ export type CorrectionQueueItem = {
 }
 
 export type CorrectionSubmissionPayload = {
+  readonly workItemId: number
   readonly criterionId: string
   readonly comment: string
 }

@@ -23,5 +23,7 @@ export async function verifyAuditLogs(token: string): Promise<AuditVerification>
     valid: readBoolean(payload, 'valid'),
     eventCount: readNumber(payload, 'event_count'),
     firstInvalidId: typeof firstInvalidId === 'number' ? firstInvalidId : null,
+    privacyMode: readString(payload, 'privacy_mode'),
+    retentionHook: readString(payload, 'retention_hook'),
   }
 }

@@ -66,6 +66,12 @@ export type TreatmentPlanAggregate = {
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly dueDate: string
+  readonly sourceDueDate: string
+  readonly locChangeDueDate: string
+  readonly checklistVersion: string
+  readonly rulesVersion: string
+  readonly evaluationDate: string
+  readonly facilityTimezone: string
   readonly status: TreatmentPlanStatus
   readonly sourceMode: 'manual_upload' | 'alleva_rest_api' | 'synthetic_fixture' | 'unavailable'
   readonly reasonForAdmission: string
@@ -97,6 +103,7 @@ export type TreatmentPlanAggregate = {
     readonly criteriaTotal: number
     readonly criteriaWithEvidence: number
     readonly criteriaMissingEvidence: number
+    readonly criteriaConflicting: number
     readonly runtimeOnlyFields: readonly string[]
   }
 }

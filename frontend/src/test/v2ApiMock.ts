@@ -10,7 +10,7 @@ type FetchState = {
   readonly mustResetPassword?: boolean
 }
 
-export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Workflow Profiles', 'Forensic Logs', 'Settings', 'Help'] as const
+export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
 
 const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Corrections', 'Help'] as const
 
@@ -124,6 +124,7 @@ function userPayload(role: Role) {
 
 function dashboardPayload() {
   return {
+    refreshed_at: '2026-07-11T12:00:00+00:00',
     source_cards: [
       { label: 'Manual upload readiness', status: 'ready', detail: 'Manual evidence accepted.' },
       { label: 'API readiness', status: 'configured for testing', detail: 'Alleva harness is bounded.' },
@@ -152,7 +153,7 @@ function treatmentPlansPayload() {
   }
 }
 
-function correctionQueueItemPayload() { return { patient_id: '812', patient_display_label: 'Patient ID 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
+function correctionQueueItemPayload() { return { work_item_id: 71, plan_version_id: 18, patient_id: '812', patient_display_label: 'Patient ID 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
 
 function workflowProfilePayload(status: 'draft' | 'published') {
   const version = { id: 71, version: 1, status, version_notes: '' }

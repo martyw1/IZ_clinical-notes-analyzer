@@ -66,6 +66,7 @@ def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user:
     saved = save_manager_action_record(
         db, patient_id=patient_id, criterion_id=payload.criterion_id, action="correction_submitted",
         comment=payload.comment.strip(), override_reason="", actor=user,
+        commit=False,
     )
     close_correction_work_item(
         db,
@@ -73,10 +74,11 @@ def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user:
         patient_id=patient_id,
         criterion_id=payload.criterion_id,
         counselor_user_id=user.id,
+        commit=False,
     )
     aggregate = treatment_plan_aggregate_for_patient(db, patient_id)
     if aggregate is not None:
-        refresh_patient_version(db, aggregate, "correction")
+        refresh_patient_version(db, aggregate, "correction", commit=False)
     record_audit_event(
         db, action="correction.submitted", actor=user, target_entity_type="treatment_plan_criterion",
         target_entity_id=f"{patient_id}:{payload.criterion_id}", details={"criterion_id": payload.criterion_id, "has_comment": True},

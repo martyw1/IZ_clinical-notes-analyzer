@@ -15,7 +15,7 @@ from app.v2.api.models import (
     AuditVerificationOut,
 )
 from app.v2.models import AppSetting, AuditLog
-from app.v2.services.audit_store import JsonValue, record_audit_event, verify_audit_chain
+from app.v2.services.audit_store import JsonValue, audit_policy_metadata, record_audit_event, verify_audit_chain
 from app.v2.services.alleva_contracts import active_contract
 from app.v2.services.secure_storage import encrypt_text_secret
 
@@ -114,7 +114,14 @@ def audit_logs(_: AdminUser, db: DbSession, limit: int = 100) -> AuditLogListOut
 @router.get("/api/audit/verify", response_model=AuditVerificationOut)
 def verify_audit_logs(_: AdminUser, db: DbSession) -> AuditVerificationOut:
     valid, event_count, first_invalid_id = verify_audit_chain(db)
-    return AuditVerificationOut(valid=valid, event_count=event_count, first_invalid_id=first_invalid_id)
+    privacy_mode, retention_hook = audit_policy_metadata()
+    return AuditVerificationOut(
+        valid=valid,
+        event_count=event_count,
+        first_invalid_id=first_invalid_id,
+        privacy_mode=privacy_mode,
+        retention_hook=retention_hook,
+    )
 
 
 def _audit_item(row: AuditLog) -> AuditLogItemOut:

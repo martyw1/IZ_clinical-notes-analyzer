@@ -14,7 +14,7 @@ function messageForError(error: unknown): string {
 }
 
 function correctionKey(item: CorrectionQueueItem): string {
-  return `${item.patientId}:${item.criterionId}`
+  return `${item.workItemId}:${item.patientId}:${item.criterionId}`
 }
 
 export function CorrectionsPage({ token }: CorrectionsPageProps) {
@@ -42,7 +42,7 @@ export function CorrectionsPage({ token }: CorrectionsPageProps) {
     setSavingKey(key)
     setMessage('')
     try {
-      await submitCorrection(token, item.patientId, { criterionId: item.criterionId, comment })
+      await submitCorrection(token, item.patientId, { workItemId: item.workItemId, criterionId: item.criterionId, comment })
       setItems((current) => current?.filter((candidate) => correctionKey(candidate) !== key) ?? [])
       setMessage('Correction submitted for manager review.')
     } catch (error) {
@@ -68,7 +68,7 @@ export function CorrectionsPage({ token }: CorrectionsPageProps) {
           {items.map((item) => {
             const key = correctionKey(item)
             return <li key={key}>
-              <strong>{item.patientDisplayLabel}</strong> <span>on {item.criterionTitle}</span>
+              <strong>Patient ID {item.patientId}</strong> <span>on {item.criterionTitle}</span>
               <span> Returned by {item.returnedByUsername} at {item.returnedAt}</span>
               <p>Manager note: {item.returnComment}</p>
               <label>

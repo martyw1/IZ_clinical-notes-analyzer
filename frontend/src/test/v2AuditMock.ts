@@ -8,4 +8,4 @@ export function auditLogsPayload() {
   }
 }
 
-export const auditVerificationPayload = { valid: true, event_count: 3, first_invalid_id: null }
+export const auditVerificationPayload = { valid: true, event_count: 3, first_invalid_id: null, privacy_mode: 'redacted_minimum_necessary', retention_hook: 'local_policy_required' }

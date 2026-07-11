@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from typing import Protocol
 
 
@@ -32,6 +33,7 @@ def dashboard_payload(
     if not loc_change_window_validated:
         blockers.append("LOC-change update window is unvalidated and configurable.")
     return {
+        "refreshed_at": datetime.now(timezone.utc).isoformat(),
         "source_cards": [
             {
                 "label": "Manual upload readiness",

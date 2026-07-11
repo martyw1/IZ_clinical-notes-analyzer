@@ -98,6 +98,7 @@ class DashboardSourceCardOut(V2Model):
 
 
 class DashboardOut(V2Model):
+    refreshed_at: str
     source_cards: tuple[DashboardSourceCardOut, ...]
     metrics: dict[str, int]
     blockers: tuple[str, ...]
@@ -356,6 +357,8 @@ class AuditVerificationOut(V2Model):
     valid: bool
     event_count: int
     first_invalid_id: int | None = None
+    privacy_mode: str
+    retention_hook: str
 
 
 class WorkflowProfileCreate(V2Model):

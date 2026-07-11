@@ -37,6 +37,7 @@ def save_manager_action_record(
     comment: str,
     override_reason: str,
     actor: User,
+    commit: bool = True,
 ) -> TreatmentPlanManagerAction:
     row = TreatmentPlanManagerAction(
         patient_id=patient_id,
@@ -49,7 +50,10 @@ def save_manager_action_record(
         actor_role=actor.role,
     )
     db.add(row)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(row)
     return row
 
@@ -135,6 +139,7 @@ def save_returned_correction_work_item(
     comment: str,
     counselor_username: str,
     actor: User,
+    commit: bool = True,
 ) -> None:
     rows = db.execute(
         text(
@@ -186,7 +191,10 @@ def save_returned_correction_work_item(
             "idempotency_key": idempotency_key,
         },
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 
 def correction_work_item_is_open_for(
@@ -219,6 +227,7 @@ def close_correction_work_item(
     patient_id: str,
     criterion_id: str,
     counselor_user_id: int,
+    commit: bool = True,
 ) -> None:
     db.execute(
         text(
@@ -241,7 +250,10 @@ def close_correction_work_item(
             "counselor_id": counselor_user_id,
         },
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 
 def _manager_review_dict(row: TreatmentPlanManagerAction) -> dict[str, JsonValue]:

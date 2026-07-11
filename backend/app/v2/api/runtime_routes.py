@@ -83,7 +83,7 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
     if user.role == "counselor":
         items.append("Corrections")
     if user.role == "admin":
-        items.extend(["API Testing Harness", "Users", "Workflow Profiles", "Forensic Logs", "Settings"])
+        items.extend(["API Testing Harness", "Users", "Forensic Logs", "Settings"])
     items.append("Help")
     return {"items": items, "active_runtime": "v2"}
 
@@ -157,6 +157,7 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Curr
         comment=payload.comment,
         override_reason=payload.override_reason,
         actor=user,
+        commit=False,
     )
     if payload.action == "return_for_correction":
         try:
@@ -167,6 +168,7 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Curr
                 comment=payload.comment,
                 counselor_username=payload.assigned_counselor_username.strip(),
                 actor=user,
+                commit=False,
             )
         except CorrectionAssignmentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

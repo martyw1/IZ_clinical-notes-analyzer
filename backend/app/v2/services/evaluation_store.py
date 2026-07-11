@@ -89,12 +89,16 @@ def refresh_patient_version(
     db: Session,
     aggregate: TreatmentPlanAggregate,
     trigger: EvaluationTrigger,
+    commit: bool = True,
 ) -> EvaluationRefreshResult:
     target = latest_plan_target(db, aggregate.patient_id)
     if target is None:
         return EvaluationRefreshResult(0, "", "", "", "")
     evaluated = persist_plan_evaluation(db, aggregate, target, trigger)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return EvaluationRefreshResult(
         versions_evaluated=1,
         evaluation_date=evaluated.evaluation_date,

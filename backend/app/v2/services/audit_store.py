@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from threading import RLock
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -14,6 +15,9 @@ JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 
 BLOCKED_DETAIL_FRAGMENTS = ("secret", "token", "authorization", "payload", "narrative", "client_name", "patient_name")
+AUDIT_PRIVACY_MODE = "redacted_minimum_necessary"
+AUDIT_RETENTION_HOOK = "local_policy_required"
+_AUDIT_CHAIN_LOCK = RLock()
 
 
 def redact_json(value: JsonValue) -> JsonValue:
@@ -30,6 +34,28 @@ def redact_json(value: JsonValue) -> JsonValue:
 
 
 def record_audit_event(
+    db: Session,
+    *,
+    action: str,
+    actor: User | None = None,
+    target_entity_type: str = "system",
+    target_entity_id: str = "",
+    outcome_status: str = "success",
+    details: dict[str, JsonValue] | None = None,
+) -> AuditLog:
+    with _AUDIT_CHAIN_LOCK:
+        return _record_audit_event(
+            db,
+            action=action,
+            actor=actor,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            outcome_status=outcome_status,
+            details=details,
+        )
+
+
+def _record_audit_event(
     db: Session,
     *,
     action: str,
@@ -85,14 +111,19 @@ def record_audit_event(
 
 
 def verify_audit_chain(db: Session) -> tuple[bool, int, int | None]:
-    rows = db.execute(select(AuditLog).order_by(AuditLog.id.asc())).scalars().all()
-    previous_hash = ""
-    for row in rows:
-        expected = _event_hash(row, previous_hash)
-        if row.prev_hash != previous_hash or row.hash != expected:
-            return False, len(rows), row.id
-        previous_hash = row.hash
-    return True, len(rows), None
+    with _AUDIT_CHAIN_LOCK:
+        rows = db.execute(select(AuditLog).order_by(AuditLog.id.asc())).scalars().all()
+        previous_hash = ""
+        for row in rows:
+            expected = _event_hash(row, previous_hash)
+            if row.prev_hash != previous_hash or row.hash != expected:
+                return False, len(rows), row.id
+            previous_hash = row.hash
+        return True, len(rows), None
+
+
+def audit_policy_metadata() -> tuple[str, str]:
+    return AUDIT_PRIVACY_MODE, AUDIT_RETENTION_HOOK
 
 
 def _is_blocked_key(key: str) -> bool:

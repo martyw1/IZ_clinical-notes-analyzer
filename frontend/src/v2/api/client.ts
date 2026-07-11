@@ -56,6 +56,7 @@ export async function getDashboard(token: string): Promise<DashboardData> {
   const payload = await readRecordPayload(await request('/api/v2/dashboard', { token }))
   const metrics = readRecord(payload, 'metrics')
   return {
+    refreshedAt: readString(payload, 'refreshed_at'),
     sourceCards: readRecordList(payload, 'source_cards').map((card) => ({
       label: readString(card, 'label'),
       status: readString(card, 'status'),
