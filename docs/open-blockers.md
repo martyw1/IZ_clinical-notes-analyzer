@@ -1,10 +1,19 @@
 # Open Blockers
 
-Date: 2026-07-08
+Date: 2026-07-11
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.1` / build `2026.07.08.1`.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1`.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
+
+## Production Release Gates
+
+Status: **open external gates; no production claim.**
+
+- R3 and Alleva must approve and supervise a live contract and end-to-end sync validation using approved non-PHI/test records.
+- The exposed credential must be rotated, all downstream copies inventoried, and the required history-remediation procedure explicitly approved before any destructive rewrite or force push.
+- R3 IT/records owners must decide whether code signing is required and define retention/legal-hold handling for release, diagnostic, backup, and incident records.
+- Final validation must run in a clean isolated local-app-data environment using synthetic data only. Details and the required evidence boundary are in `docs/v2-beta/release-readiness-2026-07-11.md`.
 
 Current V2 treatment-plan handling is documented in `docs\v2-beta\`, including product scope, data contract, Alleva/API contract, rules contract, UI workflows, security/privacy/audit notes, validation evidence, and task coverage audit. Version 1 treatment-plan handling remains archived for historical reference under `deprecated\v1\`. The blockers below remain active boundaries for the V2 beta runtime.
 
@@ -84,8 +93,8 @@ Current implementation state: Version 2.0 Beta keeps Windows preflight, source-c
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `2.0.0-beta.1` and `beta-local-desktop-v2` on that machine.
-- The `Treatment Plans` workbench shows the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.1 | beta-local-desktop-v2`, proving the V2 workflow UI is the currently served build.
+- `/api/version` and the UI footer show `2.0.0-beta.2` and `beta-local-desktop-v2` on that machine.
+- The `Treatment Plans` workbench shows the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2`, proving the V2 workflow UI is the currently served build.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
 - The Backup shortcut creates a full local-data backup zip under the user's Documents folder and warns that it can contain clinical data and encryption material.

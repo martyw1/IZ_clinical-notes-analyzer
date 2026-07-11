@@ -17,3 +17,7 @@ Manual QA:
 - Use Computer Use or equivalent desktop capture for a real Windows screenshot pass on Dashboard, Treatment Plans, and API Testing Harness before release sign-off.
 
 Current validation evidence is recorded in `validation-report.md`; task-list coverage is recorded in `task-coverage-audit.md`.
+
+## Beta.2 final validation environment
+
+Run release validation only against a freshly created, isolated `%TEMP%` local-app-data directory with synthetic users, Patient IDs, and fixtures. Do not point `IZ_CNA_LOCAL_APP_DATA_DIR` at an operator profile; do not load `.env`, credential profiles, production databases, clinical exports, saved harness reports, or uploads. Record only redacted command results and screenshots. See `release-readiness-2026-07-11.md` for the exact procedure and unresolved external gates.

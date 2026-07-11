@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## 2026-07-11 V2 beta.2 release-readiness metadata and documentation
+
+- Updated V2 prerelease metadata to `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2` in release files, backend version configuration, frontend package metadata/footer, sample OpenAPI metadata, and Windows preflight.
+- Added the V2 release-readiness handoff record and aligned the V2 contracts, workflows, privacy/security, validation, blocker, release-note, and operator documentation.
+- Kept the release explicitly prerelease-only. Supervised approved live Alleva validation, credential rotation and downstream/history-remediation approval, and signing/retention/legal-hold decisions remain external gates.
+- Required final validation remains synthetic-data-only in an isolated local-app-data environment; it must not reuse production data, credentials, clinical exports, diagnostics, uploads, databases, or artifacts.
+
 ## 2026-07-01 treatment-plan handling docs and installer sync
 - Added `docs/patient-treatment-plan-handling.md` as the current implementation reference for manual-upload treatment plans, gated Alleva REST treatment-plan sync, patient-level aggregate diagnostics, local treatment-plan tables, deterministic timeliness evaluation, selected-client 42-step checklist output, content-fact privacy handling, API routes, and Treatment Plans UI files.
 - Updated README, architecture, runbook, codebase map, API connectivity docs, Windows user/deployment/install guides, release notes, blocker notes, UAT, checklist, workflow, and PRD notes to point to the current treatment-plan handling path and preserve the gated Alleva/live-import boundaries.

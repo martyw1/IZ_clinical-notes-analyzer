@@ -39,7 +39,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
         ))}
       </nav>
       <main>{children}</main>
-      <footer className='v2-footer'>Version 2.0 Beta | 2.0.0-beta.1 | beta-local-desktop-v2</footer>
+      <footer className='v2-footer'>Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2</footer>
     </div>
   )
 }

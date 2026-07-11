@@ -1,10 +1,23 @@
 # Release Notes
 
-Current app version: `2.0.0-beta.1` / build `2026.07.08.1`.
+Current app version: `2.0.0-beta.2` / build `2026.07.11.1`.
 
 Current release channel: `beta-local-desktop-v2`.
 
-Current release date in version metadata: `2026-07-08`.
+Current release date in version metadata: `2026-07-11`.
+
+## 2.0.0-beta.2 - V2 release-readiness update
+
+Build: `2026.07.11.1`
+
+Version metadata name: `Version 2.0 Beta release-readiness update`
+
+Summary:
+
+- Aligns `VERSION`, `VERSION.json`, frontend package metadata, `/api/version`, the V2 footer, sample OpenAPI metadata, and Windows preflight on the active V2 beta version.
+- Adds an explicit synthetic-only isolated-environment final-validation procedure and a single release-readiness record for operator, security, and support handoff.
+- Records the remaining external gates: supervised approved live Alleva validation; exposed-credential rotation and downstream/history-remediation approval; and R3 IT/records decisions on signing and retention/legal hold.
+- Keeps live sync gated and makes no production, history-remediation, signing, retention, or live-Alleva-validation claim.
 
 ## 2.0.0-beta.1 - V2 beta local desktop rebuild
 

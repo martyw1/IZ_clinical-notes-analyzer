@@ -4,6 +4,8 @@ Incident date: 2026-07-10
 
 Status: **Active containment. Not remediated.**
 
+2026-07-11 beta.2 release-readiness update: the credential rotation, downstream-copy disposition, history-remediation approval, and retention/legal-hold decisions remain open external incident gates. This metadata update does not alter incident status or authorize a rewrite, force push, or production release.
+
 Scope: tracked clinical-export artifacts and a credential-pattern value retained in Git history/current repository metadata. This record contains metadata only. It does not contain clinical content, patient identifiers, original filenames, or the credential value.
 
 ## Preservation Baseline

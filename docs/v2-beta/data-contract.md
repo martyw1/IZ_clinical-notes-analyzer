@@ -7,3 +7,5 @@ Required aggregate fields include patient ID, patient display label, source mode
 The content snapshot preserves reason for admission, initial client needs, family education needs, problems, diagnoses, behavioral definitions, goals, objectives, interventions, signature metadata, observed fields, safe evidence references, redaction status, and content hash.
 
 Signature image/base64 data is not included in normal browser payloads. Clinical narrative text is not written to forensic logs.
+
+Beta.2 final validation uses only synthetic fixtures in an isolated local-app-data directory. It must not reuse clinical exports, production local databases, API reports, credentials, or uploads.

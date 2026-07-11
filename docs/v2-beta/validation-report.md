@@ -1,5 +1,11 @@
 # V2 Validation Report
 
+## 2026-07-11 beta.2 release-readiness boundary
+
+This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It records no new production, signing, retention, destructive-history, credential-rotation, or live Alleva validation claim. The required final gate is an isolated synthetic-only validation run with redacted evidence; supervised approved non-PHI/test-record Alleva validation remains external.
+
+The procedure is maintained in `release-readiness-2026-07-11.md` and requires a fresh `%TEMP%` `IZ_CNA_LOCAL_APP_DATA_DIR`, no loaded local credentials/production `.env`, and no clinical export or production local-data reuse.
+
 Validation recorded on 2026-07-08 for branch `codex/v2-beta-local-rebuild`.
 
 ## Final Command Evidence

@@ -1,6 +1,6 @@
 # IZ Clinical Notes Analyzer
 
-Current app version: `2.0.0-beta.1` / build `2026.07.08.1` on the `beta-local-desktop-v2` channel.
+Current app version: `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` channel.
 
 Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
 
@@ -21,6 +21,8 @@ Version 2.0 Beta is the current local Windows desktop beta. It includes:
 - Windows preflight, local-stack smoke, API-configuration smoke, release-folder packaging, required-file validation, and forbidden-file scans for a prepared release folder.
 - V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
 Version 2.0 Beta still does not include ungated live Alleva patient import or a signed MSI/MSIX. Live Alleva sync remains disabled until R3/Alleva approval and endpoint mapping validation are complete. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
+
+`2.0.0-beta.2` is a prerelease release-readiness update, not a production declaration. Before a production release, R3 must complete supervised approved live Alleva validation; rotate the exposed credential and approve downstream/history remediation; and record signing and retention/legal-hold decisions. The final validation procedure uses a clean isolated local-app-data directory and synthetic data only; see `docs/v2-beta/release-readiness-2026-07-11.md`.
 
 ## Interactive Architecture Diagram
 
@@ -77,7 +79,7 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.1"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2"]
         Legacy["Archived V1 runtime<br/>deprecated/v1"]
     end
 

@@ -4,6 +4,10 @@ Date: 2026-07-06
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
 
+## V2 beta.2 note
+
+The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. This document remains the historical/shared implementation map; the V2 contract and final synthetic-only validation procedure are in `docs/v2-beta/`. No live Alleva production validation is claimed. Do not use production patient data, exports, databases, credentials, or uploads when performing beta.2 release validation.
+
 ## Purpose
 
 This is the current implementation reference for how patient treatment plans are handled in the app. It covers the local database model, manual upload sync, gated Alleva REST sync, the patient-level aggregate, deterministic timeliness decisions, selected-client checklist results, privacy controls, and the user-facing Treatment Plans queue.

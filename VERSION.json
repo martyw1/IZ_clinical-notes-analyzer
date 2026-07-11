@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "2.0.0-beta.1",
-  "build": "2026.07.08.1",
+  "version": "2.0.0-beta.2",
+  "build": "2026.07.11.1",
   "release_channel": "beta-local-desktop-v2",
-  "release_date": "2026-07-08",
-  "git_branch": "codex/v2-beta-local-rebuild",
+  "release_date": "2026-07-11",
+  "git_branch": "codex/v2-production-readiness",
   "stability": "beta",
   "is_prerelease": true,
-  "version_name": "Version 2.0 Beta local desktop rebuild",
-  "description": "Archives the pre-2.0 runtime under deprecated/v1 and activates a focused V2 local FastAPI plus React/Vite treatment-plan workbench with evidence-linked checklist evaluation, bounded Alleva API harness jobs, persisted manual or approved-sync data, and visible LOC-change blocker handling."
+  "version_name": "Version 2.0 Beta release-readiness update",
+  "description": "V2 local-desktop beta release-readiness update with evidence-linked deterministic workflows, bounded Alleva contract validation, and visible external release gates. This prerelease is not a production release and does not claim approved live Alleva validation."
 }
