@@ -5,6 +5,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() -> None:
+    # Given: the Windows installer bundles desktop_runtime.py, which resolves the ASGI app dynamically.
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+
+    # When: the PyInstaller invocation is read from the release build script.
+    build_script_contents = build_script.read_text(encoding="utf-8")
+
+    # Then: the dynamically imported ASGI entrypoint is explicitly collected for frozen execution.
+    assert "--hidden-import app.desktop_main" in build_script_contents
+
+
 def test_resolve_repository_root_uses_frozen_bundle_data_root(tmp_path: Path) -> None:
     # Given: a PyInstaller extraction location and a source-style module path.
     bundled_root = tmp_path / "frozen-bundle"

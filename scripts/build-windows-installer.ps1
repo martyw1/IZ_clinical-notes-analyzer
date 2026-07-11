@@ -351,6 +351,7 @@ function Build-DesktopRuntime {
                 --add-data "$(Join-Path $RootDir 'frontend\dist');app\static" `
                 --add-data "$(Join-Path $RootDir 'config');config" `
                 --collect-submodules app `
+                --hidden-import app.desktop_main `
                 --collect-all passlib `
                 --distpath $runtimeDir `
                 --workpath (Join-Path $runtimeBuildRoot 'work') `
