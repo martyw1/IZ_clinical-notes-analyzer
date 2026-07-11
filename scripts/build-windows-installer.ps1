@@ -105,6 +105,7 @@ function Copy-RepoContent {
         (Join-Path $RootDir 'backend\.venv'),
         (Join-Path $RootDir 'frontend\node_modules'),
         (Join-Path $RootDir 'node_modules'),
+        (Join-Path $RootDir 'pip'),
         (Join-Path $RootDir 'dist'),
         (Join-Path $RootDir 'uploads'),
         (Join-Path $RootDir 'exports'),
@@ -133,6 +134,7 @@ function Copy-RepoContent {
         '.github',
         '.agents',
         'node_modules',
+        'pip',
         '.pytest_cache',
         '.tmp',
         '.cache',
@@ -709,6 +711,10 @@ New-Item -ItemType Directory -Path $InstallRoot, $StartMenuDir -Force | Out-Null
 Invoke-Robocopy -Source $SourceAppDir -Destination $InstallRoot -Label 'Install copy'
 Copy-Item -LiteralPath (Join-Path $PackageDir 'release-manifest.json') -Destination (Join-Path $InstallRoot 'release-manifest.json') -Force
 Invoke-Robocopy -Source (Join-Path $PackageDir 'installer') -Destination $InstalledInstallerDir -Label 'Installer helper copy'
+Write-InstallStep 'Initializing local packaged-runtime configuration'
+& (Join-Path $InstallRoot 'scripts\\preflight-windows.ps1') -AssumeYes -InitializePackagedRuntime
+if ($LASTEXITCODE -ne 0) { throw 'Packaged-runtime configuration initialization failed.' }
+if (-not (Test-Path -LiteralPath (Join-Path $LocalDataDir '.env'))) { throw 'Packaged-runtime configuration file was not created.' }
 
 @"
 @echo off

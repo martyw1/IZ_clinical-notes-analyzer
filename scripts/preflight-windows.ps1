@@ -4,6 +4,7 @@ param(
     [switch]$AssumeYes,
     [switch]$SkipFrontendBuild,
     [switch]$SkipFrontendCheck,
+    [switch]$InitializePackagedRuntime,
     [string]$ReportPath = ''
 )
 
@@ -431,15 +432,17 @@ New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 Add-Check 'repo' 'ok' 'Repository root located.' $RootDir
 Add-Check 'appdata' 'ok' 'Local AppData folders are writable.' $AppDataRoot
 Ensure-EnvFile
-$python = Ensure-Python
-Ensure-Venv -PythonExe $python
-if ($SkipFrontendCheck) {
-    Add-Check 'frontend_build' 'ok' 'Frontend build check deferred to the installer build script.' ''
-} else {
-    Ensure-Frontend
+if (-not $InitializePackagedRuntime) {
+    $python = Ensure-Python
+    Ensure-Venv -PythonExe $python
+    if ($SkipFrontendCheck) {
+        Add-Check 'frontend_build' 'ok' 'Frontend build check deferred to the installer build script.' ''
+    } else {
+        Ensure-Frontend
+    }
+    Test-BackendConfig
+    Test-Port
 }
-Test-BackendConfig
-Test-Port
 
 $failed = ($Results | Where-Object { $_.status -eq 'fail' }).Count
 $warnings = ($Results | Where-Object { $_.status -eq 'warn' }).Count

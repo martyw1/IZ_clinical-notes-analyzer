@@ -21,7 +21,13 @@ def _port_from_environment() -> int:
 
 
 def main() -> None:
-    uvicorn.run("app.desktop_main:app", host=HOST, port=_port_from_environment(), access_log=False)
+    uvicorn.run(
+        "app.desktop_main:app",
+        host=HOST,
+        port=_port_from_environment(),
+        access_log=False,
+        log_config=None,
+    )
 
 
 if __name__ == "__main__":

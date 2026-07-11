@@ -4,6 +4,41 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
+
+def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(monkeypatch) -> None:
+    # Given: PyInstaller --noconsole runs with sys.stdout unavailable to Uvicorn's default formatter.
+    monkeypatch.delenv("IZ_CNA_PORT", raising=False)
+    from app import desktop_runtime
+
+    # When: the frozen desktop runtime starts the local Uvicorn server.
+    with patch.object(desktop_runtime.uvicorn, "run") as run:
+        desktop_runtime.main()
+
+    # Then: it does not install the formatter that calls sys.stdout.isatty().
+    run.assert_called_once_with(
+        "app.desktop_main:app",
+        host="127.0.0.1",
+        port=8000,
+        access_log=False,
+        log_config=None,
+    )
+
+
+def test_windows_release_installer_initializes_packaged_runtime_configuration() -> None:
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+    preflight_script = Path(__file__).resolve().parents[2] / "scripts" / "preflight-windows.ps1"
+
+    assert "-InitializePackagedRuntime" in build_script.read_text(encoding="utf-8")
+    assert "[switch]$InitializePackagedRuntime" in preflight_script.read_text(encoding="utf-8")
+
+
+def test_windows_release_build_excludes_local_pip_cache() -> None:
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+
+    assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
+
 
 def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() -> None:
     # Given: the Windows installer bundles desktop_runtime.py, which resolves the ASGI app dynamically.
