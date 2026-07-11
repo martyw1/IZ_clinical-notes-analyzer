@@ -50,9 +50,9 @@ def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success() 
     # Then: it probes the documented readiness endpoint and returns failure on timeout.
     assert "/api/readiness" in launcher_contents
     assert "Readiness check failed" in launcher_contents
-    assert "Port %IZ_CNA_PORT% is already in use" in launcher_contents
     assert "BACKEND_PORT" in launcher_contents
     assert "127.0.0.1:%IZ_CNA_PORT%" in launcher_contents
+    assert "configured local port is invalid or already in use" in launcher_contents
     assert "exit /b 1" in launcher_contents
 
 

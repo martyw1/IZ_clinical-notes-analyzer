@@ -15,9 +15,10 @@ if not exist "%RUNTIME_EXE%" (
 )
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$port = 0; if (-not [int]::TryParse($env:IZ_CNA_PORT, [ref]$port) -or $port -lt 1 -or $port -gt 65535) { exit 2 }; $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse('127.0.0.1'), $port); try { $listener.Start(); exit 0 } catch { exit 1 } finally { $listener.Stop() }"
 if errorlevel 1 (
-    echo [fail] Port %IZ_CNA_PORT% is already in use or invalid. Stop the existing local app before starting another instance.
+    echo [fail] The configured local port is invalid or already in use. Stop the existing local app before starting another instance.
     exit /b 1
 )
+for /f "delims=" %%P in ('powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$port = 0; [void][int]::TryParse($env:IZ_CNA_PORT, [ref]$port); [Console]::Write($port)"') do set "IZ_CNA_PORT=%%P"
 start "" /b "%RUNTIME_EXE%"
 echo Waiting for the local runtime readiness check...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$deadline = (Get-Date).AddSeconds(30); do { try { $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:%IZ_CNA_PORT%/api/readiness' -TimeoutSec 2; if ($response.StatusCode -eq 200 -and $response.Content -match '\"status\"') { exit 0 } } catch { } Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
