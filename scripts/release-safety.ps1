@@ -27,7 +27,7 @@ function Get-ForbiddenReleaseCategory {
 
     if ($fileName -eq '.debug-journal.md') { return 'local_evidence' }
     if ($fileName -eq '.env.example') { return $null }
-    if ($fileName -eq '.env' -or $fileName.StartsWith('.env.') -or $fileName -eq '.alleva.local.ps1' -or $fileName -like '*.local.*') {
+    if ($fileName -eq '.env' -or $fileName.StartsWith('.env.') -or $fileName -eq '.alleva.local.ps1' -or $fileName -like '*.local.*' -or $fileName -like '*.local-*') {
         return 'local_config'
     }
     if ($fileName -eq 'app credentials info.md' -or $fileName -eq 'test-allevaapi.ps1' -or $fileName -like '*credential*' -or $fileName -like '*secret*' -or $fileName -like '*token*') {
@@ -36,6 +36,7 @@ function Get-ForbiddenReleaseCategory {
     if ($fileName -like '*.sqlite' -or $fileName -like '*.sqlite3' -or $fileName -like '*.db') {
         return 'database'
     }
+    if ($fileName -like '*.izcnabackup') { return 'backup' }
     if ($fileName -like '*.log') { return 'log' }
     if ($fileName -like '*.tmp' -or $fileName -like '*.bak' -or $fileName -like '*.pyc') { return 'cache' }
 

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
-import { deleteTreatmentPlanSourceDocument, downloadChecklistEvidenceExport, downloadTreatmentPlanSourceDocument } from '../api/downloads'
+import { getApiConfiguration, getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
+import { deleteTreatmentPlanSourceDocument, downloadChecklistEvidenceExport, downloadTreatmentPlanListExport, downloadTreatmentPlanSourceDocument } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
-import type { ManagerActionPayload, TreatmentPlanListData, TreatmentPlanListItem, UserProfile } from '../api/types'
+import type { ApiConfiguration, ManagerActionPayload, TreatmentPlanListData, TreatmentPlanListItem, UserProfile } from '../api/types'
+import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
 import { TreatmentPlanDetailViewer } from '../components/TreatmentPlanDetailViewer'
 import { StatusBadge } from '../components/StatusBadge'
 import type { TreatmentPlanAggregate, TreatmentPlanStatus } from '../types/treatmentPlan'
@@ -11,6 +12,7 @@ import { statusOrder as defaultStatusOrder } from '../types/treatmentPlan'
 type TreatmentPlansPageProps = {
   readonly token: string
   readonly user: UserProfile
+  readonly onNavigate: (view: string) => void
 }
 
 function messageForError(error: unknown): string {
@@ -23,8 +25,10 @@ function countStatus(items: readonly TreatmentPlanListItem[], status: TreatmentP
   return items.filter((item) => item.status === status).length
 }
 
-export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
+export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPageProps) {
   const [listData, setListData] = useState<TreatmentPlanListData | null>(null)
+  const [apiConfig, setApiConfig] = useState<ApiConfiguration | null>(null)
+  const [apiConfigError, setApiConfigError] = useState('')
   const [selectedPatientId, setSelectedPatientId] = useState('')
   const [selectedPlan, setSelectedPlan] = useState<TreatmentPlanAggregate | null>(null)
   const [error, setError] = useState('')
@@ -41,9 +45,17 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     ))
   }, [listData?.items, query, statusFilter])
   const selectedSummary = useMemo(
-    () => listData?.items.find((item) => item.patientId === selectedPatientId) ?? listData?.items[0] ?? null,
-    [listData, selectedPatientId],
+    () => visibleItems.find((item) => item.patientId === selectedPatientId) ?? visibleItems[0] ?? null,
+    [selectedPatientId, visibleItems],
   )
+
+  useEffect(() => {
+    if (!selectedSummary) {
+      setSelectedPlan(null)
+      return
+    }
+    if (selectedPatientId !== selectedSummary.patientId) setSelectedPatientId(selectedSummary.patientId)
+  }, [selectedPatientId, selectedSummary])
 
   useEffect(() => {
     let cancelled = false
@@ -62,6 +74,17 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
       cancelled = true
     }
   }, [refreshNumber, token])
+
+  useEffect(() => {
+    if (user.role !== 'admin') return
+    let cancelled = false
+    void getApiConfiguration(token).then((config) => {
+      if (!cancelled) setApiConfig(config)
+    }).catch((loadError: unknown) => {
+      if (!cancelled) setApiConfigError(messageForError(loadError))
+    })
+    return () => { cancelled = true }
+  }, [token, user.role])
 
   useEffect(() => {
     if (!selectedSummary) return
@@ -110,6 +133,14 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     await downloadChecklistEvidenceExport(token, selectedPlan.patientId)
   }
 
+  async function handleTreatmentPlanListExport() {
+    try {
+      await downloadTreatmentPlanListExport(token)
+    } catch (downloadError) {
+      setError(messageForError(downloadError))
+    }
+  }
+
   if (error) {
     return <section className='panel error-banner' role='alert'>{error}</section>
   }
@@ -120,6 +151,16 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
 
   return (
     <div className='treatment-workbench'>
+      {user.role === 'admin' && (
+        <ApprovedQueueImportCard
+          config={apiConfig}
+          token={token}
+          onNavigate={onNavigate}
+          onCompleted={() => setRefreshNumber((current) => current + 1)}
+          showOpenQueueButton={false}
+        />
+      )}
+      {apiConfigError && <p role='alert' className='error-banner'>{apiConfigError}</p>}
       <section className='sticky-toolbar'>
         <div>
           <p className='eyebrow'>Treatment Plans Workbench</p>
@@ -130,7 +171,12 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
           Search patient ID or status
           <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='Patient ID or status' />
         </label>
-        <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh queue</button>
+        <div className='button-row'>
+          {(user.role === 'admin' || user.role === 'office_manager') && (
+            <button type='button' className='secondary-button' onClick={() => void handleTreatmentPlanListExport()}>Export treatment plans and statuses</button>
+          )}
+          <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh queue</button>
+        </div>
       </section>
       <section className='status-strip' aria-label='Treatment Plans status strip'>
         {statusOrder.map((status) => (
@@ -147,6 +193,7 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
             <thead>
               <tr>
                 <th>Patient</th>
+                <th>Treatment plan ID</th>
                 <th>LOC</th>
                 <th>Next due</th>
                 <th>Status</th>
@@ -156,11 +203,15 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
               {visibleItems.map((item) => (
                 <tr key={item.patientId}>
                   <td data-label='Patient ID'><button type='button' className='link-button' onClick={() => setSelectedPatientId(item.patientId)}>{item.patientId}</button></td>
+                  <td data-label='Treatment plan ID'>{item.treatmentPlanId}</td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>
                   <td data-label='Next due'>{item.nextDueDate}</td>
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
                 </tr>
               ))}
+              {visibleItems.length === 0 && (
+                <tr><td colSpan={5} className='muted'>No treatment plans match the current filters.</td></tr>
+              )}
             </tbody>
           </table>
         </article>

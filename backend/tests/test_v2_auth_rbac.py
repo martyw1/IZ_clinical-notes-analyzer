@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,6 +47,46 @@ def _create_user(client: TestClient, headers: dict[str, str], username: str, rol
     )
     assert active_login.status_code == 200, active_login.text
     return int(created.json()["id"]), {"Authorization": f"Bearer {active_login.json()['access_token']}"}
+
+
+def test_new_office_manager_is_immediately_scoped_to_active_facilities(tmp_path: Path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+
+    created = client.post(
+        "/api/users",
+        headers=headers,
+        json={
+            "username": "manager-facility-qa",
+            "full_name": "Synthetic Manager Facility QA",
+            "role": "office_manager",
+            "password": "SyntheticTemporaryPass123",
+        },
+    )
+
+    assert created.status_code == 200
+    assert created.json()["facility_ids"]
+
+
+def test_startup_does_not_restore_deliberately_removed_office_manager_scope(tmp_path: Path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    manager_id, _ = _create_user(client, headers, "manager-startup-qa", "office_manager")
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    with sqlite3.connect(database_path) as database:
+        database.execute("DELETE FROM user_facilities WHERE user_id=?", (manager_id,))
+        database.commit()
+
+    from app.v2.db import init_database
+
+    init_database()
+
+    with sqlite3.connect(database_path) as database:
+        mapping_count = database.execute(
+            "SELECT COUNT(*) FROM user_facilities WHERE user_id=?",
+            (manager_id,),
+        ).fetchone()[0]
+    assert mapping_count == 0
 
 
 def test_first_run_transitions_bootstrap_to_password_change_to_active(tmp_path: Path, monkeypatch) -> None:
@@ -141,6 +182,7 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
 
     # When/Then: unassigned counselor and facility-unassigned viewer cannot enumerate or IDOR-read the patient.
     assert client.get("/api/v2/treatment-plans", headers=counselor_headers).json()["items"] == []
+    assert client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"] == []
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=counselor_headers).status_code == 403
     assert client.get("/api/v2/treatment-plans", headers=viewer_headers).json()["items"] == []
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=viewer_headers).status_code == 403
@@ -158,6 +200,7 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
 
     # Then: the counselor can read assigned data but cannot mutate/download/export/administer.
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=counselor_headers).status_code == 200
+    assert [item["patient_id"] for item in client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"]] == ["synthetic-812"]
     assert client.post(
         "/api/v2/treatment-plans/synthetic-812/manager-actions",
         headers=counselor_headers,
@@ -178,7 +221,9 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=manager_headers).status_code == 200
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=viewer_headers).status_code == 200
     assert client.get("/api/v2/exports/synthetic-812/checklist-evidence.csv", headers=manager_headers).status_code == 200
+    assert client.get("/api/v2/exports/treatment-plans.csv", headers=manager_headers).status_code == 200
     assert client.get("/api/v2/exports/synthetic-812/checklist-evidence.csv", headers=viewer_headers).status_code == 403
+    assert client.get("/api/v2/exports/treatment-plans.csv", headers=viewer_headers).status_code == 403
     assert client.post("/api/v2/api-harness/jobs", headers=manager_headers, json={"job_type": "pull_all_treatment_plans_all_fields"}).status_code == 403
     assert client.get("/api/audit/logs", headers=manager_headers).status_code == 403
     assert client.get("/api/workflow-definitions", headers=manager_headers).status_code == 403

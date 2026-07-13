@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import inspect as sqlalchemy_inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.v2.models import AuditLog, User
@@ -18,6 +20,19 @@ BLOCKED_DETAIL_FRAGMENTS = ("secret", "token", "authorization", "payload", "narr
 AUDIT_PRIVACY_MODE = "redacted_minimum_necessary"
 AUDIT_RETENTION_HOOK = "local_policy_required"
 _AUDIT_CHAIN_LOCK = RLock()
+
+
+@dataclass(frozen=True, slots=True)
+class AuditChainVerification:
+    valid: bool
+    event_count: int
+    verified_event_count: int
+    legacy_event_count: int
+    first_invalid_id: int | None
+
+    @property
+    def verification_scope(self) -> str:
+        return "all_events" if self.legacy_event_count == 0 else "current_format_only"
 
 
 def redact_json(value: JsonValue) -> JsonValue:
@@ -116,15 +131,33 @@ def _record_audit_event(
 
 
 def verify_audit_chain(db: Session) -> tuple[bool, int, int | None]:
+    result = verify_audit_chain_details(db)
+    return result.valid, result.event_count, result.first_invalid_id
+
+
+def verify_audit_chain_details(db: Session) -> AuditChainVerification:
     with _AUDIT_CHAIN_LOCK:
         rows = db.execute(select(AuditLog).order_by(AuditLog.id.asc())).scalars().all()
-        previous_hash = ""
-        for row in rows:
+        current_start = _current_format_start(db, rows)
+        previous_hash = (rows[current_start - 1].hash or "") if current_start > 0 else ""
+        for row in rows[current_start:]:
             expected = _event_hash(row, previous_hash)
-            if row.prev_hash != previous_hash or row.hash != expected:
-                return False, len(rows), row.id
-            previous_hash = row.hash
-        return True, len(rows), None
+            if (row.prev_hash or "") != previous_hash or row.hash != expected:
+                return AuditChainVerification(
+                    valid=False,
+                    event_count=len(rows),
+                    verified_event_count=len(rows) - current_start,
+                    legacy_event_count=current_start,
+                    first_invalid_id=row.id,
+                )
+            previous_hash = row.hash or ""
+        return AuditChainVerification(
+            valid=True,
+            event_count=len(rows),
+            verified_event_count=len(rows) - current_start,
+            legacy_event_count=current_start,
+            first_invalid_id=None,
+        )
 
 
 def audit_policy_metadata() -> tuple[str, str]:
@@ -148,7 +181,7 @@ def _event_hash(row: AuditLog, previous_hash: str) -> str:
         {
             "event_id": row.event_id,
             "timestamp_utc": _timestamp_for_hash(row.timestamp_utc),
-            "actor_id": row.actor_id,
+            "actor_id": str(row.actor_id),
             "actor_username": row.actor_username,
             "actor_role": row.actor_role,
             "action": row.action,
@@ -161,6 +194,42 @@ def _event_hash(row: AuditLog, previous_hash: str) -> str:
         sort_keys=True,
     )
     return hashlib.sha256(f"{previous_hash}|{hash_payload}".encode("utf-8")).hexdigest()
+
+
+def _current_format_start(db: Session, rows: list[AuditLog]) -> int:
+    marker_columns = {
+        "request_id",
+        "correlation_id",
+        "event_category",
+        "message",
+        "severity",
+        "cef_payload",
+    }
+    bind = db.get_bind()
+    available_columns = {column["name"] for column in sqlalchemy_inspect(bind).get_columns("audit_logs")}
+    if not marker_columns.issubset(available_columns):
+        return 0
+    markers = db.execute(
+        text(
+            "SELECT id,request_id,correlation_id,event_category,message,severity,cef_payload "
+            "FROM audit_logs ORDER BY id ASC"
+        )
+    ).mappings().all()
+    start = len(markers)
+    while start > 0 and _is_current_format_marker(markers[start - 1]):
+        start -= 1
+    return min(start, len(rows))
+
+
+def _is_current_format_marker(row: Mapping[str, object]) -> bool:
+    return (
+        str(row.get("request_id") or "") in {"", "no-request-id"}
+        and str(row.get("correlation_id") or "") in {"", "no-correlation-id"}
+        and str(row.get("event_category") or "") in {"", "application"}
+        and not str(row.get("message") or "")
+        and str(row.get("severity") or "") in {"", "info"}
+        and not str(row.get("cef_payload") or "")
+    )
 
 
 def _timestamp_for_hash(timestamp: datetime) -> str:

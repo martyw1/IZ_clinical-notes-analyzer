@@ -18,6 +18,7 @@ from app.v2.migrations.backup import (
 )
 from app.v2.migrations.backfill import backfill_legacy_tables
 from app.v2.migrations.errors import MigrationInterruptionError, MigrationPathError, MigrationStateError
+from app.v2.migrations.app_settings_migration import apply_app_setting_extensions, apply_v5_schema_compatibility
 from app.v2.migrations.lifecycle_types import (
     ApplyRequest,
     MigrationFailpoint,
@@ -26,7 +27,7 @@ from app.v2.migrations.lifecycle_types import (
     RestoreReport,
     RestoreRequest,
 )
-from app.v2.migrations.registry import LATEST_SCHEMA_VERSION, MIGRATIONS
+from app.v2.migrations.registry import APP_SETTINGS_MIGRATION_VERSION, LATEST_SCHEMA_VERSION, MIGRATIONS
 from app.v2.migrations.reporting import table_counts, table_counts_database
 from app.v2.migrations.schema_core import USER_EXTENSIONS
 from app.v2.migrations.schema_verifier import (
@@ -47,6 +48,20 @@ def run_migrations(request: MigrationRequest) -> MigrationReport:
     source_schema = _current_schema(database_path)
     pending = tuple(migration for migration in MIGRATIONS if migration.version > source_schema)
     if not pending:
+        repaired_backup = _repair_latest_schema_compatibility(request, database_path, root, source_schema)
+        if repaired_backup is not None:
+            repaired_sha256 = _file_sha256(database_path)
+            return MigrationReport(
+                source_schema=source_schema,
+                target_schema=source_schema,
+                dry_run=False,
+                original_sha256=original_sha256,
+                migrated_sha256=repaired_sha256,
+                applied_versions=(),
+                counts=table_counts_database(database_path),
+                reconciliation=reconciliation_counts_database(database_path),
+                backup_path=repaired_backup,
+            )
         verify_database(database_path, source_schema)
         return MigrationReport(
             source_schema=source_schema,
@@ -92,6 +107,42 @@ def run_migrations(request: MigrationRequest) -> MigrationReport:
         )
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+def _repair_latest_schema_compatibility(
+    request: MigrationRequest,
+    database_path: Path,
+    root: Path,
+    source_schema: int,
+) -> Path | None:
+    if source_schema < APP_SETTINGS_MIGRATION_VERSION or not _audit_column_requires_repair(database_path):
+        return None
+    backup = create_backup(
+        BackupRequest(database_path, root, request.encryption_secret, source_schema, source_schema, request.app_build)
+    )
+    temporary_path = database_path.with_name(f"{database_path.name}.migration-{uuid.uuid4().hex}.tmp")
+    try:
+        shutil.copy2(database_path, temporary_path)
+        with closing(sqlite3.connect(temporary_path)) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                apply_v5_schema_compatibility(connection)
+                connection.commit()
+            except (sqlite3.DatabaseError, MigrationStateError):
+                connection.rollback()
+                raise
+        verify_database(temporary_path, source_schema)
+        os.replace(temporary_path, database_path)
+        return backup.path
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _audit_column_requires_repair(database_path: Path) -> bool:
+    uri = f"file:{database_path.as_posix()}?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as connection:
+        columns = {str(row[1]).casefold() for row in connection.execute("PRAGMA table_info('audit_logs')")}
+    return "details_json" in columns and "details" not in columns
 
 
 def restore_database(request: RestoreRequest) -> RestoreReport:
@@ -161,6 +212,8 @@ def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> Non
         for name, definition in USER_EXTENSIONS:
             if name not in existing_user_columns:
                 connection.execute(f'ALTER TABLE users ADD COLUMN "{name}" {definition}')
+        _ensure_workflow_profile_tables(connection)
+        apply_app_setting_extensions(connection)
         connection.execute("UPDATE users SET role='office_manager' WHERE role='manager'")
         invalid_role = connection.execute(
             "SELECT 1 FROM users WHERE role NOT IN ('admin','office_manager','counselor','viewer') LIMIT 1"
@@ -168,8 +221,11 @@ def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> Non
         if invalid_role is not None:
             raise MigrationStateError("legacy user role cannot be mapped to a canonical role")
         for migration in request.pending:
-            for statement in migration.statements:
-                connection.execute(statement)
+            if migration.version == APP_SETTINGS_MIGRATION_VERSION:
+                apply_v5_schema_compatibility(connection)
+            else:
+                for statement in migration.statements:
+                    connection.execute(statement)
             backfill_legacy_tables(connection, request.encryption_secret, request.local_app_data_dir)
             connection.execute(
                 "INSERT INTO schema_migrations(version,name,checksum_sha256,applied_at,app_build) VALUES(?,?,?,?,?)",
@@ -181,6 +237,26 @@ def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> Non
     except (sqlite3.DatabaseError, MigrationStateError):
         connection.rollback()
         raise
+
+
+def _ensure_workflow_profile_tables(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS workflow_profiles("
+        "id INTEGER NOT NULL,workflow_key VARCHAR(80) NOT NULL,display_name VARCHAR(120) NOT NULL,"
+        "description TEXT NOT NULL,is_active BOOLEAN NOT NULL,current_version_id INTEGER,"
+        "created_by_user_id VARCHAR(80) NOT NULL,updated_by_user_id VARCHAR(80) NOT NULL,"
+        "created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,PRIMARY KEY(id))"
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS workflow_profile_versions("
+        "id INTEGER NOT NULL,workflow_profile_id INTEGER NOT NULL,version INTEGER NOT NULL,status VARCHAR(20) NOT NULL,"
+        "definition_snapshot_json TEXT NOT NULL,transition_rules_json TEXT NOT NULL,version_notes TEXT NOT NULL,"
+        "created_by_user_id VARCHAR(80) NOT NULL,created_at DATETIME NOT NULL,published_at DATETIME,PRIMARY KEY(id))"
+    )
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_workflow_profiles_workflow_key ON workflow_profiles(workflow_key)")
+    connection.execute("CREATE INDEX IF NOT EXISTS ix_workflow_profiles_is_active ON workflow_profiles(is_active)")
+    connection.execute("CREATE INDEX IF NOT EXISTS ix_workflow_profile_versions_status ON workflow_profile_versions(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS ix_workflow_profile_versions_workflow_profile_id ON workflow_profile_versions(workflow_profile_id)")
 
 
 def _current_schema_connection(connection: sqlite3.Connection) -> int:

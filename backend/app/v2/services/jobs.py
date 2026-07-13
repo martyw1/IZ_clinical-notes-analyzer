@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final
+from typing import Final, assert_never
 from uuid import uuid4
 
 from app.core.config import settings
@@ -13,7 +13,12 @@ from app.services.audit import log_event
 from app.v2.db import SessionLocal
 from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob, JobPreview
 from app.v2.models import ApiHarnessJobRecord, AppSetting, User
-from app.v2.services.job_runner import fetch_paged_records
+from app.v2.services.job_runner import (
+    DiagnosticPullCancelled,
+    DiagnosticPullCompleted,
+    DiagnosticPullFailed,
+    fetch_paged_records,
+)
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
 from app.v2.services.alleva_contracts import (
     ApprovedAllevaContract,
@@ -28,7 +33,7 @@ from app.v2.services.audit_store import record_audit_event
 from app.v2.services.job_store import record_as_job_values, save_job
 from app.v2.services.job_view import public_job
 from sqlalchemy import select
-from app.v2.services.job_artifacts import media_type, now_iso, write_summaries, write_tables
+from app.v2.services.job_artifacts import DiagnosticFailure, media_type, now_iso, write_failure, write_summaries, write_tables
 
 JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
@@ -91,6 +96,13 @@ class HarnessConnection:
     page_size: int
 
 
+@dataclass(frozen=True, slots=True)
+class DiagnosticAuditEvent:
+    action: str
+    outcome_status: str
+    details: dict[str, JsonValue]
+
+
 class ApiHarnessJobService:
     def __init__(self) -> None:
         self._jobs: dict[str, MutableJob] = {}
@@ -136,13 +148,13 @@ class ApiHarnessJobService:
             self._jobs[job_id] = job
             self._connections[job_id] = connection
         save_job(job)
-        log_event(
-            action="api_harness.job.created",
-            entity_type="api_harness_job",
-            entity_reference=job_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
-            details={"job_id": job_id, "job_type": job.job_type, "redaction_mode": "redacted"},
+        self._audit_diagnostic_job(
+            job_id,
+            DiagnosticAuditEvent(
+                action="api_harness.job.created",
+                outcome_status="success",
+                details={"job_type": job.job_type, "redaction_mode": "redacted"},
+            ),
         )
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
@@ -167,6 +179,12 @@ class ApiHarnessJobService:
             cancel_requested=False, last_heartbeat_at=created,
         )
         with self._lock:
+            if any(
+                existing.job_type == "approved_treatment_plan_sync"
+                and existing.status in {"queued", "running", "writing"}
+                for existing in self._jobs.values()
+            ):
+                raise ValueError("An approved treatment-plan sync is already running.")
             self._jobs[job_id] = job
             self._sync_actor_ids[job_id] = actor_id
             self._sync_contracts[job_id] = contract
@@ -230,7 +248,14 @@ class ApiHarnessJobService:
         if job.job_type == "approved_treatment_plan_sync":
             with SessionLocal() as db:
                 set_sync_cancellation_requested(db, job_id)
-        log_event(action="api_harness.job.cancel_requested", entity_type="api_harness_job", entity_reference=job_id)
+        match job.job_type:
+            case "pull_all_treatment_plans_all_fields":
+                self._audit_diagnostic_job(
+                    job_id,
+                    DiagnosticAuditEvent("api_harness.job.cancel_requested", "success", {}),
+                )
+            case _:
+                log_event(action="api_harness.job.cancel_requested", entity_type="api_harness_job", entity_reference=job_id)
         return self.get_job(job_id)
 
     def artifacts(self, job_id: str) -> tuple[ApiHarnessArtifact, ...]:
@@ -296,24 +321,69 @@ class ApiHarnessJobService:
             return
         output_dir = self._output_dir(job_id)
         self._set(job_id, status="running", started_at=_now(), progress_percent=5)
-        connection = self._connection(job_id)
-        rows, status = fetch_paged_records(job_id=job_id, connection=connection, output_dir=output_dir, is_cancelled=lambda: self.get_job(job_id).cancel_requested, update=lambda **changes: self._set(job_id, status="writing", last_heartbeat_at=_now(), **changes))
-        if status == "cancelled":
-            self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
-            log_event(action="api_harness.job.cancelled", entity_type="api_harness_job", entity_reference=job_id)
-            return
-        if status == "failed":
-            self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
-            return
-        write_tables(output_dir, rows)
-        write_summaries(output_dir, job_id, rows)
-        self._set(job_id, status="completed", completed_at=_now(), progress_percent=100)
-        log_event(
-            action="api_harness.job.completed",
-            entity_type="api_harness_job",
-            entity_reference=job_id,
-            details={"job_id": job_id, "records_seen": len(rows), "records_written": len(rows), "artifact_names": [a.name for a in self.artifacts(job_id)]},
+        self._audit_diagnostic_job(
+            job_id,
+            DiagnosticAuditEvent(
+                "api_harness.job.started",
+                "success",
+                {"endpoint": "GET /treatment-plans"},
+            ),
         )
+        connection = self._connection(job_id)
+        try:
+            result = fetch_paged_records(job_id=job_id, connection=connection, output_dir=output_dir, is_cancelled=lambda: self.get_job(job_id).cancel_requested, update=lambda **changes: self._set(job_id, status="writing", last_heartbeat_at=_now(), **changes))
+        except Exception as exc:
+            failure = DiagnosticFailure(
+                failure_stage="worker",
+                error_class=type(exc).__name__,
+                safe_message="Diagnostic pull worker failed before completion.",
+                http_status=None,
+            )
+            write_failure(output_dir, job_id, failure)
+            self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
+            self._audit_diagnostic_job(
+                job_id,
+                DiagnosticAuditEvent("api_harness.job.failed", "failure", failure.audit_details()),
+            )
+            return
+        match result:
+            case DiagnosticPullCancelled():
+                self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
+                self._audit_diagnostic_job(
+                    job_id,
+                    DiagnosticAuditEvent("api_harness.job.cancelled", "cancelled", {}),
+                )
+            case DiagnosticPullFailed(failure=failure):
+                write_failure(output_dir, job_id, failure)
+                self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
+                self._audit_diagnostic_job(
+                    job_id,
+                    DiagnosticAuditEvent("api_harness.job.failed", "failure", failure.audit_details()),
+                )
+            case DiagnosticPullCompleted(rows=rows, status=terminal_status):
+                write_tables(output_dir, rows)
+                write_summaries(output_dir, job_id, rows)
+                self._set(
+                    job_id,
+                    status=terminal_status,
+                    completed_at=_now(),
+                    progress_percent=100,
+                    warnings_count=1 if terminal_status == "completed_with_warnings" else 0,
+                )
+                self._audit_diagnostic_job(
+                    job_id,
+                    DiagnosticAuditEvent(
+                        action=f"api_harness.job.{terminal_status}",
+                        outcome_status="warning" if terminal_status == "completed_with_warnings" else "success",
+                        details={
+                            "records_seen": len(rows),
+                            "records_written": len(rows),
+                            "artifact_names": [artifact.name for artifact in self.artifacts(job_id)],
+                        },
+                    ),
+                )
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def _run_treatment_plan_sync_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract, resume_source_job_id: str | None) -> None:
         self._set(job_id, status="running", started_at=_now(), progress_percent=5, current_endpoint="GET /clients")
@@ -374,7 +444,14 @@ class ApiHarnessJobService:
                 actor=actor,
                 target_entity_type="integration_sync",
                 target_entity_id="alleva_treatment_plan_sync",
-                details={"imported_patient_count": result.imported_patient_count, "skipped_plan_count": result.skipped_plan_count},
+                details={
+                    "imported_patient_count": result.imported_patient_count,
+                    "skipped_plan_count": result.skipped_plan_count,
+                    "created_treatment_plan_count": result.created_treatment_plan_count,
+                    "updated_treatment_plan_count": result.updated_treatment_plan_count,
+                    "unchanged_treatment_plan_count": result.unchanged_treatment_plan_count,
+                    "updated_treatment_plan_ids": list(result.updated_treatment_plan_ids),
+                },
             )
         self._set(
             job_id,
@@ -382,7 +459,7 @@ class ApiHarnessJobService:
             completed_at=_now(),
             progress_percent=100,
             records_seen=result.imported_patient_count + result.skipped_plan_count,
-            records_written=result.imported_patient_count,
+            records_written=result.created_treatment_plan_count + result.updated_treatment_plan_count,
             records_failed=result.skipped_plan_count,
             current_endpoint="completed",
         )
@@ -431,6 +508,30 @@ class ApiHarnessJobService:
         if connection is None:
             raise RuntimeError("Job connection configuration is unavailable")
         return connection
+
+    def _audit_diagnostic_job(self, job_id: str, event: DiagnosticAuditEvent) -> None:
+        with self._lock:
+            job = self._jobs[job_id]
+        log_event(
+            action=event.action,
+            entity_type="api_harness_job",
+            entity_reference=job_id,
+            actor_id=job.actor_id,
+            actor_role=job.actor_role,
+            outcome=event.outcome_status,
+            details=event.details,
+        )
+        with SessionLocal() as db:
+            actor = db.get(User, int(job.actor_id)) if job.actor_id.isdecimal() else None
+            record_audit_event(
+                db,
+                action=event.action,
+                actor=actor,
+                target_entity_type="api_harness_job",
+                target_entity_id=job_id,
+                outcome_status=event.outcome_status,
+                details=event.details,
+            )
 
 
 job_service = ApiHarnessJobService()

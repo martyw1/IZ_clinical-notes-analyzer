@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ForensicLogsPage } from './pages/ForensicLogsPage'
 import { HelpPage } from './pages/HelpPage'
 import { ManualUploadPage } from './pages/ManualUploadPage'
+import { PatientRosterPage } from './pages/PatientRosterPage'
 import { PasswordResetPage } from './pages/PasswordResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage'
@@ -28,18 +29,20 @@ function messageForError(error: unknown): string {
   return 'The local V2 API did not respond as expected.'
 }
 
-function pageFor(view: string, token: string, user: UserProfile) {
+function pageFor(view: string, token: string, user: UserProfile, onNavigate: (view: string) => void) {
   switch (view) {
     case 'Status Dashboard':
       return <DashboardPage token={token} />
     case 'Treatment Plans':
-      return <TreatmentPlansPage token={token} user={user} />
+      return <TreatmentPlansPage token={token} user={user} onNavigate={onNavigate} />
+    case 'Patient Roster':
+      return <PatientRosterPage token={token} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} />
     case 'Corrections':
       return <CorrectionsPage token={token} />
     case 'API Testing Harness':
-      return <ApiHarnessPage token={token} />
+      return <ApiHarnessPage token={token} onNavigate={onNavigate} />
     case 'Users':
       return <UsersPage token={token} />
     case 'Forensic Logs':
@@ -108,10 +111,11 @@ export function AppV2() {
     setActiveView('Status Dashboard')
   }
 
-  async function refreshSessionUser() {
+  async function refreshSessionUser(token: string) {
     if (!session) return
-    const [user, navigation] = await Promise.all([getCurrentUser(session.token), getNavigation(session.token)])
-    setSession({ ...session, user, navigationItems: navigation.items })
+    const [user, navigation] = await Promise.all([getCurrentUser(token), getNavigation(token)])
+    sessionStorage.setItem(tokenStorageKey, token)
+    setSession({ token, user, navigationItems: navigation.items })
   }
 
   if (!session) {
@@ -150,7 +154,7 @@ export function AppV2() {
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
     >
-      {pageFor(activeView, session.token, session.user)}
+      {pageFor(activeView, session.token, session.user, setActiveView)}
     </AppShell>
   )
 }

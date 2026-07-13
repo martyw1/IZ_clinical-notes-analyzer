@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from fnmatch import fnmatch
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,6 +81,69 @@ def test_windows_checkout_launcher_passes_enabled_switches_without_string_boolea
     assert "-AssumeYes:$assumeYesValue" not in launcher_contents
     assert "if ($SkipFrontendBuild) { $arguments += ' -SkipFrontendBuild' }" in launcher_contents
     assert "if ($AssumeYes) { $arguments += ' -AssumeYes' }" in launcher_contents
+
+
+def test_windows_cmd_launcher_quotes_path_assignments() -> None:
+    # Given: the user-facing CMD launcher may run from a path containing shell metacharacters.
+    repository_root = Path(__file__).resolve().parents[2]
+    launcher = repository_root / "scripts" / "Start-IZ-Clinical-Notes-Analyzer.cmd"
+    build_launcher = repository_root / "Build-IZ-Windows-Installer.cmd"
+
+    # When: its environment-variable assignments are inspected.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+    build_launcher_contents = build_launcher.read_text(encoding="utf-8")
+
+    # Then: path values use quoted batch assignment syntax and cannot become commands.
+    assert 'set "SCRIPT_DIR=%~dp0"' in launcher_contents
+    assert 'set "ROOT_DIR=%SCRIPT_DIR%.."' in launcher_contents
+    assert "set SCRIPT_DIR=" not in launcher_contents
+    assert "set ROOT_DIR=" not in launcher_contents
+    assert 'set "ROOT_DIR=%~dp0"' in build_launcher_contents
+    assert 'echo "%ROOT_DIR%"' in build_launcher_contents
+    assert "echo %ROOT_DIR%" not in build_launcher_contents
+
+
+def test_windows_frozen_runtime_uses_sanitized_data_staging() -> None:
+    # Given: local backup files can exist beside otherwise packageable frontend or rule assets.
+    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
+
+    # When: the PyInstaller data-source contract is inspected.
+    build_script_contents = build_script.read_text(encoding="utf-8")
+
+    # Then: PyInstaller consumes sanitized staging trees instead of the live repository directories.
+    assert "Copy-SafeDataTree" in build_script_contents
+    assert '--add-data "$runtimeFrontendDir;app\\static"' in build_script_contents
+    assert '--add-data "$runtimeConfigDir;config"' in build_script_contents
+
+
+def test_pytest_local_backup_exclusions_never_hide_tracked_tests() -> None:
+    # Given: collection ignores local snapshots while tracked tests remain authoritative.
+    repository_root = Path(__file__).resolve().parents[2]
+    conftest = repository_root / "backend" / "tests" / "conftest.py"
+
+    # When: the tracked backend test inventory and localized ignore contract are read.
+    tracked = subprocess.run(
+        ["git", "-C", str(repository_root), "ls-files", "backend/tests/*.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    patterns = ("*.local-*.py", "*.local.*.py")
+    hidden_tracked_tests = [
+        path
+        for path in tracked.stdout.splitlines()
+        if any(
+            fnmatch(Path(path).relative_to("backend/tests").as_posix(), pattern)
+            for pattern in patterns
+        )
+    ]
+    nested_path_canaries = ("archive.local-copy/test_v2_auth.py", "archive.local.copy/test_v2_auth.py")
+
+    # Then: the ignore is test-directory scoped and no committed test can disappear behind it.
+    assert tracked.returncode == 0
+    assert all(pattern in conftest.read_text(encoding="utf-8") for pattern in patterns)
+    assert all(any(fnmatch(path, pattern) for pattern in patterns) for path in nested_path_canaries)
+    assert hidden_tracked_tests == []
 
 
 def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() -> None:

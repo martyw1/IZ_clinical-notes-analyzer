@@ -10,7 +10,7 @@ echo IZ Clinical Notes Analyzer - Windows Installer Build
 echo ============================================================
 echo.
 echo This build runs from the repository folder:
-echo %ROOT_DIR%
+echo "%ROOT_DIR%"
 echo.
 echo Administrator access is not required.
 echo The release will include current treatment-plan handling docs and will scan out local data, logs, and secrets.

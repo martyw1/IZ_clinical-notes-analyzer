@@ -3,7 +3,7 @@ import { changeCurrentPassword } from '../api/client'
 
 type PasswordResetPageProps = {
   readonly token: string
-  readonly onChanged: () => Promise<void>
+  readonly onChanged: (token: string) => Promise<void>
 }
 
 export function PasswordResetPage({ token, onChanged }: PasswordResetPageProps) {
@@ -17,8 +17,8 @@ export function PasswordResetPage({ token, onChanged }: PasswordResetPageProps) 
     const newPassword = String(form.get('newPassword') ?? '')
     setIsSaving(true)
     try {
-      await changeCurrentPassword(token, currentPassword, newPassword)
-      await onChanged()
+      const result = await changeCurrentPassword(token, currentPassword, newPassword)
+      await onChanged(result.accessToken)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to change password.')
     } finally {

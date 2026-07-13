@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass
 
 from app.v2.migrations.schema_clinical import CLINICAL_STATEMENTS
-from app.v2.migrations.schema_core import CORE_STATEMENTS, USER_EXTENSIONS
+from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS, CORE_STATEMENTS, USER_EXTENSIONS
 from app.v2.migrations.schema_evaluation_ledger import EVALUATION_LEDGER_STATEMENTS
 from app.v2.migrations.schema_hardening import HARDENING_STATEMENTS
 from app.v2.migrations.schema_sync import SYNC_STATEMENTS
@@ -35,6 +35,15 @@ MIGRATIONS = (
     _migration(2, "verify_and_harden_v2_clinical_foundation", HARDENING_STATEMENTS),
     _migration(3, "append_only_evaluation_ledger", EVALUATION_LEDGER_STATEMENTS),
     _migration(4, "sync_checkpoint_recovery_and_provenance", SYNC_PROVENANCE_STATEMENTS),
+    _migration(
+        5,
+        "normalize_legacy_api_settings",
+        tuple(
+            f"ALTER TABLE app_settings ADD COLUMN {name} {definition}"
+            for name, definition in APP_SETTING_NORMALIZED_EXTENSIONS
+        ),
+    ),
 )
 
+APP_SETTINGS_MIGRATION_VERSION = 5
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version

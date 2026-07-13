@@ -39,7 +39,10 @@ def run_alleva_sync(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
     )
     if contract is None:
         raise HTTPException(status_code=409, detail="Alleva treatment-plan sync is blocked: an approved versioned contract is required")
-    return job_service.create_treatment_plan_sync_job(actor.id, actor.role, contract)
+    try:
+        return job_service.create_treatment_plan_sync_job(actor.id, actor.role, contract)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="An approved treatment-plan sync is already running") from exc
 
 
 @router.post("/api/v2/alleva-sync/contracts", response_model=AllevaContractApprovalOut, status_code=201)

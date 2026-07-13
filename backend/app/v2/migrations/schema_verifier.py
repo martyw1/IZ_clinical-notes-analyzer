@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.v2.migrations.errors import MigrationStateError
-from app.v2.migrations.registry import MIGRATIONS
+from app.v2.migrations.app_settings_migration import verify_app_setting_extensions
+from app.v2.migrations.registry import APP_SETTINGS_MIGRATION_VERSION, MIGRATIONS
 from app.v2.migrations.schema_contract import verify_required_schema
+from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS
 
 LEGACY_COLUMNS = {
     "users": {"id", "username", "role", "password_hash"},
@@ -80,13 +82,17 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
     )
     if actual_registry != expected_registry:
         raise MigrationStateError("checksummed ordered migration registry mismatch")
-    required_columns = dict(CURRENT_COLUMNS)
+    required_columns = {table: set(columns) for table, columns in CURRENT_COLUMNS.items()}
+    if expected_version >= APP_SETTINGS_MIGRATION_VERSION:
+        required_columns["app_settings"].update(name for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS)
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",
             "source_sha256", "target_sha256", "verified_at",
         }
     _verify_columns(connection, required_columns)
+    if expected_version >= APP_SETTINGS_MIGRATION_VERSION:
+        verify_app_setting_extensions(connection)
     verify_required_schema(connection, expected_version)
     if expected_version >= 2:
         _verify_reconciliation(connection)

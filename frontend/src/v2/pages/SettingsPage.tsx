@@ -24,9 +24,11 @@ export function SettingsPage({ token }: SettingsPageProps) {
   const [definitionSummary, setDefinitionSummary] = useState('')
   const [isPullingDefinition, setIsPullingDefinition] = useState(false)
   const [isTestingConnectivity, setIsTestingConnectivity] = useState(false)
+  const [isSavingApiConfiguration, setIsSavingApiConfiguration] = useState(false)
   const [isRunningSync, setIsRunningSync] = useState(false)
   const [syncJob, setSyncJob] = useState<ApiHarnessJob | null>(null)
   const [connectivityStatus, setConnectivityStatus] = useState('')
+  const [apiSaveError, setApiSaveError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -59,9 +61,21 @@ export function SettingsPage({ token }: SettingsPageProps) {
 
   async function handleSaveApiConfiguration() {
     if (!apiConfig) return
-    setApiConfig(await saveApiConfiguration(token, apiConfig, clientSecret))
-    setClientSecret('')
-    setMessage('API configuration saved; client secret configured.')
+    setIsSavingApiConfiguration(true)
+    setApiSaveError('')
+    setMessage('')
+    try {
+      const saved = await saveApiConfiguration(token, apiConfig, clientSecret)
+      setApiConfig(saved)
+      setClientSecret('')
+      setMessage(saved.clientSecretConfigured
+        ? 'API configuration saved. The client secret is saved in encrypted local storage and remains hidden.'
+        : 'API configuration saved, but a client secret is still required before OAuth testing can run.')
+    } catch (saveError) {
+      setApiSaveError(messageForError(saveError))
+    } finally {
+      setIsSavingApiConfiguration(false)
+    }
   }
 
   async function handlePullDefinition() {
@@ -92,6 +106,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
 
   const syncReady = apiConfig.apiEnabled
     && apiConfig.treatmentPlanSyncEnabled
+    && apiConfig.treatmentPlanSyncApproved
+    && apiConfig.treatmentPlanEndpointMappingValidated
     && apiConfig.clientSecretConfigured
     && Boolean(apiConfig.activeContractVersion)
   const syncActive = syncJob !== null && !isTerminalSyncStatus(syncJob.status)
@@ -214,7 +230,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
         </label>
         <label>
           Client secret
-          <input value={clientSecret} type='password' autoComplete='new-password' onChange={(event) => setClientSecret(event.target.value)} />
+          <input aria-describedby='client-secret-help' value={clientSecret} type='password' autoComplete='new-password' onChange={(event) => setClientSecret(event.target.value)} />
+          <span id='client-secret-help' className='muted'>Enter a new value to replace the saved secret. Leave blank to keep the encrypted secret already stored on this computer.</span>
         </label>
         <label>
           OAuth auth style
@@ -263,7 +280,9 @@ export function SettingsPage({ token }: SettingsPageProps) {
           <div><dt>Approved sync</dt><dd>{syncReady ? 'ready to run' : 'gated'}</dd></div>
         </dl>
         <p className='muted'>A versioned contract with all six endpoint mappings, OAuth, pagination, rate-limit, attachment, vendor-documentation, test-population, approver, and effective-date evidence is required. These checkboxes are intent only.</p>
-        <button type='button' onClick={handleSaveApiConfiguration}>Save API configuration</button>
+        <button type='button' onClick={handleSaveApiConfiguration} disabled={isSavingApiConfiguration}>
+          {isSavingApiConfiguration ? 'Saving API configuration...' : 'Save API configuration'}
+        </button>
         <button type='button' className='secondary-button' onClick={handlePullDefinition} disabled={isPullingDefinition}>
           {isPullingDefinition ? 'Pulling OpenAPI definition...' : 'Pull OpenAPI definition'}
         </button>
@@ -285,6 +304,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
         )}
         {definitionSummary && <p role='status'>{definitionSummary}</p>}
         {connectivityStatus && <p role='status'>{connectivityStatus}</p>}
+        {apiSaveError && <p role='alert' className='error-banner'>{apiSaveError}</p>}
         {message && <p role='status'>{message}</p>}
       </section>
     </div>

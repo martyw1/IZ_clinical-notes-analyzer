@@ -35,6 +35,8 @@ Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\e
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\uploads\canary.txt') -eq 'upload') -Label 'baseline_upload_path_rejected'
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\node_modules\canary.js') -eq 'dependencies') -Label 'baseline_dependency_path_rejected'
 Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath '.debug-journal.md') -eq 'local_evidence') -Label 'debug_journal_rejected'
+Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\test.local-before-main-sync.py') -eq 'local_config') -Label 'local_backup_rejected'
+Assert-True -Condition ((Get-ForbiddenReleaseCategory -RelativePath 'synthetic\clinical-data.izcnabackup') -eq 'backup') -Label 'encrypted_backup_rejected'
 Assert-True -Condition ($null -eq (Get-ForbiddenReleaseCategory -RelativePath '.env.example')) -Label 'safe_env_template_allowed'
 
 Write-Output 'baseline_scanner_characterization=PASS'

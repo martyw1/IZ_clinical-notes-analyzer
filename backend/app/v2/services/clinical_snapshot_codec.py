@@ -4,15 +4,12 @@ import base64
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Annotated, Literal, assert_never
+from typing import Annotated, Literal, TypeAlias, assert_never
 
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
-
-type JsonPrimitive = str | int | float | bool | None
-type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
 
 CONTRACT = "izcna.clinical-snapshot.v1"
 MAGIC = b"IZCNA1:"
@@ -41,7 +38,7 @@ class AggregateSnapshot(SnapshotModel):
     aggregate: TreatmentPlanAggregate
 
 
-type ClinicalSnapshot = Annotated[
+ClinicalSnapshot: TypeAlias = Annotated[
     PlanRecordSnapshot | ReviewRecordSnapshot | AggregateSnapshot,
     Field(discriminator="kind"),
 ]

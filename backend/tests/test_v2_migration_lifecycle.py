@@ -9,12 +9,14 @@ import pytest
 from app.v2.migrations.runner import (
     MigrationFailpoint,
     MigrationRequest,
+    MigrationStateError,
     RestoreRequest,
     restore_database,
     run_migrations,
 )
-from app.v2.migrations.registry import LATEST_SCHEMA_VERSION
+from app.v2.migrations.registry import APP_SETTINGS_MIGRATION_VERSION, LATEST_SCHEMA_VERSION
 from app.v2.migrations.backup import BackupEnvelopeError
+from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS
 from v2_migration_fixtures import SYNTHETIC_SECRET, create_legacy_database
 
 
@@ -109,6 +111,82 @@ def test_verified_restore_replaces_current_database_and_wrong_key_preserves_it(t
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM treatment_plan_imports").fetchone() == (1,)
         assert connection.execute("SELECT name FROM sqlite_master WHERE name='post_migration_sentinel'").fetchone() is None
+
+
+def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path) -> None:
+    # Given: a valid version-four database from before normalized API-setting columns were introduced.
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    previous_version = APP_SETTINGS_MIGRATION_VERSION - 1
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute("DELETE FROM schema_migrations WHERE version=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        connection.execute("DELETE FROM migration_reconciliation WHERE migration_version=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
+            connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
+        connection.commit()
+    original_database_bytes = database_path.read_bytes()
+
+    # When: the database is rehearsed, upgraded, and restored from its migration backup.
+    dry_run = run_migrations(
+        MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build", dry_run=True)
+    )
+    migrated = run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    assert migrated.backup_path is not None
+    restored = restore_database(
+        RestoreRequest(database_path, tmp_path, SYNTHETIC_SECRET, migrated.backup_path)
+    )
+
+    # Then: version-specific verification accepts the source and restores its exact bytes.
+    assert dry_run.source_schema == previous_version
+    assert dry_run.applied_versions == (APP_SETTINGS_MIGRATION_VERSION,)
+    assert migrated.source_schema == previous_version
+    assert restored.source_schema == previous_version
+    assert database_path.read_bytes() == original_database_bytes
+
+
+def test_normalized_setting_columns_converge_for_existing_and_missing_paths(tmp_path) -> None:
+    # Given: equivalent legacy databases with normalized columns either preexisting or absent.
+    existing_root = tmp_path / "existing"
+    missing_root = tmp_path / "missing"
+    existing_root.mkdir()
+    missing_root.mkdir()
+    existing_path = create_legacy_database(existing_root)
+    missing_path = create_legacy_database(missing_root)
+    with closing(sqlite3.connect(missing_path)) as connection:
+        for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
+            connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
+        connection.commit()
+
+    # When: both schemas are migrated through the same checksummed registry.
+    run_migrations(MigrationRequest(existing_path, existing_root, SYNTHETIC_SECRET, "test-build"))
+    run_migrations(MigrationRequest(missing_path, missing_root, SYNTHETIC_SECRET, "test-build"))
+
+    # Then: their normalized column type, nullability, and default contracts are identical.
+    signatures = []
+    normalized_names = {name for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS}
+    for database_path in (existing_path, missing_path):
+        with closing(sqlite3.connect(database_path)) as connection:
+            signatures.append(
+                tuple(
+                    (str(row[1]), str(row[2]), int(row[3]), row[4])
+                    for row in connection.execute("PRAGMA table_info('app_settings')")
+                    if str(row[1]) in normalized_names
+                )
+            )
+    assert signatures[0] == signatures[1]
+
+
+def test_migration_rejects_existing_normalized_column_with_wrong_semantics(tmp_path) -> None:
+    # Given: a legacy database with a normalized column name but an incompatible nullable integer definition.
+    database_path = create_legacy_database(tmp_path)
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute('ALTER TABLE app_settings DROP COLUMN "api_base_url"')
+        connection.execute('ALTER TABLE app_settings ADD COLUMN "api_base_url" INTEGER')
+        connection.commit()
+
+    # When/Then: migration fails closed instead of certifying the incompatible schema as version five.
+    with pytest.raises(MigrationStateError, match="normalized application-setting column"):
+        run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
 
 
 def test_path_outside_local_app_data_is_rejected(tmp_path) -> None:

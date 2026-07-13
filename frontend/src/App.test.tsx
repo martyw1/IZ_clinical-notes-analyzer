@@ -33,6 +33,10 @@ describe('V2 active app shell', () => {
 
     await screen.findByRole('navigation', { name: /primary navigation/i })
     expect(fetchMock).toHaveBeenCalledWith('/api/users/me/change-password', expect.objectContaining({ method: 'POST' }))
+    expect(sessionStorage.getItem('iz-cna-v2-access-token')).toBe('token-after-password-change')
+    expect(fetchMock).toHaveBeenCalledWith('/api/users/me', expect.objectContaining({
+      headers: expect.objectContaining({}),
+    }))
   })
 
   it('rejects invalid credentials without entering the app shell', async () => {
@@ -126,6 +130,11 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/override reason/i), { target: { value: 'Accepted after source review.' } })
     fireEvent.click(screen.getByRole('button', { name: /save override/i }))
     expect(await screen.findByRole('status')).toHaveTextContent('Override saved with required reason and audit event.')
+
+    fireEvent.change(screen.getByLabelText(/search patient ID or status/i), { target: { value: 'no-such-patient' } })
+    expect(await screen.findByText('No treatment plans match the current filters.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Patient ID 812')).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /save override/i })).not.toBeInTheDocument()
   })
 
   it('downloads archived source files through an authenticated backend request', async () => {
@@ -182,7 +191,7 @@ describe('V2 active app shell', () => {
     expect(screen.getByText(/unvalidated by R3\/Marleigh/i)).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'new-secret-value' } })
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
-    expect(await screen.findByText(/client secret configured/i)).toBeInTheDocument()
+    expect(await screen.findByText(/saved in encrypted local storage and remains hidden/i)).toBeInTheDocument()
     expect(screen.queryByDisplayValue('new-secret-value')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /pull openapi definition/i }))
     expect(await screen.findByText('Mock Treatment Plan API: 3 operations available.')).toBeInTheDocument()
@@ -215,9 +224,27 @@ describe('V2 active app shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
+    expect(screen.getByText('api_harness.job.failed')).toBeInTheDocument()
+    expect(screen.getByText(/error_class=HTTPStatusError.*failure_stage=first_page.*http_status=503/i)).toBeInTheDocument()
+    expect(screen.getByText('alleva_sync.completed')).toBeInTheDocument()
+    expect(screen.getByText(/updated_treatment_plan_ids=plan-812/i)).toBeInTheDocument()
     expect(screen.queryByText('new-secret-value')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /verify hash chain/i }))
     expect(await screen.findByRole('status')).toHaveTextContent('Hash chain verified across 3 events.')
+  })
+
+  it('keeps an entered API secret available for retry when saving fails', async () => {
+    setupFetch({ role: 'admin', apiSaveFails: true })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByDisplayValue('R3 Recovery Services')
+    fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'retry-secret-value' } })
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Configuration could not be saved')
+    expect(screen.getByLabelText(/client secret/i)).toHaveValue('retry-secret-value')
+    expect(screen.getByRole('button', { name: /save api configuration/i })).toBeEnabled()
   })
 
   it('hides workflow profiles from the operational navigation', async () => {
@@ -232,15 +259,106 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
-    fireEvent.click(screen.getByRole('button', { name: /start large job/i }))
+    expect(await screen.findByRole('heading', { name: /Diagnostic treatment-plan pull/i })).toBeInTheDocument()
+    expect(screen.getByText(/does not add records to the Treatment Plans queue/i)).toBeInTheDocument()
+    expect(screen.getByText(/Queue import is blocked/i)).toBeInTheDocument()
+    expect(screen.getByText('https://authorization.allevasoft.com/api:read')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /test saved oauth credentials/i }))
+    expect(await screen.findByText(/token obtained and discarded after verification/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /load saved openapi definition/i }))
+    expect(await screen.findByText('Mock Treatment Plan API: 3 operations available.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /pull treatment plans for diagnostic preview/i }))
 
-    expect(await screen.findByText('completed')).toBeInTheDocument()
+    expect(await screen.findByText('completed', {}, { timeout: 5_000 })).toBeInTheDocument()
     expect(screen.getByText('all-treatment-plans.all-fields.redacted.jsonl')).toBeInTheDocument()
+    expect(screen.getByText('TP-SYNTHETIC-1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download run-summary.json' })).toBeInTheDocument()
     expect(screen.queryByText(/signatureData.*base64/i)).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText(/read-only operation path/i), { target: { value: '/health' } })
+    expect(screen.getByLabelText(/read-only operation path/i)).toHaveValue('/clients')
     fireEvent.click(screen.getByRole('button', { name: /test read-only operation/i }))
-    expect(await screen.findByText(/Read-only operation completed\. 200 \| 24 bytes/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Read-only operation completed\. 200 \| application\/json \| 24 bytes/i)).toBeInTheDocument()
+  })
+
+  it('shows actionable redacted guidance and an error artifact when a diagnostic pull fails', async () => {
+    setupFetch({ role: 'admin', harnessFails: true })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull treatment plans for diagnostic preview/i }))
+
+    expect(await screen.findByText('failed', {}, { timeout: 5_000 })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/failure was recorded in Forensic Logs/i)
+    expect(screen.getByText('all-treatment-plans.error-log.jsonl')).toBeInTheDocument()
+  })
+
+  it('runs an approved pull, evaluates it, and opens the populated Treatment Plans queue', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByDisplayValue('R3 Recovery Services')
+    fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
+    fireEvent.click(screen.getByLabelText('Enable API testing'))
+    fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
+    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate queue/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
+    fireEvent.click(screen.getByRole('button', { name: /open treatment plans queue/i }))
+    expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('pulls from Treatment Plans, refreshes the populated list, and exports plan statuses', async () => {
+    const createObjectUrl = vi.fn(() => 'blob:treatment-plan-export')
+    const revokeObjectUrl = vi.fn()
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByDisplayValue('R3 Recovery Services')
+    fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
+    fireEvent.click(screen.getByLabelText('Enable API testing'))
+    fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
+    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    expect(await screen.findByText('plan-812')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate queue/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
+    const queueReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/treatment-plans')
+    expect(queueReads.length).toBeGreaterThanOrEqual(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /export treatment plans and statuses/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v2/exports/treatment-plans.csv', expect.objectContaining({ headers: expect.any(Headers) })))
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(anchorClick).toHaveBeenCalled()
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:treatment-plan-export')
+  })
+
+  it('shows a patient roster without patient names', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
+
+    expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
+    expect(screen.getByText('812')).toBeInTheDocument()
+    expect(screen.getByText('plan-812')).toBeInTheDocument()
+    expect(screen.getByText('Needs Review')).toBeInTheDocument()
+    expect(screen.queryByText(/synthetic patient name|first name|last name/i)).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
   })
 
   it('imports normalized manual treatment-plan aggregate files through the backend', async () => {

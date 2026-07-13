@@ -40,6 +40,7 @@ function mapTreatmentPlanListItem(record: JsonRecord): TreatmentPlanListItem {
   return {
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label', 'Patient ID unavailable'),
+    treatmentPlanId: readString(record, 'treatment_plan_id', 'Unavailable'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
     nextDueDate: readString(record, 'next_due_date', 'Unknown'),

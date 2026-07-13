@@ -6,16 +6,18 @@ type Role = 'admin' | 'office_manager' | 'counselor' | 'viewer'
 type FetchState = {
   readonly role: Role
   readonly failLogin?: boolean
+  readonly harnessFails?: boolean
+  readonly apiSaveFails?: boolean
   readonly workflowCreateFails?: boolean
   readonly mustResetPassword?: boolean
 }
 
-export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
+export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
 
-const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Corrections', 'Help'] as const
+const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
-  const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let passwordResetRequired = state.mustResetPassword ?? false
+  const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let apiConfigured = false; let passwordResetRequired = state.mustResetPassword ?? false; let harnessPolls = 0
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const path = pathFrom(input)
@@ -24,11 +26,13 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
       if (state.failLogin) return jsonResponse({ detail: 'Invalid credentials' }, 401)
       return jsonResponse({ access_token: 'token-from-backend', token_type: 'bearer', must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     }
-    if (path === '/api/users/me/change-password' && method === 'POST') { passwordResetRequired = false; return jsonResponse({ ...userPayload(state.role), auth_state: 'active', must_reset_password: false }) }
+    if (path === '/api/users/me/change-password' && method === 'POST') { passwordResetRequired = false; return jsonResponse({ access_token: 'token-after-password-change', token_type: 'bearer', auth_state: 'active', must_reset_password: false }) }
     if (path === '/api/users/me') return jsonResponse({ ...userPayload(state.role), must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     if (path === '/api/v2/navigation') return jsonResponse({ items: state.role === 'admin' ? adminNavigation : counselorNavigation, active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return jsonResponse(dashboardPayload())
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload())
+    if (path === '/api/v2/patient-roster') return jsonResponse(patientRosterPayload())
+    if (path === '/api/v2/exports/treatment-plans.csv') return treatmentPlanExportResponse()
     if (path === '/api/v2/treatment-plans/812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812')))
     if (path === '/api/v2/treatment-plans/812/manager-actions' && method === 'POST') return jsonResponse({ status: 'saved' })
     if (path === '/api/v2/corrections') return jsonResponse({ items: correctionSubmitted ? [] : [correctionQueueItemPayload()] })
@@ -47,13 +51,15 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/settings') return jsonResponse(settingsPayload())
     if (path === '/api/api-configuration') {
       if (method === 'PATCH' && typeof init?.body === 'string') {
+        if (state.apiSaveFails) return jsonResponse({ detail: 'Configuration could not be saved' }, 503)
         const body = JSON.parse(init.body)
+        apiConfigured = apiConfigured || typeof body.client_secret === 'string'
         syncEnabled = body.api_enabled === true
           && body.treatment_plan_sync_enabled === true
           && body.treatment_plan_sync_approved === true
           && body.treatment_plan_endpoint_mapping_validated === true
       }
-      return jsonResponse(apiConfigurationPayload(method === 'PATCH', syncEnabled))
+      return jsonResponse(apiConfigurationPayload(apiConfigured, syncEnabled))
     }
     if (path === '/api/v2/alleva-sync/run' && method === 'POST') return jsonResponse(syncJobPayload('queued'), 202)
     if (path === '/api/v2/alleva-sync/jobs/sync-912') return jsonResponse(syncJobPayload('completed'))
@@ -74,8 +80,10 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     }
     if (path === '/api/audit/logs') return jsonResponse(auditLogsPayload())
     if (path === '/api/audit/verify') return jsonResponse(auditVerificationPayload)
-    if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload())
-    if (path === '/api/v2/api-harness/jobs/job-812/artifacts') return jsonResponse(jobPayload().artifacts)
+    if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload('queued'))
+    if (path === '/api/v2/api-harness/jobs/job-812') { harnessPolls += 1; return jsonResponse(jobPayload(harnessPolls > 20 ? (state.harnessFails ? 'failed' : 'completed') : 'running')) }
+    if (path === '/api/v2/api-harness/jobs/job-812/artifacts') return jsonResponse(state.harnessFails ? [{ artifact_id: 'all-treatment-plans.error-log.jsonl', name: 'all-treatment-plans.error-log.jsonl', media_type: 'application/json', size_bytes: 180, redaction_mode: 'redacted' }] : jobPayload().artifacts)
+    if (path === '/api/v2/api-harness/jobs/job-812/preview') return jsonResponse({ job_id: 'job-812', max_records: 25, max_fields: 50, records: [{ job_id: 'job-812', record_index: 1, record_id: 'TP-SYNTHETIC-1', source_endpoint: 'GET /treatment-plans', redaction_status: 'redacted' }], message: 'Preview is bounded to 25 records and 50 fields; full output is local artifact files.' })
     return jsonResponse({ detail: `Unexpected test route ${method} ${path}` }, 404)
   })
 
@@ -97,6 +105,16 @@ function sourceDocumentDownloadResponse(): Response {
     headers: {
       'content-disposition': 'attachment; filename="manual-treatment-plan-source-source-file-812.txt"',
       'content-type': 'text/plain',
+    },
+  })
+}
+
+function treatmentPlanExportResponse(): Response {
+  return new Response('patient_id,treatment_plan_id,status\r\n812,plan-812,Needs Review\r\n', {
+    status: 200,
+    headers: {
+      'content-disposition': 'attachment; filename="treatment-plans.csv"',
+      'content-type': 'text/csv',
     },
   })
 }
@@ -140,6 +158,7 @@ function treatmentPlansPayload() {
     items: [{
       patient_id: '812',
       patient_display_label: 'Patient ID 812',
+      treatment_plan_id: 'plan-812',
       current_level_of_care: 'PHP',
       admission_date: '2026-06-01',
       next_due_date: '2026-07-15',
@@ -150,6 +169,22 @@ function treatmentPlansPayload() {
       warnings: ['LOC-change update window remains unvalidated.'],
     }],
     status_order: ['Missing Data', 'Needs Review', 'Incomplete', 'Within Window', 'Late', 'Conflicting Evidence', 'Unable to Evaluate'],
+  }
+}
+
+function patientRosterPayload() {
+  return {
+    items: [{
+      patient_id: '812',
+      source_mode: 'alleva_rest_api',
+      lifecycle_state: 'active',
+      current_level_of_care: 'PHP',
+      treatment_plan_id: 'plan-812',
+      treatment_plan_status: 'Needs Review',
+      first_seen_at: '2026-07-08T10:00:00Z',
+      last_seen_at: '2026-07-12T10:00:00Z',
+      reconciled_at: '2026-07-12T10:01:00Z',
+    }],
   }
 }
 
@@ -294,10 +329,10 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
   }
 }
 
-function jobPayload() {
+function jobPayload(status = 'completed') {
   return {
     job_id: 'job-812',
-    status: 'completed',
+    status,
     progress_percent: 100,
     records_written: 6,
     records_failed: 0,

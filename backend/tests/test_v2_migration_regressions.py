@@ -221,6 +221,51 @@ def test_all_admin_and_office_manager_users_receive_default_facility_mapping(tmp
     assert mapped == [("admin",), ("office_manager",)]
 
 
+def test_migration_renames_legacy_audit_details_column_for_forensic_log_compatibility(tmp_path) -> None:
+    database_path = create_legacy_database(tmp_path)
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute("ALTER TABLE audit_logs RENAME COLUMN details TO details_json")
+        connection.execute(
+            """INSERT INTO audit_logs(
+                event_id,timestamp_utc,actor_id,actor_username,actor_role,action,
+                target_entity_type,target_entity_id,outcome_status,details_json,prev_hash,hash
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                "synthetic-audit-event", "2026-07-12T00:00:00+00:00", "system", "", "system",
+                "synthetic.action", "system", "", "success", "{}", "", "synthetic-hash",
+            ),
+        )
+        connection.commit()
+
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+
+    with closing(sqlite3.connect(database_path)) as connection:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('audit_logs')")}
+        stored = connection.execute(
+            "SELECT details FROM audit_logs WHERE event_id='synthetic-audit-event'"
+        ).fetchone()
+    assert "details" in columns
+    assert "details_json" not in columns
+    assert stored == ("{}",)
+
+
+def test_latest_schema_repairs_audit_column_drift_on_restart(tmp_path) -> None:
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute("ALTER TABLE audit_logs RENAME COLUMN details TO details_json")
+        connection.commit()
+
+    report = run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+
+    with closing(sqlite3.connect(database_path)) as connection:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('audit_logs')")}
+    assert report.applied_versions == ()
+    assert report.backup_path is not None
+    assert "details" in columns
+    assert "details_json" not in columns
+
+
 def _fernet() -> Fernet:
     digest = hashlib.sha256(SYNTHETIC_SECRET.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(digest))

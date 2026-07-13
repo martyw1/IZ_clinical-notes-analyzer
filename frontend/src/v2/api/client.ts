@@ -12,6 +12,7 @@ import type {
   ManualTreatmentPlanImportResult,
   ManagerActionPayload,
   NavigationResult,
+  PatientRosterData,
   UserProfile,
   UserRole,
 } from './types'
@@ -25,6 +26,10 @@ export async function login(username: string, password: string): Promise<LoginRe
       body: { username, password },
     }),
   )
+  return mapLoginResult(payload)
+}
+
+function mapLoginResult(payload: JsonRecord): LoginResult {
   return {
     accessToken: readString(payload, 'access_token'),
     mustResetPassword: readBoolean(payload, 'must_reset_password'),
@@ -36,8 +41,8 @@ export async function getCurrentUser(token: string): Promise<UserProfile> {
   return mapUser(await readRecordPayload(await request('/api/users/me', { token })))
 }
 
-export async function changeCurrentPassword(token: string, currentPassword: string, newPassword: string): Promise<UserProfile> {
-  return mapUser(
+export async function changeCurrentPassword(token: string, currentPassword: string, newPassword: string): Promise<LoginResult> {
+  return mapLoginResult(
     await readRecordPayload(
       await request('/api/users/me/change-password', { token, method: 'POST', body: { current_password: currentPassword, new_password: newPassword } }),
     ),
@@ -69,6 +74,23 @@ export async function getDashboard(token: string): Promise<DashboardData> {
 
 export async function getTreatmentPlans(token: string): Promise<TreatmentPlanListData> {
   return mapTreatmentPlanList(await readRecordPayload(await request('/api/v2/treatment-plans', { token })))
+}
+
+export async function getPatientRoster(token: string): Promise<PatientRosterData> {
+  const payload = await readRecordPayload(await request('/api/v2/patient-roster', { token }))
+  return {
+    items: readRecordList(payload, 'items').map((item) => ({
+      patientId: readString(item, 'patient_id'),
+      sourceMode: readString(item, 'source_mode', 'unknown'),
+      lifecycleState: readString(item, 'lifecycle_state', 'unknown'),
+      currentLevelOfCare: readString(item, 'current_level_of_care', 'Unknown'),
+      treatmentPlanId: readString(item, 'treatment_plan_id', 'No treatment plan'),
+      treatmentPlanStatus: readString(item, 'treatment_plan_status', 'No treatment plan'),
+      firstSeenAt: readString(item, 'first_seen_at', 'Unknown'),
+      lastSeenAt: readString(item, 'last_seen_at', 'Unknown'),
+      reconciledAt: readString(item, 'reconciled_at', 'Not reconciled'),
+    })),
+  }
 }
 
 export async function getTreatmentPlanDetail(token: string, patientId: string): Promise<TreatmentPlanAggregate> {

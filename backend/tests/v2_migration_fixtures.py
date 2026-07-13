@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +22,22 @@ from app.v2.models import (
 )
 
 SYNTHETIC_SECRET = "synthetic-migration-secret"
+
+
+def downgrade_to_pre_v2_schema(database_path: Path) -> None:
+    with closing(sqlite3.connect(database_path)) as connection:
+        for name in ("recovery_required", "password_changed_at", "locked_until", "auth_state"):
+            connection.execute(f'ALTER TABLE users DROP COLUMN "{name}"')
+        connection.execute("ALTER TABLE app_settings ADD COLUMN alleva_api_base_url TEXT")
+        connection.execute("ALTER TABLE app_settings ADD COLUMN alleva_openapi_url TEXT")
+        connection.execute("ALTER TABLE app_settings ADD COLUMN emr_smart_scopes TEXT")
+        connection.execute(
+            "UPDATE app_settings SET alleva_api_base_url=?,alleva_openapi_url=?,emr_smart_scopes=?",
+            ("https://legacy-api.invalid", "https://legacy-api.invalid/openapi.json", "legacy-fhir-scope"),
+        )
+        for name in ("api_base_url", "openapi_url", "api_scopes", "api_pagination_limit"):
+            connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
+        connection.commit()
 
 
 def encrypted_text(value: str, secret: str = SYNTHETIC_SECRET) -> str:

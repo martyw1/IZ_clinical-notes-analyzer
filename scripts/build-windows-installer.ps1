@@ -156,6 +156,7 @@ function Copy-RepoContent {
         '.env',
         '.env.*',
         '*.local.*',
+        '*.local-*',
         '.alleva.local.ps1',
         'App Credentials Info.md',
         'Test-AllevaApi.ps1',
@@ -165,6 +166,7 @@ function Copy-RepoContent {
         '*.sqlite',
         '*.sqlite3',
         '*.db',
+        '*.izcnabackup',
         '*.log',
         '*.tmp',
         '*.bak',
@@ -173,6 +175,21 @@ function Copy-RepoContent {
     )
     robocopy $RootDir $Destination /MIR /XD $excludeDirs /XF $excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
+}
+
+function Copy-SafeDataTree {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($file in Get-ChildItem -LiteralPath $Source -Recurse -File) {
+        $relativePath = Get-RelativePathInside -Path $file.FullName -Parent $Source
+        if (Get-ForbiddenReleaseCategory -RelativePath $relativePath) { continue }
+        $destinationPath = Join-Path $Destination $relativePath
+        New-Item -ItemType Directory -Path (Split-Path $destinationPath -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath $file.FullName -Destination $destinationPath -Force
+    }
 }
 
 function Find-Python {
@@ -342,16 +359,20 @@ function Build-DesktopRuntime {
     param([string]$TargetPackageDir)
     $runtimeDir = Join-Path $TargetPackageDir 'app\runtime'
     $runtimeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-runtime-$([System.Guid]::NewGuid().ToString('N'))"
+    $runtimeFrontendDir = Join-Path $runtimeBuildRoot 'data\frontend-dist'
+    $runtimeConfigDir = Join-Path $runtimeBuildRoot 'data\config'
     $entryPoint = Join-Path $RootDir 'backend\app\desktop_runtime.py'
     if (-not (Test-Path -LiteralPath $entryPoint)) { throw "Desktop runtime entry point is missing: $entryPoint" }
     New-Item -ItemType Directory -Path $runtimeDir, $runtimeBuildRoot -Force | Out-Null
     try {
+        Copy-SafeDataTree -Source (Join-Path $RootDir 'frontend\dist') -Destination $runtimeFrontendDir
+        Copy-SafeDataTree -Source (Join-Path $RootDir 'config') -Destination $runtimeConfigDir
         Write-Build 'Bundling the self-contained Windows desktop runtime...'
         Invoke-CheckedCommand -Command {
             & $VenvPython -m PyInstaller --noconfirm --clean --onefile --noconsole --name IZClinicalNotesAnalyzer `
                 --paths (Join-Path $RootDir 'backend') `
-                --add-data "$(Join-Path $RootDir 'frontend\dist');app\static" `
-                --add-data "$(Join-Path $RootDir 'config');config" `
+                --add-data "$runtimeFrontendDir;app\static" `
+                --add-data "$runtimeConfigDir;config" `
                 --collect-submodules app `
                 --hidden-import app.desktop_main `
                 --collect-all passlib `

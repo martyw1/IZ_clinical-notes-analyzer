@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.v2.api.deps import AdminUser, DbSession
 from app.v2.api.models import (
@@ -15,7 +16,7 @@ from app.v2.api.models import (
     AuditVerificationOut,
 )
 from app.v2.models import AppSetting, AuditLog
-from app.v2.services.audit_store import JsonValue, audit_policy_metadata, record_audit_event, verify_audit_chain
+from app.v2.services.audit_store import JsonValue, audit_policy_metadata, record_audit_event, verify_audit_chain_details
 from app.v2.services.alleva_contracts import active_contract
 from app.v2.services.secure_storage import encrypt_text_secret
 
@@ -92,9 +93,8 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
         target_entity_type="api_connection_profile",
         target_entity_id=row.emr_vendor_name,
         details={
-            "vendor_name": row.emr_vendor_name,
-            "api_base_url": row.api_base_url,
             "client_secret_configured": bool(row.api_client_secret),
+            "api_testing_enabled": row.emr_api_enabled,
         },
         commit=False,
     )
@@ -106,31 +106,41 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
 
 @router.get("/api/audit/logs", response_model=AuditLogListOut)
 def audit_logs(_: AdminUser, db: DbSession, limit: int = 100) -> AuditLogListOut:
+    columns = {str(row[1]) for row in db.execute(text("PRAGMA table_info('audit_logs')")).all()}
+    details_column = "details" if "details" in columns else "details_json"
+    if details_column not in columns:
+        return AuditLogListOut(items=())
     rows = db.execute(
-        select(AuditLog).order_by(AuditLog.id.desc()).limit(max(1, min(limit, 500)))
-    ).scalars().all()
-    return AuditLogListOut(items=tuple(_audit_item(row) for row in rows))
+        text(
+            "SELECT event_id,timestamp_utc,actor_id,actor_username,actor_role,action,"
+            "target_entity_type,target_entity_id,outcome_status,"
+            f"{details_column} AS details_json FROM audit_logs ORDER BY id DESC LIMIT :limit"
+        ),
+        {"limit": max(1, min(limit, 500))},
+    ).mappings().all()
+    return AuditLogListOut(items=tuple(_audit_mapping_item(row) for row in rows))
 
 
 @router.get("/api/audit/verify", response_model=AuditVerificationOut)
 def verify_audit_logs(_: AdminUser, db: DbSession) -> AuditVerificationOut:
-    valid, event_count, first_invalid_id = verify_audit_chain(db)
+    verification = verify_audit_chain_details(db)
     privacy_mode, retention_hook = audit_policy_metadata()
     return AuditVerificationOut(
-        valid=valid,
-        event_count=event_count,
-        first_invalid_id=first_invalid_id,
+        valid=verification.valid,
+        event_count=verification.event_count,
+        verified_event_count=verification.verified_event_count,
+        legacy_event_count=verification.legacy_event_count,
+        first_invalid_id=verification.first_invalid_id,
+        verification_scope=verification.verification_scope,
         privacy_mode=privacy_mode,
         retention_hook=retention_hook,
     )
 
 
 def _audit_item(row: AuditLog) -> AuditLogItemOut:
-    details = json.loads(row.details_json)
-    safe_details: dict[str, JsonValue] = details if isinstance(details, dict) else {}
-    return AuditLogItemOut(
+    return _audit_values(
         event_id=row.event_id,
-        timestamp_utc=row.timestamp_utc.isoformat(),
+        timestamp_utc=row.timestamp_utc,
         actor_id=row.actor_id,
         actor_username=row.actor_username,
         actor_role=row.actor_role,
@@ -138,7 +148,50 @@ def _audit_item(row: AuditLog) -> AuditLogItemOut:
         target_entity_type=row.target_entity_type,
         target_entity_id=row.target_entity_id,
         outcome_status=row.outcome_status,
-        details=safe_details,
-        prev_hash=row.prev_hash,
-        hash=row.hash,
+        details_json=row.details_json,
     )
+
+
+def _audit_mapping_item(row: Mapping[str, object]) -> AuditLogItemOut:
+    return _audit_values(
+        event_id=row.get("event_id"),
+        timestamp_utc=row.get("timestamp_utc"),
+        actor_id=row.get("actor_id"),
+        actor_username=row.get("actor_username"),
+        actor_role=row.get("actor_role"),
+        action=row.get("action"),
+        target_entity_type=row.get("target_entity_type"),
+        target_entity_id=row.get("target_entity_id"),
+        outcome_status=row.get("outcome_status"),
+        details_json=row.get("details_json"),
+    )
+
+
+def _audit_values(
+    *, event_id: object, timestamp_utc: object, actor_id: object, actor_username: object,
+    actor_role: object, action: object, target_entity_type: object, target_entity_id: object,
+    outcome_status: object, details_json: object,
+) -> AuditLogItemOut:
+    try:
+        details = json.loads(details_json) if isinstance(details_json, str) else details_json
+    except (json.JSONDecodeError, TypeError):
+        details = {}
+    safe_details: dict[str, JsonValue] = details if isinstance(details, dict) else {}
+    return AuditLogItemOut(
+        event_id=str(event_id),
+        timestamp_utc=_audit_timestamp(timestamp_utc),
+        actor_id=str(actor_id),
+        actor_username=str(actor_username or ""),
+        actor_role=str(actor_role or ""),
+        action=str(action or "unknown"),
+        target_entity_type=str(target_entity_type or "system"),
+        target_entity_id=str(target_entity_id or ""),
+        outcome_status=str(outcome_status or "unknown"),
+        details=safe_details,
+    )
+
+
+def _audit_timestamp(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value or "")

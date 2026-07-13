@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from urllib.parse import unquote, urlsplit
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Final
@@ -373,7 +374,18 @@ def _validate_contract(payload: AllevaContractApprovalIn) -> None:
     if set(payload.endpoints) != REQUIRED_ENDPOINTS:
         raise ValueError("The approval record must map exactly the six required Alleva endpoints.")
     for endpoint in payload.endpoints.values():
-        if not endpoint.path.startswith("/") or not endpoint.field_mappings:
+        decoded_path = unquote(endpoint.path)
+        parsed_path = urlsplit(decoded_path)
+        stripped_path = urlsplit(decoded_path.lstrip("/"))
+        if (
+            not decoded_path.startswith("/")
+            or decoded_path.startswith("//")
+            or parsed_path.scheme
+            or parsed_path.netloc
+            or stripped_path.scheme
+            or stripped_path.netloc
+            or not endpoint.field_mappings
+        ):
             raise ValueError("Every approved endpoint requires an absolute path and field mapping.")
     if "{plan_id}" not in payload.endpoints["treatment_plan_detail"].path:
         raise ValueError("Treatment-plan detail path must contain {plan_id}.")

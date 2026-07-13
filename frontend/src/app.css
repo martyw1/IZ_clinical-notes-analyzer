@@ -415,6 +415,7 @@ dd,
 }
 
 .status-badge--compliant,
+.status-badge--current-compliant,
 .status-badge--approved {
   background: #dcfce7;
   color: var(--status-compliant);
@@ -434,6 +435,27 @@ dd,
 
 .table-panel table {
   min-width: 640px;
+}
+
+.forensic-table {
+  table-layout: fixed;
+}
+
+.forensic-table th:nth-child(1) { width: 20%; }
+.forensic-table th:nth-child(2) { width: 8%; }
+.forensic-table th:nth-child(3) { width: 16%; }
+.forensic-table th:nth-child(4) { width: 9%; }
+.forensic-table th:nth-child(5) { width: 33%; }
+.forensic-table th:nth-child(6) { width: 14%; }
+
+.forensic-table td,
+.forensic-table code {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.forensic-table code {
+  white-space: normal;
 }
 
 .raw-field-table {
@@ -592,6 +614,41 @@ dd,
   }
 }
 
+@media (max-width: 900px) {
+  .table-panel table,
+  .table-panel thead,
+  .table-panel tbody,
+  .table-panel tr,
+  .table-panel td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .table-panel thead {
+    display: none;
+  }
+
+  .table-panel tr {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+
+  .table-panel td {
+    border-bottom: 0;
+    padding: 0.25rem 0;
+  }
+
+  .table-panel td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+}
+
 @media (max-width: 720px) {
   .v2-shell {
     padding: 0.75rem;
@@ -646,39 +703,6 @@ dd,
   }
 
   .queue-panel td::before {
-    content: attr(data-label);
-    display: block;
-    color: var(--text-muted);
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
-
-  .table-panel table,
-  .table-panel thead,
-  .table-panel tbody,
-  .table-panel tr,
-  .table-panel td {
-    display: block;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .table-panel thead {
-    display: none;
-  }
-
-  .table-panel tr {
-    border: 1px solid var(--border-soft);
-    border-radius: 8px;
-    padding: 0.75rem;
-  }
-
-  .table-panel td {
-    border-bottom: 0;
-    padding: 0.25rem 0;
-  }
-
-  .table-panel td::before {
     content: attr(data-label);
     display: block;
     color: var(--text-muted);

@@ -1,5 +1,13 @@
 # V2 Validation Report
 
+## 2026-07-13 treatment-plan sync, roster, and export validation
+
+The post-beta.2 feature validation passed on Windows with a disposable local-app-data directory and local synthetic Alleva service. A real Chrome window was driven through the visible Windows UI. The Treatment Plans pull created synthetic `plan-912`; a second pull with changed content under the same ID made version 2 current and preserved version 1; an unchanged pull from API Testing Harness left the populated queue intact. Patient Roster contained IDs/status metadata without patient names, the downloaded CSV included plan ID and status, and Forensic Logs showed `updated_treatment_plan_ids=plan-912`. The audit hash chain verified across the synthetic run.
+
+Automated results: backend `182 passed` with the existing Starlette/httpx deprecation warning; frontend `22 passed`; production Vite build passed. Focused post-UI authorization/update coverage also passed (`4 passed`). Full details are in `../validation/validation-report-2026-07-13-treatment-plan-sync-roster-export.md`.
+
+This is synthetic validation only. It does not approve live Alleva import, validate production credentials/data, resolve the LOC-change rule, or change the external production gates.
+
 ## 2026-07-11 beta.2 release-readiness boundary
 
 This report is updated for metadata `2.0.0-beta.2` / build `2026.07.11.1`. It records no new production, signing, retention, destructive-history, credential-rotation, or live Alleva validation claim. The required isolated synthetic-only validation run completed with redacted evidence; supervised approved non-PHI/test-record Alleva validation remains external.

@@ -1,11 +1,15 @@
 export const statusOrder = [
   'Missing Data',
+  'Conflicting Evidence',
+  'Unable to Evaluate',
   'Needs Review',
+  'Overdue',
+  'Urgent',
+  'Due Soon',
+  'Current/Compliant',
   'Incomplete',
   'Within Window',
   'Late',
-  'Conflicting Evidence',
-  'Unable to Evaluate',
 ] as const
 
 export type TreatmentPlanStatus = (typeof statusOrder)[number] | 'Approved' | 'Compliant' | 'Not Applicable'

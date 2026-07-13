@@ -16,6 +16,7 @@ from app.v2.api.models import (
     ApiHarnessJobStart,
     DashboardOut,
     ManagerActionInput,
+    PatientRosterOut,
     ReadinessCheck,
     ReadinessOut,
     TreatmentPlanListOut,
@@ -31,6 +32,7 @@ from app.v2.services.manager_action_store import (
     save_manager_action_record,
     save_returned_correction_work_item,
 )
+from app.v2.services.patient_roster import list_patient_roster
 from app.v2.services.treatment_plan_store import (
     TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
@@ -79,7 +81,7 @@ def version() -> dict[str, JsonValue]:
 
 @router.get("/api/v2/navigation")
 def navigation(user: CurrentUser) -> dict[str, JsonValue]:
-    items = ["Status Dashboard", "Treatment Plans", "Manual Upload"]
+    items = ["Status Dashboard", "Treatment Plans", "Patient Roster", "Manual Upload"]
     if user.role == "counselor":
         items.append("Corrections")
     if user.role == "admin":
@@ -116,6 +118,7 @@ def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
             {
                 "patient_id": item.patient_id,
                 "patient_display_label": item.patient_display_label,
+                "treatment_plan_id": item.treatment_plan_id,
                 "current_level_of_care": item.current_level_of_care,
                 "admission_date": item.admission_date,
                 "next_due_date": item.next_due_date,
@@ -130,6 +133,28 @@ def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
         ],
         "status_order": TREATMENT_PLAN_STATUS_ORDER,
     }
+
+
+@router.get("/api/v2/patient-roster", response_model=PatientRosterOut)
+def patient_roster(user: CurrentUser, db: DbSession) -> PatientRosterOut:
+    allowed_ids = accessible_patient_ids(db, user)
+    items = tuple(item for item in list_patient_roster(db) if item.patient_id in allowed_ids)
+    return PatientRosterOut(
+        items=tuple(
+            {
+                "patient_id": item.patient_id,
+                "source_mode": item.source_mode,
+                "lifecycle_state": item.lifecycle_state,
+                "current_level_of_care": item.current_level_of_care,
+                "treatment_plan_id": item.treatment_plan_id,
+                "treatment_plan_status": item.treatment_plan_status,
+                "first_seen_at": item.first_seen_at,
+                "last_seen_at": item.last_seen_at,
+                "reconciled_at": item.reconciled_at,
+            }
+            for item in items
+        )
+    )
 
 
 @router.get("/api/v2/treatment-plans/{patient_id}")
@@ -269,6 +294,57 @@ def redacted_checklist_export(patient_id: str, user: ManagerUser, db: DbSession)
         content=output.getvalue(),
         media_type="text/csv",
         headers={"content-disposition": "attachment; filename=redacted-checklist-evidence.csv"},
+    )
+
+
+@router.get("/api/v2/exports/treatment-plans.csv")
+def treatment_plan_list_export(user: ManagerUser, db: DbSession) -> Response:
+    allowed_ids = accessible_patient_ids(db, user)
+    items = tuple(item for item in list_treatment_plan_queue_items(db) if item.patient_id in allowed_ids)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        (
+            "patient_id",
+            "treatment_plan_id",
+            "status",
+            "current_level_of_care",
+            "admission_date",
+            "next_due_date",
+            "source_mode",
+            "missing_criteria_count",
+            "returned_criteria_count",
+        )
+    )
+    for item in items:
+        writer.writerow(
+            tuple(
+                _safe_csv_cell(str(value))
+                for value in (
+                    item.patient_id,
+                    item.treatment_plan_id,
+                    item.status,
+                    item.current_level_of_care,
+                    item.admission_date,
+                    item.next_due_date,
+                    item.source_mode,
+                    item.missing_criteria_count,
+                    item.returned_criteria_count,
+                )
+            )
+        )
+    record_audit_event(
+        db,
+        action="export.treatment_plan_list",
+        actor=user,
+        target_entity_type="treatment_plan_queue",
+        target_entity_id="current",
+        details={"treatment_plan_count": len(items)},
+    )
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"content-disposition": "attachment; filename=treatment-plans.csv"},
     )
 
 

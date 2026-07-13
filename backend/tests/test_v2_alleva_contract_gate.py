@@ -88,6 +88,17 @@ def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_
     assert "patient-name-canary" not in str(audit)
 
 
+def test_contract_rejects_endpoint_paths_that_can_escape_the_approved_origin(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    contract = _complete_contract()
+    contract["endpoints"]["clients"]["path"] = "/https://attacker.invalid/clients"
+
+    response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
+
+    assert response.status_code == 422
+
+
 def test_corrupt_contract_is_redacted_and_safely_denied(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)

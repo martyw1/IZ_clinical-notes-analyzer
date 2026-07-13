@@ -51,6 +51,7 @@ export type DashboardData = {
 export type TreatmentPlanListItem = {
   readonly patientId: string
   readonly patientDisplayLabel: string
+  readonly treatmentPlanId: string
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly nextDueDate: string
@@ -64,6 +65,22 @@ export type TreatmentPlanListItem = {
 export type TreatmentPlanListData = {
   readonly items: readonly TreatmentPlanListItem[]
   readonly statusOrder: readonly TreatmentPlanStatus[]
+}
+
+export type PatientRosterItem = {
+  readonly patientId: string
+  readonly sourceMode: string
+  readonly lifecycleState: string
+  readonly currentLevelOfCare: string
+  readonly treatmentPlanId: string
+  readonly treatmentPlanStatus: string
+  readonly firstSeenAt: string
+  readonly lastSeenAt: string
+  readonly reconciledAt: string
+}
+
+export type PatientRosterData = {
+  readonly items: readonly PatientRosterItem[]
 }
 
 export type ManualTreatmentPlanImportResult = {
@@ -109,6 +126,18 @@ export type ApiConfiguration = {
   readonly activeContractEffectiveAt: string
 }
 
+export type ApiHarnessPreviewRecord = {
+  readonly recordIndex: number
+  readonly recordId: string
+  readonly sourceEndpoint: string
+  readonly redactionStatus: string
+}
+
+export type ApiHarnessPreview = {
+  readonly records: readonly ApiHarnessPreviewRecord[]
+  readonly message: string
+}
+
 export type OpenApiDefinitionSummary = {
   readonly title: string
   readonly operationCount: number
@@ -140,12 +169,16 @@ export type AuditLogItem = {
   readonly targetEntityType: string
   readonly targetEntityId: string
   readonly outcomeStatus: string
+  readonly detailsSummary: string
 }
 
 export type AuditVerification = {
   readonly valid: boolean
   readonly eventCount: number
+  readonly verifiedEventCount: number
+  readonly legacyEventCount: number
   readonly firstInvalidId: number | null
+  readonly verificationScope: string
   readonly privacyMode: string
   readonly retentionHook: string
 }
