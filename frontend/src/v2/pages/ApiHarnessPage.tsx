@@ -6,6 +6,7 @@ import { pullOpenApiDefinition } from '../api/openapiClient'
 import { testReadOnlyOperation } from '../api/operationClient'
 import { JobProgressCard } from '../components/JobProgressCard'
 import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
+import { ApprovedContractSetupCard } from '../components/ApprovedContractSetupCard'
 import type { ApiConfiguration } from '../api/types'
 
 type ApiHarnessPageProps = {
@@ -73,46 +74,59 @@ export function ApiHarnessPage({ token, onNavigate }: ApiHarnessPageProps) {
   }
 
   return (
-    <div className='page-grid'>
+    <div className='api-harness-page'>
       {configError && <p role='alert' className='error-banner'>{configError}</p>}
-      <JobProgressCard token={token} />
-      <ApprovedQueueImportCard config={config} token={token} onNavigate={onNavigate} />
-      <section className='panel'>
-        <p className='eyebrow'>API Testing Harness</p>
-        <h2>Alleva/OpenAPI testing</h2>
-        <p className='muted'>Every control below uses the encrypted profile saved in Settings. Credentials and response bodies never appear in this page.</p>
-        <div className='harness-grid'>
-          <article>
-            <h3>OAuth authentication</h3>
-            <p>Obtains a client-credentials token and immediately discards it after verification.</p>
-            <p className='muted'>Alleva read-only scope: <code>https://authorization.allevasoft.com/api:read</code></p>
-            <button type='button' onClick={() => void testAuthentication()} disabled={isTestingAuthentication}>
-              {isTestingAuthentication ? 'Testing saved OAuth credentials...' : 'Test saved OAuth credentials'}
-            </button>
-            {authenticationMessage && <p role='status'>{authenticationMessage}</p>}
-          </article>
-          <article>
-            <h3>OpenAPI definition</h3>
-            <p>Loads the saved definition URL and returns only its title and bounded operation count.</p>
-            <button type='button' onClick={() => void loadDefinition()} disabled={isLoadingDefinition}>
-              {isLoadingDefinition ? 'Loading saved OpenAPI definition...' : 'Load saved OpenAPI definition'}
-            </button>
-            {definitionMessage && <p role='status'>{definitionMessage}</p>}
-          </article>
-          <article className='harness-operation-card'>
-            <h3>Read-only operation</h3>
-            <p>Runs one saved-profile GET request and reports status, content type, and bounded response size without returning the body.</p>
-            <label>
-              Read-only operation path
-              <input value={path} onChange={(event) => setPath(event.target.value)} placeholder='/clients' />
-            </label>
-            <button type='button' onClick={() => void runOperationTest()} disabled={isTesting}>
-              {isTesting ? 'Testing operation...' : 'Test read-only operation'}
-            </button>
-            {operationMessage && <p role='status'>{operationMessage}</p>}
-          </article>
+      <div className='api-harness-column'>
+        <div className='api-diagnostic-slot'><JobProgressCard token={token} /></div>
+        <div className='api-queue-slot'><ApprovedQueueImportCard config={config} token={token} onNavigate={onNavigate} /></div>
+      </div>
+      <div className='api-harness-column'>
+        <div className='api-contract-slot'>
+          <ApprovedContractSetupCard
+            config={config}
+            token={token}
+            onApproved={(contractVersion) => setConfig((current) => current ? { ...current, activeContractVersion: contractVersion } : current)}
+          />
         </div>
-      </section>
+        <div className='api-tests-slot'>
+          <section className='panel'>
+            <p className='eyebrow'>API Testing Harness</p>
+            <h2>Alleva/OpenAPI testing</h2>
+            <p className='muted'>Every control below uses the encrypted profile saved in Settings. Credentials and response bodies never appear in this page.</p>
+            <div className='harness-grid'>
+              <article>
+                <h3>OAuth authentication</h3>
+                <p>Obtains a client-credentials token and immediately discards it after verification.</p>
+                <p className='muted'>Alleva read-only scope: <code>https://authorization.allevasoft.com/api:read</code></p>
+                <button type='button' onClick={() => void testAuthentication()} disabled={isTestingAuthentication}>
+                  {isTestingAuthentication ? 'Testing saved OAuth credentials...' : 'Test saved OAuth credentials'}
+                </button>
+                {authenticationMessage && <p role='status'>{authenticationMessage}</p>}
+              </article>
+              <article>
+                <h3>OpenAPI definition</h3>
+                <p>Loads the saved definition URL and returns only its title and bounded operation count.</p>
+                <button type='button' onClick={() => void loadDefinition()} disabled={isLoadingDefinition}>
+                  {isLoadingDefinition ? 'Loading saved OpenAPI definition...' : 'Load saved OpenAPI definition'}
+                </button>
+                {definitionMessage && <p role='status'>{definitionMessage}</p>}
+              </article>
+              <article className='harness-operation-card'>
+                <h3>Read-only operation</h3>
+                <p>Runs one saved-profile GET request and reports status, content type, and bounded response size without returning the body.</p>
+                <label>
+                  Read-only operation path
+                  <input value={path} onChange={(event) => setPath(event.target.value)} placeholder='/clients' />
+                </label>
+                <button type='button' onClick={() => void runOperationTest()} disabled={isTesting}>
+                  {isTesting ? 'Testing operation...' : 'Test read-only operation'}
+                </button>
+                {operationMessage && <p role='status'>{operationMessage}</p>}
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

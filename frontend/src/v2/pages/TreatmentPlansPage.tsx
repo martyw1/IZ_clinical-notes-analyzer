@@ -219,7 +219,8 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
                       aria-pressed={selectedPlanKey === planKey(item)}
                       onClick={() => setSelectedPlanKey(planKey(item))}
                     >
-                      {item.treatmentPlanId}
+                      <span>{item.treatmentPlanId}</span>
+                      {selectedPlanKey === planKey(item) && <span className='selected-label'>Selected</span>}
                     </button>
                   </td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>

@@ -73,7 +73,7 @@ export function PatientRosterPage({ token, user, onNavigate }: PatientRosterPage
           <div>
             <p className='eyebrow'>Patient Roster</p>
             <h2>Patient roster</h2>
-            <p className='muted'>Identifiers and workflow state only. Patient names are excluded.</p>
+            <p className='muted'>Identifiers and workflow state only. Patient names are excluded. One row is shown per patient; plan ID and status are the current imported plan.</p>
           </div>
           <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh roster</button>
         </div>
@@ -92,7 +92,7 @@ export function PatientRosterPage({ token, user, onNavigate }: PatientRosterPage
                 <td data-label='Lifecycle'>{item.lifecycleState}</td>
                 <td data-label='LOC'>{item.currentLevelOfCare}</td>
                 <td data-label='Source'>{item.sourceMode}</td>
-                <td data-label='Last seen'>{item.lastSeenAt}</td>
+                <td data-label='Last seen'><time dateTime={item.lastSeenAt}>{item.lastSeenAt.replace('T', ' ').replace('Z', ' UTC')}</time></td>
               </tr>
             ))}
             {visibleItems.length === 0 && <tr><td colSpan={7} className='muted'>No roster entries match the current search.</td></tr>}

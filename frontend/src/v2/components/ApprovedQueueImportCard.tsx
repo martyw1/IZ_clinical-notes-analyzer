@@ -3,6 +3,8 @@ import { getApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSy
 import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, ApiHarnessJob } from '../api/types'
 
+const MISSING_CONTRACT_BLOCKER = 'No approved Alleva v1 mapping is recorded. Complete the one-time mapping setup in the API Testing Harness.'
+
 type Props = {
   readonly config: ApiConfiguration | null
   readonly token: string
@@ -63,13 +65,18 @@ export function ApprovedQueueImportCard({
         <>
           <p className='error-banner'><strong>Queue import is blocked.</strong> Configure and approve the operational import before pulling live records.</p>
           <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
-          {blockers.some((blocker) => !blocker.startsWith('No approved versioned')) && (
+          {blockers.some((blocker) => blocker !== MISSING_CONTRACT_BLOCKER) && (
             <button type='button' className='secondary-button' onClick={() => onNavigate('Settings')}>Open Settings</button>
           )}
-          {!config?.activeContractVersion && <p className='muted'>A versioned contract is recorded only after R3/Alleva approves the live endpoint mapping. Credentials alone cannot create that approval.</p>}
+          {!config?.activeContractVersion && (
+            <>
+              <p className='muted'>OAuth credentials authenticate the app. The one-time Alleva v1 mapping approval separately selects the patient, treatment-plan, diagnosis, and review fields that may be imported.</p>
+              <button type='button' className='secondary-button' onClick={() => onNavigate('API Testing Harness')}>Open Alleva mapping setup</button>
+            </>
+          )}
         </>
       ) : (
-        <p>Approved contract {config?.activeContractVersion} is active. This import normalizes every returned treatment plan, runs the deterministic checklist, and adds results to the queue.</p>
+        <p>Approved mapping {config?.activeContractVersion} is active. This import normalizes every returned treatment plan, runs the deterministic checklist, and adds results to the queue.</p>
       )}
       <button type='button' onClick={() => void runImport()} disabled={isRunning || blockers.length > 0}>
         {isRunning ? 'Pulling full treatment plans...' : buttonLabel}
@@ -90,7 +97,7 @@ function importBlockers(config: ApiConfiguration | null): readonly string[] {
   if (!config.apiEnabled) blockers.push('Enable API testing in Settings.')
   if (!config.treatmentPlanSyncEnabled) blockers.push('Enable treatment-plan sync in Settings.')
   if (!config.treatmentPlanSyncApproved || !config.treatmentPlanEndpointMappingValidated) blockers.push('Record R3/Alleva sync and endpoint-mapping approval in Settings.')
-  if (!config.activeContractVersion) blockers.push('No approved versioned Alleva contract is recorded. A client ID and secret alone cannot safely map live patient records.')
+  if (!config.activeContractVersion) blockers.push(MISSING_CONTRACT_BLOCKER)
   return blockers
 }
 

@@ -204,6 +204,7 @@ export function TreatmentPlanDetailViewer({
             <button type='button' onClick={saveReturn} disabled={isSaving || !selectedCriterion}>Return for correction</button>
             <button type='button' className='secondary-button' onClick={saveOverride} disabled={isSaving || !selectedCriterion}>Save override</button>
           </div>
+          {!selectedCriterion && <p className='muted'>Manager actions remain disabled until a checklist criterion is returned and selected.</p>}
           {actionMessage && <p role='status'>{actionMessage}</p>}
         </div> : <p className='muted'>Manager review actions are available to manager and admin roles.</p>}
       </section>

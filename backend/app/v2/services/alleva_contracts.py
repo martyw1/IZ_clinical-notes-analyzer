@@ -389,7 +389,12 @@ def _validate_contract(payload: AllevaContractApprovalIn) -> None:
             raise ValueError("Every approved endpoint requires an absolute path and field mapping.")
     if "{plan_id}" not in payload.endpoints["treatment_plan_detail"].path:
         raise ValueError("Treatment-plan detail path must contain {plan_id}.")
-    if "{plan_id}" not in payload.endpoints["diagnoses"].path or "{plan_id}" not in payload.endpoints["reviews"].path:
-        raise ValueError("Diagnosis and review paths must contain {plan_id}.")
-    if "{plan_id}" not in payload.endpoints["review_detail"].path or "{review_id}" not in payload.endpoints["review_detail"].path:
-        raise ValueError("Review detail path must contain {plan_id} and {review_id}.")
+    if "{plan_id}" not in payload.endpoints["diagnoses"].path:
+        raise ValueError("Diagnosis path must contain {plan_id}.")
+    if "{review_id}" not in payload.endpoints["review_detail"].path:
+        raise ValueError("Review detail path must contain {review_id}.")
+    if payload.endpoints["treatment_plans"].parameters.get("client_id") != "ClientId":
+        raise ValueError("Treatment-plan retrieval must map the canonical patient query to Alleva's exact ClientId parameter.")
+    plan_mappings = payload.endpoints["treatment_plans"].field_mappings
+    if not plan_mappings.get("client_id") and not plan_mappings.get("client_reference"):
+        raise ValueError("Treatment-plan retrieval must map a returned patient relationship for ownership validation.")

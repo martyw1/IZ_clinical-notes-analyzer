@@ -63,7 +63,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     admissionDate: readString(record, 'admission_date', 'Unknown'),
     dueDate: readString(record, 'date_clock_due_date', readString(record, 'source_due_date', 'Unknown')),
     sourceDueDate: readString(record, 'source_due_date', 'Unknown'),
-    locChangeDueDate: readString(record, 'loc_change_due_date', 'unvalidated_configurable'),
+    locChangeDueDate: displayLocChangeDueDate(readString(record, 'loc_change_due_date', 'unvalidated_configurable')),
     checklistVersion: readString(record, 'checklist_version', 'Unknown'),
     rulesVersion: readString(record, 'rules_version', 'Unknown'),
     evaluationDate: readString(record, 'evaluation_date', 'Unknown'),
@@ -103,6 +103,10 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
       runtimeOnlyFields: readStringList(coverage, 'runtime_only_fields'),
     },
   }
+}
+
+function displayLocChangeDueDate(value: string): string {
+  return value === 'unvalidated_configurable' ? 'Unvalidated — configurable' : value
 }
 
 function mapManagerReview(record: JsonRecord, actionFallback = 'comment', statusFallback = 'Comment') {

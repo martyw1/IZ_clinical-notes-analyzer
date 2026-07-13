@@ -288,6 +288,25 @@ dd,
 
 .page-grid {
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  align-items: start;
+}
+
+.api-harness-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.api-harness-page > .error-banner {
+  grid-column: 1 / -1;
+}
+
+.api-harness-column {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
 }
 
 .panel,
@@ -318,6 +337,10 @@ dd,
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.harness-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .source-card,
 .metric-tile,
 .harness-grid article {
@@ -325,6 +348,19 @@ dd,
   border-radius: 8px;
   background: var(--bg-subtle);
   padding: 0.8rem;
+}
+
+.harness-grid article {
+  min-width: 0;
+}
+
+.harness-grid code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.harness-operation-card {
+  grid-column: 1 / -1;
 }
 
 .source-card--blocked,
@@ -423,6 +459,7 @@ dd,
 
 .queue-and-detail {
   grid-template-columns: minmax(500px, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
 }
 
 .queue-panel {
@@ -517,6 +554,11 @@ dd,
   gap: 0.5rem;
 }
 
+.checkbox-row {
+  min-height: 44px;
+  cursor: pointer;
+}
+
 .workflow-version-row {
   display: flex;
   align-items: center;
@@ -525,18 +567,41 @@ dd,
 }
 
 .checkbox-row input {
-  width: auto;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }
 
 .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-color: var(--border-soft);
   padding: 0.55rem 0.7rem;
+  background: var(--bg-raised);
+  color: var(--text-main);
   white-space: normal;
+}
+
+.link-button:hover {
+  background: var(--action-hover-bg);
+  color: var(--text-main);
 }
 
 .link-button[aria-pressed="true"] {
   border-color: var(--action-primary);
-  background: var(--action-active-bg);
-  color: var(--text-main);
+  background: var(--action-primary);
+  color: #fbfdfc;
+}
+
+.link-button[aria-pressed="true"]:hover {
+  background: var(--action-primary-hover);
+  color: #fbfdfc;
+}
+
+.selected-label {
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .signature-grid,
@@ -618,6 +683,20 @@ dd,
   .queue-and-detail {
     grid-template-columns: 1fr;
   }
+
+  .api-harness-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .api-harness-column {
+    display: contents;
+  }
+
+  .api-diagnostic-slot { order: 1; }
+  .api-contract-slot { order: 2; }
+  .api-queue-slot { order: 3; }
+  .api-tests-slot { order: 4; }
 }
 
 @media (max-width: 900px) {
@@ -642,6 +721,9 @@ dd,
   }
 
   .table-panel td {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.4fr) minmax(0, 1fr);
+    gap: 0.75rem;
     border-bottom: 0;
     padding: 0.25rem 0;
   }
@@ -684,6 +766,10 @@ dd,
   }
 
   .source-document-list li {
+    grid-template-columns: 1fr;
+  }
+
+  .harness-grid {
     grid-template-columns: 1fr;
   }
 

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 import hashlib
+import hmac
 import json
+from threading import Lock
 import time
 from datetime import datetime, timezone
 from typing import Final, assert_never
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.models import AppSetting, User
 from app.v2.services.manual_file_aggregate import build_manual_aggregate
@@ -32,6 +36,7 @@ from app.v2.services.treatment_plan_store import (
 )
 
 MAX_SYNC_ROWS: Final = 5_000
+MAX_SYNC_HTTP_WORKERS: Final = 8
 DEFAULT_ENDPOINT_FIELD_MAPPINGS: Final = {
     "clients": {
         "client_id": "clientId", "lifecycle_status": "status", "deleted": "isDeleted",
@@ -68,18 +73,38 @@ class ApprovedRequestRateLimiter:
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
     _last_request_at: float | None = None
+    _lock: Lock = field(default_factory=Lock)
 
     def acquire(self, is_cancelled: Callable[[], bool]) -> None:
-        interval = 60.0 / self.requests_per_minute
-        if self._last_request_at is not None:
-            deadline = self._last_request_at + interval
-            while self.clock() < deadline:
-                if is_cancelled():
-                    raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled while waiting for the approved rate limit.")
-                remaining_delay = deadline - self.clock()
-                if remaining_delay > 0.0:
-                    self.sleep(min(0.1, remaining_delay))
-        self._last_request_at = self.clock()
+        with self._lock:
+            interval = 60.0 / self.requests_per_minute
+            if self._last_request_at is not None:
+                deadline = self._last_request_at + interval
+                while self.clock() < deadline:
+                    if is_cancelled():
+                        raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled while waiting for the approved rate limit.")
+                    remaining_delay = deadline - self.clock()
+                    if remaining_delay > 0.0:
+                        self.sleep(min(0.1, remaining_delay))
+            self._last_request_at = self.clock()
+
+
+@dataclass(slots=True)
+class ApprovedRecordBudget:
+    remaining: int
+    _lock: Lock = field(default_factory=Lock)
+
+    def reserve(self, requested: int) -> int:
+        with self._lock:
+            reserved = min(max(requested, 0), self.remaining)
+            self.remaining -= reserved
+            return reserved
+
+    def refund(self, unused: int) -> None:
+        if unused <= 0:
+            return
+        with self._lock:
+            self.remaining += unused
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +126,14 @@ class SyncImportSummary:
     updated_plan_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class PlanImportCandidate:
+    patient_id: str
+    client_payload: dict[str, object]
+    plan_payload: dict[str, object]
+    plan_id: str
+
+
 def run_treatment_plan_sync(
     db: Session,
     profile: AppSetting,
@@ -119,9 +152,19 @@ def run_treatment_plan_sync(
         with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=True) as client:
             rate_limiter = ApprovedRequestRateLimiter(contract.payload.rate_limit.maximum_requests_per_minute)
             client_checkpoints = load_sync_checkpoint_pages(db, resumed_from_job_id, "clients") if resumed_from_job_id else ()
-            plan_checkpoints = load_sync_checkpoint_pages(db, resumed_from_job_id, "treatment_plans") if resumed_from_job_id else ()
             clients = _paged_records(client, profile, contract, "clients", headers, is_cancelled, on_page, client_checkpoints, rate_limiter)
-            plans = _paged_records(client, profile, contract, "treatment_plans", headers, is_cancelled, on_page, plan_checkpoints, rate_limiter)
+            plans_by_patient = _patient_scoped_plans(
+                db,
+                client,
+                profile,
+                contract,
+                clients,
+                headers,
+                is_cancelled,
+                on_page,
+                resumed_from_job_id,
+                rate_limiter,
+            )
             if sync_job_id:
                 reconcile_sync_patients(
                     db,
@@ -132,7 +175,7 @@ def run_treatment_plan_sync(
                 )
             provenance = sync_import_provenance(db, sync_job_id) if sync_job_id else None
             summary = _save_client_aggregates(
-                db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter,
+                db, client, profile, actor, contract, clients, plans_by_patient, headers, is_cancelled, provenance, rate_limiter,
             )
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
@@ -176,10 +219,15 @@ def _paged_records(
     on_page: Callable[[str, int, str, str, tuple[dict[str, object], ...]], None] | None,
     checkpoint_pages: tuple[SyncCheckpointPage, ...] = (),
     rate_limiter: ApprovedRequestRateLimiter | None = None,
+    *,
+    additional_parameters: dict[str, str | int] | None = None,
+    checkpoint_endpoint_key: str | None = None,
+    record_budget: ApprovedRecordBudget | None = None,
+    page_size_override: int | None = None,
 ) -> tuple[dict[str, object], ...]:
     records = [record for checkpoint in checkpoint_pages for record in checkpoint.records]
     pagination = contract.payload.pagination
-    page_size = pagination.maximum_page_size
+    page_size = min(pagination.maximum_page_size, page_size_override or pagination.maximum_page_size)
     limit = min(pagination.maximum_records, MAX_SYNC_ROWS)
     seen_pages = {checkpoint.response_shape_sha256 for checkpoint in checkpoint_pages}
     offset = 0
@@ -191,28 +239,50 @@ def _paged_records(
     while len(records) < limit:
         if is_cancelled():
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
-        response = _get_with_retry(
-            client,
-            urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key).lstrip("/")),
-            _endpoint_request_parameters(contract, endpoint_key, min(page_size, limit - len(records)), offset),
-            headers,
-            is_cancelled,
-            contract.payload.rate_limit.retry_after_seconds,
-            rate_limiter,
-            contract.payload.pagination.maximum_response_bytes,
-        )
+        requested_page_size = min(page_size, limit - len(records))
+        if record_budget is not None:
+            requested_page_size = record_budget.reserve(requested_page_size)
+            if requested_page_size <= 0:
+                break
+        try:
+            response = _get_with_retry(
+                client,
+                urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key).lstrip("/")),
+                _endpoint_request_parameters(
+                    contract,
+                    endpoint_key,
+                    requested_page_size,
+                    offset,
+                    additional_parameters=additional_parameters,
+                ),
+                headers,
+                is_cancelled,
+                contract.payload.rate_limit.retry_after_seconds,
+                rate_limiter,
+                contract.payload.pagination.maximum_response_bytes,
+            )
+        except Exception:
+            if record_budget is not None:
+                record_budget.refund(requested_page_size)
+            raise
         response_size = int(response.headers.get("content-length", "0"))
         if response_size > pagination.maximum_response_bytes:
             raise ValueError("API page exceeded the approved response-size limit.")
         page = _records(response.json())
+        if len(page) > requested_page_size:
+            if record_budget is not None:
+                record_budget.refund(requested_page_size)
+            raise ValueError("Approved endpoint returned more records than requested.")
+        if record_budget is not None:
+            record_budget.refund(requested_page_size - len(page))
         page_hash = hashlib.sha256(json.dumps(page, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         if page_hash in seen_pages:
             raise ValueError("Approved endpoint returned a repeated page.")
         seen_pages.add(page_hash)
         records.extend(page)
         if on_page:
-            on_page(endpoint_key, offset, hashlib.sha256(str(offset).encode("utf-8")).hexdigest(), page_hash, tuple(page))
-        if len(page) < page_size:
+            on_page(checkpoint_endpoint_key or endpoint_key, offset, hashlib.sha256(str(offset).encode("utf-8")).hexdigest(), page_hash, tuple(page))
+        if len(page) < requested_page_size:
             break
         offset += len(page)
     return tuple(records[:limit])
@@ -223,6 +293,7 @@ def _endpoint_request_parameters(
     endpoint_key: str,
     limit: int,
     offset: int,
+    additional_parameters: dict[str, str | int] | None = None,
 ) -> dict[str, str | int]:
     endpoint_parameters = contract.payload.endpoints[endpoint_key].parameters
     request_parameters: dict[str, str | int] = {
@@ -230,9 +301,81 @@ def _endpoint_request_parameters(
         endpoint_parameters.get("offset", contract.payload.pagination.offset_parameter): offset,
     }
     request_parameters.update(
-        {name: value for name, value in endpoint_parameters.items() if name not in {"limit", "offset"}}
+        {name: value for name, value in endpoint_parameters.items() if name not in {"limit", "offset", "client_id"}}
     )
+    for semantic_name, value in (additional_parameters or {}).items():
+        request_parameters[endpoint_parameters.get(semantic_name, semantic_name)] = value
     return request_parameters
+
+
+def _patient_scoped_plans(
+    db: Session,
+    client: httpx.Client,
+    profile: AppSetting,
+    contract: ApprovedAllevaContract,
+    clients: tuple[dict[str, object], ...],
+    headers: dict[str, str],
+    is_cancelled: Callable[[], bool],
+    on_page: Callable[[str, int, str, str, tuple[dict[str, object], ...]], None] | None,
+    resumed_from_job_id: str | None,
+    rate_limiter: ApprovedRequestRateLimiter,
+) -> dict[str, tuple[dict[str, object], ...]]:
+    active_clients = {
+        patient_id: payload
+        for payload in clients
+        if (patient_id := _mapped_text(payload, contract, "clients", "client_id"))
+        and _client_lifecycle(payload, contract) == "active"
+    }
+    checkpoint_sets = {
+        patient_id: load_sync_checkpoint_pages(db, resumed_from_job_id, checkpoint_key)
+        if resumed_from_job_id else ()
+        for patient_id in sorted(active_clients)
+        for checkpoint_key in (_patient_checkpoint_key(patient_id),)
+    }
+    record_limit = min(contract.payload.pagination.maximum_records, MAX_SYNC_ROWS)
+    checkpoint_record_count = sum(
+        len(page.records)
+        for pages in checkpoint_sets.values()
+        for page in pages
+    )
+    budget = ApprovedRecordBudget(max(0, record_limit - checkpoint_record_count))
+    patient_count = max(1, len(active_clients))
+    fair_page_size = max(1, min(contract.payload.pagination.maximum_page_size, record_limit // patient_count))
+
+    def fetch(patient_id: str) -> tuple[str, tuple[dict[str, object], ...]]:
+        checkpoint_key = _patient_checkpoint_key(patient_id)
+        records = _paged_records(
+            client,
+            profile,
+            contract,
+            "treatment_plans",
+            headers,
+            is_cancelled,
+            on_page,
+            checkpoint_sets[patient_id],
+            rate_limiter,
+            additional_parameters={"client_id": patient_id},
+            checkpoint_endpoint_key=checkpoint_key,
+            record_budget=budget,
+            page_size_override=fair_page_size,
+        )
+        return patient_id, records
+
+    patient_ids = tuple(sorted(active_clients))
+    if not patient_ids:
+        return {}
+    worker_count = min(MAX_SYNC_HTTP_WORKERS, len(patient_ids))
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="alleva-plan-list") as executor:
+        return dict(executor.map(fetch, patient_ids))
+
+
+def _patient_checkpoint_key(patient_id: str) -> str:
+    digest = hmac.new(
+        settings.effective_data_encryption_secret.encode("utf-8"),
+        patient_id.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:24]
+    return f"treatment_plans:{digest}"
 
 
 def _mapped_text(
@@ -243,8 +386,18 @@ def _mapped_text(
 ) -> str:
     endpoint = contract.payload.endpoints[endpoint_key]
     default = DEFAULT_ENDPOINT_FIELD_MAPPINGS.get(endpoint_key, {}).get(semantic_field, semantic_field)
-    value = payload.get(endpoint.field_mappings.get(semantic_field, default))
-    return value.strip() if isinstance(value, str) else ""
+    path = endpoint.field_mappings.get(semantic_field, default).split(".")
+    value: object = payload
+    for part in path:
+        if isinstance(value, dict):
+            value = value.get(part)
+        else:
+            return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return ""
 
 
 def _mapped_nested_text(
@@ -296,7 +449,7 @@ def _save_client_aggregates(
     actor: User,
     contract: ApprovedAllevaContract,
     clients: tuple[dict[str, object], ...],
-    plans: tuple[dict[str, object], ...],
+    plans_by_patient: dict[str, tuple[dict[str, object], ...]],
     headers: dict[str, str],
     is_cancelled: Callable[[], bool],
     sync_provenance: SyncImportProvenance | None,
@@ -307,36 +460,69 @@ def _save_client_aggregates(
     unchanged = 0
     skipped = 0
     updated_plan_ids: list[str] = []
+    candidates: list[PlanImportCandidate] = []
+    api_base_url = str(profile.api_base_url)
     for client_payload in clients:
         if is_cancelled():
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
         patient_id = _mapped_text(client_payload, contract, "clients", "client_id")
         if not patient_id or _client_lifecycle(client_payload, contract) != "active":
             continue
-        patient_plans = _plans_for_patient(plans, patient_id, contract)
+        patient_plans = plans_by_patient.get(patient_id, ())
         if not patient_plans:
             skipped += 1
             continue
         for plan in patient_plans:
             plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
-            detail = _plan_detail(client, profile, contract, plan_id, headers, is_cancelled, rate_limiter) if plan_id else plan
-            aggregate = _aggregate_from_payload(patient_id, client_payload, plan, detail, plan_id, contract)
-            saved = save_treatment_plan_aggregate_with_disposition(
-                db,
-                aggregate,
-                actor,
-                sync_provenance=sync_provenance,
-            )
-            match saved.disposition:
-                case TreatmentPlanSaveDisposition.CREATED:
-                    created += 1
-                case TreatmentPlanSaveDisposition.UPDATED:
-                    updated += 1
-                    updated_plan_ids.append(saved.stored_plan.plan_id)
-                case TreatmentPlanSaveDisposition.UNCHANGED:
-                    unchanged += 1
-                case unreachable:
-                    assert_never(unreachable)
+            if not plan_id or not _plan_belongs_to_patient(plan, patient_id, contract):
+                skipped += 1
+                continue
+            candidates.append(PlanImportCandidate(patient_id, client_payload, plan, plan_id))
+
+    def fetch_detail(candidate: PlanImportCandidate) -> dict[str, object]:
+        return _plan_detail(
+            client,
+            api_base_url,
+            contract,
+            candidate.plan_id,
+            headers,
+            is_cancelled,
+            rate_limiter,
+        )
+
+    details: tuple[dict[str, object], ...]
+    if candidates:
+        worker_count = min(MAX_SYNC_HTTP_WORKERS, len(candidates))
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="alleva-plan-detail") as executor:
+            details = tuple(executor.map(fetch_detail, candidates))
+    else:
+        details = ()
+
+    for candidate, detail in zip(candidates, details, strict=True):
+        aggregate = _aggregate_from_payload(
+            candidate.patient_id,
+            candidate.client_payload,
+            candidate.plan_payload,
+            detail,
+            candidate.plan_id,
+            contract,
+        )
+        saved = save_treatment_plan_aggregate_with_disposition(
+            db,
+            aggregate,
+            actor,
+            sync_provenance=sync_provenance,
+        )
+        match saved.disposition:
+            case TreatmentPlanSaveDisposition.CREATED:
+                created += 1
+            case TreatmentPlanSaveDisposition.UPDATED:
+                updated += 1
+                updated_plan_ids.append(saved.stored_plan.plan_id)
+            case TreatmentPlanSaveDisposition.UNCHANGED:
+                unchanged += 1
+            case unreachable:
+                assert_never(unreachable)
     return SyncImportSummary(created, updated, unchanged, skipped, tuple(updated_plan_ids))
 
 
@@ -361,31 +547,84 @@ def _client_lifecycle(payload: dict[str, object], contract: ApprovedAllevaContra
     return "active"
 
 
-def _plans_for_patient(
-    plans: tuple[dict[str, object], ...], patient_id: str, contract: ApprovedAllevaContract,
-) -> tuple[dict[str, object], ...]:
-    return tuple(
-        plan
-        for plan in plans
-        if patient_id == _mapped_text(plan, contract, "treatment_plans", "client_id")
-    )
+def _plan_belongs_to_patient(
+    plan: dict[str, object],
+    patient_id: str,
+    contract: ApprovedAllevaContract,
+) -> bool:
+    observed_ids: list[str] = []
+    invalid_reference = False
+
+    mapped_id = _mapped_text(plan, contract, "treatment_plans", "client_id")
+    if mapped_id:
+        observed_ids.append(mapped_id)
+    mapped_reference = _mapped_text(plan, contract, "treatment_plans", "client_reference")
+    if mapped_reference:
+        reference_id = _patient_id_from_reference(mapped_reference)
+        if reference_id:
+            observed_ids.append(reference_id)
+        else:
+            invalid_reference = True
+
+    raw_client = plan.get("client")
+    if isinstance(raw_client, str) and raw_client.strip():
+        reference_id = _patient_id_from_reference(raw_client)
+        if reference_id:
+            observed_ids.append(reference_id)
+        else:
+            invalid_reference = True
+    elif isinstance(raw_client, dict):
+        nested_id = _identifier_text(raw_client.get("id"))
+        if nested_id:
+            observed_ids.append(nested_id)
+        for key in ("route", "href"):
+            reference = raw_client.get(key)
+            if isinstance(reference, str) and reference.strip():
+                reference_id = _patient_id_from_reference(reference)
+                if reference_id:
+                    observed_ids.append(reference_id)
+                else:
+                    invalid_reference = True
+
+    return bool(observed_ids) and not invalid_reference and all(value == patient_id for value in observed_ids)
+
+
+def _identifier_text(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+def _patient_id_from_reference(reference: str) -> str:
+    parsed = urlsplit(reference)
+    parts = [unquote(part).strip() for part in parsed.path.strip("/").split("/") if part.strip()]
+    if len(parts) >= 2 and parts[-2].lower() == "clients":
+        return parts[-1]
+    return ""
 
 
 def _plan_detail(
-    client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, plan_id: str, headers: dict[str, str],
+    client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, plan_id: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter,
 ) -> dict[str, object]:
-    response = _get_with_retry(client, urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter)
+    response = _get_with_retry(client, urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter)
     payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("Expected an API treatment-plan detail object.")
-    diagnoses = _endpoint_records(client, profile, contract, "diagnoses", headers, is_cancelled, rate_limiter, plan_id=plan_id)
-    reviews = _endpoint_records(client, profile, contract, "reviews", headers, is_cancelled, rate_limiter, plan_id=plan_id)
+    diagnoses = _endpoint_records(client, api_base_url, contract, "diagnoses", headers, is_cancelled, rate_limiter, plan_id=plan_id)
+    reviews_endpoint = contract.payload.endpoints["reviews"]
+    reviews = []
+    if "{plan_id}" in reviews_endpoint.path or "plan_id" in reviews_endpoint.field_mappings:
+        reviews = _endpoint_records(client, api_base_url, contract, "reviews", headers, is_cancelled, rate_limiter, plan_id=plan_id)
+        if "{plan_id}" not in reviews_endpoint.path:
+            reviews = [review for review in reviews if _mapped_text(review, contract, "reviews", "plan_id") == plan_id]
     payload["diagnoses"] = diagnoses or payload.get("diagnoses", [])
     if reviews:
         review_id = _mapped_text(reviews[0], contract, "reviews", "review_id")
         if review_id:
-            payload["review_detail"] = _endpoint_json(client, profile, contract, "review_detail", headers, is_cancelled, rate_limiter, plan_id=plan_id, review_id=review_id)
+            payload["review_detail"] = _endpoint_json(client, api_base_url, contract, "review_detail", headers, is_cancelled, rate_limiter, plan_id=plan_id, review_id=review_id)
     return payload
 
 
@@ -394,10 +633,10 @@ def _endpoint_path(contract: ApprovedAllevaContract, endpoint_key: str, **values
 
 
 def _endpoint_json(
-    client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
+    client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter, **values: str,
 ) -> object:
-    response = _get_with_retry(client, urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter, contract.payload.pagination.maximum_response_bytes)
+    response = _get_with_retry(client, urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter, contract.payload.pagination.maximum_response_bytes)
     return response.json()
 
 
@@ -432,10 +671,10 @@ def _wait_for_retry(delay_seconds: int, is_cancelled: Callable[[], bool]) -> Non
 
 
 def _endpoint_records(
-    client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
+    client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter, **values: str,
 ) -> list[dict[str, object]]:
-    return _records(_endpoint_json(client, profile, contract, endpoint_key, headers, is_cancelled, rate_limiter, **values))
+    return _records(_endpoint_json(client, api_base_url, contract, endpoint_key, headers, is_cancelled, rate_limiter, **values))
 
 
 def _aggregate_from_payload(

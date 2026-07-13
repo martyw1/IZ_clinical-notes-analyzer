@@ -9,7 +9,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.IZ_CNA_E2E_BASE_URL ?? 'http://127.0.0.1:8765',
     browserName: 'chromium',
-    channel: 'chrome',
+    channel: process.env.IZ_CNA_E2E_BROWSER_CHANNEL ?? 'chrome',
     screenshot: 'on',
     trace: 'retain-on-failure',
     viewport: { width: 1280, height: 900 },

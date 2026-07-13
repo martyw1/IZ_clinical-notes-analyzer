@@ -18,7 +18,7 @@ def _complete_contract() -> dict[str, object]:
         "attachments": {"mode": "metadata_only", "download_allowed": False},
         "endpoints": {
             "clients": {"path": "/clients", "parameters": {"limit": "limit", "offset": "offset"}, "field_mappings": {"client_id": "clientId"}},
-            "treatment_plans": {"path": "/treatment-plans", "parameters": {"limit": "limit", "offset": "offset"}, "field_mappings": {"client_id": "clientId", "plan_id": "id"}},
+            "treatment_plans": {"path": "/treatment-plans", "parameters": {"limit": "limit", "offset": "offset", "client_id": "ClientId"}, "field_mappings": {"client_id": "clientId", "plan_id": "id"}},
             "treatment_plan_detail": {"path": "/treatment-plans/{plan_id}", "parameters": {}, "field_mappings": {"signature_date": "staffSignatureDate"}},
             "diagnoses": {"path": "/treatment-plans/{plan_id}/diagnoses", "parameters": {}, "field_mappings": {"description": "diagnosisDescription"}},
             "reviews": {"path": "/treatment-plans/{plan_id}/reviews", "parameters": {}, "field_mappings": {"review_id": "id"}},
@@ -97,6 +97,47 @@ def test_contract_rejects_endpoint_paths_that_can_escape_the_approved_origin(tmp
     response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
 
     assert response.status_code == 422
+
+
+def test_contract_accepts_published_alleva_v1_review_paths(tmp_path, monkeypatch) -> None:
+    # Given: the review paths published in Alleva's v1 Swagger definition.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    contract = _complete_contract()
+    contract["endpoints"]["reviews"] = {
+        "path": "/treatment-reviews",
+        "parameters": {"limit": "Limit", "offset": "Cursor"},
+        "field_mappings": {"review_id": "id"},
+    }
+    contract["endpoints"]["review_detail"] = {
+        "path": "/treatment-reviews/{review_id}",
+        "parameters": {},
+        "field_mappings": {"review_date": "createdDated"},
+    }
+
+    # When: an administrator records the versioned contract.
+    response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
+
+    # Then: the official non-nested review routes are accepted.
+    assert response.status_code == 201, response.text
+
+
+def test_contract_rejects_lowercase_or_missing_treatment_plan_client_query(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+
+    for invalid_parameters in (
+        {"limit": "Limit", "offset": "Cursor"},
+        {"limit": "Limit", "offset": "Cursor", "client_id": "clientId"},
+    ):
+        contract = _complete_contract()
+        contract["contract_version"] = f"invalid-{len(invalid_parameters)}-{invalid_parameters.get('client_id', 'missing')}"
+        contract["endpoints"]["treatment_plans"]["parameters"] = invalid_parameters
+
+        response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "The Alleva contract is incomplete or invalid"
 
 
 def test_corrupt_contract_is_redacted_and_safely_denied(tmp_path, monkeypatch) -> None:
