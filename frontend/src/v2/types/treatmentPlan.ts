@@ -67,6 +67,7 @@ export type SourceDocument = {
 export type TreatmentPlanAggregate = {
   readonly patientId: string
   readonly patientDisplayLabel: string
+  readonly treatmentPlanId: string
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly dueDate: string

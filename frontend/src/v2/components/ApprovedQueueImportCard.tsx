@@ -9,9 +9,17 @@ type Props = {
   readonly onNavigate: (view: string) => void
   readonly onCompleted?: () => void
   readonly showOpenQueueButton?: boolean
+  readonly buttonLabel?: string
 }
 
-export function ApprovedQueueImportCard({ config, token, onNavigate, onCompleted, showOpenQueueButton = true }: Props) {
+export function ApprovedQueueImportCard({
+  config,
+  token,
+  onNavigate,
+  onCompleted,
+  showOpenQueueButton = true,
+  buttonLabel = 'Pull, evaluate, and populate queue',
+}: Props) {
   const [job, setJob] = useState<ApiHarnessJob | null>(null)
   const [message, setMessage] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -53,7 +61,7 @@ export function ApprovedQueueImportCard({ config, token, onNavigate, onCompleted
       <h2>Populate and evaluate the Treatment Plans queue</h2>
       {blockers.length > 0 ? (
         <>
-          <p className='error-banner'><strong>Queue import is blocked.</strong> The diagnostic pull above can still be used.</p>
+          <p className='error-banner'><strong>Queue import is blocked.</strong> Configure and approve the operational import before pulling live records.</p>
           <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
           {blockers.some((blocker) => !blocker.startsWith('No approved versioned')) && (
             <button type='button' className='secondary-button' onClick={() => onNavigate('Settings')}>Open Settings</button>
@@ -61,13 +69,11 @@ export function ApprovedQueueImportCard({ config, token, onNavigate, onCompleted
           {!config?.activeContractVersion && <p className='muted'>A versioned contract is recorded only after R3/Alleva approves the live endpoint mapping. Credentials alone cannot create that approval.</p>}
         </>
       ) : (
-        <>
-          <p>Approved contract {config?.activeContractVersion} is active. This import normalizes records, runs the deterministic checklist, and adds results to the queue.</p>
-          <button type='button' onClick={() => void runImport()} disabled={isRunning}>
-            {isRunning ? 'Pulling, evaluating, and populating queue...' : 'Pull, evaluate, and populate queue'}
-          </button>
-        </>
+        <p>Approved contract {config?.activeContractVersion} is active. This import normalizes every returned treatment plan, runs the deterministic checklist, and adds results to the queue.</p>
       )}
+      <button type='button' onClick={() => void runImport()} disabled={isRunning || blockers.length > 0}>
+        {isRunning ? 'Pulling full treatment plans...' : buttonLabel}
+      </button>
       {job && <p>Status: {job.status} | imported: {job.recordsWritten} | failed: {job.recordsFailed}</p>}
       {message && <p role='status'>{message}</p>}
       {showOpenQueueButton && (job?.status === 'completed' || job?.status === 'completed_with_warnings') && (

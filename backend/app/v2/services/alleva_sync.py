@@ -313,29 +313,30 @@ def _save_client_aggregates(
         patient_id = _mapped_text(client_payload, contract, "clients", "client_id")
         if not patient_id or _client_lifecycle(client_payload, contract) != "active":
             continue
-        plan = _plan_for_patient(plans, patient_id, contract)
-        if plan is None:
+        patient_plans = _plans_for_patient(plans, patient_id, contract)
+        if not patient_plans:
             skipped += 1
             continue
-        plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
-        detail = _plan_detail(client, profile, contract, plan_id, headers, is_cancelled, rate_limiter) if plan_id else plan
-        aggregate = _aggregate_from_payload(patient_id, client_payload, plan, detail, plan_id, contract)
-        saved = save_treatment_plan_aggregate_with_disposition(
-            db,
-            aggregate,
-            actor,
-            sync_provenance=sync_provenance,
-        )
-        match saved.disposition:
-            case TreatmentPlanSaveDisposition.CREATED:
-                created += 1
-            case TreatmentPlanSaveDisposition.UPDATED:
-                updated += 1
-                updated_plan_ids.append(saved.stored_plan.plan_id)
-            case TreatmentPlanSaveDisposition.UNCHANGED:
-                unchanged += 1
-            case unreachable:
-                assert_never(unreachable)
+        for plan in patient_plans:
+            plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
+            detail = _plan_detail(client, profile, contract, plan_id, headers, is_cancelled, rate_limiter) if plan_id else plan
+            aggregate = _aggregate_from_payload(patient_id, client_payload, plan, detail, plan_id, contract)
+            saved = save_treatment_plan_aggregate_with_disposition(
+                db,
+                aggregate,
+                actor,
+                sync_provenance=sync_provenance,
+            )
+            match saved.disposition:
+                case TreatmentPlanSaveDisposition.CREATED:
+                    created += 1
+                case TreatmentPlanSaveDisposition.UPDATED:
+                    updated += 1
+                    updated_plan_ids.append(saved.stored_plan.plan_id)
+                case TreatmentPlanSaveDisposition.UNCHANGED:
+                    unchanged += 1
+                case unreachable:
+                    assert_never(unreachable)
     return SyncImportSummary(created, updated, unchanged, skipped, tuple(updated_plan_ids))
 
 
@@ -360,13 +361,14 @@ def _client_lifecycle(payload: dict[str, object], contract: ApprovedAllevaContra
     return "active"
 
 
-def _plan_for_patient(
+def _plans_for_patient(
     plans: tuple[dict[str, object], ...], patient_id: str, contract: ApprovedAllevaContract,
-) -> dict[str, object] | None:
-    for plan in plans:
-        if patient_id == _mapped_text(plan, contract, "treatment_plans", "client_id"):
-            return plan
-    return None
+) -> tuple[dict[str, object], ...]:
+    return tuple(
+        plan
+        for plan in plans
+        if patient_id == _mapped_text(plan, contract, "treatment_plans", "client_id")
+    )
 
 
 def _plan_detail(

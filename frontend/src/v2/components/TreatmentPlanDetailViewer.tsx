@@ -49,7 +49,7 @@ export function TreatmentPlanDetailViewer({
   useEffect(() => {
     setSelectedCriterionId(plan.criteria[0]?.criterionId ?? null)
     setActionMessage('')
-  }, [plan.patientId])
+  }, [plan.treatmentPlanId])
 
   const saveReturn = async () => {
     if (!selectedCriterion) return
@@ -110,7 +110,8 @@ export function TreatmentPlanDetailViewer({
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Selected Treatment Plan Detail</p>
-            <h2>Patient ID {plan.patientId}</h2>
+            <h2>Treatment Plan ID {plan.treatmentPlanId}</h2>
+            <p className='muted'>Patient ID {plan.patientId}</p>
           </div>
           <StatusBadge status={plan.status} />
         </div>

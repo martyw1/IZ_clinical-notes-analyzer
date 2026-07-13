@@ -93,8 +93,15 @@ export async function getPatientRoster(token: string): Promise<PatientRosterData
   }
 }
 
-export async function getTreatmentPlanDetail(token: string, patientId: string): Promise<TreatmentPlanAggregate> {
-  return mapTreatmentPlanAggregate(await readRecordPayload(await request(`/api/v2/treatment-plans/${patientId}`, { token })))
+export async function getTreatmentPlanDetail(
+  token: string,
+  patientId: string,
+  treatmentPlanId?: string,
+): Promise<TreatmentPlanAggregate> {
+  const suffix = treatmentPlanId ? `/${encodeURIComponent(treatmentPlanId)}` : ''
+  return mapTreatmentPlanAggregate(await readRecordPayload(
+    await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}${suffix}`, { token }),
+  ))
 }
 
 export async function importTreatmentPlanAggregate(token: string, payload: JsonRecord): Promise<ManualTreatmentPlanImportResult> {

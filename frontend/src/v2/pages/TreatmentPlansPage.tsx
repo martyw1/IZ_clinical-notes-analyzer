@@ -29,7 +29,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
   const [listData, setListData] = useState<TreatmentPlanListData | null>(null)
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | null>(null)
   const [apiConfigError, setApiConfigError] = useState('')
-  const [selectedPatientId, setSelectedPatientId] = useState('')
+  const [selectedPlanKey, setSelectedPlanKey] = useState('')
   const [selectedPlan, setSelectedPlan] = useState<TreatmentPlanAggregate | null>(null)
   const [error, setError] = useState('')
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
@@ -41,12 +41,15 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     const normalizedQuery = query.trim().toLowerCase()
     return (listData?.items ?? []).filter((item) => (
       (!statusFilter || item.status === statusFilter)
-      && (!normalizedQuery || item.patientId.toLowerCase().includes(normalizedQuery) || item.status.toLowerCase().includes(normalizedQuery))
+      && (!normalizedQuery
+        || item.patientId.toLowerCase().includes(normalizedQuery)
+        || item.treatmentPlanId.toLowerCase().includes(normalizedQuery)
+        || item.status.toLowerCase().includes(normalizedQuery))
     ))
   }, [listData?.items, query, statusFilter])
   const selectedSummary = useMemo(
-    () => visibleItems.find((item) => item.patientId === selectedPatientId) ?? visibleItems[0] ?? null,
-    [selectedPatientId, visibleItems],
+    () => visibleItems.find((item) => planKey(item) === selectedPlanKey) ?? visibleItems[0] ?? null,
+    [selectedPlanKey, visibleItems],
   )
 
   useEffect(() => {
@@ -54,8 +57,9 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
       setSelectedPlan(null)
       return
     }
-    if (selectedPatientId !== selectedSummary.patientId) setSelectedPatientId(selectedSummary.patientId)
-  }, [selectedPatientId, selectedSummary])
+    const nextKey = planKey(selectedSummary)
+    if (selectedPlanKey !== nextKey) setSelectedPlanKey(nextKey)
+  }, [selectedPlanKey, selectedSummary])
 
   useEffect(() => {
     let cancelled = false
@@ -64,7 +68,11 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
         const payload = await getTreatmentPlans(token)
         if (cancelled) return
         setListData(payload)
-        setSelectedPatientId(payload.items[0]?.patientId ?? '')
+        setSelectedPlanKey((current) => (
+          payload.items.some((item) => planKey(item) === current)
+            ? current
+            : payload.items[0] ? planKey(payload.items[0]) : ''
+        ))
       } catch (loadError) {
         if (!cancelled) setError(messageForError(loadError))
       }
@@ -92,7 +100,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     async function loadDetail(summary: TreatmentPlanListItem) {
       setIsLoadingDetail(true)
       try {
-        const payload = await getTreatmentPlanDetail(token, summary.patientId)
+        const payload = await getTreatmentPlanDetail(token, summary.patientId, summary.treatmentPlanId)
         if (!cancelled) setSelectedPlan(payload)
       } catch (loadError) {
         if (!cancelled) setError(messageForError(loadError))
@@ -110,7 +118,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     if (!selectedPlan) return
     await saveManagerAction(token, selectedPlan.patientId, payload)
     const [detail, queue] = await Promise.all([
-      getTreatmentPlanDetail(token, selectedPlan.patientId),
+      getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId),
       getTreatmentPlans(token),
     ])
     setSelectedPlan(detail)
@@ -125,7 +133,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
   async function handleSourceDocumentDelete(sourceFileId: string) {
     if (!selectedPlan) return
     await deleteTreatmentPlanSourceDocument(token, selectedPlan.patientId, sourceFileId)
-    setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId))
+    setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId))
   }
 
   async function handleChecklistEvidenceExport() {
@@ -158,6 +166,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
           onNavigate={onNavigate}
           onCompleted={() => setRefreshNumber((current) => current + 1)}
           showOpenQueueButton={false}
+          buttonLabel='Pull full treatment plans'
         />
       )}
       {apiConfigError && <p role='alert' className='error-banner'>{apiConfigError}</p>}
@@ -201,9 +210,18 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
             </thead>
             <tbody>
               {visibleItems.map((item) => (
-                <tr key={item.patientId}>
-                  <td data-label='Patient ID'><button type='button' className='link-button' onClick={() => setSelectedPatientId(item.patientId)}>{item.patientId}</button></td>
-                  <td data-label='Treatment plan ID'>{item.treatmentPlanId}</td>
+                <tr key={planKey(item)}>
+                  <td data-label='Patient ID'>{item.patientId}</td>
+                  <td data-label='Treatment plan ID'>
+                    <button
+                      type='button'
+                      className='link-button'
+                      aria-pressed={selectedPlanKey === planKey(item)}
+                      onClick={() => setSelectedPlanKey(planKey(item))}
+                    >
+                      {item.treatmentPlanId}
+                    </button>
+                  </td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>
                   <td data-label='Next due'>{item.nextDueDate}</td>
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
@@ -230,4 +248,8 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
       </section>
     </div>
   )
+}
+
+function planKey(item: TreatmentPlanListItem): string {
+  return `${item.patientId}:${item.treatmentPlanId}`
 }

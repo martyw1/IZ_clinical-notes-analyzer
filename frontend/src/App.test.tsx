@@ -334,7 +334,7 @@ describe('V2 active app shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
     expect(await screen.findByText('plan-812')).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate queue/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull full treatment plans/i }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
     const queueReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/treatment-plans')
@@ -359,6 +359,44 @@ describe('V2 active app shell', () => {
     expect(screen.getByText('Needs Review')).toBeInTheDocument()
     expect(screen.queryByText(/synthetic patient name|first name|last name/i)).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
+  })
+
+  it('pulls full treatment plans from the patient roster and refreshes the roster list', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByDisplayValue('R3 Recovery Services')
+    fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
+    fireEvent.click(screen.getByLabelText('Enable API testing'))
+    fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
+    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull full treatment plans/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.objectContaining({ method: 'POST' }))
+    const rosterReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/patient-roster')
+    expect(rosterReads.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('keeps multiple treatment plans for one patient separately selectable', async () => {
+    const fetchMock = setupFetch({ role: 'admin', multiPlan: true })
+    await signIn()
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+
+    expect(await screen.findByText('plan-812')).toBeInTheDocument()
+    const secondPlan = await screen.findByRole('button', { name: 'plan-813' })
+    fireEvent.click(secondPlan)
+
+    expect(await screen.findByRole('heading', { name: 'Treatment Plan ID plan-813' })).toBeInTheDocument()
+    expect(secondPlan).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v2/treatment-plans/812/plan-813',
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    ))
   })
 
   it('imports normalized manual treatment-plan aggregate files through the backend', async () => {

@@ -167,6 +167,27 @@ def treatment_plan_detail(patient_id: str, user: CurrentUser, db: DbSession) -> 
     return aggregate
 
 
+@router.get("/api/v2/treatment-plans/{patient_id}/{treatment_plan_id}")
+def treatment_plan_detail_by_id(
+    patient_id: str,
+    treatment_plan_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> TreatmentPlanAggregate:
+    require_patient_read(db, user, patient_id)
+    aggregate = treatment_plan_aggregate_for_patient(db, patient_id, treatment_plan_id)
+    if aggregate is None:
+        raise HTTPException(status_code=404, detail="Treatment plan not found")
+    record_audit_event(
+        db,
+        action="treatment_plan.detail.viewed",
+        actor=user,
+        target_entity_type="treatment_plan",
+        target_entity_id=f"{patient_id}:{treatment_plan_id}",
+    )
+    return aggregate
+
+
 @router.post("/api/v2/treatment-plans/{patient_id}/manager-actions")
 def save_manager_action(patient_id: str, payload: ManagerActionInput, user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     require_patient_manager(db, user, patient_id)

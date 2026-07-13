@@ -45,8 +45,9 @@ def assemble_treatment_plan_aggregate(
     db: Session,
     patient_id: str,
     encryption_secret: str,
+    treatment_plan_id: str | None = None,
 ) -> TreatmentPlanAggregate | None:
-    plans = _plan_rows(db, patient_id)
+    plans = _plan_rows(db, patient_id, treatment_plan_id)
     if not plans:
         return None
     codec = ClinicalSnapshotCodec(encryption_secret)
@@ -60,15 +61,16 @@ def assemble_treatment_plan_aggregate(
     return record_aggregate(RecordAggregateSource(patient_id, plans[-1], records, reviews))
 
 
-def _plan_rows(db: Session, patient_id: str) -> tuple[PlanVersionRow, ...]:
+def _plan_rows(db: Session, patient_id: str, treatment_plan_id: str | None = None) -> tuple[PlanVersionRow, ...]:
     rows = db.execute(
         text(
             "SELECT v.source_system,v.source_record_id,v.version_ordinal,v.admission_date,"
             "v.source_next_review_due,v.normalized_snapshot_encrypted FROM patients p "
             "JOIN treatment_plan_versions v ON v.patient_id=p.id WHERE p.canonical_client_id=:client_id "
+            "AND (:treatment_plan_id IS NULL OR v.source_record_id=:treatment_plan_id) "
             "ORDER BY v.version_ordinal,v.id"
         ),
-        {"client_id": patient_id},
+        {"client_id": patient_id, "treatment_plan_id": treatment_plan_id},
     ).all()
     return tuple(
         PlanVersionRow(str(row[0]), str(row[1]), int(row[2]), str(row[3] or "Unknown"), str(row[4] or "Unknown"), row[5])

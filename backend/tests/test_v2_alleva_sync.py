@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import sqlite3
 import time
@@ -31,6 +33,11 @@ class _MockAllevaState:
             {"clientId": "912", "isActive": True, "levelOfCare": "PHP", "admissionDate": "2026-06-01"}
         ]
     )
+    plan_items: list[dict[str, JsonValue]] = field(
+        default_factory=lambda: [
+            {"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"}
+        ]
+    )
     detail_problem: list[str] = field(default_factory=lambda: ["Synthetic clinical problem."])
 
 
@@ -54,18 +61,22 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
             self._respond({"items": type(self).state.client_items})
             return
         if path == "/treatment-plans":
-            self._respond({"items": [{"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"}]})
+            self._respond({"items": type(self).state.plan_items})
             return
-        if path == "/treatment-plans/plan-912/diagnoses":
+        path_parts = path.strip("/").split("/")
+        plan_id = path_parts[1] if len(path_parts) >= 2 and path_parts[0] == "treatment-plans" else "plan-912"
+        if len(path_parts) == 3 and path_parts[2] == "diagnoses":
             self._respond({"items": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}]})
             return
-        if path == "/treatment-plans/plan-912/reviews":
-            self._respond({"items": [{"id": "review-912"}]})
+        if len(path_parts) == 3 and path_parts[2] == "reviews":
+            review_id = f"review-{plan_id.removeprefix('plan-')}"
+            self._respond({"items": [{"id": review_id}]})
             return
-        if path == "/treatment-plans/plan-912/reviews/review-912":
-            self._respond({"id": "review-912", "reviewDate": "2026-06-15"})
+        if len(path_parts) == 4 and path_parts[2] == "reviews":
+            self._respond({"id": path_parts[3], "reviewDate": "2026-06-15"})
             return
-        self._respond({"id": "plan-912", "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": type(self).state.detail_problem[0]}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
+        problem = type(self).state.detail_problem[0] if plan_id == "plan-912" else f"Synthetic problem for {plan_id}."
+        self._respond({"id": plan_id, "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": problem}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
 
     def log_message(self, _format: str, *_args: str | int | float | None) -> None:
         return None
@@ -80,8 +91,18 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def _mock_alleva_server(*, block_clients: bool = False, client_items: list[dict[str, JsonValue]] | None = None) -> Iterator[tuple[str, _MockAllevaState]]:
-    state = _MockAllevaState(block_clients=block_clients, client_items=client_items or _MockAllevaState().client_items)
+def _mock_alleva_server(
+    *,
+    block_clients: bool = False,
+    client_items: list[dict[str, JsonValue]] | None = None,
+    plan_items: list[dict[str, JsonValue]] | None = None,
+) -> Iterator[tuple[str, _MockAllevaState]]:
+    defaults = _MockAllevaState()
+    state = _MockAllevaState(
+        block_clients=block_clients,
+        client_items=client_items or defaults.client_items,
+        plan_items=plan_items or defaults.plan_items,
+    )
 
     class IsolatedMockAllevaHandler(_MockAllevaHandler):
         pass
@@ -260,6 +281,48 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         "updated_treatment_plan_ids": [],
     }
     assert "mock-secret" not in str(audit)
+
+
+def test_approved_sync_populates_every_treatment_plan_for_the_same_patient(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    plan_items: list[dict[str, JsonValue]] = [
+        {"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"},
+        {"id": "plan-913", "clientId": "912", "nextReviewDue": "2026-08-01"},
+    ]
+
+    with _mock_alleva_server(plan_items=plan_items) as (base_url, _state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "treatment_plan_endpoint_mapping_validated": True,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+
+        synced = _completed_sync(client, headers)
+
+    assert synced["status"] == "completed"
+    assert synced["records_written"] == 2
+    queue = client.get("/api/v2/treatment-plans", headers=headers)
+    assert queue.status_code == 200
+    assert {item["treatment_plan_id"] for item in queue.json()["items"]} == {"plan-912", "plan-913"}
+    exported = client.get("/api/v2/exports/treatment-plans.csv", headers=headers)
+    assert exported.status_code == 200
+    assert {row["treatment_plan_id"] for row in csv.DictReader(io.StringIO(exported.text))} == {"plan-912", "plan-913"}
+    second_detail = client.get("/api/v2/treatment-plans/912/plan-913", headers=headers)
+    assert second_detail.status_code == 200
+    assert second_detail.json()["content_snapshot"]["plan_id"] == "plan-913"
 
 
 def test_repeated_sync_updates_same_plan_id_and_leaves_identical_replay_unchanged(tmp_path, monkeypatch) -> None:

@@ -36,7 +36,7 @@ function pageFor(view: string, token: string, user: UserProfile, onNavigate: (vi
     case 'Treatment Plans':
       return <TreatmentPlansPage token={token} user={user} onNavigate={onNavigate} />
     case 'Patient Roster':
-      return <PatientRosterPage token={token} />
+      return <PatientRosterPage token={token} user={user} onNavigate={onNavigate} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} />
     case 'Corrections':

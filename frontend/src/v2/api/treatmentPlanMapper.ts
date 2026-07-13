@@ -58,6 +58,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
   return {
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label', 'Patient ID unavailable'),
+    treatmentPlanId: readString(snapshot, 'plan_id', 'Unavailable'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
     dueDate: readString(record, 'date_clock_due_date', readString(record, 'source_due_date', 'Unknown')),

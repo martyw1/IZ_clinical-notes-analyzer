@@ -533,6 +533,12 @@ dd,
   white-space: normal;
 }
 
+.link-button[aria-pressed="true"] {
+  border-color: var(--action-primary);
+  background: var(--action-active-bg);
+  color: var(--text-main);
+}
+
 .signature-grid,
 .job-stats {
   margin: 0;

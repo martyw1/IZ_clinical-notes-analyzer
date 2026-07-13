@@ -60,14 +60,19 @@ def persist_plan_evaluation(
     return apply_evaluation(aggregate, bundle)
 
 
-def latest_plan_target(db: Session, patient_id: str) -> PlanEvaluationTarget | None:
+def latest_plan_target(
+    db: Session,
+    patient_id: str,
+    treatment_plan_id: str | None = None,
+) -> PlanEvaluationTarget | None:
     row = db.execute(
         text(
             "SELECT v.id,v.evidence_sha256 FROM treatment_plan_versions v "
             "JOIN patients p ON p.id=v.patient_id WHERE p.canonical_client_id=:patient_id "
+            "AND (:treatment_plan_id IS NULL OR v.source_record_id=:treatment_plan_id) "
             "ORDER BY v.version_ordinal DESC,v.id DESC LIMIT 1"
         ),
-        {"patient_id": patient_id},
+        {"patient_id": patient_id, "treatment_plan_id": treatment_plan_id},
     ).first()
     return PlanEvaluationTarget(int(row[0]), str(row[1])) if row else None
 
@@ -77,7 +82,7 @@ def latest_evaluated_aggregate(
     aggregate: TreatmentPlanAggregate,
     trigger: EvaluationTrigger = "date_rollover",
 ) -> TreatmentPlanAggregate:
-    target = latest_plan_target(db, aggregate.patient_id)
+    target = latest_plan_target(db, aggregate.patient_id, aggregate.content_snapshot.plan_id)
     if target is None:
         return aggregate
     evaluated = persist_plan_evaluation(db, aggregate, target, trigger)

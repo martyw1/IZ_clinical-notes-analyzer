@@ -10,7 +10,8 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 
 ### 2026-07-13 V2 treatment-plan queue update
 
-- The Treatment Plans tab and API Testing Harness now share the same approved operational pull. A completed pull refreshes the current queue on the Treatment Plans screen.
+- The Treatment Plans tab, Patient Roster, and API Testing Harness share the same approved operational pull. A completed pull refreshes the active list on the initiating screen.
+- The V2 sync imports every returned treatment plan for each active patient. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}` loads the selected plan without collapsing multiple plans for one patient.
 - A changed record with the same source treatment-plan ID creates an encrypted immutable successor version and replaces the visible current plan. An identical replay creates no duplicate version.
 - The completion audit records created, updated, and unchanged counts plus the exact `updated_treatment_plan_ids`; clinical narrative and patient names remain excluded from logs.
 - `Patient Roster` lists authorized patient IDs, plan IDs, lifecycle/LOC/source metadata, and plan status without patient-name fields.

@@ -2,11 +2,12 @@
 
 ## 2026-07-13 V2 treatment-plan pull, roster, and status export
 
-- Added the approved operational pull directly to Treatment Plans and reused the same path in API Testing Harness; successful pulls refresh and populate the Treatment Plans queue.
+- Added the approved operational pull directly to Treatment Plans and Patient Roster and reused the same path in API Testing Harness; successful pulls refresh and populate the active list.
+- Corrected the sync worker to import every treatment plan returned for each active patient instead of selecting only the first, and corrected queue/detail/export projections to keep each distinct current treatment-plan ID separately visible and selectable.
 - Added disposition-aware storage for created, updated, and unchanged plans. Changed content under the same treatment-plan ID preserves the encrypted immutable prior version, makes the successor current, and logs the exact updated plan IDs; identical replays add no duplicate.
 - Added a role-scoped Patient Roster tab without patient names and a manager-only, formula-safe current treatment-plan/status CSV export with minimum-necessary audit details.
-- Added backend/frontend regression coverage for same-ID overwrite semantics, authorization/privacy, export content, both pull surfaces, queue refresh, roster rendering, backend status vocabulary, and forensic updated-ID display.
-- Verification passed the full backend suite (`182 passed`), frontend suite (`22 passed`), production frontend build, and a real Windows Chrome UI walkthrough against disposable synthetic local data. The UI pass created and updated `plan-912`, confirmed two immutable versions with version 2 current, verified roster privacy, downloaded/inspected the CSV, and verified the audit hash chain.
+- Added backend/frontend regression coverage for same-ID overwrite semantics, multiple plans per patient, authorization/privacy, export content, all three pull surfaces, queue/roster refresh, plan-specific detail, backend status vocabulary, and forensic updated-ID display.
+- Verification passed the full backend suite (`183 passed`), frontend suite (`24 passed`), production frontend build, and a real Windows Chromium Playwright walkthrough against synthetic intercepted API data. The UI pass pulled two plans for Patient ID `912`, selected `plan-913` independently, confirmed the plan-specific detail heading/content, pulled again from Patient Roster, and confirmed the name-free roster populated with status.
 - Live Alleva import remains gated, and the LOC-change update window remains configurable and unvalidated.
 
 ## 2026-07-11 V2 beta.2 release-readiness metadata and documentation
