@@ -10,8 +10,15 @@ from fastapi.testclient import TestClient
 import pytest
 
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
-from v2_migration_fixtures import SYNTHETIC_SECRET, create_legacy_database, encrypted_text
+from v2_migration_fixtures import (
+    SYNTHETIC_SECRET,
+    create_legacy_database,
+    downgrade_to_pre_v2_schema,
+    encrypted_text,
+)
+from app.v2.migrations.backup import read_backup
 from app.v2.migrations.backfill_types import encrypt_bytes
+from app.v2.migrations.schema_core import USER_EXTENSIONS
 from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec, PlanRecordSnapshot, SnapshotCodecError
 
 PRIVACY_CANARY = "MIGRATED-PATIENT-NAME-CANARY"
@@ -40,7 +47,7 @@ def test_manual_import_snapshot_contract_remains_http_compatible(tmp_path, monke
 
 def test_startup_migration_serves_multi_version_plan_and_review_records(tmp_path, monkeypatch) -> None:
     # Given: a synthetic legacy database with multiple plans, reviews, and nested identity aliases.
-    client = _migrated_client(tmp_path, monkeypatch)
+    client, _original_database_bytes = _migrated_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
 
     # When: the migrated patient is read through the real authenticated HTTP routes.
@@ -56,8 +63,40 @@ def test_startup_migration_serves_multi_version_plan_and_review_records(tmp_path
     assert [review["id"] for review in payload["treatment_reviews"]] == ["synthetic-review-1", "synthetic-review-2"]
     assert PRIVACY_CANARY not in json.dumps(listed.json(), sort_keys=True)
     assert PRIVACY_CANARY not in json.dumps(payload, sort_keys=True)
-    with sqlite3.connect(tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3") as connection:
+    with closing(sqlite3.connect(tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3")) as connection:
         assert connection.execute("SELECT DISTINCT trigger_kind FROM evaluation_runs").fetchall() == [("migration",)]
+
+
+def test_startup_migrates_legacy_user_and_settings_columns_before_orm_bootstrap(tmp_path, monkeypatch) -> None:
+    # Given: a synthetic legacy database from before the v2 user and API settings columns existed.
+    monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_USERNAME", "replacement-admin")
+    client, original_database_bytes = _migrated_client(tmp_path, monkeypatch, use_legacy_schema=True)
+
+    # When: the real application startup and readiness boundary run.
+    readiness = client.get("/api/readiness")
+
+    # Then: startup succeeds and the ordered migration restores every required user column.
+    assert readiness.status_code == 200
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    with closing(sqlite3.connect(database_path)) as connection:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info('users')")}
+        settings = connection.execute(
+            "SELECT api_base_url,openapi_url,api_scopes,api_pagination_limit FROM app_settings"
+        ).fetchone()
+        replacement_admin = connection.execute(
+            "SELECT auth_state FROM users WHERE username='replacement-admin'"
+        ).fetchone()
+    backup_path = next((tmp_path / "app-data" / "backups").glob("migration-0-to-*.izcnabackup"))
+    backup = read_backup(backup_path, SYNTHETIC_SECRET)
+    assert {name for name, _definition in USER_EXTENSIONS}.issubset(columns)
+    assert settings == (
+        "https://legacy-api.invalid",
+        "https://legacy-api.invalid/openapi.json",
+        "",
+        100,
+    )
+    assert replacement_admin == ("bootstrap_required",)
+    assert backup.database_bytes == original_database_bytes
 
 
 def test_snapshot_codec_accepts_legacy_record_envelope_and_rejects_malformed_token() -> None:
@@ -75,7 +114,7 @@ def test_snapshot_codec_accepts_legacy_record_envelope_and_rejects_malformed_tok
         codec.decode_plan(b"IZCNA1:not-a-valid-token")
 
 
-def _migrated_client(tmp_path: Path, monkeypatch) -> TestClient:
+def _migrated_client(tmp_path: Path, monkeypatch, *, use_legacy_schema: bool = False) -> tuple[TestClient, bytes]:
     app_data = tmp_path / "app-data"
     app_data.mkdir()
     monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(app_data))
@@ -86,6 +125,8 @@ def _migrated_client(tmp_path: Path, monkeypatch) -> TestClient:
         if module_name == "app" or module_name.startswith("app."):
             sys.modules.pop(module_name)
     database_path = create_legacy_database(app_data)
+    if use_legacy_schema:
+        downgrade_to_pre_v2_schema(database_path)
     from app.v2.security import hash_password
 
     payload = {
@@ -107,6 +148,7 @@ def _migrated_client(tmp_path: Path, monkeypatch) -> TestClient:
             (encrypted_text(json.dumps(payload, sort_keys=True)),),
         )
         connection.commit()
+    original_database_bytes = database_path.read_bytes()
     from app.main import create_app
 
-    return TestClient(create_app(), raise_server_exceptions=False)
+    return TestClient(create_app(), raise_server_exceptions=False), original_database_bytes

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import event, inspect, select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine
 
@@ -34,12 +34,12 @@ if is_sqlite_database:
 
 def init_database() -> None:
     settings.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(bind=engine)
-    _ensure_app_settings_columns()
-    with SessionLocal() as db:
-        _ensure_bootstrap_admin(db)
-        _ensure_app_settings(db)
-        db.commit()
+    if not settings.sqlite_db_path.is_file():
+        Base.metadata.create_all(bind=engine)
+        with SessionLocal() as db:
+            _ensure_bootstrap_admin(db)
+            _ensure_app_settings(db)
+            db.commit()
     engine.dispose()
     migration_report = run_migrations(
         MigrationRequest(
@@ -49,32 +49,20 @@ def init_database() -> None:
             app_build=f"{settings.app_version}:{settings.build_channel}",
         )
     )
+    Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
+        _ensure_bootstrap_admin(db)
+        _ensure_app_settings(db)
         _mark_interrupted_jobs_stale(db)
         _ensure_admin_facilities(db)
         reevaluate_all_plan_versions(db, "migration" if migration_report.applied_versions else "startup")
         db.commit()
 
 
-def _ensure_app_settings_columns() -> None:
-    if not is_sqlite_database:
-        return
-    existing = {column["name"] for column in inspect(engine).get_columns("app_settings")}
-    definitions = {
-        "alleva_treatment_plan_sync_enabled": "BOOLEAN NOT NULL DEFAULT 0",
-        "alleva_treatment_plan_sync_approved": "BOOLEAN NOT NULL DEFAULT 0",
-        "alleva_treatment_plan_endpoint_mapping_validated": "BOOLEAN NOT NULL DEFAULT 0",
-    }
-    with engine.begin() as connection:
-        for name, definition in definitions.items():
-            if name not in existing:
-                connection.execute(text(f"ALTER TABLE app_settings ADD COLUMN {name} {definition}"))
-
-
 def _ensure_bootstrap_admin(db: Session) -> None:
     username = settings.bootstrap_admin_username.strip() or "admin"
-    existing = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
-    if existing:
+    existing_id = db.execute(select(User.id).where(User.username == username)).scalar_one_or_none()
+    if existing_id is not None:
         return
     db.add(
         User(
@@ -92,8 +80,8 @@ def _ensure_bootstrap_admin(db: Session) -> None:
 
 
 def _ensure_app_settings(db: Session) -> None:
-    existing = db.execute(select(AppSetting)).scalar_one_or_none()
-    if existing:
+    existing_id = db.execute(select(AppSetting.id)).scalar_one_or_none()
+    if existing_id is not None:
         return
     db.add(AppSetting())
 
@@ -109,10 +97,12 @@ def _mark_interrupted_jobs_stale(db: Session) -> None:
 def _ensure_admin_facilities(db: Session) -> None:
     db.execute(
         text(
-            """INSERT OR IGNORE INTO user_facilities(user_id,facility_id,assigned_by_user_id,assigned_at)
-            SELECT administrator.id,facility.id,administrator.id,:assigned_at
-            FROM users administrator CROSS JOIN facilities facility
-            WHERE administrator.role='admin' AND facility.is_active=1"""
+            "INSERT OR IGNORE INTO user_facilities"
+            "(user_id,facility_id,assigned_by_user_id,assigned_at) "
+            "SELECT target.id,facility.id,administrator.id,:assigned_at "
+            "FROM users target CROSS JOIN facilities facility "
+            "CROSS JOIN (SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1) administrator "
+            "WHERE target.role='admin' AND facility.is_active=1"
         ),
         {"assigned_at": utc_now().isoformat()},
     )

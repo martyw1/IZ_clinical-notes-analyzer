@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-type JsonPrimitive = str | int | float | bool | None
-type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 SourceMode = Literal["manual_upload", "alleva_rest_api", "synthetic_fixture"]
 SignatureEvidenceRole = Literal["initial_plan", "master_plan", "review", "unknown"]

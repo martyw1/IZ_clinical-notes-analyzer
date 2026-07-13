@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class V2Model(BaseModel):
@@ -344,9 +343,7 @@ class AuditLogItemOut(V2Model):
     target_entity_type: str
     target_entity_id: str
     outcome_status: str
-    details: dict[str, str | int | float | bool | None | list[str] | dict[str, str]]
-    prev_hash: str
-    hash: str
+    details: dict[str, JsonValue]
 
 
 class AuditLogListOut(V2Model):
@@ -356,7 +353,10 @@ class AuditLogListOut(V2Model):
 class AuditVerificationOut(V2Model):
     valid: bool
     event_count: int
+    verified_event_count: int
+    legacy_event_count: int
     first_invalid_id: int | None = None
+    verification_scope: Literal["all_events", "current_format_only"]
     privacy_mode: str
     retention_hook: str
 

@@ -76,7 +76,7 @@ class AuditLog(Base):
     target_entity_type: Mapped[str] = mapped_column(String(80), default="system")
     target_entity_id: Mapped[str] = mapped_column(String(120), default="")
     outcome_status: Mapped[str] = mapped_column(String(20), default="success")
-    details_json: Mapped[str] = mapped_column(Text, default="{}")
+    details_json: Mapped[str] = mapped_column("details", Text, default="{}")
     prev_hash: Mapped[str] = mapped_column(String(128), default="")
     hash: Mapped[str] = mapped_column(String(128), index=True)
 

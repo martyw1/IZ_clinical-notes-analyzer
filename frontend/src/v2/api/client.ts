@@ -25,6 +25,10 @@ export async function login(username: string, password: string): Promise<LoginRe
       body: { username, password },
     }),
   )
+  return mapLoginResult(payload)
+}
+
+function mapLoginResult(payload: JsonRecord): LoginResult {
   return {
     accessToken: readString(payload, 'access_token'),
     mustResetPassword: readBoolean(payload, 'must_reset_password'),
@@ -36,8 +40,8 @@ export async function getCurrentUser(token: string): Promise<UserProfile> {
   return mapUser(await readRecordPayload(await request('/api/users/me', { token })))
 }
 
-export async function changeCurrentPassword(token: string, currentPassword: string, newPassword: string): Promise<UserProfile> {
-  return mapUser(
+export async function changeCurrentPassword(token: string, currentPassword: string, newPassword: string): Promise<LoginResult> {
+  return mapLoginResult(
     await readRecordPayload(
       await request('/api/users/me/change-password', { token, method: 'POST', body: { current_password: currentPassword, new_password: newPassword } }),
     ),

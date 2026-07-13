@@ -65,3 +65,22 @@ USER_EXTENSIONS = (
     ("password_changed_at", "TEXT NULL"),
     ("recovery_required", "INTEGER NOT NULL DEFAULT 0 CHECK(recovery_required IN (0,1))"),
 )
+
+APP_SETTING_NORMALIZED_EXTENSIONS = (
+    ("api_base_url", "VARCHAR(500) NOT NULL DEFAULT 'https://api.allevasoft.com'"),
+    ("openapi_url", "VARCHAR(500) NOT NULL DEFAULT 'https://api.allevasoft.com/swagger/v1/swagger.json'"),
+    ("api_scopes", "VARCHAR(500) NOT NULL DEFAULT ''"),
+    ("api_pagination_limit", "INTEGER NOT NULL DEFAULT 100"),
+)
+
+APP_SETTING_EXTENSIONS = (
+    *APP_SETTING_NORMALIZED_EXTENSIONS,
+    ("alleva_treatment_plan_sync_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("alleva_treatment_plan_sync_approved", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("alleva_treatment_plan_endpoint_mapping_validated", "BOOLEAN NOT NULL DEFAULT 0"),
+)
+
+APP_SETTING_LEGACY_SOURCES = (
+    ("api_base_url", "alleva_api_base_url"),
+    ("openapi_url", "alleva_openapi_url"),
+)

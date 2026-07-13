@@ -25,6 +25,11 @@ class _TokenClient:
         return httpx.Response(200, request=httpx.Request("POST", url), json={"access_token": "mock-token", "token_type": "Bearer", "expires_in": 3600})
 
 
+class _RejectedTokenClient(_TokenClient):
+    def post(self, url: str, *, data: dict[str, str], headers: dict[str, str]) -> httpx.Response:
+        return httpx.Response(401, request=httpx.Request("POST", url), json={"error": "synthetic-private-vendor-message"})
+
+
 def test_saved_oauth_profile_uses_body_and_basic_styles_without_exposing_token(tmp_path, monkeypatch) -> None:
     client: TestClient = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -55,3 +60,22 @@ def test_saved_oauth_profile_uses_body_and_basic_styles_without_exposing_token(t
     event = next(item for item in audit if item["action"] == "api.oauth.connectivity.tested")
     assert event["details"]["credentials_verified"] is True
     assert "mock-secret" not in str(event)
+
+
+def test_saved_oauth_failure_reports_safe_actionable_http_status(tmp_path, monkeypatch) -> None:
+    client: TestClient = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    monkeypatch.setattr("app.v2.services.oauth_connectivity.httpx.Client", _RejectedTokenClient)
+    client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={"token_url": "https://mock.invalid/connect/token", "client_id": "mock-client", "client_secret": "mock-secret"},
+    )
+
+    result = client.post("/api/api-configuration/test-connectivity", headers=headers)
+
+    assert result.status_code == 200
+    assert result.json()["status"] == "failure"
+    assert "OAuth HTTP 401" in result.json()["message"]
+    assert "mock-secret" not in result.text
+    assert "synthetic-private-vendor-message" not in result.text

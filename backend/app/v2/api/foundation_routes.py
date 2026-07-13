@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.v2.api.deps import AdminUser, CurrentUser, DbSession
 from app.v2.api.models import (
@@ -132,8 +132,8 @@ def current_profile(user: CurrentUser, db: DbSession) -> UserOut:
     return _user_out(user, db)
 
 
-@router.post("/api/users/me/change-password", response_model=UserOut)
-def change_current_password(payload: UserPasswordChange, user: CurrentUser, db: DbSession) -> UserOut:
+@router.post("/api/users/me/change-password", response_model=TokenOut)
+def change_current_password(payload: UserPasswordChange, user: CurrentUser, db: DbSession) -> TokenOut:
     if not verify_password(payload.current_password, user.password_hash):
         record_audit_event(db, action="user.password.change.failed", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -153,7 +153,11 @@ def change_current_password(payload: UserPasswordChange, user: CurrentUser, db: 
     db.commit()
     db.refresh(user)
     record_audit_event(db, action="user.password.changed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
-    return _user_out(user, db)
+    return TokenOut(
+        access_token=create_access_token(user.username, user.password_changed_at),
+        must_reset_password=False,
+        auth_state="active",
+    )
 
 
 @router.get("/api/users", response_model=list[UserOut])
@@ -184,9 +188,31 @@ def create_user(payload: UserCreate, actor: AdminUser, db: DbSession) -> UserOut
         auth_state="password_change_required",
     )
     db.add(created)
+    db.flush()
+    if created.role in {"admin", "office_manager"}:
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO user_facilities"
+                "(user_id,facility_id,assigned_by_user_id,assigned_at) "
+                "SELECT :user_id,id,:actor_id,:assigned_at FROM facilities WHERE is_active=1"
+            ),
+            {
+                "user_id": created.id,
+                "actor_id": actor.id,
+                "assigned_at": _utc_now().isoformat(),
+            },
+        )
+    record_audit_event(
+        db,
+        action="user.create",
+        actor=actor,
+        target_entity_type="user",
+        target_entity_id=str(created.id),
+        details={"username": created.username, "role": created.role},
+        commit=False,
+    )
     db.commit()
     db.refresh(created)
-    record_audit_event(db, action="user.create", actor=actor, target_entity_type="user", target_entity_id=str(created.id), details={"username": created.username, "role": created.role})
     return _user_out(created, db)
 
 

@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.v2.services.bounded_http import ResponseTooLarge, get_bounded
+
 MAX_OPENAPI_BYTES = 2 * 1024 * 1024
 HTTP_METHODS = frozenset({"get", "put", "post", "delete", "patch", "head", "options", "trace"})
 
@@ -26,12 +28,10 @@ def load_openapi_definition(url: str, timeout_seconds: int) -> OpenApiDefinition
         raise OpenApiDefinitionError("Saved OpenAPI URL must be an absolute HTTP or HTTPS URL")
     try:
         with httpx.Client(timeout=max(1, min(timeout_seconds, 60)), follow_redirects=True) as client:
-            response = client.get(url, headers={"accept": "application/json"})
+            response = get_bounded(client, url, maximum_bytes=MAX_OPENAPI_BYTES, headers={"accept": "application/json"})
             response.raise_for_status()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ResponseTooLarge) as exc:
         raise OpenApiDefinitionError("Unable to retrieve the saved OpenAPI definition") from exc
-    if len(response.content) > MAX_OPENAPI_BYTES:
-        raise OpenApiDefinitionError("OpenAPI definition exceeds the 2 MiB safety limit")
     try:
         payload = json.loads(response.content)
     except (TypeError, json.JSONDecodeError) as exc:

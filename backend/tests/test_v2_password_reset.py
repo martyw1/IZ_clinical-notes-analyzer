@@ -19,6 +19,10 @@ def test_must_reset_user_is_blocked_until_current_password_is_changed(tmp_path, 
     changed = client.post("/api/users/me/change-password", headers=headers, json={"current_password": "InitialResetPass1", "new_password": "UpdatedResetPass2"})
     assert changed.status_code == 200
     assert changed.json()["must_reset_password"] is False
+    assert changed.json()["auth_state"] == "active"
+    refreshed_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}
+    assert client.get("/api/v2/dashboard", headers=headers).status_code == 401
+    assert client.get("/api/v2/dashboard", headers=refreshed_headers).status_code == 200
     fresh = client.post("/api/auth/login", json={"username": "resetuser", "password": "UpdatedResetPass2"})
     assert fresh.status_code == 200
     fresh_headers = {"Authorization": f"Bearer {fresh.json()['access_token']}"}

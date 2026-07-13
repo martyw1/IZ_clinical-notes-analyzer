@@ -41,9 +41,17 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
     ))
   }, [listData?.items, query, statusFilter])
   const selectedSummary = useMemo(
-    () => listData?.items.find((item) => item.patientId === selectedPatientId) ?? listData?.items[0] ?? null,
-    [listData, selectedPatientId],
+    () => visibleItems.find((item) => item.patientId === selectedPatientId) ?? visibleItems[0] ?? null,
+    [selectedPatientId, visibleItems],
   )
+
+  useEffect(() => {
+    if (!selectedSummary) {
+      setSelectedPlan(null)
+      return
+    }
+    if (selectedPatientId !== selectedSummary.patientId) setSelectedPatientId(selectedSummary.patientId)
+  }, [selectedPatientId, selectedSummary])
 
   useEffect(() => {
     let cancelled = false
@@ -161,6 +169,9 @@ export function TreatmentPlansPage({ token, user }: TreatmentPlansPageProps) {
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
                 </tr>
               ))}
+              {visibleItems.length === 0 && (
+                <tr><td colSpan={4} className='muted'>No treatment plans match the current filters.</td></tr>
+              )}
             </tbody>
           </table>
         </article>

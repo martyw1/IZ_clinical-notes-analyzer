@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { cancelApiHarnessJob, getApiHarnessJob, listApiHarnessArtifacts, startApiHarnessJob } from '../api/jobs'
+import { useEffect, useRef, useState } from 'react'
+import { cancelApiHarnessJob, downloadApiHarnessArtifact, getApiHarnessJob, getApiHarnessPreview, listApiHarnessArtifacts, startApiHarnessJob } from '../api/jobs'
 import { ApiRequestError } from '../api/json'
-import type { ApiHarnessArtifact, ApiHarnessJob } from '../api/types'
+import type { ApiHarnessArtifact, ApiHarnessJob, ApiHarnessPreview } from '../api/types'
 
 type JobProgressCardProps = {
   readonly token: string
@@ -14,13 +14,22 @@ function messageForError(error: unknown): string {
 }
 
 export function JobProgressCard({ token }: JobProgressCardProps) {
+  const isMounted = useRef(true)
   const [job, setJob] = useState<ApiHarnessJob | null>(null)
   const [artifacts, setArtifacts] = useState<readonly ApiHarnessArtifact[]>([])
+  const [preview, setPreview] = useState<ApiHarnessPreview | null>(null)
   const [error, setError] = useState('')
   const [isStarting, setIsStarting] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const status = job?.status ?? 'idle'
   const progress = job?.progressPercent ?? 0
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
 
   const startJob = async () => {
     setError('')
@@ -30,7 +39,16 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
       setJob(started)
       const completed = await pollJob(started)
       setJob(completed)
-      setArtifacts(completed.artifacts.length ? completed.artifacts : await listApiHarnessArtifacts(token, completed.jobId))
+      if (completed.status === 'completed' || completed.status === 'completed_with_warnings') {
+        const [completedArtifacts, completedPreview] = await Promise.all([
+          completed.artifacts.length ? completed.artifacts : listApiHarnessArtifacts(token, completed.jobId),
+          getApiHarnessPreview(token, completed.jobId),
+        ])
+        setArtifacts(completedArtifacts)
+        setPreview(completedPreview)
+      } else if (completed.status === 'failed') {
+        setArtifacts(await listApiHarnessArtifacts(token, completed.jobId))
+      }
     } catch (startError) {
       setError(messageForError(startError))
     } finally {
@@ -40,11 +58,12 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
 
   async function pollJob(started: ApiHarnessJob): Promise<ApiHarnessJob> {
     let current = started
-    for (let attempt = 0; attempt < 20 && !isTerminalStatus(current.status); attempt += 1) {
+    for (let attempt = 0; attempt < 5_000 && !isTerminalStatus(current.status) && isMounted.current; attempt += 1) {
       await sleep(120)
       current = await getApiHarnessJob(token, current.jobId)
-      setJob(current)
+      if (isMounted.current) setJob(current)
     }
+    if (!isTerminalStatus(current.status) && isMounted.current) throw new Error('The API job is still running. Return to this page to check it again.')
     return current
   }
 
@@ -60,14 +79,22 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
     }
   }
 
+  async function downloadArtifact(artifact: ApiHarnessArtifact) {
+    try {
+      await downloadApiHarnessArtifact(token, job?.jobId ?? '', artifact)
+    } catch (downloadError) {
+      setError(messageForError(downloadError))
+    }
+  }
+
   return (
-    <section className='panel job-card' aria-label='Pull ALL Treatment Plans job card'>
+    <section className='panel job-card' aria-label='Diagnostic treatment-plan pull'>
       <div>
-        <p className='eyebrow'>Large API job</p>
-        <h2>Pull ALL Treatment Plans - ALL Fields</h2>
-        <p>Starts as a backend job and keeps browser output bounded to compact progress and previews.</p>
+        <p className='eyebrow'>Preview and export only</p>
+        <h2>Diagnostic treatment-plan pull</h2>
+        <p>Pulls available treatment-plan metadata into a redacted preview and secret-keyed identifier-hashed local artifacts. Direct patient and treatment-plan identifiers are not written. This diagnostic does not add records to the Treatment Plans queue.</p>
       </div>
-      <div className='job-meter' aria-label={`Job progress ${progress}%`}>
+      <div className='job-meter' role='progressbar' aria-label='API job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
         <span style={{ width: `${progress}%` }} />
       </div>
       <dl className='job-stats'>
@@ -85,20 +112,40 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
         </div>
       </dl>
       <div className='button-row'>
-        <button type='button' onClick={startJob} disabled={isStarting}>
-          {isStarting ? 'Starting large job...' : 'Start large job'}
+        <button type='button' onClick={startJob} disabled={isStarting || (job !== null && !isTerminalStatus(status))}>
+          {isStarting ? 'Starting diagnostic pull...' : 'Pull treatment plans for diagnostic preview'}
         </button>
         <button type='button' className='secondary-button' onClick={() => void cancelJob()} disabled={!job || isCancelling || isTerminalStatus(status)}>
           {isCancelling ? 'Cancelling job...' : 'Cancel in backend queue'}
         </button>
       </div>
       {error && <p role='alert' className='error-banner'>{error}</p>}
+      {status === 'completed_with_warnings' && (
+        <p role='status'>Pull completed safely with a warning: Alleva repeated a full page or the diagnostic safety limit was reached. Duplicate pages were not written.</p>
+      )}
+      {status === 'failed' && (
+        <p role='alert' className='error-banner'>The diagnostic pull failed before completion. A redacted failure was recorded in Forensic Logs and the local error artifact; credentials and response bodies were not logged.</p>
+      )}
       {artifacts.length > 0 && (
         <ul className='artifact-list' aria-label='Completed job artifacts'>
           {artifacts.map((artifact) => (
-            <li key={artifact.artifactId}>{artifact.name}</li>
+            <li key={artifact.artifactId}>
+              <span>{artifact.name}</span>
+              <button type='button' className='secondary-button' onClick={() => void downloadArtifact(artifact)} aria-label={`Download ${artifact.name}`}>Download</button>
+            </li>
           ))}
         </ul>
+      )}
+      {preview && (
+        <div>
+          <p className='muted'>{preview.message}</p>
+          {preview.records.length > 0 && (
+            <table>
+              <thead><tr><th>Record</th><th>Source</th><th>Redaction</th></tr></thead>
+              <tbody>{preview.records.map((record) => <tr key={`${record.recordIndex}-${record.recordId}`}><td>{record.recordId}</td><td>{record.sourceEndpoint}</td><td>{record.redactionStatus}</td></tr>)}</tbody>
+            </table>
+          )}
+        </div>
       )}
     </section>
   )

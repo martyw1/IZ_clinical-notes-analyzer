@@ -4,11 +4,12 @@ import base64
 import hashlib
 import sqlite3
 from dataclasses import dataclass
+from typing import TypeAlias
 
 from cryptography.fernet import Fernet
+from pydantic import JsonValue
 
-type JsonPrimitive = str | int | float | bool | None
-type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
+JsonPrimitive: TypeAlias = str | int | float | bool | None
 
 
 @dataclass(frozen=True, slots=True)

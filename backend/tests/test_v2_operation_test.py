@@ -59,3 +59,4 @@ def test_saved_profile_read_only_operation_uses_in_memory_bearer_and_safe_result
     assert "operation-token" not in tested.text
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert any(item["action"] == "api.operation.read_only.tested" for item in audit)
+    assert all("prev_hash" not in item and "hash" not in item for item in audit)

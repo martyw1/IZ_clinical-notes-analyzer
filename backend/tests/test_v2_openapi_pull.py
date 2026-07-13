@@ -29,6 +29,14 @@ class _OpenApiClient:
             },
         )
 
+    def build_request(self, method: str, url: str, **kwargs: object) -> httpx.Request:
+        return httpx.Request(method, url, params=kwargs.get("params"), headers=kwargs.get("headers"))
+
+    def send(self, request: httpx.Request, *, stream: bool = False) -> httpx.Response:
+        response = self.get(str(request.url), headers={"accept": request.headers["accept"]})
+        response.request = request
+        return response
+
 
 def test_openapi_pull_uses_saved_profile_and_records_safe_summary(tmp_path, monkeypatch) -> None:
     client: TestClient = _fresh_client(tmp_path, monkeypatch)

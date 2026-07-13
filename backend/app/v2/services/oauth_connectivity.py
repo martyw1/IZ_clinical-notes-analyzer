@@ -48,8 +48,18 @@ def request_client_credentials(
             response = client.post(token_url, data=data, headers=headers)
             response.raise_for_status()
             payload = response.json()
-    except (httpx.HTTPError, ValueError):
-        return OAuthConnectivityResult("failure", style, "OAuth token request did not complete successfully."), ""
+    except httpx.HTTPStatusError as exc:
+        return OAuthConnectivityResult("failure", style, _safe_http_failure(exc.response.status_code)), ""
+    except httpx.RequestError:
+        return OAuthConnectivityResult(
+            "failure", style,
+            "Could not reach the saved OAuth token endpoint. Check the URL, network connection, and vendor availability.",
+        ), ""
+    except ValueError:
+        return OAuthConnectivityResult(
+            "failure", style,
+            "The OAuth token endpoint returned an unreadable response. Verify that the saved URL is the vendor token endpoint.",
+        ), ""
     token = payload.get("access_token") if isinstance(payload, dict) else None
     if not isinstance(token, str) or not token.strip():
         return OAuthConnectivityResult("failure", style, "OAuth token response did not include an access token."), ""
@@ -58,3 +68,15 @@ def request_client_credentials(
         "ok", style, "OAuth client-credentials token obtained and discarded after verification.",
         str(payload.get("token_type") or "Bearer"), expires_in if isinstance(expires_in, int) else None,
     ), token.strip()
+
+
+def _safe_http_failure(status_code: int) -> str:
+    if status_code in {401, 403}:
+        return f"OAuth HTTP {status_code}: the vendor rejected the saved client credentials or authentication style."
+    if status_code == 404:
+        return "OAuth HTTP 404: the saved token endpoint was not found. Verify the token URL in Settings."
+    if status_code == 400:
+        return "OAuth HTTP 400: the vendor rejected the token request. Verify scopes, client ID, secret, and authentication style."
+    if status_code >= 500:
+        return f"OAuth HTTP {status_code}: the vendor token service is currently unavailable."
+    return f"OAuth HTTP {status_code}: the vendor did not accept the token request."

@@ -1,6 +1,6 @@
 import { readNumber, readRecordList, readRecordListPayload, readRecordPayload, readString } from './json'
 import { request } from './request'
-import type { ApiHarnessArtifact, ApiHarnessJob } from './types'
+import type { ApiHarnessArtifact, ApiHarnessJob, ApiHarnessPreview } from './types'
 
 export async function startApiHarnessJob(token: string): Promise<ApiHarnessJob> {
   return mapJob(
@@ -26,6 +26,34 @@ export async function cancelApiHarnessJob(token: string, jobId: string): Promise
 
 export async function listApiHarnessArtifacts(token: string, jobId: string): Promise<readonly ApiHarnessArtifact[]> {
   return (await readRecordListPayload(await request(`/api/v2/api-harness/jobs/${jobId}/artifacts`, { token }))).map(mapArtifact)
+}
+
+export async function getApiHarnessPreview(token: string, jobId: string): Promise<ApiHarnessPreview> {
+  const payload = await readRecordPayload(await request(`/api/v2/api-harness/jobs/${jobId}/preview`, { token }))
+  return {
+    records: readRecordList(payload, 'records').map((record) => ({
+      recordIndex: readNumber(record, 'record_index'),
+      recordId: readString(record, 'record_id'),
+      sourceEndpoint: readString(record, 'source_endpoint'),
+      redactionStatus: readString(record, 'redaction_status'),
+    })),
+    message: readString(payload, 'message'),
+  }
+}
+
+export async function downloadApiHarnessArtifact(token: string, jobId: string, artifact: ApiHarnessArtifact): Promise<void> {
+  const response = await request(
+    `/api/v2/api-harness/jobs/${encodeURIComponent(jobId)}/artifacts/${encodeURIComponent(artifact.artifactId)}`,
+    { token },
+  )
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = artifact.name
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function mapJob(record: Record<string, unknown>): ApiHarnessJob {

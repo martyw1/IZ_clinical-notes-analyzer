@@ -176,6 +176,7 @@ def _paged_records(
             is_cancelled,
             contract.payload.rate_limit.retry_after_seconds,
             rate_limiter,
+            contract.payload.pagination.maximum_response_bytes,
         )
         response_size = int(response.headers.get("content-length", "0"))
         if response_size > pagination.maximum_response_bytes:
@@ -354,17 +355,23 @@ def _endpoint_json(
     client: httpx.Client, profile: AppSetting, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter, **values: str,
 ) -> object:
-    response = _get_with_retry(client, urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter)
+    response = _get_with_retry(client, urljoin(f"{profile.api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter, contract.payload.pagination.maximum_response_bytes)
     return response.json()
 
 
-def _get_with_retry(client: httpx.Client, url: str, params: dict[str, str | int] | None, headers: dict[str, str], is_cancelled: Callable[[], bool], retry_after_seconds: int, rate_limiter: ApprovedRequestRateLimiter | None = None) -> httpx.Response:
+def _get_with_retry(client: httpx.Client, url: str, params: dict[str, str | int] | None, headers: dict[str, str], is_cancelled: Callable[[], bool], retry_after_seconds: int, rate_limiter: ApprovedRequestRateLimiter | None = None, maximum_response_bytes: int = 5 * 1024 * 1024) -> httpx.Response:
     for attempt in range(3):
         if is_cancelled():
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
         if rate_limiter:
             rate_limiter.acquire(is_cancelled)
-        response = client.get(url, params=params, headers=headers)
+        response = get_bounded(
+            client,
+            url,
+            maximum_bytes=maximum_response_bytes,
+            params=params,
+            headers=headers,
+        )
         if response.status_code not in {429, 500, 502, 503, 504}:
             response.raise_for_status()
             return response
@@ -468,3 +475,4 @@ def _nested_text(payload: dict[str, object], collection: str, *keys: str) -> str
             if text:
                 return text
     return ""
+from app.v2.services.bounded_http import get_bounded

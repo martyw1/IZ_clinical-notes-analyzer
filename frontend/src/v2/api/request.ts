@@ -22,6 +22,15 @@ export async function request(path: string, options: RequestOptions = {}): Promi
     body: options.formBody ?? (options.body ? JSON.stringify(options.body) : undefined),
   })
   if (response.ok) return response
-  const payload = await readRecordPayload(response)
+  let payload
+  try {
+    payload = await readRecordPayload(response)
+  } catch (error) {
+    if (error instanceof ApiRequestError) throw error
+    throw new ApiRequestError(
+      response.status,
+      'The local service returned an unexpected error. Restart the app and try again.',
+    )
+  }
   throw new ApiRequestError(response.status, readString(payload, 'detail', 'The local API request failed.'))
 }
