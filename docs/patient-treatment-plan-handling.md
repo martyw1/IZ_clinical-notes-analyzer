@@ -8,6 +8,15 @@ Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026
 
 The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. This document remains the historical/shared implementation map; the V2 contract and final synthetic-only validation procedure are in `docs/v2-beta/`. No live Alleva production validation is claimed. Do not use production patient data, exports, databases, credentials, or uploads when performing beta.2 release validation.
 
+### 2026-07-13 V2 treatment-plan queue update
+
+- The Treatment Plans tab and API Testing Harness now share the same approved operational pull. A completed pull refreshes the current queue on the Treatment Plans screen.
+- A changed record with the same source treatment-plan ID creates an encrypted immutable successor version and replaces the visible current plan. An identical replay creates no duplicate version.
+- The completion audit records created, updated, and unchanged counts plus the exact `updated_treatment_plan_ids`; clinical narrative and patient names remain excluded from logs.
+- `Patient Roster` lists authorized patient IDs, plan IDs, lifecycle/LOC/source metadata, and plan status without patient-name fields.
+- Administrators and office managers can export the authorized current treatment-plan list and statuses as formula-safe CSV through `GET /api/v2/exports/treatment-plans.csv`.
+- These V2 changes do not open live Alleva import. The approved versioned contract, API/sync gates, external R3/Alleva approval blocker, and unvalidated LOC-change window remain in force.
+
 ## Purpose
 
 This is the current implementation reference for how patient treatment plans are handled in the app. It covers the local database model, manual upload sync, gated Alleva REST sync, the patient-level aggregate, deterministic timeliness decisions, selected-client checklist results, privacy controls, and the user-facing Treatment Plans queue.

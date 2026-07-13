@@ -4,6 +4,7 @@ import json
 import hashlib
 from dataclasses import dataclass
 from datetime import timezone
+from enum import StrEnum
 from typing import Final
 
 from sqlalchemy import text
@@ -41,6 +42,7 @@ TREATMENT_PLAN_STATUS_ORDER: Final = (
 class TreatmentPlanQueueItem:
     patient_id: str
     patient_display_label: str
+    treatment_plan_id: str
     current_level_of_care: str
     admission_date: str
     next_due_date: str
@@ -65,6 +67,18 @@ class StoredTreatmentPlan:
     missing_criteria_count: int
     content_summary_json: str
     warnings_json: str
+
+
+class TreatmentPlanSaveDisposition(StrEnum):
+    CREATED = "created"
+    UPDATED = "updated"
+    UNCHANGED = "unchanged"
+
+
+@dataclass(frozen=True, slots=True)
+class TreatmentPlanSaveResult:
+    stored_plan: StoredTreatmentPlan
+    disposition: TreatmentPlanSaveDisposition
 
 
 def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
@@ -93,6 +107,20 @@ def save_treatment_plan_aggregate(
     actor: User,
     sync_provenance: SyncImportProvenance | None = None,
 ) -> StoredTreatmentPlan:
+    return save_treatment_plan_aggregate_with_disposition(
+        db,
+        aggregate,
+        actor,
+        sync_provenance=sync_provenance,
+    ).stored_plan
+
+
+def save_treatment_plan_aggregate_with_disposition(
+    db: Session,
+    aggregate: TreatmentPlanAggregate,
+    actor: User,
+    sync_provenance: SyncImportProvenance | None = None,
+) -> TreatmentPlanSaveResult:
     aggregate = aggregate.model_copy(update={"patient_display_label": f"Patient ID {aggregate.patient_id}"})
     payload_json = aggregate.model_dump_json()
     encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
@@ -125,7 +153,26 @@ def save_treatment_plan_aggregate(
         {"patient_id": patient_id},
     ).first()
     version_ordinal = int(latest[1]) + 1 if latest else 1
-    supersedes_version_id = int(latest[0]) if latest else None
+    prior_same_plan = db.execute(
+        text(
+            "SELECT id,content_sha256 FROM treatment_plan_versions "
+            "WHERE patient_id=:patient_id AND source_system=:source_system AND source_record_id=:source_record_id "
+            "ORDER BY version_ordinal DESC,id DESC LIMIT 1"
+        ),
+        {
+            "patient_id": patient_id,
+            "source_system": aggregate.source_mode,
+            "source_record_id": aggregate.content_snapshot.plan_id,
+        },
+    ).first()
+    if prior_same_plan is not None and str(prior_same_plan[1]) == content_sha256:
+        return TreatmentPlanSaveResult(_stored_plan(aggregate), TreatmentPlanSaveDisposition.UNCHANGED)
+    supersedes_version_id = int(prior_same_plan[0]) if prior_same_plan else None
+    disposition = (
+        TreatmentPlanSaveDisposition.UPDATED
+        if prior_same_plan is not None
+        else TreatmentPlanSaveDisposition.CREATED
+    )
     db.execute(
         text(
             """INSERT OR IGNORE INTO treatment_plan_versions(
@@ -171,7 +218,7 @@ def save_treatment_plan_aggregate(
     if events.new_review:
         evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "new_review", sync_provenance=sync_provenance)
     db.commit()
-    return _stored_plan(evaluated)
+    return TreatmentPlanSaveResult(_stored_plan(evaluated), disposition)
 
 
 def treatment_plan_aggregate_for_patient(db: Session, patient_id: str) -> TreatmentPlanAggregate | None:
@@ -196,6 +243,7 @@ def _queue_item_from_import(row: StoredTreatmentPlan, returned_criteria_count: i
     return TreatmentPlanQueueItem(
         patient_id=row.patient_id,
         patient_display_label=row.patient_display_label,
+        treatment_plan_id=row.plan_id,
         current_level_of_care=row.current_level_of_care,
         admission_date=row.admission_date,
         next_due_date=row.next_due_date,

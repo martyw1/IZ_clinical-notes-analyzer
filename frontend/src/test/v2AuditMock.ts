@@ -8,6 +8,10 @@ export function auditLogsPayload() {
       event_id: 'evt-2', timestamp_utc: '2026-07-08T10:01:00Z', actor_username: 'admin', actor_role: 'admin',
       action: 'api_harness.job.failed', details: { error_class: 'HTTPStatusError', failure_stage: 'first_page', http_status: 503 },
       target_entity_type: 'api_harness_job', target_entity_id: 'job-synthetic', outcome_status: 'failure',
+    }, {
+      event_id: 'evt-3', timestamp_utc: '2026-07-08T10:02:00Z', actor_username: 'admin', actor_role: 'admin',
+      action: 'alleva_sync.completed', details: { created_count: 0, updated_count: 1, unchanged_count: 0, updated_treatment_plan_ids: ['plan-812'] },
+      target_entity_type: 'alleva_sync_job', target_entity_id: 'sync-912', outcome_status: 'success',
     }],
   }
 }

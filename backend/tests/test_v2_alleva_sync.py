@@ -31,6 +31,7 @@ class _MockAllevaState:
             {"clientId": "912", "isActive": True, "levelOfCare": "PHP", "admissionDate": "2026-06-01"}
         ]
     )
+    detail_problem: list[str] = field(default_factory=lambda: ["Synthetic clinical problem."])
 
 
 class _MockAllevaHandler(BaseHTTPRequestHandler):
@@ -64,7 +65,7 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
         if path == "/treatment-plans/plan-912/reviews/review-912":
             self._respond({"id": "review-912", "reviewDate": "2026-06-15"})
             return
-        self._respond({"id": "plan-912", "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": "Synthetic clinical problem."}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
+        self._respond({"id": "plan-912", "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": type(self).state.detail_problem[0]}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
 
     def log_message(self, _format: str, *_args: str | int | float | None) -> None:
         return None
@@ -250,8 +251,95 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
-    assert completed["details"] == {"imported_patient_count": 1, "skipped_plan_count": 0}
+    assert completed["details"] == {
+        "created_treatment_plan_count": 1,
+        "imported_patient_count": 1,
+        "skipped_plan_count": 0,
+        "unchanged_treatment_plan_count": 0,
+        "updated_treatment_plan_count": 0,
+        "updated_treatment_plan_ids": [],
+    }
     assert "mock-secret" not in str(audit)
+
+
+def test_repeated_sync_updates_same_plan_id_and_leaves_identical_replay_unchanged(tmp_path, monkeypatch) -> None:
+    # Given: an approved synthetic source with one stable treatment-plan ID.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+
+    with _mock_alleva_server() as (base_url, state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "treatment_plan_endpoint_mapping_validated": True,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+
+        # When: the plan is created, changed under the same ID, then replayed unchanged.
+        first = _completed_sync(client, headers)
+        assert first["status"] == "completed"
+        state.detail_problem[0] = "Synthetic revised clinical problem."
+        second = _completed_sync(client, headers)
+        assert second["status"] == "completed"
+        third = _completed_sync(client, headers)
+        assert third["status"] == "completed"
+
+    # Then: two immutable versions exist, the changed version is current, and the replay adds no duplicate.
+    detail = client.get("/api/v2/treatment-plans/912", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["content_snapshot"]["problems"][0]["problem_description"] == "Synthetic revised clinical problem."
+    queue = client.get("/api/v2/treatment-plans", headers=headers).json()["items"]
+    assert queue[0]["treatment_plan_id"] == "plan-912"
+    with sqlite3.connect(database_path) as database:
+        versions = database.execute(
+            "SELECT id,source_record_id,supersedes_version_id FROM treatment_plan_versions ORDER BY id"
+        ).fetchall()
+    assert len(versions) == 2
+    assert [row[1] for row in versions] == ["plan-912", "plan-912"]
+    assert versions[1][2] == versions[0][0]
+
+    audit = client.get("/api/audit/logs", headers=headers).json()["items"]
+    completions = [item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed"]
+    assert completions[0]["details"] == {
+        "created_treatment_plan_count": 0,
+        "imported_patient_count": 1,
+        "skipped_plan_count": 0,
+        "unchanged_treatment_plan_count": 1,
+        "updated_treatment_plan_count": 0,
+        "updated_treatment_plan_ids": [],
+    }
+    assert completions[1]["details"] == {
+        "created_treatment_plan_count": 0,
+        "imported_patient_count": 1,
+        "skipped_plan_count": 0,
+        "unchanged_treatment_plan_count": 0,
+        "updated_treatment_plan_count": 1,
+        "updated_treatment_plan_ids": ["plan-912"],
+    }
+
+
+def _completed_sync(client, headers: dict[str, str]) -> dict[str, JsonValue]:
+    started = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert started.status_code == 202, started.text
+    payload = started.json()
+    for _ in range(80):
+        payload = client.get(f"/api/v2/alleva-sync/jobs/{payload['job_id']}", headers=headers).json()
+        if payload["status"] in {"completed", "failed", "cancelled"}:
+            return payload
+        sleep(0.05)
+    raise AssertionError("synthetic sync did not reach a terminal state")
 
 
 def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_flight(tmp_path, monkeypatch) -> None:

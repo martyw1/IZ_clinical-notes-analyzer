@@ -226,6 +226,8 @@ describe('V2 active app shell', () => {
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
     expect(screen.getByText('api_harness.job.failed')).toBeInTheDocument()
     expect(screen.getByText(/error_class=HTTPStatusError.*failure_stage=first_page.*http_status=503/i)).toBeInTheDocument()
+    expect(screen.getByText('alleva_sync.completed')).toBeInTheDocument()
+    expect(screen.getByText(/updated_treatment_plan_ids=plan-812/i)).toBeInTheDocument()
     expect(screen.queryByText('new-secret-value')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /verify hash chain/i }))
     expect(await screen.findByRole('status')).toHaveTextContent('Hash chain verified across 3 events.')
@@ -310,6 +312,53 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /open treatment plans queue/i }))
     expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('pulls from Treatment Plans, refreshes the populated list, and exports plan statuses', async () => {
+    const createObjectUrl = vi.fn(() => 'blob:treatment-plan-export')
+    const revokeObjectUrl = vi.fn()
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByDisplayValue('R3 Recovery Services')
+    fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
+    fireEvent.click(screen.getByLabelText('Enable API testing'))
+    fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
+    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
+    fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    expect(await screen.findByText('plan-812')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate queue/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
+    const queueReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/treatment-plans')
+    expect(queueReads.length).toBeGreaterThanOrEqual(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /export treatment plans and statuses/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v2/exports/treatment-plans.csv', expect.objectContaining({ headers: expect.any(Headers) })))
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(anchorClick).toHaveBeenCalled()
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:treatment-plan-export')
+  })
+
+  it('shows a patient roster without patient names', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
+
+    expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
+    expect(screen.getByText('812')).toBeInTheDocument()
+    expect(screen.getByText('plan-812')).toBeInTheDocument()
+    expect(screen.getByText('Needs Review')).toBeInTheDocument()
+    expect(screen.queryByText(/synthetic patient name|first name|last name/i)).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
   })
 
   it('imports normalized manual treatment-plan aggregate files through the backend', async () => {

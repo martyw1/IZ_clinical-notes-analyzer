@@ -51,6 +51,7 @@ export type DashboardData = {
 export type TreatmentPlanListItem = {
   readonly patientId: string
   readonly patientDisplayLabel: string
+  readonly treatmentPlanId: string
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly nextDueDate: string
@@ -64,6 +65,22 @@ export type TreatmentPlanListItem = {
 export type TreatmentPlanListData = {
   readonly items: readonly TreatmentPlanListItem[]
   readonly statusOrder: readonly TreatmentPlanStatus[]
+}
+
+export type PatientRosterItem = {
+  readonly patientId: string
+  readonly sourceMode: string
+  readonly lifecycleState: string
+  readonly currentLevelOfCare: string
+  readonly treatmentPlanId: string
+  readonly treatmentPlanStatus: string
+  readonly firstSeenAt: string
+  readonly lastSeenAt: string
+  readonly reconciledAt: string
+}
+
+export type PatientRosterData = {
+  readonly items: readonly PatientRosterItem[]
 }
 
 export type ManualTreatmentPlanImportResult = {

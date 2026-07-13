@@ -71,6 +71,7 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/dashboard"),
             ("GET", "/api/v2/treatment-plans"),
             ("GET", "/api/v2/treatment-plans/{patient_id}"),
+            ("GET", "/api/v2/patient-roster"),
         }
     ),
     "patient_manager": frozenset(
@@ -82,6 +83,7 @@ ROUTE_FAMILIES: Final = {
             ("DELETE", "/api/v2/treatment-plans/{patient_id}/source-documents/{source_file_id}"),
             ("GET", "/api/v2/treatment-plans/{patient_id}/source-documents/{source_file_id}/download"),
             ("GET", "/api/v2/exports/{patient_id}/checklist-evidence.csv"),
+            ("GET", "/api/v2/exports/treatment-plans.csv"),
         }
     ),
     "correction": frozenset(

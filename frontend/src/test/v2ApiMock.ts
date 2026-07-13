@@ -12,9 +12,9 @@ type FetchState = {
   readonly mustResetPassword?: boolean
 }
 
-export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
+export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
 
-const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Manual Upload', 'Corrections', 'Help'] as const
+const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
   const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let apiConfigured = false; let passwordResetRequired = state.mustResetPassword ?? false; let harnessPolls = 0
@@ -31,6 +31,8 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/v2/navigation') return jsonResponse({ items: state.role === 'admin' ? adminNavigation : counselorNavigation, active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return jsonResponse(dashboardPayload())
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload())
+    if (path === '/api/v2/patient-roster') return jsonResponse(patientRosterPayload())
+    if (path === '/api/v2/exports/treatment-plans.csv') return treatmentPlanExportResponse()
     if (path === '/api/v2/treatment-plans/812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812')))
     if (path === '/api/v2/treatment-plans/812/manager-actions' && method === 'POST') return jsonResponse({ status: 'saved' })
     if (path === '/api/v2/corrections') return jsonResponse({ items: correctionSubmitted ? [] : [correctionQueueItemPayload()] })
@@ -107,6 +109,16 @@ function sourceDocumentDownloadResponse(): Response {
   })
 }
 
+function treatmentPlanExportResponse(): Response {
+  return new Response('patient_id,treatment_plan_id,status\r\n812,plan-812,Needs Review\r\n', {
+    status: 200,
+    headers: {
+      'content-disposition': 'attachment; filename="treatment-plans.csv"',
+      'content-type': 'text/csv',
+    },
+  })
+}
+
 function importResponse(patientId: string, archived: boolean, patientIdCorrectionApplied = false): Response {
   return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `Patient ID ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
 }
@@ -146,6 +158,7 @@ function treatmentPlansPayload() {
     items: [{
       patient_id: '812',
       patient_display_label: 'Patient ID 812',
+      treatment_plan_id: 'plan-812',
       current_level_of_care: 'PHP',
       admission_date: '2026-06-01',
       next_due_date: '2026-07-15',
@@ -156,6 +169,22 @@ function treatmentPlansPayload() {
       warnings: ['LOC-change update window remains unvalidated.'],
     }],
     status_order: ['Missing Data', 'Needs Review', 'Incomplete', 'Within Window', 'Late', 'Conflicting Evidence', 'Unable to Evaluate'],
+  }
+}
+
+function patientRosterPayload() {
+  return {
+    items: [{
+      patient_id: '812',
+      source_mode: 'alleva_rest_api',
+      lifecycle_state: 'active',
+      current_level_of_care: 'PHP',
+      treatment_plan_id: 'plan-812',
+      treatment_plan_status: 'Needs Review',
+      first_seen_at: '2026-07-08T10:00:00Z',
+      last_seen_at: '2026-07-12T10:00:00Z',
+      reconciled_at: '2026-07-12T10:01:00Z',
+    }],
   }
 }
 

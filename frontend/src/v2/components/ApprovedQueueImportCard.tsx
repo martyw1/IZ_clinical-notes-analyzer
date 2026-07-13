@@ -7,9 +7,11 @@ type Props = {
   readonly config: ApiConfiguration | null
   readonly token: string
   readonly onNavigate: (view: string) => void
+  readonly onCompleted?: () => void
+  readonly showOpenQueueButton?: boolean
 }
 
-export function ApprovedQueueImportCard({ config, token, onNavigate }: Props) {
+export function ApprovedQueueImportCard({ config, token, onNavigate, onCompleted, showOpenQueueButton = true }: Props) {
   const [job, setJob] = useState<ApiHarnessJob | null>(null)
   const [message, setMessage] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -28,7 +30,10 @@ export function ApprovedQueueImportCard({ config, token, onNavigate }: Props) {
         setJob(current)
       }
       if (current.status === 'completed' || current.status === 'completed_with_warnings') {
-        setMessage(`Queue populated and deterministic evaluation completed for ${current.recordsWritten} treatment plan${current.recordsWritten === 1 ? '' : 's'}.`)
+        setMessage(current.recordsWritten === 0
+          ? 'Queue refreshed. No new or changed treatment plans were written.'
+          : `Queue populated and deterministic evaluation completed for ${current.recordsWritten} treatment plan${current.recordsWritten === 1 ? '' : 's'}.`)
+        onCompleted?.()
       } else {
         keepLockedForActiveJob = !isTerminal(current.status)
         setMessage(keepLockedForActiveJob
@@ -65,7 +70,7 @@ export function ApprovedQueueImportCard({ config, token, onNavigate }: Props) {
       )}
       {job && <p>Status: {job.status} | imported: {job.recordsWritten} | failed: {job.recordsFailed}</p>}
       {message && <p role='status'>{message}</p>}
-      {(job?.status === 'completed' || job?.status === 'completed_with_warnings') && (
+      {showOpenQueueButton && (job?.status === 'completed' || job?.status === 'completed_with_warnings') && (
         <button type='button' className='secondary-button' onClick={() => onNavigate('Treatment Plans')}>Open Treatment Plans queue</button>
       )}
     </section>

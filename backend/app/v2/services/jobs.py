@@ -444,7 +444,14 @@ class ApiHarnessJobService:
                 actor=actor,
                 target_entity_type="integration_sync",
                 target_entity_id="alleva_treatment_plan_sync",
-                details={"imported_patient_count": result.imported_patient_count, "skipped_plan_count": result.skipped_plan_count},
+                details={
+                    "imported_patient_count": result.imported_patient_count,
+                    "skipped_plan_count": result.skipped_plan_count,
+                    "created_treatment_plan_count": result.created_treatment_plan_count,
+                    "updated_treatment_plan_count": result.updated_treatment_plan_count,
+                    "unchanged_treatment_plan_count": result.unchanged_treatment_plan_count,
+                    "updated_treatment_plan_ids": list(result.updated_treatment_plan_ids),
+                },
             )
         self._set(
             job_id,
@@ -452,7 +459,7 @@ class ApiHarnessJobService:
             completed_at=_now(),
             progress_percent=100,
             records_seen=result.imported_patient_count + result.skipped_plan_count,
-            records_written=result.imported_patient_count,
+            records_written=result.created_treatment_plan_count + result.updated_treatment_plan_count,
             records_failed=result.skipped_plan_count,
             current_endpoint="completed",
         )

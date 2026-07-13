@@ -14,6 +14,9 @@ Version metadata name: `Version 2.0 Beta release-readiness update`
 
 Summary:
 
+- Post-build 2026-07-13 update: adds the shared approved operational pull to Treatment Plans, automatic queue refresh from either pull surface, immutable same-ID update history with exact updated-ID audit details, a patient-name-free Patient Roster tab, and a manager-authorized treatment-plan/status CSV export.
+- Post-build validation used only a disposable synthetic local profile and local mock Alleva service; the live-import and LOC-change external gates remain unchanged.
+
 - Aligns `VERSION`, `VERSION.json`, frontend package metadata, `/api/version`, the V2 footer, sample OpenAPI metadata, and Windows preflight on the active V2 beta version.
 - Adds an explicit synthetic-only isolated-environment final-validation procedure and a single release-readiness record for operator, security, and support handoff.
 - Records the remaining external gates: supervised approved live Alleva validation; exposed-credential rotation and downstream/history-remediation approval; and R3 IT/records decisions on signing and retention/legal hold.

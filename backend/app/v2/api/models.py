@@ -106,6 +106,7 @@ class DashboardOut(V2Model):
 class TreatmentPlanListItemOut(V2Model):
     patient_id: str
     patient_display_label: str
+    treatment_plan_id: str
     current_level_of_care: str
     admission_date: str
     next_due_date: str
@@ -120,6 +121,22 @@ class TreatmentPlanListItemOut(V2Model):
 class TreatmentPlanListOut(V2Model):
     items: tuple[TreatmentPlanListItemOut, ...]
     status_order: tuple[str, ...]
+
+
+class PatientRosterItemOut(V2Model):
+    patient_id: str
+    source_mode: str
+    lifecycle_state: str
+    current_level_of_care: str
+    treatment_plan_id: str
+    treatment_plan_status: str
+    first_seen_at: str
+    last_seen_at: str
+    reconciled_at: str
+
+
+class PatientRosterOut(V2Model):
+    items: tuple[PatientRosterItemOut, ...]
 
 
 class AppSettingsUpdate(V2Model):

@@ -30,6 +30,12 @@ function summarizeDetails(item: Record<string, unknown>): string {
 
 function renderPrimitive(value: unknown): string | null {
   if (value === null) return 'null'
+  if (Array.isArray(value)) {
+    const primitiveValues = value.filter((item): item is string | number | boolean => (
+      typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
+    ))
+    return primitiveValues.length === value.length ? primitiveValues.join(',') : null
+  }
   switch (typeof value) {
     case 'string':
     case 'number':

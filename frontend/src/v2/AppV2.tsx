@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ForensicLogsPage } from './pages/ForensicLogsPage'
 import { HelpPage } from './pages/HelpPage'
 import { ManualUploadPage } from './pages/ManualUploadPage'
+import { PatientRosterPage } from './pages/PatientRosterPage'
 import { PasswordResetPage } from './pages/PasswordResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlansPage } from './pages/TreatmentPlansPage'
@@ -33,7 +34,9 @@ function pageFor(view: string, token: string, user: UserProfile, onNavigate: (vi
     case 'Status Dashboard':
       return <DashboardPage token={token} />
     case 'Treatment Plans':
-      return <TreatmentPlansPage token={token} user={user} />
+      return <TreatmentPlansPage token={token} user={user} onNavigate={onNavigate} />
+    case 'Patient Roster':
+      return <PatientRosterPage token={token} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} />
     case 'Corrections':

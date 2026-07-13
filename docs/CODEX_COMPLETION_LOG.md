@@ -1,5 +1,14 @@
 # Codex completion log - 2026-05-14
 
+## 2026-07-13 V2 treatment-plan pull, roster, and status export
+
+- Added the approved operational pull directly to Treatment Plans and reused the same path in API Testing Harness; successful pulls refresh and populate the Treatment Plans queue.
+- Added disposition-aware storage for created, updated, and unchanged plans. Changed content under the same treatment-plan ID preserves the encrypted immutable prior version, makes the successor current, and logs the exact updated plan IDs; identical replays add no duplicate.
+- Added a role-scoped Patient Roster tab without patient names and a manager-only, formula-safe current treatment-plan/status CSV export with minimum-necessary audit details.
+- Added backend/frontend regression coverage for same-ID overwrite semantics, authorization/privacy, export content, both pull surfaces, queue refresh, roster rendering, backend status vocabulary, and forensic updated-ID display.
+- Verification passed the full backend suite (`182 passed`), frontend suite (`22 passed`), production frontend build, and a real Windows Chrome UI walkthrough against disposable synthetic local data. The UI pass created and updated `plan-912`, confirmed two immutable versions with version 2 current, verified roster privacy, downloaded/inspected the CSV, and verified the audit hash chain.
+- Live Alleva import remains gated, and the LOC-change update window remains configurable and unvalidated.
+
 ## 2026-07-11 V2 beta.2 release-readiness metadata and documentation
 
 - Updated V2 prerelease metadata to `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2` in release files, backend version configuration, frontend package metadata/footer, sample OpenAPI metadata, and Windows preflight.

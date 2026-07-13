@@ -6,7 +6,7 @@ import hashlib
 import json
 import time
 from datetime import datetime, timezone
-from typing import Final
+from typing import Final, assert_never
 from urllib.parse import urljoin
 
 import httpx
@@ -26,7 +26,10 @@ from app.v2.services.alleva_contracts import (
 )
 from app.v2.services.oauth_connectivity import request_client_credentials
 from app.v2.services.secure_storage import decrypt_text_secret
-from app.v2.services.treatment_plan_store import save_treatment_plan_aggregate
+from app.v2.services.treatment_plan_store import (
+    TreatmentPlanSaveDisposition,
+    save_treatment_plan_aggregate_with_disposition,
+)
 
 MAX_SYNC_ROWS: Final = 5_000
 DEFAULT_ENDPOINT_FIELD_MAPPINGS: Final = {
@@ -83,6 +86,19 @@ class ApprovedRequestRateLimiter:
 class AllevaSyncResult:
     imported_patient_count: int
     skipped_plan_count: int
+    created_treatment_plan_count: int
+    updated_treatment_plan_count: int
+    unchanged_treatment_plan_count: int
+    updated_treatment_plan_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SyncImportSummary:
+    created_count: int
+    updated_count: int
+    unchanged_count: int
+    skipped_count: int
+    updated_plan_ids: tuple[str, ...]
 
 
 def run_treatment_plan_sync(
@@ -115,12 +131,19 @@ def run_treatment_plan_sync(
                     datetime.now(timezone.utc).isoformat(),
                 )
             provenance = sync_import_provenance(db, sync_job_id) if sync_job_id else None
-            imported, skipped = _save_client_aggregates(
+            summary = _save_client_aggregates(
                 db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter,
             )
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
-    return AllevaSyncResult(imported_patient_count=imported, skipped_plan_count=skipped)
+    return AllevaSyncResult(
+        imported_patient_count=summary.created_count + summary.updated_count + summary.unchanged_count,
+        skipped_plan_count=summary.skipped_count,
+        created_treatment_plan_count=summary.created_count,
+        updated_treatment_plan_count=summary.updated_count,
+        unchanged_treatment_plan_count=summary.unchanged_count,
+        updated_treatment_plan_ids=summary.updated_plan_ids,
+    )
 
 
 def _oauth_token(profile: AppSetting, contract: ApprovedAllevaContract, is_cancelled: Callable[[], bool]) -> str:
@@ -278,9 +301,12 @@ def _save_client_aggregates(
     is_cancelled: Callable[[], bool],
     sync_provenance: SyncImportProvenance | None,
     rate_limiter: ApprovedRequestRateLimiter,
-) -> tuple[int, int]:
-    imported = 0
+) -> SyncImportSummary:
+    created = 0
+    updated = 0
+    unchanged = 0
     skipped = 0
+    updated_plan_ids: list[str] = []
     for client_payload in clients:
         if is_cancelled():
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
@@ -294,9 +320,23 @@ def _save_client_aggregates(
         plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
         detail = _plan_detail(client, profile, contract, plan_id, headers, is_cancelled, rate_limiter) if plan_id else plan
         aggregate = _aggregate_from_payload(patient_id, client_payload, plan, detail, plan_id, contract)
-        save_treatment_plan_aggregate(db, aggregate, actor, sync_provenance=sync_provenance)
-        imported += 1
-    return imported, skipped
+        saved = save_treatment_plan_aggregate_with_disposition(
+            db,
+            aggregate,
+            actor,
+            sync_provenance=sync_provenance,
+        )
+        match saved.disposition:
+            case TreatmentPlanSaveDisposition.CREATED:
+                created += 1
+            case TreatmentPlanSaveDisposition.UPDATED:
+                updated += 1
+                updated_plan_ids.append(saved.stored_plan.plan_id)
+            case TreatmentPlanSaveDisposition.UNCHANGED:
+                unchanged += 1
+            case unreachable:
+                assert_never(unreachable)
+    return SyncImportSummary(created, updated, unchanged, skipped, tuple(updated_plan_ids))
 
 
 def _client_lifecycles(clients: tuple[dict[str, object], ...], contract: ApprovedAllevaContract) -> dict[str, str]:
@@ -435,9 +475,11 @@ def _aggregate_from_payload(
         for criterion in aggregate.criteria_results
     )
     snapshot = aggregate.content_snapshot.model_copy(update={
+        "plan_id": plan_id,
         "source_mode": "alleva_rest_api",
         "observed_fields": tuple(field.model_copy(update={"source_endpoint": "Alleva REST"}) for field in aggregate.content_snapshot.observed_fields),
     })
+    evidence_coverage = aggregate.evidence_coverage_summary.model_copy(update={"plan_id": plan_id})
     return aggregate.model_copy(
         update={
             "source_mode": "alleva_rest_api",
@@ -451,6 +493,7 @@ def _aggregate_from_payload(
             "source_evidence": evidence,
             "criteria_results": criteria,
             "content_snapshot": snapshot,
+            "evidence_coverage_summary": evidence_coverage,
             "data_quality_warnings": aggregate.data_quality_warnings + ("Alleva REST treatment-plan sync is read-only; source payload remains encrypted at rest.",),
             "audit_refs": ("alleva.treatment_plan_sync.completed",),
         }

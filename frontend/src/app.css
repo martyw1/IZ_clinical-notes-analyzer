@@ -415,6 +415,7 @@ dd,
 }
 
 .status-badge--compliant,
+.status-badge--current-compliant,
 .status-badge--approved {
   background: #dcfce7;
   color: var(--status-compliant);
