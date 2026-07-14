@@ -11,6 +11,7 @@ from app.v2.models import ApiHarnessJobRecord, AppSetting, Base, User, utc_now
 from app.v2.migrations.runner import MigrationRequest, run_migrations
 from app.v2.security import hash_password
 from app.v2.services.evaluation_store import reevaluate_all_plan_versions
+from app.v2.services.legacy_settings_migration import migrate_legacy_api_settings
 
 is_sqlite_database = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False, "timeout": 30} if is_sqlite_database else {}
@@ -53,6 +54,11 @@ def init_database() -> None:
     with SessionLocal() as db:
         _ensure_bootstrap_admin(db)
         _ensure_app_settings(db)
+        migrate_legacy_api_settings(
+            db,
+            settings.legacy_sqlite_db_path,
+            settings.effective_data_encryption_secret,
+        )
         _mark_interrupted_jobs_stale(db)
         _ensure_admin_facilities(db)
         reevaluate_all_plan_versions(db, "migration" if migration_report.applied_versions else "startup")

@@ -17,6 +17,7 @@ from app.v2.services.alleva_contracts import (
     ensure_builtin_contract,
 )
 from app.v2.services.jobs import job_service
+from app.v2.services.secure_storage import decrypt_api_client_id
 
 router = APIRouter()
 
@@ -66,6 +67,66 @@ def alleva_sync_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
         raise HTTPException(status_code=404, detail="Sync job not found") from exc
     if job.job_type != "approved_treatment_plan_sync":
         raise HTTPException(status_code=404, detail="Sync job not found")
+    return job
+
+
+@router.get("/api/v2/alleva-sync-last-run", response_model=ApiHarnessJob)
+def latest_alleva_sync_job(_: AdminUser) -> ApiHarnessJob:
+    job = next((item for item in job_service.list_jobs() if item.job_type == "approved_treatment_plan_sync"), None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No treatment-plan sync run is available")
+    return job
+
+
+@router.post("/api/v2/patient-roster/pull", response_model=ApiHarnessJob, status_code=202)
+def run_patient_roster_pull(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
+    profile = db.execute(select(AppSetting)).scalar_one()
+    configuration_blockers = _configuration_blockers(profile)
+    if configuration_blockers:
+        record_audit_event(
+            db, action="alleva.patient_roster_pull.blocked", actor=actor,
+            target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+            outcome_status="blocked", details={"blocker_count": len(configuration_blockers)},
+        )
+        raise HTTPException(status_code=409, detail="Patient-roster pull is blocked by the saved Alleva authorization settings")
+    try:
+        contract, _created = ensure_builtin_contract(db, profile, actor.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Patient-roster pull is blocked by an incomplete API profile") from exc
+    blockers = _sync_blockers(profile, contract)
+    if blockers:
+        record_audit_event(
+            db, action="alleva.patient_roster_pull.blocked", actor=actor,
+            target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+            outcome_status="blocked", details={"blocker_count": len(blockers)},
+        )
+        raise HTTPException(status_code=409, detail="Patient-roster pull is blocked by the approved Alleva mapping")
+    record_audit_event(
+        db, action="alleva.patient_roster_pull.job.started", actor=actor,
+        target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+    )
+    try:
+        return job_service.create_roster_pull_job(actor.id, actor.role, contract)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="A patient-roster pull is already running") from exc
+
+
+@router.get("/api/v2/patient-roster/jobs/latest", response_model=ApiHarnessJob)
+def latest_patient_roster_job(_: AdminUser) -> ApiHarnessJob:
+    job = next((item for item in job_service.list_jobs() if item.job_type == "active_patient_roster_pull"), None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No patient-roster pull is available")
+    return job
+
+
+@router.get("/api/v2/patient-roster/jobs/{job_id}", response_model=ApiHarnessJob)
+def patient_roster_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
+    try:
+        job = job_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Patient-roster job not found") from exc
+    if job.job_type != "active_patient_roster_pull":
+        raise HTTPException(status_code=404, detail="Patient-roster job not found")
     return job
 
 
@@ -140,7 +201,11 @@ def _configuration_blockers(profile: AppSetting) -> tuple[str, ...]:
         blockers.append("treatment-plan sync is not enabled")
     if not profile.alleva_treatment_plan_sync_approved:
         blockers.append("live treatment-plan import is not authorized for this tenant")
-    if not profile.api_client_id.strip():
+    try:
+        client_id = decrypt_api_client_id(profile.api_client_id)
+    except HTTPException:
+        client_id = ""
+    if not client_id.strip():
         blockers.append("OAuth client ID is not configured")
     if not profile.api_client_secret:
         blockers.append("encrypted client secret is not configured")

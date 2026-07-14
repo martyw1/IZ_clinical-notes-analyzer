@@ -3,9 +3,6 @@ import { readBoolean, readNumber, readRecord, readRecordList, readRecordListPayl
 import type { JsonRecord } from './json'
 import { request } from './request'
 import type {
-  ApiHarnessJob,
-  ApiConfiguration,
-  AppSettings,
   DashboardData,
   Facility,
   LoginResult,
@@ -119,14 +116,14 @@ export async function importTreatmentPlanAggregate(token: string, payload: JsonR
 
 export async function importTreatmentPlanFile(
   token: string,
-  file: File,
+  files: readonly File[],
   patientId: string,
   confirmPatientIdCorrection: boolean,
 ): Promise<ManualTreatmentPlanImportResult> {
   const formData = new FormData()
   formData.set('patient_id', patientId)
   formData.set('confirm_patient_id_correction', String(confirmPatientIdCorrection))
-  formData.set('file', file)
+  for (const file of files) formData.append('file', file)
   const result = await readRecordPayload(
     await request('/api/v2/manual-uploads/treatment-plan-file', { token, method: 'POST', formBody: formData }),
   )
@@ -134,8 +131,9 @@ export async function importTreatmentPlanFile(
 }
 
 function mapManualTreatmentPlanImportResult(record: Record<string, unknown>): ManualTreatmentPlanImportResult {
+  const status = readString(record, 'status') === 'imported_with_warnings' ? 'imported_with_warnings' : 'imported'
   return {
-    status: 'imported',
+    status,
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label'),
     sourceMode: 'manual_upload',
@@ -143,7 +141,13 @@ function mapManualTreatmentPlanImportResult(record: Record<string, unknown>): Ma
     encryptedAtRest: readBoolean(record, 'encrypted_at_rest'),
     sourceFileArchived: readBoolean(record, 'source_file_archived'),
     sourceFileId: readString(record, 'source_file_id'),
+    sourceFileIds: readStringList(record, 'source_file_ids'),
     patientIdCorrectionApplied: readBoolean(record, 'patient_id_correction_applied'),
+    fileCount: readNumber(record, 'file_count', 1),
+    parsedFileCount: readNumber(record, 'parsed_file_count', 1),
+    opaqueFileCount: readNumber(record, 'opaque_file_count'),
+    overallStatus: readString(record, 'overall_status'),
+    warnings: readStringList(record, 'warnings'),
   }
 }
 
@@ -160,61 +164,6 @@ export async function saveManagerAction(token: string, patientId: string, payloa
   })
 }
 
-export async function getSettings(token: string): Promise<AppSettings> {
-  return mapSettings(await readRecordPayload(await request('/api/settings', { token })))
-}
-
-export async function saveSettings(token: string, settings: AppSettings): Promise<AppSettings> {
-  return mapSettings(
-    await readRecordPayload(
-      await request('/api/settings', {
-        token,
-        method: 'PATCH',
-        body: {
-          organization_name: settings.organizationName,
-          facility_timezone: settings.facilityTimezone,
-          treatment_plan_master_due_days: settings.treatmentPlanMasterDueDays,
-          treatment_plan_php_review_interval_days: settings.treatmentPlanPhpReviewIntervalDays,
-          treatment_plan_iop_op_review_interval_days: settings.treatmentPlanIopOpReviewIntervalDays,
-          treatment_plan_loc_change_window_days: settings.treatmentPlanLocChangeWindowDays,
-          treatment_plan_loc_change_window_validated: settings.treatmentPlanLocChangeWindowValidated,
-        },
-      }),
-    ),
-  )
-}
-
-export async function getApiConfiguration(token: string): Promise<ApiConfiguration> {
-  return mapApiConfiguration(await readRecordPayload(await request('/api/api-configuration', { token })))
-}
-
-export async function saveApiConfiguration(token: string, config: ApiConfiguration, clientSecret: string): Promise<ApiConfiguration> {
-  return mapApiConfiguration(
-    await readRecordPayload(
-      await request('/api/api-configuration', {
-        token,
-        method: 'PATCH',
-        body: {
-          vendor_name: config.vendorName,
-          api_base_url: config.apiBaseUrl,
-          openapi_url: config.openapiUrl,
-          token_url: config.tokenUrl,
-          client_id: config.clientId,
-          client_secret: clientSecret || undefined,
-          token_auth_style: config.tokenAuthStyle,
-          scopes: config.scopes,
-          pagination_limit: config.paginationLimit,
-          sync_limit: config.syncLimit,
-          requests_per_minute: config.requestsPerMinute,
-          timeout_seconds: config.timeoutSeconds,
-          api_enabled: config.apiEnabled,
-          treatment_plan_sync_enabled: config.treatmentPlanSyncEnabled,
-          treatment_plan_sync_approved: config.treatmentPlanSyncApproved,
-        },
-      }),
-    ),
-  )
-}
 
 export async function listUsers(token: string): Promise<readonly UserProfile[]> {
   return (await readRecordListPayload(await request('/api/users', { token }))).map(mapUser)
@@ -238,31 +187,6 @@ export async function assignPatient(token: string, patientId: string, counselorU
   await request(`/api/patient-assignments/${encodeURIComponent(patientId)}/${encodeURIComponent(counselorUsername)}`, { token, method: 'PUT' })
 }
 
-export async function runApprovedAllevaTreatmentPlanSync(token: string): Promise<ApiHarnessJob> {
-  const payload = await readRecordPayload(await request('/api/v2/alleva-sync/run', { token, method: 'POST' }))
-  return {
-    jobId: readString(payload, 'job_id'),
-    status: readString(payload, 'status'),
-    progressPercent: readNumber(payload, 'progress_percent'),
-    recordsWritten: readNumber(payload, 'records_written'),
-    recordsFailed: readNumber(payload, 'records_failed'),
-    warningsCount: readNumber(payload, 'warnings_count'),
-    artifacts: [],
-  }
-}
-
-export async function getApprovedAllevaTreatmentPlanSyncJob(token: string, jobId: string): Promise<ApiHarnessJob> {
-  const payload = await readRecordPayload(await request(`/api/v2/alleva-sync/jobs/${jobId}`, { token }))
-  return {
-    jobId: readString(payload, 'job_id'),
-    status: readString(payload, 'status'),
-    progressPercent: readNumber(payload, 'progress_percent'),
-    recordsWritten: readNumber(payload, 'records_written'),
-    recordsFailed: readNumber(payload, 'records_failed'),
-    warningsCount: readNumber(payload, 'warnings_count'),
-    artifacts: [],
-  }
-}
 
 export async function createUser(token: string, username: string, fullName: string, role: UserRole, password: string): Promise<UserProfile> {
   return mapUser(
@@ -310,18 +234,6 @@ function mapAuthState(value: string): UserProfile['authState'] {
   }
 }
 
-export async function resumeApprovedAllevaTreatmentPlanSync(token: string, jobId: string): Promise<ApiHarnessJob> {
-  const payload = await readRecordPayload(await request(`/api/v2/alleva-sync/jobs/${jobId}/resume`, { token, method: 'POST' }))
-  return {
-    jobId: readString(payload, 'job_id'),
-    status: readString(payload, 'status'),
-    progressPercent: readNumber(payload, 'progress_percent'),
-    recordsWritten: readNumber(payload, 'records_written'),
-    recordsFailed: readNumber(payload, 'records_failed'),
-    warningsCount: readNumber(payload, 'warnings_count'),
-    artifacts: [],
-  }
-}
 
 function mapRole(value: string): UserRole {
   switch (value) {
@@ -342,38 +254,4 @@ function mapNumberRecord(record: Record<string, unknown>): Record<string, number
     if (typeof value === 'number') numbers[key] = value
   }
   return numbers
-}
-
-function mapSettings(record: Record<string, unknown>): AppSettings {
-  const locWindow = record.treatment_plan_loc_change_window_days
-  return {
-    organizationName: readString(record, 'organization_name'),
-    facilityTimezone: readString(record, 'facility_timezone'),
-    treatmentPlanMasterDueDays: readNumber(record, 'treatment_plan_master_due_days'),
-    treatmentPlanPhpReviewIntervalDays: readNumber(record, 'treatment_plan_php_review_interval_days'),
-    treatmentPlanIopOpReviewIntervalDays: readNumber(record, 'treatment_plan_iop_op_review_interval_days'),
-    treatmentPlanLocChangeWindowDays: typeof locWindow === 'number' ? locWindow : null,
-    treatmentPlanLocChangeWindowValidated: readBoolean(record, 'treatment_plan_loc_change_window_validated'),
-  }
-}
-
-function mapApiConfiguration(record: Record<string, unknown>): ApiConfiguration {
-  return {
-    vendorName: readString(record, 'vendor_name'),
-    apiBaseUrl: readString(record, 'api_base_url'),
-    openapiUrl: readString(record, 'openapi_url'),
-    tokenUrl: readString(record, 'token_url'),
-    clientId: readString(record, 'client_id'),
-    apiKeyConfigured: readBoolean(record, 'api_key_configured'),
-    clientSecretConfigured: readBoolean(record, 'client_secret_configured'),
-    tokenAuthStyle: readString(record, 'token_auth_style', 'body'),
-    scopes: readString(record, 'scopes'),
-    paginationLimit: readNumber(record, 'pagination_limit', 500),
-    syncLimit: readNumber(record, 'sync_limit', 100),
-    requestsPerMinute: readNumber(record, 'requests_per_minute', 600),
-    timeoutSeconds: readNumber(record, 'timeout_seconds', 10),
-    apiEnabled: readBoolean(record, 'api_enabled'),
-    treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
-    treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),
-  }
 }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getApiConfiguration, getPatientRoster } from '../api/client'
+import { getPatientRoster } from '../api/client'
+import { getApiConfiguration } from '../api/settingsClient'
 import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, PatientRosterData, UserProfile } from '../api/types'
-import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
+import { PatientRosterPullCard } from '../components/PatientRosterPullCard'
 
 type PatientRosterPageProps = {
   readonly token: string
@@ -59,13 +60,11 @@ export function PatientRosterPage({ token, user, onNavigate }: PatientRosterPage
   return (
     <div className='treatment-workbench'>
       {user.role === 'admin' && (
-        <ApprovedQueueImportCard
+        <PatientRosterPullCard
           config={apiConfig}
           token={token}
           onNavigate={onNavigate}
           onCompleted={() => setRefreshNumber((current) => current + 1)}
-          showOpenQueueButton={false}
-          buttonLabel='Pull full treatment plans'
         />
       )}
       <section className='panel table-panel'>

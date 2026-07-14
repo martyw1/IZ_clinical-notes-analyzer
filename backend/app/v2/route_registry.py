@@ -53,7 +53,11 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/api-harness/jobs/{job_id}/preview"),
             ("POST", "/api/v2/alleva-sync/run"),
             ("GET", "/api/v2/alleva-sync/jobs/{job_id}"),
+            ("GET", "/api/v2/alleva-sync-last-run"),
             ("POST", "/api/v2/alleva-sync/jobs/{job_id}/resume"),
+            ("POST", "/api/v2/patient-roster/pull"),
+            ("GET", "/api/v2/patient-roster/jobs/latest"),
+            ("GET", "/api/v2/patient-roster/jobs/{job_id}"),
         }
     ),
     "audit": frozenset({("GET", "/api/audit/logs"), ("GET", "/api/audit/verify")}),

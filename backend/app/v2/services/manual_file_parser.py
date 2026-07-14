@@ -53,7 +53,9 @@ def aggregate_from_manual_file(
         raise ManualFileParseError("Manual treatment-plan files are limited to 512 KiB for the local desktop beta.")
     suffix = Path(filename).suffix.lower()
     extracted = extract_manual_file(raw_bytes, filename)
-    fields = _fields_from_text_like_file(extracted.raw_text, suffix)
+    if extracted.is_opaque:
+        raise ManualFileParseError("Opaque manual treatment-plan sources require the multi-file binder workflow.")
+    fields = fields_from_manual_text(extracted.raw_text, suffix)
     parsed = _parsed_fields(
         fields,
         fallback_patient_id.strip(),
@@ -68,16 +70,16 @@ def aggregate_from_manual_file(
     )
 
 
-def _fields_from_text_like_file(text: str, suffix: str) -> Mapping[str, str]:
-    match suffix:
-        case ".txt" | ".md" | ".pdf" | ".xlsx":
+def fields_from_manual_text(text: str, suffix: str) -> Mapping[str, str]:
+    match suffix:  # noqa: MATCH_OK - Parser suffixes are open strings with an explicit reject boundary.
+        case ".txt" | ".md" | ".pdf" | ".xlsx" | ".docx" | ".rtf":
             return _key_value_lines(text)
         case ".csv":
             return _delimited_row(text, ",")
         case ".tsv":
             return _delimited_row(text, "\t")
         case _:
-            raise ManualFileParseError("Supported manual treatment-plan files are .txt, .md, .csv, .tsv, .pdf, and .xlsx.")
+            raise ManualFileParseError("The selected source does not contain deterministically extractable treatment-plan text.")
 
 
 def _key_value_lines(text: str) -> dict[str, str]:

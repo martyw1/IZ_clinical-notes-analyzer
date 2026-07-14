@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Final
 
-from app.v2.domain.schemas import JsonValue, TreatmentPlanAggregate
+from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
 from app.v2.services.rule_package import DeterministicRulePackage
 
 UNKNOWN_VALUES: Final = frozenset({"", "unknown", "unavailable", "unvalidated_configurable", "none", "null"})
@@ -32,6 +32,8 @@ class EvaluationEvidence:
     loc_changed: bool
     loc_conflict: bool
     loc_candidate: date | None
+    source_uncertainty: ReviewStatus | None
+    source_uncertainty_reason: str
 
 
 def collect_evidence(
@@ -68,12 +70,29 @@ def collect_evidence(
         latest_loc + timedelta(days=package.rules.loc_change_blocker.default_preset_calendar_days)
         if loc_changed and latest_loc else None
     )
+    source_uncertainty, source_uncertainty_reason = _manual_source_uncertainty(aggregate)
     return EvaluationEvidence(
         aggregate, admission, initial, initial_path, master, master_path, anchor, calculated_due,
         source_due, source_due_missing, source_due_invalid, mapped_loc, interval, due_conflict,
         any_malformed, future_review, not bool(aggregate.treatment_plans), loc_changed,
-        loc_conflict, loc_candidate,
+        loc_conflict, loc_candidate, source_uncertainty, source_uncertainty_reason,
     )
+
+
+def _manual_source_uncertainty(aggregate: TreatmentPlanAggregate) -> tuple[ReviewStatus | None, str]:
+    if aggregate.source_mode != "manual_upload":
+        return None, ""
+    if aggregate.treatment_review_data_status == "manual_upload_opaque_only":
+        return (
+            "Unable to Evaluate",
+            "The manual binder contained only opaque sources; no clinical content was deterministically evaluated.",
+        )
+    if aggregate.evidence_coverage_summary.criteria_conflicting > 0:
+        return (
+            "Conflicting Evidence",
+            "Persisted manual-source conflicts require manager resolution; missing values were not inferred.",
+        )
+    return None, ""
 
 
 def parse_date(raw: str) -> date | None:

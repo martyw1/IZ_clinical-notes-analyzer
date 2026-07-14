@@ -48,6 +48,11 @@ MIGRATIONS = (
         "add_api_request_rate_ceiling",
         (),
     ),
+    _migration(
+        7,
+        "persist_alleva_protocol_and_legacy_settings_migration_state",
+        (),
+    ),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

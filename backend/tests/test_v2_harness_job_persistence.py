@@ -20,9 +20,15 @@ class _HarnessClient:
     def post(self, url: str, **_: object) -> httpx.Response:
         return httpx.Response(200, request=httpx.Request("POST", url), json={"access_token": "harness-token"})
 
-    def get(self, url: str, *, params: dict[str, int], headers: dict[str, str]) -> httpx.Response:
+    def get(self, url: str, *, params: dict[str, str | int], headers: dict[str, str]) -> httpx.Response:
         assert headers["authorization"] == "Bearer harness-token"
-        assert params == {"limit": 100, "offset": 0}
+        assert headers["x-version"] == "1.0"
+        assert params == {
+            "Limit": 100,
+            "Cursor": 0,
+            "api-version": "1.0",
+            "StartDate": "2000-01-01T16:03",
+        }
         return httpx.Response(200, request=httpx.Request("GET", url), json={"items": [{"id": "TP-MOCK-1", "clientId": "CLIENT-MOCK-1"}]})
 
     def build_request(self, method: str, url: str, **kwargs: object) -> httpx.Request:
@@ -41,17 +47,29 @@ class _HarnessClient:
             return response
         response = self.get(
             str(request.url).split("?", 1)[0],
-            params={key: int(value) for key, value in request.url.params.items()},
-            headers={"authorization": request.headers["authorization"]},
+            params={
+                key: int(value) if key in {"Limit", "Cursor"} else value
+                for key, value in request.url.params.items()
+            },
+            headers={
+                "authorization": request.headers["authorization"],
+                "x-version": request.headers["x-version"],
+            },
         )
         response.request = request
         return response
 
 
 class _FailingHarnessClient(_HarnessClient):
-    def get(self, url: str, *, params: dict[str, int], headers: dict[str, str]) -> httpx.Response:
+    def get(self, url: str, *, params: dict[str, str | int], headers: dict[str, str]) -> httpx.Response:
         assert headers["authorization"] == "Bearer harness-token"
-        assert params == {"limit": 100, "offset": 0}
+        assert headers["x-version"] == "1.0"
+        assert params == {
+            "Limit": 100,
+            "Cursor": 0,
+            "api-version": "1.0",
+            "StartDate": "2000-01-01T16:03",
+        }
         return httpx.Response(503, request=httpx.Request("GET", url), json={"detail": "synthetic failure"})
 
 

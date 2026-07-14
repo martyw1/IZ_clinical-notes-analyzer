@@ -10,7 +10,7 @@ from app.v2.migrations.errors import MigrationStateError
 from app.v2.migrations.app_settings_migration import verify_app_setting_extensions
 from app.v2.migrations.registry import APP_SETTINGS_MIGRATION_VERSION, MIGRATIONS
 from app.v2.migrations.schema_contract import verify_required_schema
-from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS
+from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS, APP_SETTING_PROTOCOL_EXTENSIONS
 
 LEGACY_COLUMNS = {
     "users": {"id", "username", "role", "password_hash"},
@@ -87,6 +87,8 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
         required_columns["app_settings"].update(name for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS)
     if expected_version >= 6:
         required_columns["app_settings"].add("api_requests_per_minute")
+    if expected_version >= 7:
+        required_columns["app_settings"].update(name for name, _definition in APP_SETTING_PROTOCOL_EXTENSIONS)
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",

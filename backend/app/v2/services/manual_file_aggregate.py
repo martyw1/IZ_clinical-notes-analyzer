@@ -4,6 +4,7 @@ import hashlib
 
 from app.v2.domain.schemas import (
     JsonValue,
+    ReviewStatus,
     TreatmentPlanAggregate,
     TreatmentPlanContentSnapshot,
     TreatmentPlanEvidenceCoverage,
@@ -34,14 +35,14 @@ def build_manual_aggregate(parsed: ParsedManualFields) -> TreatmentPlanAggregate
         criteria_total=42,
         criteria_with_evidence=sum(1 for criterion in criteria if criterion.evidence_refs),
         criteria_missing_evidence=sum(1 for criterion in criteria if criterion.result_status == "Missing Data"),
-        criteria_conflicting=0,
+        criteria_conflicting=sum(1 for criterion in criteria if criterion.result_status == "Conflicting Evidence"),
         content_sections_present=sections_present,
         content_sections_missing=missing_sections(sections_present),
         unmapped_runtime_fields=(),
         unused_content_fields=(),
         swagger_only_fields=("TreatmentReview.nextReviewDue",),
         runtime_only_fields=(),
-        warnings=("LOC-change update window remains unvalidated and configurable.",),
+        warnings=("LOC-change update window remains unvalidated and configurable.", *parsed.data_quality_warnings),
     )
     return TreatmentPlanAggregate(
         patient_id=parsed.patient_id,
@@ -59,21 +60,21 @@ def build_manual_aggregate(parsed: ParsedManualFields) -> TreatmentPlanAggregate
         latest_created_active_plan={"plan_id": snapshot.plan_id, "label": "manual upload parsed file"},
         has_multiple_active_plans=False,
         current_plan_selection_reason="manual upload parsed treatment-plan file",
-        treatment_review_data_status="manual_upload_parsed",
+        treatment_review_data_status="manual_upload_parsed" if parsed.parsed_source_count else "manual_upload_opaque_only",
         next_review_due_source="manual_upload_file" if parsed.due_date != "Unknown" else "unavailable",
         date_clock_anchor=parsed.admission_date,
         date_clock_due_date=parsed.due_date,
         source_due_date=parsed.due_date,
         loc_change_due_date="unvalidated_configurable",
-        overall_status="Needs Review",
-        overall_status_reason="Manual text-like upload parsed into the V2 aggregate; manager review remains required.",
+        overall_status=_overall_status(parsed),
+        overall_status_reason=_overall_status_reason(parsed),
         data_quality_warnings=_data_quality_warnings(parsed),
         source_evidence=(
             evidence_ref(
-                "manual-upload-file",
-                "Manual upload file",
+                "manual-upload-binder",
+                "Manual upload binder",
                 "manual_upload",
-                "Parsed text-like treatment-plan evidence.",
+                "Bounded manual source evidence was processed deterministically.",
             ),
         ),
         content_snapshot_summary=_snapshot_summary(parsed),
@@ -156,10 +157,29 @@ def _observed_fields(parsed: ParsedManualFields) -> tuple[TreatmentPlanObservedF
 
 
 def _data_quality_warnings(parsed: ParsedManualFields) -> tuple[str, ...]:
-    parser_warning = "Manual parser accepts labeled fields only; scanned/non-extractable PDFs and multi-document binders require review."
-    if not parsed.patient_id_correction_applied:
-        return (parser_warning,)
-    return (parser_warning, "Patient ID correction was confirmed before this manual file was imported.")
+    parser_warning = "Manual parser accepts labeled fields only; unsupported content remains explicitly unevaluated."
+    correction_warning = (
+        ("Patient ID correction was confirmed before this manual binder was imported.",)
+        if parsed.patient_id_correction_applied
+        else ()
+    )
+    return tuple(dict.fromkeys((parser_warning, *parsed.data_quality_warnings, *correction_warning)))
+
+
+def _overall_status(parsed: ParsedManualFields) -> ReviewStatus:
+    if parsed.parsed_source_count == 0:
+        return "Unable to Evaluate"
+    if parsed.conflicting_fields:
+        return "Conflicting Evidence"
+    return "Needs Review"
+
+
+def _overall_status_reason(parsed: ParsedManualFields) -> str:
+    if parsed.parsed_source_count == 0:
+        return "The binder contained only opaque sources; no clinical content was deterministically evaluated."
+    if parsed.conflicting_fields:
+        return "Conflicting scalar evidence requires manager resolution; file order was not used to select a value."
+    return "Manual binder evidence was parsed into the V2 aggregate; manager review remains required."
 
 
 def _snapshot_summary(parsed: ParsedManualFields) -> dict[str, JsonValue]:

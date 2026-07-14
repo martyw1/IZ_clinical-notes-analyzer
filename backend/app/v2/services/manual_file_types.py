@@ -6,9 +6,10 @@ from app.v2.domain.schemas import TreatmentPlanAggregate
 
 
 class ManualFileParseError(Exception):
-    def __init__(self, detail: str) -> None:
+    def __init__(self, detail: str, status_code: int = 400) -> None:
         super().__init__(detail)
         self.detail = detail
+        self.status_code = status_code
 
 
 class ManualFilePatientIdCorrectionRequired(ManualFileParseError):
@@ -42,3 +43,7 @@ class ParsedManualFields:
     intervention_description: str
     signature_datetime: str
     raw_text: str
+    conflicting_fields: tuple[str, ...] = ()
+    data_quality_warnings: tuple[str, ...] = ()
+    parsed_source_count: int = 1
+    opaque_source_count: int = 0

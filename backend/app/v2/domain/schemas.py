@@ -236,6 +236,8 @@ class ApiHarnessJob(V2Model):
     raw_sensitive_mode_used: bool
     cancel_requested: bool
     last_heartbeat_at: str
+    phase: str
+    message: str
     artifacts: tuple[ApiHarnessArtifact, ...]
 
 

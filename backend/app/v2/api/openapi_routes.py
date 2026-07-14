@@ -17,7 +17,7 @@ from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.openapi_definition_loader import OpenApiDefinitionError, load_openapi_definition
 from app.v2.services.oauth_connectivity import test_client_credentials
-from app.v2.services.secure_storage import decrypt_text_secret
+from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ def pull_definitions(actor: AdminUser, db: DbSession) -> PullDefinitionsOut:
 def test_connectivity(actor: AdminUser, db: DbSession) -> OAuthConnectivityOut:
     profile = db.execute(select(AppSetting)).scalar_one()
     result = test_client_credentials(
-        token_url=profile.api_oauth_token_url, client_id=profile.api_client_id,
+        token_url=profile.api_oauth_token_url, client_id=decrypt_api_client_id(profile.api_client_id),
         client_secret=decrypt_text_secret(profile.api_client_secret), scope=profile.api_scopes,
         token_auth_style=profile.api_token_auth_style, timeout_seconds=profile.emr_api_timeout_seconds,
     )

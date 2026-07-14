@@ -20,8 +20,14 @@ from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes, ensure_
 
 SOURCE_KIND = "manual_treatment_plan_file"
 SOURCE_DOWNLOAD_CONTENT_TYPES: Final = {
+    "application/msword",
     "application/pdf",
+    "application/rtf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/zip",
+    "image/jpeg",
+    "image/png",
     "text/plain",
     "text/csv",
     "text/tab-separated-values",
@@ -29,11 +35,17 @@ SOURCE_DOWNLOAD_CONTENT_TYPES: Final = {
 }
 SOURCE_EXTENSION_BY_FORMAT: Final = {
     "csv": "csv",
+    "doc": "doc",
+    "docx": "docx",
+    "jpeg": "jpg",
     "pdf": "pdf",
+    "png": "png",
+    "rtf": "rtf",
     "markdown": "md",
     "text": "txt",
     "tsv": "tsv",
     "xlsx": "xlsx",
+    "zip": "zip",
 }
 
 

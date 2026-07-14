@@ -39,7 +39,7 @@ from app.v2.services.treatment_plan_store import (
     list_treatment_plan_queue_items,
     treatment_plan_aggregate_for_patient,
 )
-from app.v2.services.secure_storage import decrypt_text_secret
+from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
 from app.v2.authorization import accessible_patient_ids, require_patient_manager, require_patient_read
 
 router = APIRouter()
@@ -59,7 +59,8 @@ def health() -> dict[str, str]:
 @router.get("/api/readiness")
 def readiness(db: DbSession) -> ReadinessOut:
     profile = _app_setting(db)
-    api_status = "ok" if profile.api_client_secret and profile.emr_api_enabled else "warn"
+    client_id = decrypt_api_client_id(profile.api_client_id)
+    api_status = "ok" if client_id and profile.api_client_secret and profile.emr_api_enabled else "warn"
     api_message = "Encrypted credentials are saved and API testing is enabled." if api_status == "ok" else "Configure encrypted API credentials and enable API testing before connectivity checks."
     return ReadinessOut(
         status="warn",
@@ -93,13 +94,14 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
 @router.get("/api/v2/dashboard", response_model=DashboardOut)
 def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     profile = _app_setting(db)
+    client_id = decrypt_api_client_id(profile.api_client_id)
     allowed_ids = accessible_patient_ids(db, user)
     imports = tuple(item for item in list_treatment_plan_imports(db) if item.patient_id in allowed_ids)
     correction_counts = open_correction_counts_by_patient(db)
     return dashboard_payload(
         imports,
         api_configured=bool(profile.api_client_secret),
-        api_client_id_configured=bool(profile.api_client_id.strip()),
+        api_client_id_configured=bool(client_id.strip()),
         api_enabled=profile.emr_api_enabled,
         sync_enabled=profile.alleva_treatment_plan_sync_enabled,
         sync_authorized=profile.alleva_treatment_plan_sync_approved,
@@ -257,10 +259,12 @@ def create_api_harness_job(payload: ApiHarnessJobStart, actor: AdminUser, db: Db
     if not profile.emr_api_enabled:
         raise HTTPException(status_code=409, detail="Enable API testing before starting the configured harness job.")
     connection = HarnessConnection(
-        api_base_url=profile.api_base_url, token_url=profile.api_oauth_token_url, client_id=profile.api_client_id,
+        api_base_url=profile.api_base_url, token_url=profile.api_oauth_token_url,
+        client_id=decrypt_api_client_id(profile.api_client_id),
         client_secret=decrypt_text_secret(profile.api_client_secret), scope=profile.api_scopes,
         token_auth_style=profile.api_token_auth_style, timeout_seconds=profile.emr_api_timeout_seconds,
-        page_size=profile.api_pagination_limit,
+        page_size=profile.api_pagination_limit, api_version=profile.alleva_api_version,
+        treatment_plan_start_date=profile.alleva_treatment_plan_start_date,
     )
     return job_service.create_all_fields_job(connection, actor_id=str(actor.id), actor_role=actor.role)
 

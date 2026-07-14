@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
-from dataclasses import dataclass
 from datetime import timezone
-from enum import StrEnum
 from typing import Final
 
 from sqlalchemy import text
@@ -24,6 +22,14 @@ from app.v2.services.clinical_evidence_store import persist_clinical_evidence
 from app.v2.services.evaluation_store import PlanEvaluationTarget, latest_evaluated_aggregate, persist_plan_evaluation
 from app.v2.services.migrated_treatment_plan import assemble_treatment_plan_aggregate
 from app.v2.services.alleva_contracts import SyncImportProvenance
+from app.v2.services.treatment_plan_types import (
+    StoredTreatmentPlan,
+    TreatmentPlanQueueItem,
+    TreatmentPlanSaveDisposition,
+    TreatmentPlanSaveResult,
+    signature_date,
+    stored_plan,
+)
 
 TREATMENT_PLAN_STATUS_ORDER: Final = (
     "Missing Data",
@@ -36,49 +42,6 @@ TREATMENT_PLAN_STATUS_ORDER: Final = (
     "Current/Compliant",
     "Incomplete",
 )
-
-
-@dataclass(frozen=True, slots=True)
-class TreatmentPlanQueueItem:
-    patient_id: str
-    patient_display_label: str
-    treatment_plan_id: str
-    current_level_of_care: str
-    admission_date: str
-    next_due_date: str
-    status: str
-    missing_criteria_count: int
-    returned_criteria_count: int
-    source_mode: str
-    content_completeness_summary: dict[str, int]
-    warnings: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class StoredTreatmentPlan:
-    patient_id: str
-    patient_display_label: str
-    plan_id: str
-    source_mode: str
-    current_level_of_care: str
-    admission_date: str
-    next_due_date: str
-    overall_status: str
-    missing_criteria_count: int
-    content_summary_json: str
-    warnings_json: str
-
-
-class TreatmentPlanSaveDisposition(StrEnum):
-    CREATED = "created"
-    UPDATED = "updated"
-    UNCHANGED = "unchanged"
-
-
-@dataclass(frozen=True, slots=True)
-class TreatmentPlanSaveResult:
-    stored_plan: StoredTreatmentPlan
-    disposition: TreatmentPlanSaveDisposition
 
 
 def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
@@ -100,7 +63,7 @@ def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
         )
         for row in rows
     )
-    return tuple(_stored_plan(latest_evaluated_aggregate(db, aggregate)) for aggregate in aggregates if aggregate is not None)
+    return tuple(stored_plan(latest_evaluated_aggregate(db, aggregate)) for aggregate in aggregates if aggregate is not None)
 
 
 def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem, ...]:
@@ -113,12 +76,15 @@ def save_treatment_plan_aggregate(
     aggregate: TreatmentPlanAggregate,
     actor: User,
     sync_provenance: SyncImportProvenance | None = None,
+    *,
+    commit: bool = True,
 ) -> StoredTreatmentPlan:
     return save_treatment_plan_aggregate_with_disposition(
         db,
         aggregate,
         actor,
         sync_provenance=sync_provenance,
+        commit=commit,
     ).stored_plan
 
 
@@ -127,6 +93,8 @@ def save_treatment_plan_aggregate_with_disposition(
     aggregate: TreatmentPlanAggregate,
     actor: User,
     sync_provenance: SyncImportProvenance | None = None,
+    *,
+    commit: bool = True,
 ) -> TreatmentPlanSaveResult:
     aggregate = aggregate.model_copy(update={"patient_display_label": f"Patient ID {aggregate.patient_id}"})
     payload_json = aggregate.model_dump_json()
@@ -173,7 +141,7 @@ def save_treatment_plan_aggregate_with_disposition(
         },
     ).first()
     if prior_same_plan is not None and str(prior_same_plan[1]) == content_sha256:
-        return TreatmentPlanSaveResult(_stored_plan(aggregate), TreatmentPlanSaveDisposition.UNCHANGED)
+        return TreatmentPlanSaveResult(stored_plan(aggregate), TreatmentPlanSaveDisposition.UNCHANGED)
     supersedes_version_id = int(prior_same_plan[0]) if prior_same_plan else None
     disposition = (
         TreatmentPlanSaveDisposition.UPDATED
@@ -196,7 +164,7 @@ def save_treatment_plan_aggregate_with_disposition(
             "source_record_id": aggregate.content_snapshot.plan_id,
             "version_ordinal": version_ordinal,
             "plan_date": aggregate.date_clock_anchor,
-            "signature_date": _signature_date(aggregate),
+            "signature_date": signature_date(aggregate),
             "admission_date": aggregate.admission_date,
             "next_due": aggregate.date_clock_due_date,
             "payload": encrypted_payload,
@@ -224,8 +192,11 @@ def save_treatment_plan_aggregate_with_disposition(
         evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "loc_change", sync_provenance=sync_provenance)
     if events.new_review:
         evaluated = persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), "new_review", sync_provenance=sync_provenance)
-    db.commit()
-    return TreatmentPlanSaveResult(_stored_plan(evaluated), disposition)
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return TreatmentPlanSaveResult(stored_plan(evaluated), disposition)
 
 
 def treatment_plan_aggregate_for_patient(
@@ -275,19 +246,6 @@ def _queue_item_from_import(row: StoredTreatmentPlan, returned_criteria_count: i
     )
 
 
-def _returned_criteria_count(aggregate: TreatmentPlanAggregate) -> int:
-    return sum(1 for review in aggregate.manager_reviews if review.get("manager_status") == "Returned")
-
-
-def _content_summary_json(aggregate: TreatmentPlanAggregate) -> str:
-    summary = {
-        key: value
-        for key, value in aggregate.content_snapshot_summary.items()
-        if isinstance(value, int)
-    }
-    return json.dumps(summary, sort_keys=True)
-
-
 def _int_map(raw_json: str) -> dict[str, int]:
     payload = json.loads(raw_json or "{}")
     if not isinstance(payload, dict):
@@ -300,27 +258,6 @@ def _string_tuple(raw_json: str) -> tuple[str, ...]:
     if not isinstance(payload, list):
         return ()
     return tuple(value for value in payload if isinstance(value, str))
-
-
-def _stored_plan(aggregate: TreatmentPlanAggregate) -> StoredTreatmentPlan:
-    return StoredTreatmentPlan(
-        patient_id=aggregate.patient_id,
-        patient_display_label=aggregate.patient_display_label,
-        plan_id=aggregate.content_snapshot.plan_id,
-        source_mode=aggregate.source_mode,
-        current_level_of_care=aggregate.current_level_of_care,
-        admission_date=aggregate.admission_date,
-        next_due_date=aggregate.date_clock_due_date,
-        overall_status=aggregate.overall_status,
-        missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,
-        content_summary_json=_content_summary_json(aggregate),
-        warnings_json=json.dumps(list(aggregate.data_quality_warnings), sort_keys=True),
-    )
-
-
-def _signature_date(aggregate: TreatmentPlanAggregate) -> str | None:
-    dates = tuple(item.signature_datetime for item in aggregate.content_snapshot.signatures if item.signature_datetime.strip())
-    return max(dates, default=None)
 
 
 def _provenance_values(provenance: SyncImportProvenance | None) -> dict[str, int | str | None]:

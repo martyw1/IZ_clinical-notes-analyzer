@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { getApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSync } from '../api/client'
-import { ApiRequestError } from '../api/json'
+import { approvedImportBlockers } from '../api/apiReadiness'
+import { getApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSync } from '../api/allevaJobsClient'
 import type { ApiConfiguration, ApiHarnessJob } from '../api/types'
+import { useJobAction } from '../hooks/useJobAction'
+import { JobStatusPanel } from './JobStatusPanel'
 
 type Props = {
   readonly config: ApiConfiguration | null
@@ -20,40 +21,14 @@ export function ApprovedQueueImportCard({
   showOpenQueueButton = true,
   buttonLabel = 'Pull, evaluate, and populate queue',
 }: Props) {
-  const [job, setJob] = useState<ApiHarnessJob | null>(null)
-  const [message, setMessage] = useState('')
-  const [isRunning, setIsRunning] = useState(false)
-  const blockers = importBlockers(config)
-
-  async function runImport() {
-    let keepLockedForActiveJob = false
-    setIsRunning(true)
-    setMessage('')
-    try {
-      let current = await runApprovedAllevaTreatmentPlanSync(token)
-      setJob(current)
-      for (let attempt = 0; attempt < 5_000 && !isTerminal(current.status); attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 120))
-        current = await getApprovedAllevaTreatmentPlanSyncJob(token, current.jobId)
-        setJob(current)
-      }
-      if (current.status === 'completed' || current.status === 'completed_with_warnings') {
-        setMessage(current.recordsWritten === 0
-          ? 'Queue refreshed. No new or changed treatment plans were written.'
-          : `Queue populated and deterministic evaluation completed for ${current.recordsWritten} treatment plan${current.recordsWritten === 1 ? '' : 's'}.`)
-        onCompleted?.()
-      } else {
-        keepLockedForActiveJob = !isTerminal(current.status)
-        setMessage(keepLockedForActiveJob
-          ? `Queue import is still ${current.status}. This page will not start a second import.`
-          : `Queue import ended with status: ${current.status}.`)
-      }
-    } catch (error) {
-      setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : 'Unable to run the queue import.')
-    } finally {
-      if (!keepLockedForActiveJob) setIsRunning(false)
-    }
-  }
+  const blockers = approvedImportBlockers(config)
+  const action = useJobAction({
+    start: () => runApprovedAllevaTreatmentPlanSync(token),
+    poll: (jobId) => getApprovedAllevaTreatmentPlanSyncJob(token, jobId),
+    onCompleted,
+    failureMessage: 'Unable to pull and evaluate treatment plans. Review Settings and try again.',
+    successMessage: queueCompletionMessage,
+  })
 
   return (
     <section className='panel' aria-label='Treatment Plans queue import'>
@@ -68,29 +43,19 @@ export function ApprovedQueueImportCard({
       ) : (
         <p>The built-in Alleva v1 mapping is applied automatically when the pull starts. Every returned treatment plan is normalized, evaluated, and added to the queue.</p>
       )}
-      <button type='button' onClick={() => void runImport()} disabled={isRunning || blockers.length > 0}>
-        {isRunning ? 'Pulling full treatment plans...' : buttonLabel}
+      <button type='button' onClick={() => void action.run()} disabled={action.isActive || blockers.length > 0}>
+        {action.isActive ? 'Pulling full treatment plans...' : buttonLabel}
       </button>
-      {job && <p>Status: {job.status} | imported: {job.recordsWritten} | failed: {job.recordsFailed}</p>}
-      {message && <p role='status'>{message}</p>}
-      {showOpenQueueButton && (job?.status === 'completed' || job?.status === 'completed_with_warnings') && (
+      <JobStatusPanel job={action.job} isActive={action.isActive} message={action.message} error={action.error} onRetry={() => void action.run()} />
+      {showOpenQueueButton && (action.job?.status === 'completed' || action.job?.status === 'completed_with_warnings') && (
         <button type='button' className='secondary-button' onClick={() => onNavigate('Treatment Plans')}>Open Treatment Plans queue</button>
       )}
     </section>
   )
 }
 
-function importBlockers(config: ApiConfiguration | null): readonly string[] {
-  if (!config) return ['Loading saved API configuration.']
-  const blockers: string[] = []
-  if (!config.clientId.trim()) blockers.push('Save the Alleva OAuth client ID in Settings.')
-  if (!config.clientSecretConfigured) blockers.push('Save the Alleva client secret in Settings.')
-  if (!config.apiEnabled) blockers.push('Enable API testing in Settings.')
-  if (!config.treatmentPlanSyncEnabled) blockers.push('Enable treatment-plan sync in Settings.')
-  if (!config.treatmentPlanSyncApproved) blockers.push('Authorize live read-only treatment-plan import for this tenant in Settings.')
-  return blockers
-}
-
-function isTerminal(status: string): boolean {
-  return ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'stale_or_interrupted'].includes(status)
+function queueCompletionMessage(job: ApiHarnessJob): string {
+  if (job.recordsWritten === 0) return 'Queue refreshed. No new or changed treatment plans were written.'
+  const summary = `Queue populated and deterministic evaluation completed for ${job.recordsWritten} treatment plan${job.recordsWritten === 1 ? '' : 's'}.`
+  return job.status === 'completed_with_warnings' ? `${summary} Review ${job.warningsCount} warning${job.warningsCount === 1 ? '' : 's'}.` : summary
 }

@@ -11,6 +11,7 @@ from app.core.config import settings
 
 ENCRYPTION_MAGIC = b"IZCNA1:"
 SECRET_TEXT_PREFIX = "enc:v1:"
+LEGACY_SECRET_TEXT_PREFIX = "IZCNA1-TEXT:"
 
 
 def ensure_private_directory(path: Path) -> None:
@@ -58,6 +59,12 @@ def decrypt_text_secret(value: str) -> str:
     except ValueError as exc:
         raise HTTPException(status_code=500, detail="Stored application secret is not valid encrypted text") from exc
     return decrypt_bytes(encrypted).decode("utf-8")
+
+
+def decrypt_api_client_id(value: str) -> str:
+    if value.startswith(LEGACY_SECRET_TEXT_PREFIX):
+        raise HTTPException(status_code=500, detail="Stored API client identifier uses an unsupported envelope")
+    return decrypt_text_secret(value)
 
 
 def text_secret_is_encrypted(value: str) -> bool:

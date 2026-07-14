@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 class V2Model(BaseModel):
@@ -169,6 +169,8 @@ class ApiConfigurationUpdate(V2Model):
     client_secret: str | None = None
     token_auth_style: Literal["body", "basic"] | None = None
     scopes: str | None = None
+    api_version: Literal["1.0"] | None = None
+    treatment_plan_start_date: str | None = Field(default=None, min_length=16, max_length=40)
     pagination_limit: int | None = Field(default=None, ge=1, le=5000)
     sync_limit: int | None = Field(default=None, ge=1, le=5000)
     requests_per_minute: int | None = Field(default=None, ge=1, le=10000)
@@ -177,17 +179,27 @@ class ApiConfigurationUpdate(V2Model):
     treatment_plan_sync_enabled: bool = False
     treatment_plan_sync_approved: bool = False
 
+    @field_validator("treatment_plan_start_date")
+    @classmethod
+    def validate_treatment_plan_start_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        datetime.fromisoformat(value)
+        return value
+
 
 class ApiConfigurationOut(V2Model):
     vendor_name: str
     api_base_url: str
     openapi_url: str
     token_url: str
-    client_id: str
+    client_id_configured: bool
     api_key_configured: bool
     client_secret_configured: bool = False
     token_auth_style: str
     scopes: str
+    api_version: str
+    treatment_plan_start_date: str
     pagination_limit: int
     sync_limit: int
     requests_per_minute: int

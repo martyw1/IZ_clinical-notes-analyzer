@@ -140,6 +140,15 @@ All spacing derives from a base of 4px.
 - **Accessibility**: blockers use text plus badge color, never color alone.
 - **Motion**: hover for actionable cards only.
 
+### Compact Job Status
+
+- **Structure**: phase and progress first, followed by compact record/warning counts and the last completed timestamp.
+- **Variants**: diagnostic preview, active patient roster pull, approved treatment-plan sync.
+- **Spacing**: `--space-2` between status rows with a thin left state stripe.
+- **States**: idle, queued, running, writing, completed, completed with warnings, failed, cancelled, interrupted.
+- **Accessibility**: one polite atomic live region per job, a labeled progress bar, `aria-busy` while active, and alert semantics only for failures.
+- **Motion**: progress width may transition; status changes must not shift the surrounding action controls.
+
 ### Evidence Ledger
 
 - **Structure**: compact newest-first event list with event label, source, timestamp, and state.

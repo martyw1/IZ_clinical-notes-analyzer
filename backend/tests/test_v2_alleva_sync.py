@@ -25,6 +25,7 @@ JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 @dataclass(frozen=True, slots=True)
 class _MockAllevaState:
     paths: list[str] = field(default_factory=list)
+    request_metadata: list[dict[str, str]] = field(default_factory=list)
     block_clients: bool = False
     clients_started: Event = field(default_factory=Event)
     release_clients: Event = field(default_factory=Event)
@@ -58,6 +59,12 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         type(self).state.paths.append(self.path)
+        authorization = self.headers.get("authorization", "")
+        type(self).state.request_metadata.append({
+            "accept": self.headers.get("accept", ""),
+            "authorization_scheme": authorization.partition(" ")[0],
+            "x_version": self.headers.get("x-version", ""),
+        })
         path = urlparse(self.path).path
         if path == "/clients":
             type(self).state.clients_started.set()
@@ -332,7 +339,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
                 break
             sleep(0.05)
 
-        assert synced.json()["status"] == "completed"
+        assert synced.json()["status"] == "completed", state.paths
         with sqlite3.connect(database_path) as database:
             checkpoints = database.execute(
                 "SELECT endpoint_key,page_number,encrypted_records_json FROM sync_checkpoints JOIN sync_jobs ON sync_checkpoints.job_id=sync_jobs.id WHERE external_job_id=? ORDER BY endpoint_key",
@@ -367,11 +374,14 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert {field["source_endpoint"] for field in detail.json()["content_snapshot"]["observed_fields"]} == {"Alleva REST"}
         assert state.paths == [
             "/token",
-            "/clients?Limit=100&Cursor=0",
-            "/treatment-plans?Limit=100&Cursor=0&ClientId=912",
-            "/treatment-plans/plan-912",
-            "/treatment-plans/plan-912/diagnosis",
+            "/clients?Limit=100&Cursor=0&api-version=1.0",
+            "/treatment-plans?Limit=100&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03&ClientId=912",
+            "/treatment-plans/plan-912?api-version=1.0",
+            "/treatment-plans/plan-912/diagnosis?api-version=1.0",
         ]
+        assert state.request_metadata == [
+            {"accept": "application/json", "authorization_scheme": "Bearer", "x_version": "1.0"}
+        ] * 4
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
@@ -426,6 +436,84 @@ def test_approved_sync_populates_every_treatment_plan_for_the_same_patient(tmp_p
     second_detail = client.get("/api/v2/treatment-plans/912/plan-913", headers=headers)
     assert second_detail.status_code == 200
     assert second_detail.json()["content_snapshot"]["plan_id"] == "plan-913"
+
+
+def test_patient_plan_list_accepts_vendor_page_larger_than_fair_request_within_global_budget(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    client_items: list[dict[str, JsonValue]] = [
+        {"id": str(patient_id), "status": "Active"}
+        for patient_id in range(912, 922)
+    ]
+    plan_items: list[dict[str, JsonValue]] = [
+        {"id": "plan-912", "client": {"id": "912", "route": "/clients/912"}},
+        {"id": "plan-913", "client": {"id": "912", "route": "/clients/912"}},
+    ]
+
+    with _mock_alleva_server(client_items=client_items, plan_items=plan_items) as (base_url, _state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "sync_limit": 10,
+                "requests_per_minute": 10_000,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+
+        synced = _completed_sync(client, headers)
+
+    assert synced["status"] == "completed"
+    assert synced["records_written"] == 2
+    queue = client.get("/api/v2/treatment-plans", headers=headers)
+    assert {item["treatment_plan_id"] for item in queue.json()["items"]} == {"plan-912", "plan-913"}
+
+
+def test_patient_scoped_single_plan_pages_do_not_repeat_ignored_vendor_cursor(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    client_items: list[dict[str, JsonValue]] = [
+        {"id": str(patient_id), "status": "Active"}
+        for patient_id in range(912, 922)
+    ]
+    plan_items: list[dict[str, JsonValue]] = [
+        {"id": f"plan-{patient_id}", "client": {"id": str(patient_id), "route": f"/clients/{patient_id}"}}
+        for patient_id in range(912, 922)
+    ]
+
+    with _mock_alleva_server(client_items=client_items, plan_items=plan_items) as (base_url, _state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "sync_limit": 10,
+                "requests_per_minute": 10_000,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+
+        synced = _completed_sync(client, headers)
+
+    assert synced["status"] == "completed"
+    assert synced["records_written"] == 10
 
 
 def test_patient_scoped_plan_queries_overlap_with_bounded_concurrency(tmp_path, monkeypatch) -> None:
@@ -509,7 +597,7 @@ def test_published_alleva_v1_numeric_nested_ids_populate_queue_and_roster(tmp_pa
     assert [(item["patient_id"], item["treatment_plan_id"]) for item in queue] == [("912", "4815")]
     roster = client.get("/api/v2/patient-roster", headers=headers).json()["items"]
     assert [(item["patient_id"], item["treatment_plan_id"]) for item in roster] == [("912", "4815")]
-    assert "/treatment-plans/4815/diagnosis" in state.paths
+    assert "/treatment-plans/4815/diagnosis?api-version=1.0" in state.paths
     assert any(path.endswith("&ClientId=912") for path in state.paths if path.startswith("/treatment-plans?"))
     assert not any("clientId=" in path for path in state.paths)
     assert not any(path.startswith("/treatment-reviews") for path in state.paths)
@@ -631,7 +719,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
             sleep(0.05)
 
         assert synced.json()["status"] == "cancelled"
-        assert state.paths == ["/token", "/clients?Limit=100&Cursor=0"]
+        assert state.paths == ["/token", "/clients?Limit=100&Cursor=0&api-version=1.0"]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert any(item["action"] == "alleva.treatment_plan_sync.cancelled" for item in audit)

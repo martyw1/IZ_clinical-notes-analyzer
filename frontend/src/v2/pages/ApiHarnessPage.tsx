@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getApiConfiguration } from '../api/client'
+import { getApiConfiguration } from '../api/settingsClient'
 import { testSavedOAuthConnectivity } from '../api/connectivityClient'
 import { ApiRequestError } from '../api/json'
 import { pullOpenApiDefinition } from '../api/openapiClient'

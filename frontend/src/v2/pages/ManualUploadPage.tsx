@@ -4,6 +4,7 @@ import { ApiRequestError, isRecord } from '../api/json'
 
 type ManualUploadPageProps = {
   readonly token: string
+  readonly onNavigate: (view: string) => void
 }
 
 class FileReadError extends Error {
@@ -36,35 +37,42 @@ function readFileText(file: File): Promise<string> {
   })
 }
 
-export function ManualUploadPage({ token }: ManualUploadPageProps) {
+export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [rawFile, setRawFile] = useState<File | null>(null)
+  const [binderFiles, setBinderFiles] = useState<readonly File[]>([])
+  const [binderInputVersion, setBinderInputVersion] = useState(0)
   const [rawPatientId, setRawPatientId] = useState('')
   const [confirmPatientIdCorrection, setConfirmPatientIdCorrection] = useState(false)
+  const [correctionRequired, setCorrectionRequired] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isParsing, setIsParsing] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  const [jsonMessage, setJsonMessage] = useState('')
+  const [jsonError, setJsonError] = useState('')
+  const [binderMessage, setBinderMessage] = useState('')
+  const [binderError, setBinderError] = useState('')
+  const [binderWarnings, setBinderWarnings] = useState<readonly string[]>([])
+  const [binderCounts, setBinderCounts] = useState({ parsed: 0, opaque: 0 })
+  const [binderImported, setBinderImported] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage('')
-    setError('')
+    setJsonMessage('')
+    setJsonError('')
     if (!selectedFile) {
-      setError('Choose a normalized V2 aggregate JSON file before importing.')
+      setJsonError('Choose a normalized V2 aggregate JSON file before importing.')
       return
     }
     setIsImporting(true)
     try {
       const payload: unknown = JSON.parse(await readFileText(selectedFile))
       if (!isRecord(payload)) {
-        setError('The selected JSON file must contain one treatment-plan aggregate object.')
+        setJsonError('The selected JSON file must contain one treatment-plan aggregate object.')
         return
       }
       const result = await importTreatmentPlanAggregate(token, payload)
-      setMessage(`Imported ${result.patientDisplayLabel} from ${result.sourceMode}.`)
+      setJsonMessage(`Imported ${result.patientDisplayLabel} from ${result.sourceMode}.`)
     } catch (importError) {
-      setError(messageForError(importError))
+      setJsonError(messageForError(importError))
     } finally {
       setIsImporting(false)
     }
@@ -72,23 +80,55 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
 
   async function handleRawFileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage('')
-    setError('')
-    if (!rawFile) {
-      setError('Choose a supported treatment-plan file before importing.')
+    setBinderMessage('')
+    setBinderError('')
+    setBinderWarnings([])
+    setBinderImported(false)
+    if (!binderFiles.length) {
+      setBinderError('Choose one or more treatment-plan binder files before importing.')
       return
     }
     setIsParsing(true)
     try {
-      const result = await importTreatmentPlanFile(token, rawFile, rawPatientId, confirmPatientIdCorrection)
-      const archived = result.sourceFileArchived ? ' and archived encrypted source file' : ''
-      const correction = result.patientIdCorrectionApplied ? ' after confirmed Patient ID correction' : ''
-      setMessage(`Imported ${result.patientDisplayLabel} from parsed ${result.sourceMode} file${correction}${archived}.`)
+      const result = await importTreatmentPlanFile(token, binderFiles, rawPatientId, confirmPatientIdCorrection)
+      const warningSummary = result.status === 'imported_with_warnings' ? ' Imported with warnings.' : ''
+      const correctionSummary = result.patientIdCorrectionApplied ? ' Confirmed Patient ID correction applied.' : ''
+      setBinderMessage(`Secure processing complete. Imported ${result.patientDisplayLabel} from ${result.fileCount} source ${result.fileCount === 1 ? 'file' : 'files'}.${warningSummary}${correctionSummary}`)
+      setBinderWarnings(result.warnings)
+      setBinderCounts({ parsed: result.parsedFileCount, opaque: result.opaqueFileCount })
+      setBinderImported(true)
+      setBinderFiles([])
+      setBinderInputVersion((current) => current + 1)
+      setRawPatientId('')
+      setConfirmPatientIdCorrection(false)
+      setCorrectionRequired(false)
     } catch (importError) {
-      setError(messageForError(importError))
+      setBinderError(messageForError(importError))
+      setCorrectionRequired(importError instanceof ApiRequestError && importError.status === 409)
     } finally {
       setIsParsing(false)
     }
+  }
+
+  function selectBinderFiles(files: FileList | null) {
+    setBinderFiles(files ? Array.from(files) : [])
+    setBinderMessage('')
+    setBinderError('')
+    setBinderWarnings([])
+    setBinderImported(false)
+    setCorrectionRequired(false)
+  }
+
+  function removeBinderFile(index: number) {
+    setBinderFiles((current) => current.filter((_file, candidateIndex) => candidateIndex !== index))
+    setBinderError('')
+  }
+
+  function clearBinderSelection() {
+    setBinderFiles([])
+    setBinderInputVersion((current) => current + 1)
+    setBinderError('')
+    setCorrectionRequired(false)
   }
 
   return (
@@ -97,7 +137,7 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
         <p className='eyebrow'>Manual Upload</p>
         <h2>Point-in-time treatment-plan evidence</h2>
         <p>Import normalized V2 aggregate JSON, or parse supported treatment-plan evidence files into the same encrypted aggregate store.</p>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} aria-label='Normalized aggregate import'>
           <label>
             Normalized V2 aggregate JSON
             <input
@@ -106,13 +146,36 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
               onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)}
             />
           </label>
-          {error && <p role='alert' className='error-banner'>{error}</p>}
-          {message && <p role='status'>{message}</p>}
+          {jsonError && <p role='alert' className='error-banner'>{jsonError}</p>}
+          {jsonMessage && <p role='status'>{jsonMessage}</p>}
           <button type='submit' disabled={isImporting}>
             {isImporting ? 'Importing...' : 'Import treatment-plan aggregate'}
           </button>
         </form>
-        <form onSubmit={handleRawFileSubmit}>
+        <form onSubmit={handleRawFileSubmit} aria-label='Treatment-plan binder import'>
+          <label>
+            Treatment-plan binder files
+            <input
+              key={binderInputVersion}
+              type='file'
+              multiple
+              accept='.txt,.md,.csv,.tsv,.pdf,.xlsx,.docx,.rtf,.doc,.zip,.png,.jpg,.jpeg,text/plain,text/markdown,text/csv,text/tab-separated-values,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,application/msword,application/zip,image/png,image/jpeg'
+              onChange={(event) => selectBinderFiles(event.currentTarget.files)}
+              disabled={isParsing}
+            />
+          </label>
+          <div className='binder-selection' aria-live='polite'>
+            <div className='binder-selection-header'>
+              <strong>{binderFiles.length ? `${binderFiles.length} ${binderFiles.length === 1 ? 'file' : 'files'} selected` : 'No binder files selected'}</strong>
+              {binderFiles.length > 0 && <button type='button' className='secondary-button' onClick={clearBinderSelection} disabled={isParsing}>Clear selection</button>}
+            </div>
+            {binderFiles.length > 0 && <ul className='binder-file-list'>
+              {binderFiles.map((file, index) => <li key={`${file.name}:${file.size}:${file.lastModified}`}>
+                <span>{file.name}</span>
+                <button type='button' className='secondary-button' aria-label={`Remove ${file.name}`} onClick={() => removeBinderFile(index)} disabled={isParsing}>Remove</button>
+              </li>)}
+            </ul>}
+          </div>
           <label>
             Patient ID override
             <input
@@ -126,29 +189,34 @@ export function ManualUploadPage({ token }: ManualUploadPageProps) {
               type='checkbox'
               checked={confirmPatientIdCorrection}
               onChange={(event) => setConfirmPatientIdCorrection(event.currentTarget.checked)}
+              disabled={isParsing}
             />
-            I confirm this override corrects a different Patient ID detected in the file.
+            I confirm this Patient ID correction when the override differs from evidence detected in the binder.
           </label>
-          <label>
-            Treatment-plan file (TXT, CSV, TSV, MD, text-extractable PDF, XLSX)
-            <input
-              type='file'
-              accept='.txt,.md,.csv,.tsv,.pdf,.xlsx,text/plain,text/markdown,text/csv,text/tab-separated-values,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-              onChange={(event) => setRawFile(event.currentTarget.files?.[0] ?? null)}
-            />
-          </label>
-          <button type='submit' disabled={isParsing}>
-            {isParsing ? 'Parsing...' : 'Upload and parse treatment-plan file'}
-          </button>
+          {binderError && <p role='alert' className='error-banner'>{binderError}</p>}
+          {binderMessage && <p role='status' className={binderWarnings.length ? 'binder-status warning' : 'binder-status'}>{binderMessage}</p>}
+          {binderImported && <div className='binder-result-summary' aria-label='Binder processing counts'>
+            <span>{binderCounts.parsed} parsed</span>
+            <span>{binderCounts.opaque} stored without parsing</span>
+          </div>}
+          {binderWarnings.length > 0 && <ul className='binder-warning-list'>
+            {binderWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>}
+          <div className='binder-actions'>
+            <button type='submit' disabled={isParsing || (correctionRequired && !confirmPatientIdCorrection)}>
+              {isParsing ? 'Securely processing binder...' : correctionRequired ? 'Retry with confirmed Patient ID' : 'Upload and securely process binder'}
+            </button>
+            {binderImported && <button type='button' className='secondary-button' onClick={() => onNavigate('Treatment Plans')}>Review in Treatment Plans</button>}
+          </div>
         </form>
       </section>
       <section className='panel'>
         <p className='eyebrow'>Current boundary</p>
         <h2>Manual evidence import</h2>
         <div className='source-card-grid'>
-          <article className='source-card'><h3>Accepted now</h3><p>V2 aggregate JSON plus text, Markdown, CSV, TSV, text-extractable PDF, and XLSX files with labeled treatment-plan fields. Image-only PDFs are rejected because no deterministic text evidence is available.</p></article>
-          <article className='source-card'><h3>Stored safely</h3><p>Aggregate payloads and parsed source files are encrypted. Queue columns keep only patient ID and non-secret status metadata.</p></article>
-          <article className='source-card'><h3>Still pending</h3><p>Multi-document binders remain a documented blocker for a later station.</p></article>
+          <article className='source-card'><h3>Parsed deterministically</h3><p>Text, Markdown, CSV, TSV, text-extractable PDF, XLSX, DOCX, and RTF sources are merged into one treatment-plan result. Conflicting evidence is reported instead of guessed.</p></article>
+          <article className='source-card'><h3>Stored safely</h3><p>Every selected source is encrypted under a generated identifier. Original filenames are cleared from the page after submission and are not persisted.</p></article>
+          <article className='source-card'><h3>Opaque sources</h3><p>Legacy DOC, ZIP, PNG, and JPEG files can be archived encrypted, but are counted as stored without parsing and produce explicit warnings.</p></article>
         </div>
       </section>
     </div>

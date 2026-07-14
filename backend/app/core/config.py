@@ -131,6 +131,10 @@ class Settings:
         return f"sqlite:///{self.sqlite_db_path.as_posix()}"
 
     @property
+    def legacy_sqlite_db_path(self) -> Path:
+        return self.local_app_data_dir / "clinical-notes-analyzer.sqlite3"
+
+    @property
     def effective_data_encryption_secret(self) -> str:
         return self.data_encryption_key.strip() or self.secret_key
 

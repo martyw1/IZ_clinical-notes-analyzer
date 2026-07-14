@@ -42,6 +42,7 @@ def test_contract_parameter_and_field_mapping_drive_paged_requests() -> None:
     assert _endpoint_request_parameters(contract, "clients", limit=2, offset=4) == {
         "page_size": 2,
         "page_start": 4,
+        "api-version": "1.0",
         "status": "active",
     }
     assert _endpoint_request_parameters(
@@ -53,6 +54,8 @@ def test_contract_parameter_and_field_mapping_drive_paged_requests() -> None:
     ) == {
         "page_size": 2,
         "page_start": 4,
+        "api-version": "1.0",
+        "StartDate": "2000-01-01T16:03",
         "ClientId": "client-912",
     }
     assert _mapped_text({"member_id": "client-912"}, contract, "clients", "client_id") == "client-912"

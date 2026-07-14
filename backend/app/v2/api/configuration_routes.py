@@ -35,11 +35,13 @@ def _api_config_out(row: AppSetting, contract_version: str | None = None, effect
         api_base_url=row.api_base_url,
         openapi_url=row.openapi_url,
         token_url=row.api_oauth_token_url,
-        client_id=row.api_client_id,
+        client_id_configured=bool(row.api_client_id),
         api_key_configured=configured,
         client_secret_configured=configured,
         token_auth_style=row.api_token_auth_style,
         scopes=row.api_scopes,
+        api_version=row.alleva_api_version,
+        treatment_plan_start_date=row.alleva_treatment_plan_start_date,
         pagination_limit=row.api_pagination_limit,
         sync_limit=row.alleva_treatment_plan_sync_limit,
         requests_per_minute=row.api_requests_per_minute,
@@ -66,9 +68,10 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
         "api_base_url": "api_base_url",
         "openapi_url": "openapi_url",
         "token_url": "api_oauth_token_url",
-        "client_id": "api_client_id",
         "token_auth_style": "api_token_auth_style",
         "scopes": "api_scopes",
+        "api_version": "alleva_api_version",
+        "treatment_plan_start_date": "alleva_treatment_plan_start_date",
         "pagination_limit": "api_pagination_limit",
         "sync_limit": "alleva_treatment_plan_sync_limit",
         "requests_per_minute": "api_requests_per_minute",
@@ -82,9 +85,12 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
             value = getattr(payload, source)
             if value is not None:
                 setattr(row, target, value)
+    if "client_id" in payload.model_fields_set and payload.client_id is not None:
+        row.api_client_id = encrypt_text_secret(payload.client_id.strip())
     secret = payload.client_secret if "client_secret" in payload.model_fields_set else payload.api_key
     if secret:
         row.api_client_secret = encrypt_text_secret(secret)
+    row.legacy_api_settings_migration_state = "v2_user_configured"
     row.updated_at = datetime.now(timezone.utc)
     record_audit_event(
         db,
@@ -93,6 +99,7 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
         target_entity_type="api_connection_profile",
         target_entity_id=row.emr_vendor_name,
         details={
+            "client_id_configured": bool(row.api_client_id),
             "client_secret_configured": bool(row.api_client_secret),
             "api_testing_enabled": row.emr_api_enabled,
         },

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -13,19 +15,31 @@ from pypdf.errors import PdfReadError
 from app.v2.services.manual_file_types import ManualFileParseError
 
 MAX_EXTRACTED_TEXT_CHARS: Final = 96 * 1024
+OFFICE_MAX_ENTRIES: Final = 200
+OFFICE_MAX_UNCOMPRESSED_BYTES: Final = 25 * 1024 * 1024
 XLSX_MAIN_NS: Final = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 XLSX_WORKSHEET_PREFIX: Final = "xl/worksheets/"
+DOCX_MAIN_NS: Final = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+OPAQUE_FORMATS: Final = {
+    ".doc": "doc",
+    ".jpeg": "jpeg",
+    ".jpg": "jpeg",
+    ".png": "png",
+    ".zip": "zip",
+}
 
 
 @dataclass(frozen=True, slots=True)
 class ExtractedManualFile:
     raw_text: str
     source_format: str
+    is_opaque: bool = False
+    warning: str = ""
 
 
 def extract_manual_file(raw_bytes: bytes, filename: str) -> ExtractedManualFile:
     suffix = Path(filename).suffix.lower()
-    match suffix:
+    match suffix:  # noqa: MATCH_OK - Upload extensions are open strings with an explicit reject boundary.
         case ".txt":
             return ExtractedManualFile(raw_text=_decode_text_upload(raw_bytes), source_format="text")
         case ".md":
@@ -38,8 +52,22 @@ def extract_manual_file(raw_bytes: bytes, filename: str) -> ExtractedManualFile:
             return ExtractedManualFile(raw_text=_extract_pdf_text(raw_bytes), source_format="pdf")
         case ".xlsx":
             return ExtractedManualFile(raw_text=_extract_xlsx_text(raw_bytes), source_format="xlsx")
+        case ".docx":
+            return ExtractedManualFile(raw_text=_extract_docx_text(raw_bytes), source_format="docx")
+        case ".rtf":
+            return ExtractedManualFile(raw_text=_extract_rtf_text(raw_bytes), source_format="rtf")
         case _:
-            raise ManualFileParseError("Supported manual treatment-plan files are .txt, .md, .csv, .tsv, .pdf, and .xlsx.")
+            opaque_format = OPAQUE_FORMATS.get(suffix)
+            if opaque_format is not None:
+                return ExtractedManualFile(
+                    raw_text="",
+                    source_format=opaque_format,
+                    is_opaque=True,
+                    warning="One uploaded source was archived as opaque content and was not parsed.",
+                )
+            raise ManualFileParseError(
+                "Supported manual treatment-plan files are .txt, .md, .csv, .tsv, .pdf, .xlsx, .docx, .rtf, .doc, .zip, .png, .jpg, and .jpeg."
+            )
 
 
 def _decode_text_upload(raw_bytes: bytes) -> str:
@@ -62,12 +90,66 @@ def _extract_pdf_text(raw_bytes: bytes) -> str:
 def _extract_xlsx_text(raw_bytes: bytes) -> str:
     try:
         with ZipFile(BytesIO(raw_bytes)) as workbook:
+            _validate_office_archive(workbook, "XLSX")
             text = _xlsx_rows_to_labeled_text(_xlsx_rows(workbook))
     except BadZipFile as exc:
         raise ManualFileParseError("Manual XLSX treatment-plan file could not be read.") from exc
     except ElementTree.ParseError as exc:
         raise ManualFileParseError("Manual XLSX treatment-plan file contains invalid worksheet XML.") from exc
     return _bounded_non_empty_text(text, "Manual XLSX treatment-plan file must include labeled treatment-plan fields.")
+
+
+def _extract_docx_text(raw_bytes: bytes) -> str:
+    try:
+        with ZipFile(BytesIO(raw_bytes)) as document:
+            _validate_office_archive(document, "DOCX")
+            root = ElementTree.fromstring(document.read("word/document.xml"))
+    except BadZipFile as exc:
+        raise ManualFileParseError("Manual DOCX treatment-plan file could not be read.") from exc
+    except KeyError as exc:
+        raise ManualFileParseError("Manual DOCX treatment-plan file is missing its document body.") from exc
+    except ElementTree.ParseError as exc:
+        raise ManualFileParseError("Manual DOCX treatment-plan file contains invalid document XML.") from exc
+    paragraphs = tuple(
+        "".join(node.text or "" for node in paragraph.iter(f"{DOCX_MAIN_NS}t")).strip()
+        for paragraph in root.iter(f"{DOCX_MAIN_NS}p")
+    )
+    return _bounded_non_empty_text(
+        "\n".join(paragraph for paragraph in paragraphs if paragraph),
+        "Manual DOCX treatment-plan file did not contain extractable text.",
+    )
+
+
+def _extract_rtf_text(raw_bytes: bytes) -> str:
+    decoded = _decode_rtf_bytes(raw_bytes)
+    with_breaks = re.sub(r"\\(?:par|line)\b\s*", "\n", decoded, flags=re.IGNORECASE)
+    without_hex = re.sub(
+        r"\\'([0-9a-fA-F]{2})",
+        lambda match: bytes.fromhex(match.group(1)).decode("latin-1"),
+        with_breaks,
+    )
+    without_controls = re.sub(r"\\[a-zA-Z]+-?\d*\s?", "", without_hex)
+    without_escapes = without_controls.replace(r"\{", "{").replace(r"\}", "}").replace(r"\\", "\\")
+    text = html.unescape(without_escapes.replace("{", " ").replace("}", " "))
+    return _bounded_non_empty_text(
+        "\n".join(re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines() if line.strip()),
+        "Manual RTF treatment-plan file did not contain extractable text.",
+    )
+
+
+def _decode_rtf_bytes(raw_bytes: bytes) -> str:
+    try:
+        return raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw_bytes.decode("latin-1")
+
+
+def _validate_office_archive(archive: ZipFile, label: str) -> None:
+    entries = archive.infolist()
+    if len(entries) > OFFICE_MAX_ENTRIES or sum(entry.file_size for entry in entries) > OFFICE_MAX_UNCOMPRESSED_BYTES:
+        raise ManualFileParseError(f"Manual {label} treatment-plan file exceeds safe extraction limits.")
+    if any(entry.flag_bits & 0x1 for entry in entries):
+        raise ManualFileParseError(f"Encrypted {label} treatment-plan files are not supported.")
 
 
 def _bounded_non_empty_text(text: str, empty_message: str) -> str:
@@ -105,7 +187,7 @@ def _xlsx_shared_strings(workbook: ZipFile) -> tuple[str, ...]:
 
 def _xlsx_cell_text(cell: ElementTree.Element, shared_strings: tuple[str, ...]) -> str:
     cell_type = cell.attrib.get("t", "")
-    match cell_type:
+    match cell_type:  # noqa: MATCH_OK - XLSX cell types are an open XML vocabulary with a safe fallback.
         case "inlineStr":
             return "".join(text.text or "" for text in cell.iter(f"{XLSX_MAIN_NS}t"))
         case "s":

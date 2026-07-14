@@ -699,6 +699,116 @@ dd,
   .api-tests-slot { order: 3; }
 }
 
+.compact-job-status {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: 0.8rem;
+  border-left: 4px solid var(--border-strong);
+  padding: 0.75rem;
+  background: var(--bg-subtle);
+}
+
+.compact-job-status--completed {
+  border-left-color: var(--status-compliant);
+}
+
+.compact-job-status--completed_with_warnings,
+.compact-job-status--writing {
+  border-left-color: var(--status-due-soon);
+}
+
+.compact-job-status--failed,
+.compact-job-status--stale_or_interrupted {
+  border-left-color: var(--status-overdue);
+}
+
+.compact-job-status__heading,
+.compact-job-status__counts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.compact-job-status__counts div {
+  display: grid;
+  min-width: 4.5rem;
+}
+
+.compact-job-status__counts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.preflight-blockers {
+  color: var(--text-muted);
+}
+
+.settings-form form,
+.binder-selection,
+.binder-file-list,
+.binder-warning-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.settings-form form {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--border-soft);
+  padding-top: var(--space-4);
+}
+
+.binder-selection {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+}
+
+.binder-selection-header,
+.binder-file-list li,
+.binder-actions,
+.binder-result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.binder-file-list,
+.binder-warning-list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.binder-file-list li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.binder-status {
+  margin: 0;
+  border-left: 4px solid var(--status-compliant);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+}
+
+.binder-status.warning {
+  border-left-color: var(--status-due-soon);
+}
+
+.binder-result-summary {
+  justify-content: flex-start;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.binder-warning-list {
+  color: var(--status-urgent);
+}
+
 @media (max-width: 900px) {
   .table-panel table,
   .table-panel thead,

@@ -38,7 +38,7 @@ function pageFor(view: string, token: string, user: UserProfile, onNavigate: (vi
     case 'Patient Roster':
       return <PatientRosterPage token={token} user={user} onNavigate={onNavigate} />
     case 'Manual Upload':
-      return <ManualUploadPage token={token} />
+      return <ManualUploadPage token={token} onNavigate={onNavigate} />
     case 'Corrections':
       return <CorrectionsPage token={token} />
     case 'API Testing Harness':

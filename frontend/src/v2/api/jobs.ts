@@ -1,4 +1,5 @@
 import { readNumber, readRecordList, readRecordListPayload, readRecordPayload, readString } from './json'
+import { mapArtifact, mapJob } from './jobMapper'
 import { request } from './request'
 import type { ApiHarnessArtifact, ApiHarnessJob, ApiHarnessPreview } from './types'
 
@@ -16,6 +17,10 @@ export async function startApiHarnessJob(token: string): Promise<ApiHarnessJob> 
 
 export async function getApiHarnessJob(token: string, jobId: string): Promise<ApiHarnessJob> {
   return mapJob(await readRecordPayload(await request(`/api/v2/api-harness/jobs/${jobId}`, { token })))
+}
+
+export async function listApiHarnessJobs(token: string): Promise<readonly ApiHarnessJob[]> {
+  return (await readRecordListPayload(await request('/api/v2/api-harness/jobs', { token }))).map(mapJob)
 }
 
 export async function cancelApiHarnessJob(token: string, jobId: string): Promise<ApiHarnessJob> {
@@ -54,26 +59,4 @@ export async function downloadApiHarnessArtifact(token: string, jobId: string, a
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
-}
-
-function mapJob(record: Record<string, unknown>): ApiHarnessJob {
-  return {
-    jobId: readString(record, 'job_id'),
-    status: readString(record, 'status'),
-    progressPercent: readNumber(record, 'progress_percent'),
-    recordsWritten: readNumber(record, 'records_written'),
-    recordsFailed: readNumber(record, 'records_failed'),
-    warningsCount: readNumber(record, 'warnings_count'),
-    artifacts: readRecordList(record, 'artifacts').map(mapArtifact),
-  }
-}
-
-function mapArtifact(record: Record<string, unknown>): ApiHarnessArtifact {
-  return {
-    artifactId: readString(record, 'artifact_id'),
-    name: readString(record, 'name'),
-    mediaType: readString(record, 'media_type'),
-    sizeBytes: readNumber(record, 'size_bytes'),
-    redactionMode: readString(record, 'redaction_mode'),
-  }
 }

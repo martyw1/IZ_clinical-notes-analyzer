@@ -96,6 +96,8 @@ class EvaluationContext:
 
 
 def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
+    if context.source_uncertainty is not None:
+        return context.source_uncertainty, context.source_uncertainty_reason
     if context.malformed_signature or context.loc_conflict:
         return "Conflicting Evidence", "Signature or level-of-care evidence is malformed or internally inconsistent."
     if context.future_review:

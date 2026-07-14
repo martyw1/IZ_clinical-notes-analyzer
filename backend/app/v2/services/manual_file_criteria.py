@@ -4,7 +4,7 @@ import json
 from typing import Final, Mapping
 
 from app.core.config import REPO_ROOT
-from app.v2.domain.schemas import ContentEvidenceRef, JsonValue, TreatmentPlanCriterionResult
+from app.v2.domain.schemas import ContentEvidenceRef, JsonValue, ReviewStatus, TreatmentPlanCriterionResult
 from app.v2.services.manual_file_types import ManualFileParseError, ParsedManualFields
 
 SOURCE_ENDPOINT: Final = "manual_upload://parsed-treatment-plan-file"
@@ -73,19 +73,29 @@ def _criterion_result(
     key = _step_text(step, "key", f"criterion_{index}")
     title = _step_text(step, "title", f"Criterion {index}")
     path, value = _criterion_evidence_source(key, title, parsed)
-    has_value = _has_value(value)
-    evidence = (evidence_ref(key, title, path, preview(value)),) if has_value else ()
-    status = "Compliant" if has_value else "Missing Data"
-    if path == "manual_upload.raw_text" and parsed.raw_text.strip():
-        status = "Needs Review"
-        evidence = (
-            evidence_ref(
-                key,
-                title,
-                path,
-                "Manual file text exists; parser could not map this criterion automatically.",
-            ),
-        )
+    conflict_key = _conflict_key(path)
+    conflict_refs: tuple[str, ...] = ()
+    if parsed.parsed_source_count == 0:
+        status: ReviewStatus = "Unable to Evaluate"
+        evidence: tuple[ContentEvidenceRef, ...] = ()
+    elif conflict_key in parsed.conflicting_fields:
+        status = "Conflicting Evidence"
+        evidence = ()
+        conflict_refs = (path,)
+    else:
+        has_value = _has_value(value)
+        evidence = (evidence_ref(key, title, path, preview(value)),) if has_value else ()
+        status = "Compliant" if has_value else "Missing Data"
+        if path == "manual_upload.raw_text" and parsed.raw_text.strip():
+            status = "Needs Review"
+            evidence = (
+                evidence_ref(
+                    key,
+                    title,
+                    path,
+                    "Manual file text exists; parser could not map this criterion automatically.",
+                ),
+            )
     return TreatmentPlanCriterionResult(
         criterion_id=key,
         criterion_title=title,
@@ -95,12 +105,21 @@ def _criterion_result(
         content_considered=present_sections(parsed),
         evidence_refs=evidence,
         missing_content_refs=() if evidence else (path,),
-        conflict_refs=(),
+        conflict_refs=conflict_refs,
         source_json_paths=(path,),
         source_endpoint=SOURCE_ENDPOINT,
         redaction_status="safe_preview_only",
         manager_action_options=("approve criterion", "return criterion for correction", "override with reason"),
     )
+
+
+def _conflict_key(path: str) -> str:
+    return {
+        "admission_date": "admission_date",
+        "current_level_of_care": "current_level_of_care",
+        "date_clock_due_date": "date_clock_due_date",
+        "content_snapshot.signatures[0].signature_datetime": "signature_datetime",
+    }.get(path, "")
 
 
 def _criterion_evidence_source(key: str, title: str, parsed: ParsedManualFields) -> tuple[str, str]:

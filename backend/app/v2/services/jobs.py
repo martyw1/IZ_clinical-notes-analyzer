@@ -20,6 +20,7 @@ from app.v2.services.job_runner import (
     fetch_paged_records,
 )
 from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
+from app.v2.services.alleva_roster import run_roster_pull
 from app.v2.services.alleva_contracts import (
     ApprovedAllevaContract,
     copy_sync_checkpoints,
@@ -53,6 +54,24 @@ ARTIFACT_NAMES: Final = (
 
 def _now() -> str:
     return now_iso()
+
+
+def _safe_sync_failure_details(exc: AllevaSyncError) -> dict[str, JsonPrimitive]:
+    details: dict[str, JsonPrimitive] = {"error_class": type(exc).__name__}
+    cause = exc.__cause__
+    if cause is None:
+        return details
+    details["cause_class"] = type(cause).__name__
+    trace = cause.__traceback__
+    while trace and trace.tb_next:
+        trace = trace.tb_next
+    if trace is not None:
+        details["cause_origin"] = trace.tb_frame.f_code.co_name
+    response = getattr(cause, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        details["http_status"] = status_code
+    return details
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +113,8 @@ class HarnessConnection:
     token_auth_style: str
     timeout_seconds: int
     page_size: int
+    api_version: str
+    treatment_plan_start_date: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +131,8 @@ class ApiHarnessJobService:
         self._sync_actor_ids: dict[str, int] = {}
         self._sync_contracts: dict[str, ApprovedAllevaContract] = {}
         self._sync_resume_sources: dict[str, str] = {}
+        self._roster_actor_ids: dict[str, int] = {}
+        self._roster_contracts: dict[str, ApprovedAllevaContract] = {}
         self._lock = threading.Lock()
 
     def create_all_fields_job(self, connection: HarnessConnection, actor_id: str = "admin", actor_role: str = "admin") -> ApiHarnessJob:
@@ -199,6 +222,38 @@ class ApiHarnessJobService:
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
+    def create_roster_pull_job(
+        self,
+        actor_id: int,
+        actor_role: str,
+        contract: ApprovedAllevaContract,
+    ) -> ApiHarnessJob:
+        job_id = f"roster-{uuid4().hex[:12]}"
+        output_dir = settings.api_harness_runs_dir / job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        created = _now()
+        job = MutableJob(
+            job_id=job_id, job_type="active_patient_roster_pull", created_at=created, started_at=None,
+            updated_at=created, completed_at=None, cancelled_at=None, failed_at=None, actor_id=str(actor_id),
+            actor_role=actor_role, status="queued", progress_percent=0, current_endpoint="GET /clients",
+            current_page=0, current_cursor="", records_seen=0, records_written=0, records_failed=0,
+            warnings_count=0, errors_count=0, output_dir=str(output_dir), redaction_mode="redacted",
+            raw_sensitive_mode_used=False, cancel_requested=False, last_heartbeat_at=created,
+        )
+        with self._lock:
+            if any(
+                existing.job_type == "active_patient_roster_pull"
+                and existing.status in {"queued", "running", "writing"}
+                for existing in self._jobs.values()
+            ):
+                raise ValueError("An active patient-roster pull is already running.")
+            self._jobs[job_id] = job
+            self._roster_actor_ids[job_id] = actor_id
+            self._roster_contracts[job_id] = contract
+        save_job(job)
+        threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
+        return self.get_job(job_id)
+
     def resume_treatment_plan_sync_job(
         self,
         job_id: str,
@@ -249,7 +304,7 @@ class ApiHarnessJobService:
             with SessionLocal() as db:
                 set_sync_cancellation_requested(db, job_id)
         match job.job_type:
-            case "pull_all_treatment_plans_all_fields":
+            case "pull_all_treatment_plans_all_fields" | "active_patient_roster_pull":
                 self._audit_diagnostic_job(
                     job_id,
                     DiagnosticAuditEvent("api_harness.job.cancel_requested", "success", {}),
@@ -313,6 +368,14 @@ class ApiHarnessJobService:
             sync_actor_id = self._sync_actor_ids.pop(job_id, None)
             sync_contract = self._sync_contracts.pop(job_id, None)
             resume_source_job_id = self._sync_resume_sources.pop(job_id, None)
+            roster_actor_id = self._roster_actor_ids.pop(job_id, None)
+            roster_contract = self._roster_contracts.pop(job_id, None)
+        if roster_actor_id is not None:
+            if roster_contract is None:
+                self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
+                return
+            self._run_roster_pull_job(job_id, roster_actor_id, roster_contract)
+            return
         if sync_actor_id is not None:
             if sync_contract is None:
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
@@ -418,7 +481,7 @@ class ApiHarnessJobService:
                     1,
                     _now(),
                 )
-                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__})
+                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details=_safe_sync_failure_details(exc))
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
             except Exception as exc:
@@ -438,29 +501,96 @@ class ApiHarnessJobService:
                 record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__, "error_origin": error_origin})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
+            audit_details: dict[str, JsonValue] = {
+                "imported_patient_count": result.imported_patient_count,
+                "skipped_plan_count": result.skipped_plan_count,
+                "created_treatment_plan_count": result.created_treatment_plan_count,
+                "updated_treatment_plan_count": result.updated_treatment_plan_count,
+                "unchanged_treatment_plan_count": result.unchanged_treatment_plan_count,
+                "updated_treatment_plan_ids": list(result.updated_treatment_plan_ids),
+            }
+            if result.failed_detail_count:
+                audit_details["failed_detail_count"] = result.failed_detail_count
             record_audit_event(
                 db,
                 action="alleva.treatment_plan_sync.completed",
                 actor=actor,
                 target_entity_type="integration_sync",
                 target_entity_id="alleva_treatment_plan_sync",
+                details=audit_details,
+            )
+        terminal_status = "completed_with_warnings" if result.failed_detail_count else "completed"
+        self._set(
+            job_id,
+            status=terminal_status,
+            completed_at=_now(),
+            progress_percent=100,
+            records_seen=result.imported_patient_count + result.skipped_plan_count + result.failed_detail_count,
+            records_written=result.created_treatment_plan_count + result.updated_treatment_plan_count,
+            records_failed=result.failed_detail_count,
+            warnings_count=result.failed_detail_count,
+            current_endpoint="completed",
+        )
+
+    def _run_roster_pull_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract) -> None:
+        self._set(job_id, status="running", started_at=_now(), progress_percent=5, current_endpoint="GET /clients")
+        with SessionLocal() as db:
+            profile = db.execute(select(AppSetting)).scalar_one()
+            actor = db.get(User, actor_id)
+            if actor is None:
+                self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
+                return
+            try:
+                result = run_roster_pull(
+                    db,
+                    profile,
+                    contract,
+                    job_id,
+                    _now(),
+                    is_cancelled=lambda: self.get_job(job_id).cancel_requested,
+                    on_page=lambda page, cursor, records: self._set(
+                        job_id,
+                        status="writing",
+                        current_page=page + 1,
+                        current_cursor=f"offset-{cursor}",
+                        records_seen=self.get_job(job_id).records_seen + len(records),
+                        progress_percent=min(90, 10 + (page + 1) * 15),
+                        last_heartbeat_at=_now(),
+                    ),
+                )
+            except AllevaSyncCancelled:
+                self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
+                record_audit_event(
+                    db, action="alleva.patient_roster_pull.cancelled", actor=actor,
+                    target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+                    outcome_status="cancelled",
+                )
+                return
+            except AllevaSyncError as exc:
+                self._set(job_id, status="failed", failed_at=_now(), progress_percent=100, errors_count=1)
+                record_audit_event(
+                    db, action="alleva.patient_roster_pull.failed", actor=actor,
+                    target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+                    outcome_status="failure", details={"error_class": type(exc).__name__},
+                )
+                return
+            record_audit_event(
+                db, action=f"alleva.patient_roster_pull.{result.status}", actor=actor,
+                target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+                outcome_status="warning" if result.warning_count else "success",
                 details={
-                    "imported_patient_count": result.imported_patient_count,
-                    "skipped_plan_count": result.skipped_plan_count,
-                    "created_treatment_plan_count": result.created_treatment_plan_count,
-                    "updated_treatment_plan_count": result.updated_treatment_plan_count,
-                    "unchanged_treatment_plan_count": result.unchanged_treatment_plan_count,
-                    "updated_treatment_plan_ids": list(result.updated_treatment_plan_ids),
+                    "observed_patient_count": result.observed_count,
+                    "complete_snapshot": result.complete_snapshot,
                 },
             )
         self._set(
             job_id,
-            status="completed",
+            status=result.status,
             completed_at=_now(),
             progress_percent=100,
-            records_seen=result.imported_patient_count + result.skipped_plan_count,
-            records_written=result.created_treatment_plan_count + result.updated_treatment_plan_count,
-            records_failed=result.skipped_plan_count,
+            records_seen=result.observed_count,
+            records_written=result.observed_count,
+            warnings_count=result.warning_count,
             current_endpoint="completed",
         )
 

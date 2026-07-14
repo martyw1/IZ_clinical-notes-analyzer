@@ -17,7 +17,7 @@ from app.v2.models import AppSetting
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 REQUIRED_ENDPOINTS: Final = frozenset(("clients", "treatment_plans", "treatment_plan_detail", "diagnoses", "reviews", "review_detail"))
-BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-07-13"
+BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-07-13-exact-read-protocol"
 DEFAULT_ALLEVA_SCOPE: Final = "https://authorization.allevasoft.com/api:read"
 _BUILTIN_CONTRACT_LOCK: Final = Lock()
 
@@ -87,22 +87,7 @@ def _ensure_builtin_contract(
         return current, False
 
     now = datetime.now(timezone.utc)
-    profile_fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "mapping_version": BUILT_IN_MAPPING_VERSION,
-                "api_base_url": profile.api_base_url,
-                "token_url": profile.api_oauth_token_url,
-                "token_auth_style": profile.api_token_auth_style,
-                "scope": _profile_scope(profile),
-                "pagination_limit": profile.api_pagination_limit,
-                "sync_limit": profile.alleva_treatment_plan_sync_limit,
-                "requests_per_minute": profile.api_requests_per_minute,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()[:10]
+    profile_fingerprint = _profile_fingerprint(profile)
     timestamp = now.strftime("%Y%m%d%H%M%S%f")
     payload = _builtin_contract_payload(
         profile,
@@ -155,7 +140,12 @@ def _builtin_contract_payload(
                 },
                 "treatment_plans": {
                     "path": "/treatment-plans",
-                    "parameters": {"limit": "Limit", "offset": "Cursor", "client_id": "ClientId"},
+                    "parameters": {
+                        "limit": "Limit",
+                        "offset": "Cursor",
+                        "client_id": "ClientId",
+                        "start_date": "StartDate",
+                    },
                     "field_mappings": {
                         "client_id": "client.id",
                         "client_reference": "client.route",
@@ -201,8 +191,29 @@ def _profile_scope(profile: AppSetting) -> str:
     return profile.api_scopes.strip() or DEFAULT_ALLEVA_SCOPE
 
 
+def _profile_fingerprint(profile: AppSetting) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "mapping_version": BUILT_IN_MAPPING_VERSION,
+                "api_base_url": profile.api_base_url,
+                "token_url": profile.api_oauth_token_url,
+                "token_auth_style": profile.api_token_auth_style,
+                "scope": _profile_scope(profile),
+                "api_version": profile.alleva_api_version,
+                "treatment_plan_start_date": profile.alleva_treatment_plan_start_date,
+                "pagination_limit": profile.api_pagination_limit,
+                "sync_limit": profile.alleva_treatment_plan_sync_limit,
+                "requests_per_minute": profile.api_requests_per_minute,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()[:10]
+
+
 def _is_builtin_contract(contract: ApprovedAllevaContract, profile: AppSetting) -> bool:
-    if not contract.contract_version.startswith(f"{BUILT_IN_MAPPING_VERSION}-"):
+    if not contract.contract_version.startswith(f"{BUILT_IN_MAPPING_VERSION}-{_profile_fingerprint(profile)}-"):
         return False
     expected = _builtin_contract_payload(
         profile,
@@ -224,6 +235,9 @@ def contract_matches_profile(contract: ApprovedAllevaContract, profile: AppSetti
         return connection_matches
     return (
         connection_matches
+        and contract.contract_version.startswith(
+            f"{BUILT_IN_MAPPING_VERSION}-{_profile_fingerprint(profile)}-"
+        )
         and payload.pagination.maximum_page_size == profile.api_pagination_limit
         and payload.pagination.maximum_records == profile.alleva_treatment_plan_sync_limit
         and payload.rate_limit.maximum_requests_per_minute == profile.api_requests_per_minute

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.models import AppSetting, User
+from app.v2.services.bounded_http import ResponseTooLarge
 from app.v2.services.manual_file_aggregate import build_manual_aggregate
 from app.v2.services.manual_file_types import ParsedManualFields
 from app.v2.services.alleva_contracts import (
@@ -29,7 +30,16 @@ from app.v2.services.alleva_contracts import (
     sync_import_provenance,
 )
 from app.v2.services.oauth_connectivity import request_client_credentials
-from app.v2.services.secure_storage import decrypt_text_secret
+from app.v2.services.alleva_protocol import (
+    DEFAULT_ALLEVA_API_VERSION,
+    DEFAULT_TREATMENT_PLAN_START_DATE,
+    AllevaReadProtocol,
+    collection_parameters,
+    collection_records,
+    detail_parameters,
+    read_headers,
+)
+from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
 from app.v2.services.treatment_plan_store import (
     TreatmentPlanSaveDisposition,
     save_treatment_plan_aggregate_with_disposition,
@@ -114,6 +124,7 @@ class AllevaSyncResult:
     created_treatment_plan_count: int
     updated_treatment_plan_count: int
     unchanged_treatment_plan_count: int
+    failed_detail_count: int
     updated_treatment_plan_ids: tuple[str, ...]
 
 
@@ -123,6 +134,7 @@ class SyncImportSummary:
     updated_count: int
     unchanged_count: int
     skipped_count: int
+    failed_detail_count: int
     updated_plan_ids: tuple[str, ...]
 
 
@@ -147,7 +159,11 @@ def run_treatment_plan_sync(
     if is_cancelled():
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before it started.")
     token = _oauth_token(profile, contract, is_cancelled)
-    headers = {"accept": "application/json", "authorization": f"Bearer {token}"}
+    protocol = AllevaReadProtocol(
+        profile.alleva_api_version,
+        profile.alleva_treatment_plan_start_date,
+    )
+    headers = read_headers(bearer_token=token, protocol=protocol)
     try:
         with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=False) as client:
             rate_limiter = ApprovedRequestRateLimiter(contract.payload.rate_limit.maximum_requests_per_minute)
@@ -185,6 +201,7 @@ def run_treatment_plan_sync(
         created_treatment_plan_count=summary.created_count,
         updated_treatment_plan_count=summary.updated_count,
         unchanged_treatment_plan_count=summary.unchanged_count,
+        failed_detail_count=summary.failed_detail_count,
         updated_treatment_plan_ids=summary.updated_plan_ids,
     )
 
@@ -196,7 +213,7 @@ def _oauth_token(profile: AppSetting, contract: ApprovedAllevaContract, is_cance
         raise AllevaSyncError("Encrypted Alleva client secret is not configured.")
     _, token = request_client_credentials(
         token_url=contract.payload.oauth.token_url,
-        client_id=profile.api_client_id,
+        client_id=decrypt_api_client_id(profile.api_client_id),
         client_secret=decrypt_text_secret(profile.api_client_secret),
         scope=contract.payload.oauth.scope,
         token_auth_style=contract.payload.oauth.token_auth_style,
@@ -224,6 +241,7 @@ def _paged_records(
     checkpoint_endpoint_key: str | None = None,
     record_budget: ApprovedRecordBudget | None = None,
     page_size_override: int | None = None,
+    stop_after_first_page: bool = False,
 ) -> tuple[dict[str, object], ...]:
     records = [record for checkpoint in checkpoint_pages for record in checkpoint.records]
     pagination = contract.payload.pagination
@@ -253,6 +271,14 @@ def _paged_records(
                     endpoint_key,
                     requested_page_size,
                     offset,
+                    protocol=AllevaReadProtocol(
+                        getattr(profile, "alleva_api_version", DEFAULT_ALLEVA_API_VERSION),
+                        getattr(
+                            profile,
+                            "alleva_treatment_plan_start_date",
+                            DEFAULT_TREATMENT_PLAN_START_DATE,
+                        ),
+                    ),
                     additional_parameters=additional_parameters,
                 ),
                 headers,
@@ -269,10 +295,14 @@ def _paged_records(
         if response_size > pagination.maximum_response_bytes:
             raise ValueError("API page exceeded the approved response-size limit.")
         page = _records(response.json())
-        if len(page) > requested_page_size:
-            if record_budget is not None:
-                record_budget.refund(requested_page_size)
-            raise ValueError("Approved endpoint returned more records than requested.")
+        vendor_exceeded_requested_page = len(page) > requested_page_size
+        if vendor_exceeded_requested_page:
+            if record_budget is None or len(page) > pagination.maximum_page_size:
+                if record_budget is not None:
+                    record_budget.refund(requested_page_size)
+                raise ValueError("Approved endpoint returned more records than the bounded page permits.")
+            extra_allowed = record_budget.reserve(len(page) - requested_page_size)
+            page = page[: requested_page_size + extra_allowed]
         if record_budget is not None:
             record_budget.refund(requested_page_size - len(page))
         page_hash = hashlib.sha256(json.dumps(page, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -282,9 +312,11 @@ def _paged_records(
         records.extend(page)
         if on_page:
             on_page(checkpoint_endpoint_key or endpoint_key, offset, hashlib.sha256(str(offset).encode("utf-8")).hexdigest(), page_hash, tuple(page))
+        if stop_after_first_page or vendor_exceeded_requested_page:
+            break
         if len(page) < requested_page_size:
             break
-        offset += len(page)
+        offset += requested_page_size
     return tuple(records[:limit])
 
 
@@ -294,16 +326,28 @@ def _endpoint_request_parameters(
     limit: int,
     offset: int,
     additional_parameters: dict[str, str | int] | None = None,
+    *,
+    protocol: AllevaReadProtocol | None = None,
 ) -> dict[str, str | int]:
     endpoint_parameters = contract.payload.endpoints[endpoint_key].parameters
-    request_parameters: dict[str, str | int] = {
-        endpoint_parameters.get("limit", contract.payload.pagination.limit_parameter): limit,
-        endpoint_parameters.get("offset", contract.payload.pagination.offset_parameter): offset,
-    }
-    request_parameters.update(
-        {name: value for name, value in endpoint_parameters.items() if name not in {"limit", "offset", "client_id"}}
+    additional = dict(additional_parameters or {})
+    api_version = str(additional.pop("api_version", DEFAULT_ALLEVA_API_VERSION))
+    treatment_plan_start_date = str(
+        additional.pop("start_date", DEFAULT_TREATMENT_PLAN_START_DATE)
     )
-    for semantic_name, value in (additional_parameters or {}).items():
+    effective_protocol = protocol or AllevaReadProtocol(api_version, treatment_plan_start_date)
+    client_id_value = additional.pop("client_id", None)
+    request_parameters = collection_parameters(
+        endpoint_parameters=endpoint_parameters,
+        limit_parameter=contract.payload.pagination.limit_parameter,
+        offset_parameter=contract.payload.pagination.offset_parameter,
+        limit=limit,
+        cursor=offset,
+        protocol=effective_protocol,
+        include_start_date=endpoint_key == "treatment_plans",
+        client_id=str(client_id_value) if client_id_value is not None else None,
+    )
+    for semantic_name, value in additional.items():
         request_parameters[endpoint_parameters.get(semantic_name, semantic_name)] = value
     return request_parameters
 
@@ -358,6 +402,7 @@ def _patient_scoped_plans(
             checkpoint_endpoint_key=checkpoint_key,
             record_budget=budget,
             page_size_override=fair_page_size,
+            stop_after_first_page=True,
         )
         return patient_id, records
 
@@ -436,10 +481,7 @@ def _mapped_collection_text(
 
 
 def _records(payload: object) -> list[dict[str, object]]:
-    values = payload.get("items") if isinstance(payload, dict) else payload
-    if not isinstance(values, list):
-        raise ValueError("Expected an API list response.")
-    return [value for value in values if isinstance(value, dict)]
+    return collection_records(payload)
 
 
 def _save_client_aggregates(
@@ -459,6 +501,7 @@ def _save_client_aggregates(
     updated = 0
     unchanged = 0
     skipped = 0
+    failed_details = 0
     updated_plan_ids: list[str] = []
     candidates: list[PlanImportCandidate] = []
     api_base_url = str(profile.api_base_url)
@@ -488,17 +531,23 @@ def _save_client_aggregates(
             headers,
             is_cancelled,
             rate_limiter,
+            api_version=profile.alleva_api_version,
         )
 
-    details: tuple[dict[str, object], ...]
+    details: list[dict[str, object] | None] = [None] * len(candidates)
     if candidates:
         worker_count = min(MAX_SYNC_HTTP_WORKERS, len(candidates))
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="alleva-plan-detail") as executor:
-            details = tuple(executor.map(fetch_detail, candidates))
-    else:
-        details = ()
+            futures = tuple(executor.submit(fetch_detail, candidate) for candidate in candidates)
+            for index, future in enumerate(futures):
+                try:
+                    details[index] = future.result()
+                except (httpx.HTTPError, json.JSONDecodeError, ValueError, ResponseTooLarge):
+                    failed_details += 1
 
     for candidate, detail in zip(candidates, details, strict=True):
+        if detail is None:
+            continue
         aggregate = _aggregate_from_payload(
             candidate.patient_id,
             candidate.client_payload,
@@ -523,7 +572,7 @@ def _save_client_aggregates(
                 unchanged += 1
             case unreachable:
                 assert_never(unreachable)
-    return SyncImportSummary(created, updated, unchanged, skipped, tuple(updated_plan_ids))
+    return SyncImportSummary(created, updated, unchanged, skipped, failed_details, tuple(updated_plan_ids))
 
 
 def _client_lifecycles(clients: tuple[dict[str, object], ...], contract: ApprovedAllevaContract) -> dict[str, str]:
@@ -608,11 +657,13 @@ def _patient_id_from_reference(reference: str) -> str:
 def _plan_detail(
     client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, plan_id: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter,
+    *, api_version: str = DEFAULT_ALLEVA_API_VERSION,
 ) -> dict[str, object]:
+    protocol = AllevaReadProtocol(api_version=api_version)
     response = _get_with_retry(
         client,
         urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")),
-        None,
+        detail_parameters(protocol),
         headers,
         is_cancelled,
         contract.payload.rate_limit.retry_after_seconds,
@@ -622,18 +673,27 @@ def _plan_detail(
     payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("Expected an API treatment-plan detail object.")
-    diagnoses = _endpoint_records(client, api_base_url, contract, "diagnoses", headers, is_cancelled, rate_limiter, plan_id=plan_id)
+    diagnoses = _endpoint_records(
+        client, api_base_url, contract, "diagnoses", headers, is_cancelled, rate_limiter,
+        api_version=api_version, plan_id=plan_id,
+    )
     reviews_endpoint = contract.payload.endpoints["reviews"]
     reviews = []
     if "{plan_id}" in reviews_endpoint.path or "plan_id" in reviews_endpoint.field_mappings:
-        reviews = _endpoint_records(client, api_base_url, contract, "reviews", headers, is_cancelled, rate_limiter, plan_id=plan_id)
+        reviews = _endpoint_records(
+            client, api_base_url, contract, "reviews", headers, is_cancelled, rate_limiter,
+            api_version=api_version, plan_id=plan_id,
+        )
         if "{plan_id}" not in reviews_endpoint.path:
             reviews = [review for review in reviews if _mapped_text(review, contract, "reviews", "plan_id") == plan_id]
     payload["diagnoses"] = diagnoses or payload.get("diagnoses", [])
     if reviews:
         review_id = _mapped_text(reviews[0], contract, "reviews", "review_id")
         if review_id:
-            payload["review_detail"] = _endpoint_json(client, api_base_url, contract, "review_detail", headers, is_cancelled, rate_limiter, plan_id=plan_id, review_id=review_id)
+            payload["review_detail"] = _endpoint_json(
+                client, api_base_url, contract, "review_detail", headers, is_cancelled, rate_limiter,
+                api_version=api_version, plan_id=plan_id, review_id=review_id,
+            )
     return payload
 
 
@@ -643,9 +703,19 @@ def _endpoint_path(contract: ApprovedAllevaContract, endpoint_key: str, **values
 
 def _endpoint_json(
     client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
-    is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter, **values: str,
+    is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter,
+    *, api_version: str = DEFAULT_ALLEVA_API_VERSION, **values: str,
 ) -> object:
-    response = _get_with_retry(client, urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter, contract.payload.pagination.maximum_response_bytes)
+    response = _get_with_retry(
+        client,
+        urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, endpoint_key, **values).lstrip("/")),
+        detail_parameters(AllevaReadProtocol(api_version=api_version)),
+        headers,
+        is_cancelled,
+        contract.payload.rate_limit.retry_after_seconds,
+        rate_limiter,
+        contract.payload.pagination.maximum_response_bytes,
+    )
     return response.json()
 
 
@@ -681,9 +751,15 @@ def _wait_for_retry(delay_seconds: int, is_cancelled: Callable[[], bool]) -> Non
 
 def _endpoint_records(
     client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, endpoint_key: str, headers: dict[str, str],
-    is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter, **values: str,
+    is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter,
+    *, api_version: str = DEFAULT_ALLEVA_API_VERSION, **values: str,
 ) -> list[dict[str, object]]:
-    return _records(_endpoint_json(client, api_base_url, contract, endpoint_key, headers, is_cancelled, rate_limiter, **values))
+    return _records(
+        _endpoint_json(
+            client, api_base_url, contract, endpoint_key, headers, is_cancelled, rate_limiter,
+            api_version=api_version, **values,
+        )
+    )
 
 
 def _aggregate_from_payload(

@@ -79,7 +79,12 @@ APP_SETTING_EXTENSIONS = (
     ("alleva_treatment_plan_sync_approved", "BOOLEAN NOT NULL DEFAULT 0"),
     ("alleva_treatment_plan_endpoint_mapping_validated", "BOOLEAN NOT NULL DEFAULT 0"),
     ("api_requests_per_minute", "INTEGER NOT NULL DEFAULT 600 CHECK(api_requests_per_minute BETWEEN 1 AND 10000)"),
+    ("alleva_api_version", "VARCHAR(20) NOT NULL DEFAULT '1.0'"),
+    ("alleva_treatment_plan_start_date", "VARCHAR(40) NOT NULL DEFAULT '2000-01-01T16:03'"),
+    ("legacy_api_settings_migration_state", "VARCHAR(80) NOT NULL DEFAULT ''"),
 )
+
+APP_SETTING_PROTOCOL_EXTENSIONS = APP_SETTING_EXTENSIONS[-3:]
 
 APP_SETTING_LEGACY_SOURCES = (
     ("api_base_url", "alleva_api_base_url"),

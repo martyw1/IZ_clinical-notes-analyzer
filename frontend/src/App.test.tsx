@@ -240,7 +240,7 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'retry-secret-value' } })
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Configuration could not be saved')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The local service could not complete the request. Restart the app and try again.')
     expect(screen.getByLabelText(/client secret/i)).toHaveValue('retry-secret-value')
     expect(screen.getByRole('button', { name: /save api configuration/i })).toBeEnabled()
   })
@@ -355,7 +355,7 @@ describe('V2 active app shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
   })
 
-  it('pulls full treatment plans from the patient roster and refreshes the roster list', async () => {
+  it('pulls active patients from the patient roster and refreshes the roster list', async () => {
     const fetchMock = setupFetch()
     await signIn()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
@@ -366,10 +366,10 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
-    fireEvent.click(await screen.findByRole('button', { name: /pull full treatment plans/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull active patient roster/i }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
-    expect(fetchMock).toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.objectContaining({ method: 'POST' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Completed successfully. 1 record updated.')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster/pull', expect.objectContaining({ method: 'POST' }))
     const rosterReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/patient-roster')
     expect(rosterReads.length).toBeGreaterThanOrEqual(2)
   })
@@ -406,35 +406,96 @@ describe('V2 active app shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/manual-uploads/treatment-plan-aggregate', expect.objectContaining({ method: 'POST' }))
   })
 
-  it('uploads parsed text treatment-plan files through the backend', async () => {
+  it('uploads a multi-file treatment-plan binder and opens the imported result', async () => {
     const fetchMock = setupFetch()
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
     fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
-    const file = new File(['Patient ID: 914\nIntervention: Weekly CBT skills practice.'], 'manual-text.txt', {
+    const textFile = new File(['Patient ID: 914\nIntervention: Weekly CBT skills practice.'], 'manual-text.txt', {
       type: 'text/plain',
     })
-    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, text-extractable PDF, XLSX\)/i), { target: { files: [file] } })
-    fireEvent.click(screen.getByRole('button', { name: /upload and parse treatment-plan file/i }))
+    const pdfFile = new File(['synthetic-pdf'], 'manual-plan.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [textFile, pdfFile] } })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file and archived encrypted source file.')
-    expect(fetchMock).toHaveBeenCalledWith('/api/v2/manual-uploads/treatment-plan-file', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }))
+    expect(screen.getByText('2 files selected')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
+
+    expect(await screen.findByText(/secure processing complete/i)).toBeInTheDocument()
+    const uploadCall = fetchMock.mock.calls.find(([path]) => path === '/api/v2/manual-uploads/treatment-plan-file')
+    expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData)
+    expect((uploadCall?.[1]?.body as FormData).getAll('file')).toHaveLength(2)
+    expect(screen.queryByText('manual-text.txt')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /review in treatment plans/i }))
+    expect(await screen.findByRole('heading', { name: /treatment plan workbench/i })).toBeInTheDocument()
   })
 
-  it('posts confirmed patient ID corrections for parsed treatment-plan files', async () => {
+  it('lets users remove and reset binder selections before upload', async () => {
     setupFetch()
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
-    fireEvent.click(screen.getByLabelText(/I confirm this override corrects/i))
-    const file = new File(['Patient ID: 913\nIntervention: Synthetic correction review.'], 'manual-correction.txt', {
-      type: 'text/plain',
-    })
-    fireEvent.change(screen.getByLabelText(/treatment-plan file \(TXT, CSV, TSV, MD, text-extractable PDF, XLSX\)/i), { target: { files: [file] } })
-    fireEvent.click(screen.getByRole('button', { name: /upload and parse treatment-plan file/i }))
+    const first = new File(['Patient ID: 914'], 'first.txt', { type: 'text/plain' })
+    const second = new File(['Synthetic binder'], 'second.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [first, second] } })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 914 from parsed manual_upload file after confirmed Patient ID correction and archived encrypted source file.')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove first.txt' }))
+    expect(screen.getByText('1 file selected')).toBeInTheDocument()
+    expect(screen.queryByText('first.txt')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /clear selection/i }))
+    expect(screen.getByText(/no binder files selected/i)).toBeInTheDocument()
+  })
+
+  it('requires a truthful patient-ID correction confirmation after a 409 response', async () => {
+    const fetchMock = setupFetch({ role: 'admin', manualUploadConflict: true })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
+    fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
+    const file = new File(['Patient ID: 913'], 'conflict.txt', { type: 'text/plain' })
+    fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/differs from the Patient ID detected/i)
+    fireEvent.click(screen.getByLabelText(/confirm this patient id correction/i))
+    fireEvent.click(screen.getByRole('button', { name: /retry with confirmed patient id/i }))
+
+    expect(await screen.findByText(/confirmed patient id correction/i)).toBeInTheDocument()
+    const binderCalls = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/manual-uploads/treatment-plan-file')
+    expect(binderCalls).toHaveLength(2)
+    expect((binderCalls[1]?.[1]?.body as FormData).get('confirm_patient_id_correction')).toBe('true')
+  })
+
+  it('keeps binder warnings local to the binder form and reports parsed and opaque counts', async () => {
+    setupFetch({ role: 'admin', manualUploadWarnings: true })
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
+    const parsed = new File(['Patient ID: 914'], 'parsed.txt', { type: 'text/plain' })
+    const opaque = new File(['opaque'], 'legacy.doc', { type: 'application/msword' })
+    fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [parsed, opaque] } })
+    fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
+
+    const binderForm = screen.getByRole('form', { name: /treatment-plan binder import/i })
+    expect(await within(binderForm).findByText(/imported with warnings/i)).toBeInTheDocument()
+    expect(within(binderForm).getByText(/1 parsed/i)).toBeInTheDocument()
+    expect(within(binderForm).getByText(/1 stored without parsing/i)).toBeInTheDocument()
+    expect(within(binderForm).getByText(/one uploaded source was archived as opaque content and was not parsed/i)).toBeInTheDocument()
+    expect(within(binderForm).queryByText('legacy.doc')).not.toBeInTheDocument()
+  })
+
+  it('prevents duplicate binder submissions while processing', async () => {
+    const fetchMock = setupFetch()
+    await signIn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
+    const file = new File(['Patient ID: 914'], 'single.txt', { type: 'text/plain' })
+    fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [file] } })
+    const submit = screen.getByRole('button', { name: /upload and securely process binder/i })
+    fireEvent.click(submit)
+    fireEvent.click(submit)
+
+    await screen.findByText(/secure processing complete/i)
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/v2/manual-uploads/treatment-plan-file')).toHaveLength(1)
   })
 })

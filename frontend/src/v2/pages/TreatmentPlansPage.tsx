@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getApiConfiguration, getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
+import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
+import { getApiConfiguration } from '../api/settingsClient'
 import { deleteTreatmentPlanSourceDocument, downloadChecklistEvidenceExport, downloadTreatmentPlanListExport, downloadTreatmentPlanSourceDocument } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, ManagerActionPayload, TreatmentPlanListData, TreatmentPlanListItem, UserProfile } from '../api/types'
@@ -172,9 +173,9 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
       {apiConfigError && <p role='alert' className='error-banner'>{apiConfigError}</p>}
       <section className='sticky-toolbar'>
         <div>
-          <p className='eyebrow'>Treatment Plans Workbench</p>
-          <h2>Focused V2 treatment-plan review queue</h2>
-          <p className='muted'>Signed in as {user.fullName}</p>
+          <p className='eyebrow'>Operational review queue</p>
+          <h2>Treatment Plan Workbench</h2>
+          <p className='muted'>Focused V2 review · Signed in as {user.fullName}</p>
         </div>
         <label>
           Search patient ID or status

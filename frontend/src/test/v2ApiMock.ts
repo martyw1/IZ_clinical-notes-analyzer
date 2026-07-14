@@ -11,6 +11,9 @@ type FetchState = {
   readonly workflowCreateFails?: boolean
   readonly mustResetPassword?: boolean
   readonly multiPlan?: boolean
+  readonly manualUploadConflict?: boolean
+  readonly manualUploadWarnings?: boolean
+  readonly manualUploadFails?: boolean
 }
 
 export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
@@ -49,7 +52,11 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/v2/manual-uploads/treatment-plan-file' && method === 'POST') {
       const correctionConfirmed = init?.body instanceof FormData
         && init.body.get('confirm_patient_id_correction') === 'true'
-      return importResponse('914', true, correctionConfirmed)
+      if (state.manualUploadFails) return jsonResponse({ detail: 'The binder could not be processed. Check the file limits and try again.' }, 413)
+      if (state.manualUploadConflict && !correctionConfirmed) {
+        return jsonResponse({ detail: 'The Patient ID override differs from the Patient ID detected in the binder. Confirm the correction to continue.' }, 409)
+      }
+      return binderImportResponse(correctionConfirmed, state.manualUploadWarnings ?? false)
     }
     if (path === '/api/settings') return jsonResponse(settingsPayload())
     if (path === '/api/api-configuration') {
@@ -64,6 +71,9 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     }
     if (path === '/api/v2/alleva-sync/run' && method === 'POST') return jsonResponse(syncJobPayload('queued'), 202)
     if (path === '/api/v2/alleva-sync/jobs/sync-912') return jsonResponse(syncJobPayload('completed'))
+    if (path === '/api/v2/patient-roster/jobs/latest') return jsonResponse({ detail: 'No roster job has run' }, 404)
+    if (path === '/api/v2/patient-roster/pull' && method === 'POST') return jsonResponse(rosterJobPayload('queued'), 202)
+    if (path === '/api/v2/patient-roster/jobs/roster-912') return jsonResponse(rosterJobPayload('completed'))
     if (path === '/api/api-configuration/pull-definitions' && method === 'POST') return jsonResponse({ status: 'ok', definition_summary: { title: 'Mock Treatment Plan API', operation_count: 3 }, redaction_status: 'safe_summary_only' })
     if (path === '/api/api-configuration/test-connectivity' && method === 'POST') return jsonResponse({ status: 'ok', token_auth_style: 'body', message: 'OAuth client-credentials token obtained and discarded after verification.', token_type: 'Bearer', expires_in: 3600 })
     if (path === '/api/api-configuration/test-operation' && method === 'POST') return jsonResponse({ status: 'ok', message: 'Read-only operation completed.', status_code: 200, content_type: 'application/json', response_bytes: 24, response_truncated: false })
@@ -81,6 +91,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     }
     if (path === '/api/audit/logs') return jsonResponse(auditLogsPayload())
     if (path === '/api/audit/verify') return jsonResponse(auditVerificationPayload)
+    if (path === '/api/v2/api-harness/jobs' && method === 'GET') return jsonResponse([])
     if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload('queued'))
     if (path === '/api/v2/api-harness/jobs/job-812') { harnessPolls += 1; return jsonResponse(jobPayload(harnessPolls > 20 ? (state.harnessFails ? 'failed' : 'completed') : 'running')) }
     if (path === '/api/v2/api-harness/jobs/job-812/artifacts') return jsonResponse(state.harnessFails ? [{ artifact_id: 'all-treatment-plans.error-log.jsonl', name: 'all-treatment-plans.error-log.jsonl', media_type: 'application/json', size_bytes: 180, redaction_mode: 'redacted' }] : jobPayload().artifacts)
@@ -123,6 +134,26 @@ function treatmentPlanExportResponse(): Response {
 
 function importResponse(patientId: string, archived: boolean, patientIdCorrectionApplied = false): Response {
   return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `Patient ID ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
+}
+
+function binderImportResponse(patientIdCorrectionApplied: boolean, withWarnings: boolean): Response {
+  return jsonResponse({
+    status: withWarnings ? 'imported_with_warnings' : 'imported',
+    patient_id: '914',
+    patient_display_label: 'Patient ID 914',
+    source_mode: 'manual_upload',
+    criteria_total: 42,
+    encrypted_at_rest: true,
+    source_file_archived: true,
+    source_file_id: 'source-file-914',
+    source_file_ids: ['source-file-914', 'source-file-915'],
+    patient_id_correction_applied: patientIdCorrectionApplied,
+    file_count: 2,
+    parsed_file_count: withWarnings ? 1 : 2,
+    opaque_file_count: withWarnings ? 1 : 0,
+    overall_status: withWarnings ? 'Unable to Evaluate' : 'Needs Review',
+    warnings: withWarnings ? ['One uploaded source was archived as opaque content and was not parsed.'] : [],
+  }, 201)
 }
 
 function userPayload(role: Role) {
@@ -317,11 +348,13 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
     api_base_url: 'https://api.allevasoft.com',
     openapi_url: 'https://api.allevasoft.com/swagger/v1/swagger.json',
     token_url: 'https://api.allevasoft.com/connect/token',
-    client_id: 'configured-client-id',
+    client_id_configured: configured,
     api_key_configured: configured,
     client_secret_configured: configured,
     token_auth_style: 'body',
     scopes: '',
+    api_version: '1.0',
+    treatment_plan_start_date: '2020-01-01T00:00:00Z',
     pagination_limit: 500,
     sync_limit: 100,
     timeout_seconds: 10,
@@ -337,15 +370,32 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
 function jobPayload(status = 'completed') {
   return {
     job_id: 'job-812',
+    job_type: 'pull_all_treatment_plans_all_fields',
+    created_at: '2026-07-14T10:00:00Z',
+    started_at: '2026-07-14T10:00:01Z',
+    updated_at: '2026-07-14T10:00:02Z',
+    completed_at: status === 'completed' ? '2026-07-14T10:00:02Z' : null,
     status,
+    phase: status,
+    message: 'Sanitized synthetic job status.',
     progress_percent: 100,
+    current_endpoint: 'GET /treatment-plans',
+    current_page: 1,
+    records_seen: 6,
     records_written: 6,
     records_failed: 0,
     warnings_count: 0,
+    errors_count: 0,
+    cancel_requested: false,
+    last_heartbeat_at: '2026-07-14T10:00:02Z',
     artifacts: [{ artifact_id: 'run-summary.json', name: 'run-summary.json', media_type: 'application/json', size_bytes: 200, redaction_mode: 'safe' }, { artifact_id: 'all-treatment-plans.all-fields.redacted.jsonl', name: 'all-treatment-plans.all-fields.redacted.jsonl', media_type: 'application/jsonl', size_bytes: 800, redaction_mode: 'safe' }],
   }
 }
 
 function syncJobPayload(status: string) {
   return { ...jobPayload(), job_id: 'sync-912', job_type: 'approved_treatment_plan_sync', status, records_written: status === 'completed' ? 1 : 0, records_failed: 0, warnings_count: 0 }
+}
+
+function rosterJobPayload(status: string) {
+  return { ...jobPayload(status), job_id: 'roster-912', job_type: 'active_patient_roster_pull', current_endpoint: 'GET /clients', records_written: status === 'completed' ? 1 : 0 }
 }

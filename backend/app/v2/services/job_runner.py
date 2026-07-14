@@ -5,13 +5,21 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Literal, Protocol, TypeAlias
 
 import httpx
 
 from app.v2.services.bounded_http import ResponseTooLarge, get_bounded
 from app.v2.services.job_artifacts import DiagnosticFailure, JsonValue, record, write_progress
 from app.v2.services.oauth_connectivity import request_client_credentials
+from app.v2.services.alleva_protocol import (
+    AllevaReadProtocol,
+    DEFAULT_ALLEVA_API_VERSION,
+    DEFAULT_TREATMENT_PLAN_START_DATE,
+    collection_parameters,
+    collection_records,
+    read_headers,
+)
 
 MAX_DIAGNOSTIC_PAGES = 100
 MAX_DIAGNOSTIC_RECORDS = 10_000
@@ -47,7 +55,20 @@ class FailureCause:
     http_status: int | None = None
 
 
-def fetch_paged_records(*, job_id: str, connection: Any, output_dir: Path, is_cancelled: Callable[[], bool], update: Callable[..., None]) -> DiagnosticPullResult:
+class DiagnosticConnection(Protocol):
+    api_base_url: str
+    token_url: str
+    client_id: str
+    client_secret: str
+    scope: str
+    token_auth_style: str
+    timeout_seconds: int
+    page_size: int
+    api_version: str
+    treatment_plan_start_date: str
+
+
+def fetch_paged_records(*, job_id: str, connection: DiagnosticConnection, output_dir: Path, is_cancelled: Callable[[], bool], update: Callable[..., None]) -> DiagnosticPullResult:
     authentication, token = request_client_credentials(token_url=connection.token_url, client_id=connection.client_id, client_secret=connection.client_secret, scope=connection.scope, token_auth_style=connection.token_auth_style, timeout_seconds=connection.timeout_seconds)
     if not token:
         return DiagnosticPullFailed(
@@ -58,6 +79,10 @@ def fetch_paged_records(*, job_id: str, connection: Any, output_dir: Path, is_ca
     rows: list[dict[str, JsonValue]] = []
     page_signatures: set[str] = set()
     page = 0
+    protocol = AllevaReadProtocol(
+        getattr(connection, "api_version", DEFAULT_ALLEVA_API_VERSION),
+        getattr(connection, "treatment_plan_start_date", DEFAULT_TREATMENT_PLAN_START_DATE),
+    )
     try:
         with httpx.Client(timeout=max(1, min(connection.timeout_seconds, 60)), follow_redirects=True) as client, (output_dir / "all-treatment-plans.all-fields.redacted.jsonl").open("w", encoding="utf-8") as handle:
             offset = 0
@@ -72,8 +97,16 @@ def fetch_paged_records(*, job_id: str, connection: Any, output_dir: Path, is_ca
                     client,
                     f"{connection.api_base_url.rstrip('/')}/treatment-plans",
                     maximum_bytes=MAX_DIAGNOSTIC_RESPONSE_BYTES,
-                    params={"limit": connection.page_size, "offset": offset},
-                    headers={"accept": "application/json", "authorization": f"Bearer {token}"},
+                    params=collection_parameters(
+                        endpoint_parameters={"limit": "Limit", "offset": "Cursor", "start_date": "StartDate"},
+                        limit_parameter="Limit",
+                        offset_parameter="Cursor",
+                        limit=connection.page_size,
+                        cursor=offset,
+                        protocol=protocol,
+                        include_start_date=True,
+                    ),
+                    headers=read_headers(bearer_token=token, protocol=protocol),
                 )
                 response.raise_for_status()
                 records = _records(response.json())
@@ -105,7 +138,7 @@ def fetch_paged_records(*, job_id: str, connection: Any, output_dir: Path, is_ca
                     return DiagnosticPullCompleted(tuple(rows), "completed_with_warnings")
                 if len(records) < connection.page_size:
                     return DiagnosticPullCompleted(tuple(rows), "completed")
-                offset += len(records)
+                offset += connection.page_size
     except httpx.HTTPStatusError as exc:
         return _failed(rows, page, FailureCause(type(exc).__name__, "Vendor API returned an unsuccessful HTTP status.", exc.response.status_code))
     except httpx.TimeoutException as exc:
@@ -136,7 +169,4 @@ def _failed(
 
 
 def _records(payload: object) -> list[dict[str, object]]:
-    values = payload.get("items") if isinstance(payload, dict) else payload
-    if not isinstance(values, list):
-        raise ValueError("Treatment-plan response did not contain a list")
-    return [item for item in values if isinstance(item, dict)]
+    return collection_records(payload)

@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
-import { getApiConfiguration, getApprovedAllevaTreatmentPlanSyncJob, getSettings, resumeApprovedAllevaTreatmentPlanSync, runApprovedAllevaTreatmentPlanSync, saveApiConfiguration, saveSettings } from '../api/client'
+import { getApprovedAllevaTreatmentPlanSyncJob, getLatestApprovedAllevaTreatmentPlanSyncJob, resumeApprovedAllevaTreatmentPlanSync, runApprovedAllevaTreatmentPlanSync } from '../api/allevaJobsClient'
+import { approvedImportBlockers } from '../api/apiReadiness'
+import { getApiConfiguration, getSettings, saveApiConfiguration, saveSettings } from '../api/settingsClient'
 import { pullOpenApiDefinition } from '../api/openapiClient'
 import { testSavedOAuthConnectivity } from '../api/connectivityClient'
 import { cancelApiHarnessJob } from '../api/jobs'
 import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, ApiHarnessJob, AppSettings } from '../api/types'
+import { JobStatusPanel } from '../components/JobStatusPanel'
 
 type SettingsPageProps = {
   readonly token: string
 }
 
 function messageForError(error: unknown): string {
-  if (error instanceof ApiRequestError) return error.message
+  if (error instanceof ApiRequestError) return error.status >= 500
+    ? 'The local service could not complete the request. Restart the app and try again.'
+    : error.message
   if (error instanceof Error) return error.message
   return 'Unable to load settings.'
 }
@@ -19,6 +24,7 @@ function messageForError(error: unknown): string {
 export function SettingsPage({ token }: SettingsPageProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | null>(null)
+  const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [message, setMessage] = useState('')
   const [definitionSummary, setDefinitionSummary] = useState('')
@@ -35,10 +41,15 @@ export function SettingsPage({ token }: SettingsPageProps) {
     let cancelled = false
     async function loadSettings() {
       try {
-        const [loadedSettings, loadedApiConfig] = await Promise.all([getSettings(token), getApiConfiguration(token)])
+        const [loadedSettings, loadedApiConfig, latestSync] = await Promise.all([
+          getSettings(token),
+          getApiConfiguration(token),
+          getLatestApprovedAllevaTreatmentPlanSyncJob(token),
+        ])
         if (!cancelled) {
           setSettings(loadedSettings)
           setApiConfig(loadedApiConfig)
+          setSyncJob(latestSync)
         }
       } catch (loadError) {
         if (!cancelled) setError(messageForError(loadError))
@@ -65,8 +76,9 @@ export function SettingsPage({ token }: SettingsPageProps) {
     setApiSaveError('')
     setMessage('')
     try {
-      const saved = await saveApiConfiguration(token, apiConfig, clientSecret)
+      const saved = await saveApiConfiguration(token, apiConfig, clientId, clientSecret)
       setApiConfig(saved)
+      setClientId('')
       setClientSecret('')
       setMessage(saved.clientSecretConfigured
         ? 'API configuration saved. The client secret is saved in encrypted local storage and remains hidden.'
@@ -104,11 +116,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
     }
   }
 
-  const syncReady = apiConfig.apiEnabled
-    && apiConfig.treatmentPlanSyncEnabled
-    && apiConfig.treatmentPlanSyncApproved
-    && Boolean(apiConfig.clientId.trim())
-    && apiConfig.clientSecretConfigured
+  const syncBlockers = approvedImportBlockers(apiConfig)
+  const syncReady = syncBlockers.length === 0
   const syncActive = syncJob !== null && !isTerminalSyncStatus(syncJob.status)
 
   async function handleRunSync() {
@@ -122,6 +131,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
       setSyncJob(completed)
       if (isTerminalSyncStatus(completed.status)) {
         setMessage(`Treatment-plan sync ${completed.status}: ${completed.recordsWritten} imported, ${completed.recordsFailed} skipped.`)
+        setApiConfig(await getApiConfiguration(token))
       } else {
         setMessage('Treatment-plan sync is still running. Cancel it if you need to stop the read-only import.')
       }
@@ -225,7 +235,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
         </label>
         <label>
           Client ID
-          <input value={apiConfig.clientId} onChange={(event) => setApiConfig({ ...apiConfig, clientId: event.target.value })} />
+          <input aria-describedby='client-id-help' value={clientId} autoComplete='off' onChange={(event) => setClientId(event.target.value)} />
+          <span id='client-id-help' className='muted'>{apiConfig.clientIdConfigured ? 'A client ID is configured. Enter a new value only to replace it.' : 'Enter the Alleva OAuth client ID.'}</span>
         </label>
         <label>
           Client secret
@@ -273,6 +284,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
         </label>
         <dl className='summary-grid'>
           <div><dt>API key</dt><dd>{apiConfig.apiKeyConfigured ? 'configured' : 'not configured'}</dd></div>
+          <div><dt>Client ID</dt><dd>{apiConfig.clientIdConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>Client secret</dt><dd>{apiConfig.clientSecretConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>API testing</dt><dd>{apiConfig.apiEnabled ? 'enabled' : 'disabled'}</dd></div>
           <div><dt>Import mapping</dt><dd>built-in Alleva v1</dd></div>
@@ -291,6 +303,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
         <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run read-only treatment-plan sync' : 'A client ID, saved encrypted secret, API and sync enablement, and explicit tenant import authorization are required before sync can run.'}>
           {isRunningSync ? 'Running treatment-plan sync...' : 'Run treatment-plan sync'}
         </button>
+        {syncBlockers.length > 0 && <ul className='preflight-blockers' aria-label='Treatment-plan sync requirements'>{syncBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}
         {syncJob && !isTerminalSyncStatus(syncJob.status) && (
           <button type='button' className='secondary-button' onClick={handleCancelSync}>
             Cancel treatment-plan sync
@@ -304,12 +317,12 @@ export function SettingsPage({ token }: SettingsPageProps) {
         {definitionSummary && <p role='status'>{definitionSummary}</p>}
         {connectivityStatus && <p role='status'>{connectivityStatus}</p>}
         {apiSaveError && <p role='alert' className='error-banner'>{apiSaveError}</p>}
-        {message && <p role='status'>{message}</p>}
+        <JobStatusPanel job={syncJob} isActive={isRunningSync || syncActive} message={message} error='' onRetry={syncReady ? () => void handleRunSync() : undefined} />
       </section>
     </div>
   )
 }
 
 function isTerminalSyncStatus(status: string): boolean {
-  return ['completed', 'failed', 'cancelled', 'stale_or_interrupted'].includes(status)
+  return ['completed', 'completed_with_warnings', 'failed', 'cancelled', 'stale_or_interrupted'].includes(status)
 }

@@ -139,7 +139,7 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
 
     # Then: version-specific verification accepts the source and restores its exact bytes.
     assert dry_run.source_schema == previous_version
-    assert dry_run.applied_versions == (APP_SETTINGS_MIGRATION_VERSION, LATEST_SCHEMA_VERSION)
+    assert dry_run.applied_versions == tuple(range(APP_SETTINGS_MIGRATION_VERSION, LATEST_SCHEMA_VERSION + 1))
     assert migrated.source_schema == previous_version
     assert restored.source_schema == previous_version
     assert database_path.read_bytes() == original_database_bytes

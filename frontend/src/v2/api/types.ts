@@ -84,7 +84,7 @@ export type PatientRosterData = {
 }
 
 export type ManualTreatmentPlanImportResult = {
-  readonly status: 'imported'
+  readonly status: 'imported' | 'imported_with_warnings'
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly sourceMode: 'manual_upload'
@@ -92,36 +92,13 @@ export type ManualTreatmentPlanImportResult = {
   readonly encryptedAtRest: boolean
   readonly sourceFileArchived: boolean
   readonly sourceFileId: string
+  readonly sourceFileIds: readonly string[]
   readonly patientIdCorrectionApplied: boolean
-}
-
-export type AppSettings = {
-  readonly organizationName: string
-  readonly facilityTimezone: string
-  readonly treatmentPlanMasterDueDays: number
-  readonly treatmentPlanPhpReviewIntervalDays: number
-  readonly treatmentPlanIopOpReviewIntervalDays: number
-  readonly treatmentPlanLocChangeWindowDays: number | null
-  readonly treatmentPlanLocChangeWindowValidated: boolean
-}
-
-export type ApiConfiguration = {
-  readonly vendorName: string
-  readonly apiBaseUrl: string
-  readonly openapiUrl: string
-  readonly tokenUrl: string
-  readonly clientId: string
-  readonly apiKeyConfigured: boolean
-  readonly clientSecretConfigured: boolean
-  readonly tokenAuthStyle: string
-  readonly scopes: string
-  readonly paginationLimit: number
-  readonly syncLimit: number
-  readonly requestsPerMinute: number
-  readonly timeoutSeconds: number
-  readonly apiEnabled: boolean
-  readonly treatmentPlanSyncEnabled: boolean
-  readonly treatmentPlanSyncApproved: boolean
+  readonly fileCount: number
+  readonly parsedFileCount: number
+  readonly opaqueFileCount: number
+  readonly overallStatus: string
+  readonly warnings: readonly string[]
 }
 
 export type ApiHarnessPreviewRecord = {
@@ -189,15 +166,8 @@ export type ApiHarnessArtifact = {
   readonly redactionMode: string
 }
 
-export type ApiHarnessJob = {
-  readonly jobId: string
-  readonly status: string
-  readonly progressPercent: number
-  readonly recordsWritten: number
-  readonly recordsFailed: number
-  readonly warningsCount: number
-  readonly artifacts: readonly ApiHarnessArtifact[]
-}
+export type { ApiConfiguration, AppSettings } from './configurationTypes'
+export type { ApiHarnessJob, JobStatus } from './jobTypes'
 
 export type ManagerActionPayload = {
   readonly criterionId: string
