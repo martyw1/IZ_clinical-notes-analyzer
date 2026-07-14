@@ -85,7 +85,7 @@ export function PatientRosterPage({ token, user, onNavigate }: PatientRosterPage
           <thead><tr><th>Patient ID</th><th>Treatment plan ID</th><th>Status</th><th>Lifecycle</th><th>LOC</th><th>Source</th><th>Last seen</th></tr></thead>
           <tbody>
             {visibleItems.map((item) => (
-              <tr key={item.patientId}>
+              <tr key={`${item.patientId}:${item.sourceMode}`}>
                 <td data-label='Patient ID'>{item.patientId}</td>
                 <td data-label='Treatment plan ID'>{item.treatmentPlanId}</td>
                 <td data-label='Status'>{item.treatmentPlanStatus}</td>

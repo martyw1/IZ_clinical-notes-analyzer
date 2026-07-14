@@ -302,6 +302,10 @@ dd,
   grid-column: 1 / -1;
 }
 
+.api-tests-slot {
+  grid-column: 1 / -1;
+}
+
 .api-harness-column {
   display: grid;
   align-content: start;
@@ -458,7 +462,7 @@ dd,
 }
 
 .queue-and-detail {
-  grid-template-columns: minmax(500px, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(680px, 0.9fr) minmax(0, 1.1fr);
   align-items: start;
 }
 
@@ -508,13 +512,14 @@ dd,
 }
 
 .queue-panel table {
-  min-width: 0;
+  min-width: 650px;
 }
 
 .queue-panel th,
 .queue-panel td {
   padding: 0.5rem;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .detail-grid {
@@ -678,7 +683,7 @@ dd,
   font-size: 0.84rem;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1350px) {
   .page-grid,
   .queue-and-detail {
     grid-template-columns: 1fr;
@@ -689,14 +694,9 @@ dd,
     flex-direction: column;
   }
 
-  .api-harness-column {
-    display: contents;
-  }
-
   .api-diagnostic-slot { order: 1; }
-  .api-contract-slot { order: 2; }
-  .api-queue-slot { order: 3; }
-  .api-tests-slot { order: 4; }
+  .api-queue-slot { order: 2; }
+  .api-tests-slot { order: 3; }
 }
 
 @media (max-width: 900px) {
@@ -792,6 +792,16 @@ dd,
   .queue-panel td {
     border-bottom: 0;
     padding: 0.25rem 0;
+    white-space: normal;
+  }
+
+  .queue-panel table {
+    min-width: 0;
+  }
+
+  .criterion-list {
+    max-height: none;
+    overflow: visible;
   }
 
   .queue-panel td::before {

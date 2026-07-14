@@ -199,10 +199,8 @@ describe('V2 active app shell', () => {
     expect(await screen.findByText(/token obtained and discarded after verification/i)).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Enable API testing'))
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
-    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
-    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
-    fireEvent.click(await screen.findByRole('button', { name: /run approved treatment-plan sync/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^run treatment-plan sync$/i }))
     expect(await screen.findByText('Treatment-plan sync completed: 1 imported, 0 skipped.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Users' }))
@@ -292,7 +290,7 @@ describe('V2 active app shell', () => {
     expect(screen.getByText('all-treatment-plans.error-log.jsonl')).toBeInTheDocument()
   })
 
-  it('runs an approved pull, evaluates it, and opens the populated Treatment Plans queue', async () => {
+  it('runs an operational pull, evaluates it, and opens the populated Treatment Plans queue', async () => {
     const fetchMock = setupFetch()
     await signIn()
 
@@ -301,8 +299,6 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
     fireEvent.click(screen.getByLabelText('Enable API testing'))
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
-    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
-    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
@@ -328,8 +324,6 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
     fireEvent.click(screen.getByLabelText('Enable API testing'))
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
-    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
-    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
@@ -369,8 +363,6 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'synthetic-approved-secret' } })
     fireEvent.click(screen.getByLabelText('Enable API testing'))
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
-    fireEvent.click(screen.getByLabelText('Sync intent recorded (does not authorize execution)'))
-    fireEvent.click(screen.getByLabelText('Mapping intent recorded (does not authorize execution)'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
@@ -394,7 +386,7 @@ describe('V2 active app shell', () => {
     expect(await screen.findByRole('heading', { name: 'Treatment Plan ID plan-813' })).toBeInTheDocument()
     expect(secondPlan).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v2/treatment-plans/812/plan-813',
+      '/api/v2/treatment-plans/812/plan-813?source_mode=alleva_rest_api',
       expect.objectContaining({ headers: expect.any(Headers) }),
     ))
   })

@@ -62,7 +62,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.
 - The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
 - Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
 - Periodic API readiness checks can be enabled in App settings after saving REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and interval.
-- Alleva has confirmed it does not currently support FHIR. Active integration is Alleva REST/OpenAPI/HL7-readiness only.
+- Alleva has confirmed it does not currently support FHIR. Active integration uses REST/OpenAPI for testing plus explicit tenant-authorized read-only treatment-plan import; HL7 remains a readiness boundary.
 - Stored API endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
 - Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
 
@@ -70,15 +70,15 @@ For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.
 
 - `Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
 - App startup sync uses the same REST concept. It is disabled by default.
-- Manual retrieval is available from the Status Dashboard EMR/API card and from App Settings, but it uses the same approval and mapping gates as startup sync.
+- Manual retrieval is available from the API Testing Harness, Treatment Plans, and Patient Roster tabs. Each control uses the same automatic canonical Alleva v1 mapping and operational importer.
 - Admins can run the API-harness `patient_treatment_plan_aggregates` dry-run to compare `/clients`, `/treatment-plans`, and `/treatment-reviews` coverage without enabling live sync.
-- To arm startup sync, App settings must have Alleva REST API base URL, token URL, client ID, encrypted client secret, explicit R3/Alleva live-sync approval, and validated endpoint mapping.
-- Endpoint mapping must confirm active-client filtering, treatment-plan records, treatment-review records, staff/creator signature dates, client signature dates, current LOC, admission date, next review due, pagination, and status fields.
+- To arm an operator-triggered sync, App settings must have the Alleva REST API base URL, token URL, client ID, encrypted client secret, API and sync enabled, and live read-only tenant import authorized. The canonical mapping is applied automatically.
+- Configure pagination, total-record, and requests-per-minute ceilings to match tenant guidance. Treatment-review evidence stays missing/unknown unless a trusted review-to-plan identifier is available.
 - Patient-name import/display is off by default. When it is off, Alleva-sourced Treatment Plan clients keep generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels; saving App settings with the control off redacts existing Alleva-sourced names again.
 - Name-fallback matching is a separate validation-only setting. Keep it off unless R3 is actively validating endpoint ID mapping.
 - When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
 - Current-plan detail fetch is optional and capped. When enabled it stores counts and PHI-minimized content facts, not raw narrative text.
-- If required approval or mapping is missing, the sync records a blocked status and imports no live patient treatment-plan data.
+- If credentials, enablement, or tenant import authorization are missing, the sync records a blocked status and imports no live patient treatment-plan data.
 
 ## Treatment-plan date clock
 
@@ -115,7 +115,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.
 - If the Windows app will not start, inspect `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json` and the startup logs in the same AppData tree.
 - If no local admin can sign in, follow `docs\admin-access-reset.md`.
 - If the browser shows an old UI, rebuild `frontend\dist` or use a freshly built release folder.
-- If API readiness fails, use `docs\api-configuration-and-connectivity.md` and keep live patient import disabled until approved vendor details and endpoint mapping are available.
+- If API readiness fails, use `docs\api-configuration-and-connectivity.md` and keep live treatment-plan reads off until tenant credentials, API/sync enablement, and explicit live-read authorization are configured. The built-in Alleva v1 mapping does not require a separate approval form.
 
 ## Backup and restore
 

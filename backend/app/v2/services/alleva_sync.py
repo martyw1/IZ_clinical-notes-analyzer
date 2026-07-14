@@ -149,7 +149,7 @@ def run_treatment_plan_sync(
     token = _oauth_token(profile, contract, is_cancelled)
     headers = {"accept": "application/json", "authorization": f"Bearer {token}"}
     try:
-        with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=True) as client:
+        with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=False) as client:
             rate_limiter = ApprovedRequestRateLimiter(contract.payload.rate_limit.maximum_requests_per_minute)
             client_checkpoints = load_sync_checkpoint_pages(db, resumed_from_job_id, "clients") if resumed_from_job_id else ()
             clients = _paged_records(client, profile, contract, "clients", headers, is_cancelled, on_page, client_checkpoints, rate_limiter)
@@ -609,7 +609,16 @@ def _plan_detail(
     client: httpx.Client, api_base_url: str, contract: ApprovedAllevaContract, plan_id: str, headers: dict[str, str],
     is_cancelled: Callable[[], bool], rate_limiter: ApprovedRequestRateLimiter,
 ) -> dict[str, object]:
-    response = _get_with_retry(client, urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")), None, headers, is_cancelled, contract.payload.rate_limit.retry_after_seconds, rate_limiter)
+    response = _get_with_retry(
+        client,
+        urljoin(f"{api_base_url.rstrip('/')}/", _endpoint_path(contract, "treatment_plan_detail", plan_id=plan_id).lstrip("/")),
+        None,
+        headers,
+        is_cancelled,
+        contract.payload.rate_limit.retry_after_seconds,
+        rate_limiter,
+        contract.payload.pagination.maximum_response_bytes,
+    )
     payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("Expected an API treatment-plan detail object.")

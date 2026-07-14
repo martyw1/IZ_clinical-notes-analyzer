@@ -46,6 +46,116 @@ def test_patient_roster_is_scoped_and_contains_no_patient_name_fields(tmp_path, 
     assert PRIVACY_CANARY not in response.text
 
 
+def test_patient_roster_uses_newest_plan_when_patient_has_multiple_plans(tmp_path, monkeypatch) -> None:
+    # Given: a patient whose older and newer treatment plans are both retained.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    base = _aggregate("roster-842")
+    older = base.model_copy(update={
+        "content_snapshot": base.content_snapshot.model_copy(update={"plan_id": "plan-older"}),
+    })
+    newer = base.model_copy(update={
+        "current_level_of_care": "PHP",
+        "content_snapshot": base.content_snapshot.model_copy(update={"plan_id": "plan-newer"}),
+    })
+    assert client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate",
+        headers=headers,
+        json=older.model_dump(mode="json"),
+    ).status_code == 201
+    assert client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate",
+        headers=headers,
+        json=newer.model_dump(mode="json"),
+    ).status_code == 201
+
+    # When: the patient roster is loaded.
+    response = client.get("/api/v2/patient-roster", headers=headers)
+
+    # Then: the single patient row summarizes the most recently imported plan.
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "patient_id": "roster-842",
+            "source_mode": "manual_upload",
+            "lifecycle_state": "active",
+            "current_level_of_care": "PHP",
+            "treatment_plan_id": "plan-newer",
+            "treatment_plan_status": response.json()["items"][0]["treatment_plan_status"],
+            "first_seen_at": response.json()["items"][0]["first_seen_at"],
+            "last_seen_at": response.json()["items"][0]["last_seen_at"],
+            "reconciled_at": "",
+        }
+    ]
+
+
+def test_patient_roster_keeps_same_patient_id_separate_by_source(tmp_path, monkeypatch) -> None:
+    # Given: manual and Alleva records share a canonical patient ID but have distinct plans.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    manual = _aggregate("roster-843")
+    manual = manual.model_copy(update={
+        "content_snapshot": manual.content_snapshot.model_copy(update={"plan_id": "plan-shared"}),
+    })
+    assert client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate",
+        headers=headers,
+        json=manual.model_dump(mode="json"),
+    ).status_code == 201
+
+    from app.v2.db import SessionLocal
+    from app.v2.domain.schemas import TreatmentPlanAggregate
+    from app.v2.models import User
+    from app.v2.services.treatment_plan_store import save_treatment_plan_aggregate
+
+    alleva_payload = manual.model_dump(mode="json")
+    alleva_payload.update({"source_mode": "alleva_rest_api", "current_level_of_care": "RTC"})
+    alleva_payload["content_snapshot"].update({"plan_id": "plan-shared", "source_mode": "alleva_rest_api"})
+    alleva = TreatmentPlanAggregate.model_validate(alleva_payload)
+    with SessionLocal() as database:
+        actor = database.get(User, 1)
+        assert actor is not None
+        save_treatment_plan_aggregate(database, alleva, actor)
+
+    # When: the roster is loaded.
+    response = client.get("/api/v2/patient-roster", headers=headers)
+
+    # Then: each source row retains its own newest plan and provenance.
+    assert response.status_code == 200
+    items = response.json()["items"]
+    matching = {item["source_mode"]: item for item in items if item["patient_id"] == "roster-843"}
+    assert matching["manual_upload"]["treatment_plan_id"] == "plan-shared"
+    assert matching["alleva_rest_api"]["treatment_plan_id"] == "plan-shared"
+    assert matching["manual_upload"]["current_level_of_care"] != "RTC"
+    assert matching["alleva_rest_api"]["current_level_of_care"] == "RTC"
+    manual_detail = client.get(
+        "/api/v2/treatment-plans/roster-843/plan-shared?source_mode=manual_upload",
+        headers=headers,
+    )
+    alleva_detail = client.get(
+        "/api/v2/treatment-plans/roster-843/plan-shared?source_mode=alleva_rest_api",
+        headers=headers,
+    )
+    assert manual_detail.status_code == 200 and manual_detail.json()["source_mode"] == "manual_upload"
+    assert alleva_detail.status_code == 200 and alleva_detail.json()["source_mode"] == "alleva_rest_api"
+    assert alleva_detail.json()["current_level_of_care"] == "RTC"
+    from app.v2.services.evaluation_store import latest_plan_target
+    from sqlalchemy import text
+
+    with SessionLocal() as database:
+        expected_ids = dict(database.execute(
+            text(
+                "SELECT v.source_system,v.id FROM treatment_plan_versions v "
+                "JOIN patients p ON p.id=v.patient_id WHERE p.canonical_client_id=:patient_id"
+            ),
+            {"patient_id": "roster-843"},
+        ).all())
+        manual_target = latest_plan_target(database, "roster-843", "plan-shared", "manual_upload")
+        alleva_target = latest_plan_target(database, "roster-843", "plan-shared", "alleva_rest_api")
+    assert manual_target is not None and manual_target.plan_version_id == expected_ids["manual_upload"]
+    assert alleva_target is not None and alleva_target.plan_version_id == expected_ids["alleva_rest_api"]
+
+
 def test_treatment_plan_list_export_is_manager_only_safe_and_audited(tmp_path, monkeypatch) -> None:
     # Given: a formula-like synthetic patient ID and both manager and counselor sessions.
     client = _fresh_client(tmp_path, monkeypatch)

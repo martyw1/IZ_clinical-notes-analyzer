@@ -17,7 +17,10 @@ def dashboard_payload(
     treatment_plans: Sequence[DashboardTreatmentPlan],
     *,
     api_configured: bool,
+    api_client_id_configured: bool,
     api_enabled: bool,
+    sync_enabled: bool,
+    sync_authorized: bool,
     loc_change_window_validated: bool,
     returned_count: int,
 ) -> dict[str, JsonValue]:
@@ -30,6 +33,12 @@ def dashboard_payload(
         blockers.append("API credentials are not configured; live connectivity testing is unavailable.")
     elif not api_enabled:
         blockers.append("API credentials are saved but API use is disabled.")
+    elif not api_client_id_configured:
+        blockers.append("OAuth client ID is not configured.")
+    elif not sync_enabled:
+        blockers.append("Treatment-plan sync is disabled in Settings.")
+    elif not sync_authorized:
+        blockers.append("Live read-only treatment-plan import is not authorized for this tenant.")
     if not loc_change_window_validated:
         blockers.append("LOC-change update window is unvalidated and configurable.")
     return {
@@ -41,7 +50,11 @@ def dashboard_payload(
                 "detail": f"{len(treatment_plans)} normalized treatment-plan aggregate(s) imported." if has_imports else "No normalized treatment-plan aggregates have been imported.",
             },
             {"label": "API readiness", "status": api_status, "detail": api_detail},
-            {"label": "Alleva treatment-plan sync readiness", "status": "blocked", "detail": "Live sync remains gated pending R3/Alleva approval."},
+            {
+                "label": "Alleva treatment-plan sync readiness",
+                "status": "ready" if api_configured and api_client_id_configured and api_enabled and sync_enabled and sync_authorized else "not ready",
+                "detail": "Built-in Alleva v1 mapping will be applied automatically." if api_configured and api_client_id_configured and api_enabled and sync_enabled and sync_authorized else "Save the client ID and encrypted secret, then enable and authorize live read-only sync in Settings.",
+            },
         ],
         "metrics": {
             "active_patient_ids": len(treatment_plans),

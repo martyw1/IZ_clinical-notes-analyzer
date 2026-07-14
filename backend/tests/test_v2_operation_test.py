@@ -21,6 +21,19 @@ class _OperationClient:
     def post(self, url: str, **_: object) -> httpx.Response:
         return httpx.Response(200, request=httpx.Request("POST", url), json={"access_token": "operation-token"})
 
+    def build_request(self, method: str, url: str, **kwargs: object) -> httpx.Request:
+        return httpx.Request(
+            method,
+            url,
+            data=kwargs.get("data"),
+            headers=kwargs.get("headers"),
+        )
+
+    def send(self, request: httpx.Request, *, stream: bool = False) -> httpx.Response:
+        response = self.post(str(request.url))
+        response.request = request
+        return response
+
     def stream(self, method: str, url: str, *, headers: dict[str, str]):
         assert method == "GET"
         assert url == "https://mock.invalid/clients?active=true"

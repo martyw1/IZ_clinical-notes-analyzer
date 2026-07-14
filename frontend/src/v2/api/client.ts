@@ -97,10 +97,12 @@ export async function getTreatmentPlanDetail(
   token: string,
   patientId: string,
   treatmentPlanId?: string,
+  sourceMode?: string,
 ): Promise<TreatmentPlanAggregate> {
   const suffix = treatmentPlanId ? `/${encodeURIComponent(treatmentPlanId)}` : ''
+  const query = sourceMode ? `?source_mode=${encodeURIComponent(sourceMode)}` : ''
   return mapTreatmentPlanAggregate(await readRecordPayload(
-    await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}${suffix}`, { token }),
+    await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}${suffix}${query}`, { token }),
   ))
 }
 
@@ -203,11 +205,11 @@ export async function saveApiConfiguration(token: string, config: ApiConfigurati
           scopes: config.scopes,
           pagination_limit: config.paginationLimit,
           sync_limit: config.syncLimit,
+          requests_per_minute: config.requestsPerMinute,
           timeout_seconds: config.timeoutSeconds,
           api_enabled: config.apiEnabled,
           treatment_plan_sync_enabled: config.treatmentPlanSyncEnabled,
           treatment_plan_sync_approved: config.treatmentPlanSyncApproved,
-          treatment_plan_endpoint_mapping_validated: config.treatmentPlanEndpointMappingValidated,
         },
       }),
     ),
@@ -368,12 +370,10 @@ function mapApiConfiguration(record: Record<string, unknown>): ApiConfiguration 
     scopes: readString(record, 'scopes'),
     paginationLimit: readNumber(record, 'pagination_limit', 500),
     syncLimit: readNumber(record, 'sync_limit', 100),
+    requestsPerMinute: readNumber(record, 'requests_per_minute', 600),
     timeoutSeconds: readNumber(record, 'timeout_seconds', 10),
     apiEnabled: readBoolean(record, 'api_enabled'),
     treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
     treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),
-    treatmentPlanEndpointMappingValidated: readBoolean(record, 'treatment_plan_endpoint_mapping_validated'),
-    activeContractVersion: readString(record, 'active_contract_version'),
-    activeContractEffectiveAt: readString(record, 'active_contract_effective_at'),
   }
 }

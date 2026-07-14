@@ -119,10 +119,11 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
     run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
     previous_version = APP_SETTINGS_MIGRATION_VERSION - 1
     with closing(sqlite3.connect(database_path)) as connection:
-        connection.execute("DELETE FROM schema_migrations WHERE version=?", (APP_SETTINGS_MIGRATION_VERSION,))
-        connection.execute("DELETE FROM migration_reconciliation WHERE migration_version=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        connection.execute("DELETE FROM schema_migrations WHERE version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
         for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
             connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
+        connection.execute('ALTER TABLE app_settings DROP COLUMN "api_requests_per_minute"')
         connection.commit()
     original_database_bytes = database_path.read_bytes()
 
@@ -138,7 +139,7 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
 
     # Then: version-specific verification accepts the source and restores its exact bytes.
     assert dry_run.source_schema == previous_version
-    assert dry_run.applied_versions == (APP_SETTINGS_MIGRATION_VERSION,)
+    assert dry_run.applied_versions == (APP_SETTINGS_MIGRATION_VERSION, LATEST_SCHEMA_VERSION)
     assert migrated.source_schema == previous_version
     assert restored.source_schema == previous_version
     assert database_path.read_bytes() == original_database_bytes

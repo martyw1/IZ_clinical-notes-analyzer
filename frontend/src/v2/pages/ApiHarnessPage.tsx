@@ -6,7 +6,6 @@ import { pullOpenApiDefinition } from '../api/openapiClient'
 import { testReadOnlyOperation } from '../api/operationClient'
 import { JobProgressCard } from '../components/JobProgressCard'
 import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
-import { ApprovedContractSetupCard } from '../components/ApprovedContractSetupCard'
 import type { ApiConfiguration } from '../api/types'
 
 type ApiHarnessPageProps = {
@@ -30,7 +29,7 @@ export function ApiHarnessPage({ token, onNavigate }: ApiHarnessPageProps) {
     void getApiConfiguration(token).then((result) => {
       if (!cancelled) setConfig(result)
     }).catch((error: unknown) => {
-      if (!cancelled) setConfigError(messageForError(error, 'Unable to load saved API and approval status. Refresh the page to retry.'))
+      if (!cancelled) setConfigError(messageForError(error, 'Unable to load saved API connection status. Refresh the page to retry.'))
     })
     return () => { cancelled = true }
   }, [token])
@@ -76,19 +75,9 @@ export function ApiHarnessPage({ token, onNavigate }: ApiHarnessPageProps) {
   return (
     <div className='api-harness-page'>
       {configError && <p role='alert' className='error-banner'>{configError}</p>}
-      <div className='api-harness-column'>
-        <div className='api-diagnostic-slot'><JobProgressCard token={token} /></div>
-        <div className='api-queue-slot'><ApprovedQueueImportCard config={config} token={token} onNavigate={onNavigate} /></div>
-      </div>
-      <div className='api-harness-column'>
-        <div className='api-contract-slot'>
-          <ApprovedContractSetupCard
-            config={config}
-            token={token}
-            onApproved={(contractVersion) => setConfig((current) => current ? { ...current, activeContractVersion: contractVersion } : current)}
-          />
-        </div>
-        <div className='api-tests-slot'>
+      <div className='api-diagnostic-slot'><JobProgressCard token={token} /></div>
+      <div className='api-queue-slot'><ApprovedQueueImportCard config={config} token={token} onNavigate={onNavigate} /></div>
+      <div className='api-tests-slot'>
           <section className='panel'>
             <p className='eyebrow'>API Testing Harness</p>
             <h2>Alleva/OpenAPI testing</h2>
@@ -125,7 +114,6 @@ export function ApiHarnessPage({ token, onNavigate }: ApiHarnessPageProps) {
               </article>
             </div>
           </section>
-        </div>
       </div>
     </div>
   )

@@ -21,7 +21,7 @@ Audit refreshed on 2026-07-11 against the V2 Beta PDF task list.
 | User roles and shell navigation | Covered at beta level | Active V2 shell includes Users page and required nav order; deeper RBAC persistence remains future hardening. |
 | Manual upload | Partial/deferred | V2 Manual Upload page and docs show supported file types and readiness; production parser hardening and full conversion-to-aggregate workflow remain deferred. |
 | LOC-change rule | Blocked by business decision | LOC-change update window remains configurable and visibly unvalidated in readiness, settings, docs, and blockers. |
-| Live Alleva import/sync | Intentionally blocked | Live sync remains disabled pending R3/Alleva approval, endpoint mapping, credentials, pagination, rate limits, attachment rules, vendor docs, and compliance approval. |
+| Live Alleva import/sync | Operator-triggered beta path | The canonical Alleva v1 mapping is automatic. Runtime requires a saved client ID/encrypted secret, API and sync enablement, and explicit tenant import authorization. Supervised non-PHI validation and production/compliance release remain external readiness work. |
 | Frontend visual QA | Covered | Chrome/Playwright screenshots and Computer Use Windows screenshots cover dashboard, Treatment Plans, API Harness, and mobile dashboard. |
 | Windows preflight/local stack/API smoke | Covered | `preflight-windows.ps1`, `test-local-app-stack.ps1`, and `test-api-configuration-local.ps1` all pass in PowerShell. |
 | Windows release package | Covered | `Build-IZ-Windows-Installer.cmd` passes and creates release folder/zip after forbidden-file scans. |

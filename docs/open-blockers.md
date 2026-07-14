@@ -34,13 +34,13 @@ Required resolution evidence:
 - R3 confirms whether the trigger date is the LOC-change date, signed review date, admission date, or another source evidence date.
 - R3 confirms the user-visible label and default status for overdue LOC-change updates.
 
-## Alleva REST Treatment-Plan Sync Approval and Mapping
+## Alleva REST Treatment-Plan Sync Validation
 
-Owner: R3 + Alleva
+Owner: R3
 
-Status: Open.
+Status: Mapping accepted for operator-triggered use; supervised live validation remains open.
 
-Current implementation state: Version 2.0 Beta includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires API enablement, explicit sync enablement, recorded R3/Alleva approval, and endpoint-mapping validation before it can make `/clients`, paged `/treatment-plans`, and detail requests. Startup sync and live patient import remain disabled until R3/Alleva approval and validated endpoint mapping exist. The API Testing Harness remains readiness/testing evidence, not production import approval.
+Current implementation state: Version 2.0 Beta includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires a client ID, encrypted secret, API and sync enablement, and explicit live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and stored as an encrypted versioned contract when a pull begins; there is no separate mapping-approval form. Startup sync remains disabled. Supervised validation against R3's live tenant, credential rotation, and compliance release approval remain open production-readiness tasks.
 
 Current patient-centered API harness contract:
 
@@ -57,7 +57,7 @@ Current patient-centered rules:
 - `chartId`, `externalId`, `mrn`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not production treatment-plan join keys.
 - Treatment-review list data is not a reliable patient join source. Do not join treatment reviews by `clientName`.
 
-The API harness also includes a `patient_treatment_plan_aggregates` dry-run report for combining `/clients`, `/treatment-plans`, and safely attributable treatment-review evidence into PHI-minimized aggregate diagnostics. This remains readiness/testing evidence only. It does not remove the live sync approval, endpoint mapping, tenant credential, pagination/rate-limit, PHI handling, or LOC-change blocker requirements.
+The API harness also includes a `patient_treatment_plan_aggregates` dry-run report for combining `/clients`, `/treatment-plans`, and safely attributable treatment-review evidence into PHI-minimized aggregate diagnostics. This remains readiness/testing evidence only. It does not remove the tenant credential, API/sync enablement, pagination/rate-limit, PHI handling, supervised live validation, or LOC-change blocker requirements.
 
 Current Swagger/OpenAPI mapping evidence: the Alleva Swagger/OpenAPI mapping export generated on `2026-06-21 14:59:49` is now available to the documentation set and is reflected in `docs\alleva-treatment-plan-data-coverage.md` and `docs\alleva-patient-treatment-plan-aggregate.md`. The export was derived from the public Alleva Swagger UI and v1 Swagger JSON and listed 424 endpoints and 2303 unique fields. This resolves the old documentation-only note that the mapping files were unavailable, but it does **not** prove runtime production payloads or approve live sync. Runtime fields can differ from Swagger, and endpoints without Swagger response schemas can still require live validation.
 

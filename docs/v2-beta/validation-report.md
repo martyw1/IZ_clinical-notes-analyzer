@@ -4,7 +4,7 @@
 
 The post-beta.2 feature validation passed on Windows with a disposable local-app-data directory and local synthetic Alleva service. A real Chrome window was driven through the visible Windows UI. The Treatment Plans pull created synthetic `plan-912`; a second pull with changed content under the same ID made version 2 current and preserved version 1; an unchanged pull from API Testing Harness left the populated queue intact. Patient Roster contained IDs/status metadata without patient names, the downloaded CSV included plan ID and status, and Forensic Logs showed `updated_treatment_plan_ids=plan-912`. The audit hash chain verified across the synthetic run.
 
-Automated results: backend `182 passed` with the existing Starlette/httpx deprecation warning; frontend `22 passed`; production Vite build passed. Focused post-UI authorization/update coverage also passed (`4 passed`). Full details are in `../validation/validation-report-2026-07-13-treatment-plan-sync-roster-export.md`.
+Automated results after the automatic-mapping and source-identity fixes: backend `193 passed` with the existing Starlette/httpx deprecation warning; frontend `24 passed`; TypeScript `tsc --noEmit` and the production Vite build passed. Desktop Playwright UI validation passed `6` flows, including the shared pull, multiple selectable plans, same patient/plan IDs kept distinct by source, the name-free roster, manual upload, mocked sync, and queued-sync cancellation. Full details are in `../validation/validation-report-2026-07-13-treatment-plan-sync-roster-export.md`.
 
 This is synthetic validation only. It does not approve live Alleva import, validate production credentials/data, resolve the LOC-change rule, or change the external production gates.
 
@@ -94,7 +94,7 @@ The temporary UI QA backend process was stopped after validation.
 
 ## Known Residuals
 
-- Live Alleva import remains intentionally disabled until official tenant credentials, endpoint mapping, pagination, rate limits, attachment behavior, vendor documentation, and compliance approval exist.
+- Operator-triggered read-only Alleva treatment-plan import remains off by default and requires saved tenant credentials, API/sync enablement, and explicit live-read authorization. The built-in mapping removes the separate mapping-approval form; supervised real-tenant validation and broader production/compliance approval remain external gates.
 - The LOC-change treatment-plan update window remains an R3/Marleigh blocker and is intentionally configurable/unvalidated.
 - Manual upload production parsing is represented by V2 UI/contract readiness, but production parser hardening remains deferred.
 - The exhaustive PDF test matrix is covered by active tests, scripts, docs, and UI evidence at the beta-slice level; it is not yet a full production certification suite.

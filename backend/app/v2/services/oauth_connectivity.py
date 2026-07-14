@@ -6,6 +6,10 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.v2.services.bounded_http import ResponseTooLarge, post_bounded
+
+MAX_OAUTH_RESPONSE_BYTES = 1_048_576
+
 
 @dataclass(frozen=True, slots=True)
 class OAuthConnectivityResult:
@@ -44,8 +48,14 @@ def request_client_credentials(
         encoded = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
         headers["authorization"] = f"Basic {encoded}"
     try:
-        with httpx.Client(timeout=max(1, min(timeout_seconds, 60)), follow_redirects=True) as client:
-            response = client.post(token_url, data=data, headers=headers)
+        with httpx.Client(timeout=max(1, min(timeout_seconds, 60)), follow_redirects=False) as client:
+            response = post_bounded(
+                client,
+                token_url,
+                maximum_bytes=MAX_OAUTH_RESPONSE_BYTES,
+                data=data,
+                headers=headers,
+            )
             response.raise_for_status()
             payload = response.json()
     except httpx.HTTPStatusError as exc:
@@ -54,6 +64,11 @@ def request_client_credentials(
         return OAuthConnectivityResult(
             "failure", style,
             "Could not reach the saved OAuth token endpoint. Check the URL, network connection, and vendor availability.",
+        ), ""
+    except ResponseTooLarge:
+        return OAuthConnectivityResult(
+            "failure", style,
+            "The OAuth token endpoint response exceeded the safe local size limit.",
         ), ""
     except ValueError:
         return OAuthConnectivityResult(

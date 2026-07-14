@@ -18,6 +18,22 @@ def get_bounded(
     headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     request = client.build_request("GET", url, params=params, headers=headers)
+    return _send_bounded(client, request, maximum_bytes)
+
+
+def post_bounded(
+    client: httpx.Client,
+    url: str,
+    *,
+    maximum_bytes: int,
+    data: dict[str, str],
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    request = client.build_request("POST", url, data=data, headers=headers)
+    return _send_bounded(client, request, maximum_bytes)
+
+
+def _send_bounded(client: httpx.Client, request: httpx.Request, maximum_bytes: int) -> httpx.Response:
     response = client.send(request, stream=True)
     try:
         content = bytearray()

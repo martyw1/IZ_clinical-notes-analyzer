@@ -26,9 +26,19 @@ class _HarnessClient:
         return httpx.Response(200, request=httpx.Request("GET", url), json={"items": [{"id": "TP-MOCK-1", "clientId": "CLIENT-MOCK-1"}]})
 
     def build_request(self, method: str, url: str, **kwargs: object) -> httpx.Request:
-        return httpx.Request(method, url, params=kwargs.get("params"), headers=kwargs.get("headers"))
+        return httpx.Request(
+            method,
+            url,
+            data=kwargs.get("data"),
+            params=kwargs.get("params"),
+            headers=kwargs.get("headers"),
+        )
 
     def send(self, request: httpx.Request, *, stream: bool = False) -> httpx.Response:
+        if request.method == "POST":
+            response = self.post(str(request.url))
+            response.request = request
+            return response
         response = self.get(
             str(request.url).split("?", 1)[0],
             params={key: int(value) for key, value in request.url.params.items()},
@@ -47,6 +57,8 @@ class _FailingHarnessClient(_HarnessClient):
 
 class _UnexpectedFailureHarnessClient(_HarnessClient):
     def send(self, request: httpx.Request, *, stream: bool = False) -> httpx.Response:
+        if request.method == "POST":
+            return super().send(request, stream=stream)
         raise RuntimeError("synthetic sensitive internal detail")
 
 

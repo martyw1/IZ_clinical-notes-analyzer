@@ -78,6 +78,7 @@ APP_SETTING_EXTENSIONS = (
     ("alleva_treatment_plan_sync_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
     ("alleva_treatment_plan_sync_approved", "BOOLEAN NOT NULL DEFAULT 0"),
     ("alleva_treatment_plan_endpoint_mapping_validated", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("api_requests_per_minute", "INTEGER NOT NULL DEFAULT 600 CHECK(api_requests_per_minute BETWEEN 1 AND 10000)"),
 )
 
 APP_SETTING_LEGACY_SOURCES = (

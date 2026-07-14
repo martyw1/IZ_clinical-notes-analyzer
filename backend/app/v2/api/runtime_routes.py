@@ -21,7 +21,7 @@ from app.v2.api.models import (
     ReadinessOut,
     TreatmentPlanListOut,
 )
-from app.v2.domain.schemas import ApiHarnessJob, JobPreview, TreatmentPlanAggregate
+from app.v2.domain.schemas import ApiHarnessJob, JobPreview, SourceMode, TreatmentPlanAggregate
 from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
@@ -99,7 +99,10 @@ def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     return dashboard_payload(
         imports,
         api_configured=bool(profile.api_client_secret),
+        api_client_id_configured=bool(profile.api_client_id.strip()),
         api_enabled=profile.emr_api_enabled,
+        sync_enabled=profile.alleva_treatment_plan_sync_enabled,
+        sync_authorized=profile.alleva_treatment_plan_sync_approved,
         loc_change_window_validated=profile.treatment_plan_loc_change_window_validated,
         returned_count=sum(count for patient_id, count in correction_counts.items() if patient_id in allowed_ids),
     )
@@ -158,9 +161,14 @@ def patient_roster(user: CurrentUser, db: DbSession) -> PatientRosterOut:
 
 
 @router.get("/api/v2/treatment-plans/{patient_id}")
-def treatment_plan_detail(patient_id: str, user: CurrentUser, db: DbSession) -> TreatmentPlanAggregate:
+def treatment_plan_detail(
+    patient_id: str,
+    user: CurrentUser,
+    db: DbSession,
+    source_mode: SourceMode | None = None,
+) -> TreatmentPlanAggregate:
     require_patient_read(db, user, patient_id)
-    aggregate = treatment_plan_aggregate_for_patient(db, patient_id)
+    aggregate = treatment_plan_aggregate_for_patient(db, patient_id, source_system=source_mode)
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
     record_audit_event(db, action="treatment_plan.detail.viewed", actor=user, target_entity_type="treatment_plan", target_entity_id=patient_id)
@@ -173,9 +181,15 @@ def treatment_plan_detail_by_id(
     treatment_plan_id: str,
     user: CurrentUser,
     db: DbSession,
+    source_mode: SourceMode | None = None,
 ) -> TreatmentPlanAggregate:
     require_patient_read(db, user, patient_id)
-    aggregate = treatment_plan_aggregate_for_patient(db, patient_id, treatment_plan_id)
+    aggregate = treatment_plan_aggregate_for_patient(
+        db,
+        patient_id,
+        treatment_plan_id,
+        source_system=source_mode,
+    )
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment plan not found")
     record_audit_event(
@@ -183,7 +197,7 @@ def treatment_plan_detail_by_id(
         action="treatment_plan.detail.viewed",
         actor=user,
         target_entity_type="treatment_plan",
-        target_entity_id=f"{patient_id}:{treatment_plan_id}",
+        target_entity_id=f"{patient_id}:{source_mode or 'any'}:{treatment_plan_id}",
     )
     return aggregate
 

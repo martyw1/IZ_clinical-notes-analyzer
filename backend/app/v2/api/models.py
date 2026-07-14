@@ -171,11 +171,11 @@ class ApiConfigurationUpdate(V2Model):
     scopes: str | None = None
     pagination_limit: int | None = Field(default=None, ge=1, le=5000)
     sync_limit: int | None = Field(default=None, ge=1, le=5000)
+    requests_per_minute: int | None = Field(default=None, ge=1, le=10000)
     timeout_seconds: int = 10
     api_enabled: bool = False
     treatment_plan_sync_enabled: bool = False
     treatment_plan_sync_approved: bool = False
-    treatment_plan_endpoint_mapping_validated: bool = False
 
 
 class ApiConfigurationOut(V2Model):
@@ -190,11 +190,11 @@ class ApiConfigurationOut(V2Model):
     scopes: str
     pagination_limit: int
     sync_limit: int
+    requests_per_minute: int
     timeout_seconds: int
     api_enabled: bool
     treatment_plan_sync_enabled: bool
     treatment_plan_sync_approved: bool
-    treatment_plan_endpoint_mapping_validated: bool
     active_contract_version: str | None = None
     active_contract_effective_at: datetime | None = None
 
@@ -240,13 +240,6 @@ class AllevaContractApprovalIn(V2Model):
     rate_limit: AllevaRateLimitContract
     attachments: AllevaAttachmentsContract
     endpoints: dict[str, AllevaEndpointContract]
-
-
-class AllevaContractApprovalOut(V2Model):
-    contract_version: str
-    contract_sha256: str
-    effective_at: datetime
-    approved_at: datetime
 
 
 class AllevaTreatmentPlanSyncOut(V2Model):

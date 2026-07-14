@@ -84,14 +84,20 @@ class TreatmentPlanSaveResult:
 def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
     rows = db.execute(
         text(
-            "SELECT p.canonical_client_id,v.source_record_id,MAX(v.imported_at),MAX(v.id) FROM patients p "
+            "SELECT p.canonical_client_id,v.source_record_id,v.source_system,MAX(v.imported_at),MAX(v.id) FROM patients p "
             "JOIN treatment_plan_versions v ON v.patient_id=p.id "
             "GROUP BY p.id,p.canonical_client_id,v.source_system,v.source_record_id "
             "ORDER BY MAX(v.imported_at) DESC,MAX(v.id) DESC"
         )
     ).all()
     aggregates = tuple(
-        assemble_treatment_plan_aggregate(db, str(row[0]), settings.effective_data_encryption_secret, str(row[1]))
+        assemble_treatment_plan_aggregate(
+            db,
+            str(row[0]),
+            settings.effective_data_encryption_secret,
+            str(row[1]),
+            source_system=str(row[2]),
+        )
         for row in rows
     )
     return tuple(_stored_plan(latest_evaluated_aggregate(db, aggregate)) for aggregate in aggregates if aggregate is not None)
@@ -226,12 +232,15 @@ def treatment_plan_aggregate_for_patient(
     db: Session,
     patient_id: str,
     treatment_plan_id: str | None = None,
+    *,
+    source_system: str | None = None,
 ) -> TreatmentPlanAggregate | None:
     aggregate = assemble_treatment_plan_aggregate(
         db,
         patient_id,
         settings.effective_data_encryption_secret,
         treatment_plan_id,
+        source_system=source_system,
     )
     if aggregate is None:
         return None

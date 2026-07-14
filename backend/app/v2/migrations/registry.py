@@ -43,6 +43,11 @@ MIGRATIONS = (
             for name, definition in APP_SETTING_NORMALIZED_EXTENSIONS
         ),
     ),
+    _migration(
+        6,
+        "add_api_request_rate_ceiling",
+        (),
+    ),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

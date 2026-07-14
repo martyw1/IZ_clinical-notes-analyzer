@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
+from app.v2.api.models import AllevaContractApprovalIn
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 
 
@@ -27,13 +30,22 @@ def _complete_contract() -> dict[str, object]:
     }
 
 
-def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_path, monkeypatch) -> None:
+def test_operational_sync_automatically_records_encrypted_builtin_mapping(tmp_path, monkeypatch) -> None:
+    from app.v2.services.alleva_sync import AllevaSyncResult
+    import app.v2.services.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "run_treatment_plan_sync",
+        lambda *_args, **_kwargs: AllevaSyncResult(0, 0, 0, 0, 0, ()),
+    )
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     saved = client.patch(
         "/api/api-configuration",
         headers=headers,
         json={
+            "client_id": "synthetic-client-id",
             "client_secret": "synthetic-contract-secret",
             "api_base_url": "https://vendor.invalid",
             "token_url": "https://vendor.invalid/token",
@@ -42,48 +54,22 @@ def test_contract_gate_blocks_mutable_checkbox_bypass_and_encrypts_approval(tmp_
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert saved.status_code == 200
-    blocked = client.post("/api/v2/alleva-sync/run", headers=headers)
-    assert blocked.status_code == 409
-    assert "approved versioned contract" in blocked.json()["detail"].lower()
-    approved = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=_complete_contract())
-    assert approved.status_code == 201, approved.text
-    assert approved.json()["contract_version"] == "synthetic-alleva-v1"
-    assert approved.json()["contract_sha256"]
-    approval_removed = client.patch(
-        "/api/api-configuration",
-        headers=headers,
-        json={
-            "treatment_plan_sync_approved": False,
-            "treatment_plan_endpoint_mapping_validated": False,
-        },
-    )
-    assert approval_removed.status_code == 200
-    missing_external_gate = client.post("/api/v2/alleva-sync/run", headers=headers)
-    assert missing_external_gate.status_code == 409
-    assert "R3/Alleva approval" in missing_external_gate.json()["detail"]
-    restored = client.patch(
-        "/api/api-configuration",
-        headers=headers,
-        json={
-            "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
-        },
-    )
-    assert restored.status_code == 200
+    started = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert started.status_code == 202, started.text
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
-        encrypted = database.execute(
-            "SELECT encrypted_contract_json FROM alleva_contract_approvals WHERE contract_version=?",
-            ("synthetic-alleva-v1",),
-        ).fetchone()[0]
+        version, encrypted = database.execute(
+            "SELECT contract_version,encrypted_contract_json FROM alleva_contract_approvals ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert version.startswith("alleva-rest-v1-built-in-")
     assert b"synthetic-contract-secret" not in encrypted
     assert b"patient-name-canary" not in encrypted
     assert encrypted.startswith(b"IZCNA1:")
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
+    assert any(item["action"] == "alleva.mapping.automatic" for item in audit)
     assert "synthetic-contract-secret" not in str(audit)
     assert "patient-name-canary" not in str(audit)
 
@@ -94,9 +80,8 @@ def test_contract_rejects_endpoint_paths_that_can_escape_the_approved_origin(tmp
     contract = _complete_contract()
     contract["endpoints"]["clients"]["path"] = "/https://attacker.invalid/clients"
 
-    response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
-
-    assert response.status_code == 422
+    with pytest.raises(ValueError):
+        _store_contract(contract)
 
 
 def test_contract_accepts_published_alleva_v1_review_paths(tmp_path, monkeypatch) -> None:
@@ -115,11 +100,15 @@ def test_contract_accepts_published_alleva_v1_review_paths(tmp_path, monkeypatch
         "field_mappings": {"review_date": "createdDated"},
     }
 
-    # When: an administrator records the versioned contract.
-    response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
+    _store_contract(contract)
 
-    # Then: the official non-nested review routes are accepted.
-    assert response.status_code == 201, response.text
+
+def _store_contract(payload: dict[str, object]) -> None:
+    from app.v2.db import SessionLocal
+    from app.v2.services.alleva_contracts import approve_contract
+
+    with SessionLocal() as database:
+        approve_contract(database, AllevaContractApprovalIn.model_validate(payload), 1)
 
 
 def test_contract_rejects_lowercase_or_missing_treatment_plan_client_query(tmp_path, monkeypatch) -> None:
@@ -134,17 +123,29 @@ def test_contract_rejects_lowercase_or_missing_treatment_plan_client_query(tmp_p
         contract["contract_version"] = f"invalid-{len(invalid_parameters)}-{invalid_parameters.get('client_id', 'missing')}"
         contract["endpoints"]["treatment_plans"]["parameters"] = invalid_parameters
 
-        response = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=contract)
-
-        assert response.status_code == 422
-        assert response.json()["detail"] == "The Alleva contract is incomplete or invalid"
+        with pytest.raises(ValueError):
+            _store_contract(contract)
 
 
-def test_corrupt_contract_is_redacted_and_safely_denied(tmp_path, monkeypatch) -> None:
+def test_corrupt_manual_contract_is_redacted_and_replaced_by_builtin_mapping(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
-    approved = client.post("/api/v2/alleva-sync/contracts", headers=headers, json=_complete_contract())
-    assert approved.status_code == 201
+    configured = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "client_id": "mock-client",
+            "client_secret": "mock-secret",
+            "api_base_url": "https://vendor.invalid",
+            "token_url": "https://vendor.invalid/token",
+            "scopes": "treatment-plans.read",
+            "api_enabled": True,
+            "treatment_plan_sync_enabled": True,
+            "treatment_plan_sync_approved": True,
+        },
+    )
+    assert configured.status_code == 200
+    _store_contract(_complete_contract())
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
         database.execute(
@@ -152,7 +153,92 @@ def test_corrupt_contract_is_redacted_and_safely_denied(tmp_path, monkeypatch) -
             (b"not-an-encrypted-contract-patient-name-canary", "synthetic-alleva-v1"),
         )
         database.commit()
-    denied = client.post("/api/v2/alleva-sync/run", headers=headers)
-    assert denied.status_code == 409
-    assert "contract" in denied.json()["detail"].lower()
-    assert "patient-name-canary" not in denied.text
+    captured_contracts = []
+
+    def capture_without_starting(_actor_id, _actor_role, contract):
+        captured_contracts.append(contract)
+        raise ValueError("synthetic active job")
+
+    import app.v2.api.alleva_sync_routes as alleva_sync_routes
+
+    monkeypatch.setattr(alleva_sync_routes.job_service, "create_treatment_plan_sync_job", capture_without_starting)
+    response = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert response.status_code == 409
+    assert captured_contracts[0].contract_version.startswith("alleva-rest-v1-built-in-")
+    assert "patient-name-canary" not in response.text
+
+
+def test_sync_requires_client_id_before_mapping_or_job_creation(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    saved = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "client_secret": "synthetic-secret",
+            "api_enabled": True,
+            "treatment_plan_sync_enabled": True,
+            "treatment_plan_sync_approved": True,
+        },
+    )
+    assert saved.status_code == 200
+
+    response = client.post("/api/v2/alleva-sync/run", headers=headers)
+
+    assert response.status_code == 409
+    assert "client ID" in response.json()["detail"]
+    database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
+    with sqlite3.connect(database_path) as database:
+        assert database.execute("SELECT COUNT(*) FROM alleva_contract_approvals").fetchone() == (0,)
+        assert database.execute("SELECT COUNT(*) FROM sync_jobs").fetchone() == (0,)
+
+
+def test_builtin_mapping_replaces_valid_custom_contract_and_refreshes_changed_limits(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    configured = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={
+            "client_id": "synthetic-client",
+            "client_secret": "synthetic-secret",
+            "api_base_url": "https://vendor.invalid",
+            "token_url": "https://vendor.invalid/token",
+            "scopes": "treatment-plans.read",
+            "api_enabled": True,
+            "treatment_plan_sync_enabled": True,
+            "treatment_plan_sync_approved": True,
+            "pagination_limit": 100,
+            "sync_limit": 250,
+            "requests_per_minute": 600,
+        },
+    )
+    assert configured.status_code == 200
+    custom = _complete_contract()
+    custom["contract_version"] = "alleva-rest-v1-built-in-2026-07-13-spoof"
+    _store_contract(custom)
+
+    import app.v2.api.alleva_sync_routes as alleva_sync_routes
+
+    captured_contracts = []
+
+    def capture_without_starting(_actor_id, _actor_role, contract):
+        captured_contracts.append(contract)
+        raise ValueError("synthetic active job")
+
+    monkeypatch.setattr(alleva_sync_routes.job_service, "create_treatment_plan_sync_job", capture_without_starting)
+    assert client.post("/api/v2/alleva-sync/run", headers=headers).status_code == 409
+    assert captured_contracts[-1].payload.endpoints["clients"].field_mappings["client_id"] == "id"
+    assert captured_contracts[-1].contract_version != custom["contract_version"]
+
+    changed = client.patch(
+        "/api/api-configuration",
+        headers=headers,
+        json={"pagination_limit": 25, "sync_limit": 75, "requests_per_minute": 900},
+    )
+    assert changed.status_code == 200
+    assert client.post("/api/v2/alleva-sync/run", headers=headers).status_code == 409
+    refreshed = captured_contracts[-1].payload
+    assert refreshed.pagination.maximum_page_size == 25
+    assert refreshed.pagination.maximum_records == 75
+    assert refreshed.rate_limit.maximum_requests_per_minute == 900

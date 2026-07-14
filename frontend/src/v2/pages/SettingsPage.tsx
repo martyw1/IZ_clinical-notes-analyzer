@@ -107,9 +107,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
   const syncReady = apiConfig.apiEnabled
     && apiConfig.treatmentPlanSyncEnabled
     && apiConfig.treatmentPlanSyncApproved
-    && apiConfig.treatmentPlanEndpointMappingValidated
+    && Boolean(apiConfig.clientId.trim())
     && apiConfig.clientSecretConfigured
-    && Boolean(apiConfig.activeContractVersion)
   const syncActive = syncJob !== null && !isTerminalSyncStatus(syncJob.status)
 
   async function handleRunSync() {
@@ -124,7 +123,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
       if (isTerminalSyncStatus(completed.status)) {
         setMessage(`Treatment-plan sync ${completed.status}: ${completed.recordsWritten} imported, ${completed.recordsFailed} skipped.`)
       } else {
-        setMessage('Treatment-plan sync is still running. Cancel it if you need to stop the approved read-only import.')
+        setMessage('Treatment-plan sync is still running. Cancel it if you need to stop the read-only import.')
       }
     } catch (syncError) {
       setMessage(messageForError(syncError))
@@ -256,6 +255,10 @@ export function SettingsPage({ token }: SettingsPageProps) {
           Treatment-plan sync limit
           <input type='number' min='1' max='5000' value={apiConfig.syncLimit} onChange={(event) => setApiConfig({ ...apiConfig, syncLimit: Number(event.target.value) })} />
         </label>
+        <label>
+          Request ceiling per minute
+          <input type='number' min='1' max='10000' value={apiConfig.requestsPerMinute} onChange={(event) => setApiConfig({ ...apiConfig, requestsPerMinute: Number(event.target.value) })} />
+        </label>
         <label className='checkbox-row'>
           <input type='checkbox' checked={apiConfig.apiEnabled} onChange={(event) => setApiConfig({ ...apiConfig, apiEnabled: event.target.checked })} />
           Enable API testing
@@ -266,20 +269,16 @@ export function SettingsPage({ token }: SettingsPageProps) {
         </label>
         <label className='checkbox-row'>
           <input type='checkbox' checked={apiConfig.treatmentPlanSyncApproved} onChange={(event) => setApiConfig({ ...apiConfig, treatmentPlanSyncApproved: event.target.checked })} />
-          Sync intent recorded (does not authorize execution)
-        </label>
-        <label className='checkbox-row'>
-          <input type='checkbox' checked={apiConfig.treatmentPlanEndpointMappingValidated} onChange={(event) => setApiConfig({ ...apiConfig, treatmentPlanEndpointMappingValidated: event.target.checked })} />
-          Mapping intent recorded (does not authorize execution)
+          Authorize live read-only treatment-plan import for this tenant
         </label>
         <dl className='summary-grid'>
           <div><dt>API key</dt><dd>{apiConfig.apiKeyConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>Client secret</dt><dd>{apiConfig.clientSecretConfigured ? 'configured' : 'not configured'}</dd></div>
           <div><dt>API testing</dt><dd>{apiConfig.apiEnabled ? 'enabled' : 'disabled'}</dd></div>
-          <div><dt>Approved contract</dt><dd>{apiConfig.activeContractVersion || 'not recorded'}</dd></div>
-          <div><dt>Approved sync</dt><dd>{syncReady ? 'ready to run' : 'gated'}</dd></div>
+          <div><dt>Import mapping</dt><dd>built-in Alleva v1</dd></div>
+          <div><dt>Treatment-plan sync</dt><dd>{syncReady ? 'ready to run' : 'not ready'}</dd></div>
         </dl>
-        <p className='muted'>A versioned contract with all six endpoint mappings, OAuth, pagination, rate-limit, attachment, vendor-documentation, test-population, approver, and effective-date evidence is required. These checkboxes are intent only.</p>
+        <p className='muted'>The published Alleva v1 patient and treatment-plan mapping is applied automatically at pull time. The request ceiling is an application throttle and can be lowered to match Alleva tenant guidance. The internal version and checksum are retained for audit provenance.</p>
         <button type='button' onClick={handleSaveApiConfiguration} disabled={isSavingApiConfiguration}>
           {isSavingApiConfiguration ? 'Saving API configuration...' : 'Save API configuration'}
         </button>
@@ -289,8 +288,8 @@ export function SettingsPage({ token }: SettingsPageProps) {
         <button type='button' className='secondary-button' onClick={handleTestConnectivity} disabled={isTestingConnectivity}>
           {isTestingConnectivity ? 'Testing OAuth connectivity...' : 'Test saved OAuth connectivity'}
         </button>
-        <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run approved read-only treatment-plan sync' : 'A saved encrypted secret, explicit enablement, and an effective versioned approval contract are required before sync can run.'}>
-          {isRunningSync ? 'Running treatment-plan sync...' : 'Run approved treatment-plan sync'}
+        <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run read-only treatment-plan sync' : 'A client ID, saved encrypted secret, API and sync enablement, and explicit tenant import authorization are required before sync can run.'}>
+          {isRunningSync ? 'Running treatment-plan sync...' : 'Run treatment-plan sync'}
         </button>
         {syncJob && !isTerminalSyncStatus(syncJob.status) && (
           <button type='button' className='secondary-button' onClick={handleCancelSync}>

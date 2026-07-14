@@ -42,11 +42,11 @@ def _api_config_out(row: AppSetting, contract_version: str | None = None, effect
         scopes=row.api_scopes,
         pagination_limit=row.api_pagination_limit,
         sync_limit=row.alleva_treatment_plan_sync_limit,
+        requests_per_minute=row.api_requests_per_minute,
         timeout_seconds=row.emr_api_timeout_seconds,
         api_enabled=row.emr_api_enabled,
         treatment_plan_sync_enabled=row.alleva_treatment_plan_sync_enabled,
         treatment_plan_sync_approved=row.alleva_treatment_plan_sync_approved,
-        treatment_plan_endpoint_mapping_validated=row.alleva_treatment_plan_endpoint_mapping_validated,
         active_contract_version=contract_version,
         active_contract_effective_at=effective_at,
     )
@@ -71,11 +71,11 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
         "scopes": "api_scopes",
         "pagination_limit": "api_pagination_limit",
         "sync_limit": "alleva_treatment_plan_sync_limit",
+        "requests_per_minute": "api_requests_per_minute",
         "timeout_seconds": "emr_api_timeout_seconds",
         "api_enabled": "emr_api_enabled",
         "treatment_plan_sync_enabled": "alleva_treatment_plan_sync_enabled",
         "treatment_plan_sync_approved": "alleva_treatment_plan_sync_approved",
-        "treatment_plan_endpoint_mapping_validated": "alleva_treatment_plan_endpoint_mapping_validated",
     }
     for source, target in field_map.items():
         if source in payload.model_fields_set:

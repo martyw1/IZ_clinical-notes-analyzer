@@ -56,7 +56,7 @@ The browser result includes status code, content type, timing when available, pa
 
 Large operation responses are capped before returning to the browser. The app captures at most 200 KB from a selected operation response and shows at most a short preview if the response is larger. Saved redacted reports omit full OpenAPI definitions and compact long JSON arrays/objects so a provider response cannot overwhelm the UI or local report directory.
 
-Alleva has confirmed it does not currently support FHIR. Active Alleva integration in this app is REST/OpenAPI/HL7-readiness only. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path.
+Alleva has confirmed it does not currently support FHIR. Active Alleva integration in this app uses REST/OpenAPI for testing plus operator-triggered, tenant-authorized, read-only treatment-plan import; HL7 remains a readiness boundary. The public Alleva Swagger UI (`https://api.allevasoft.com/swagger/index.html`) and OpenAPI JSON (`https://api.allevasoft.com/swagger/v1/swagger.json` or `/swagger/v2/swagger.json`) belong in the OpenAPI URL/API harness fields. `https://api.allevasoft.com/advanced-form-elements` is a protected Alleva REST operation path.
 
 For Alleva OAuth client credentials, pasting the R3/Alleva-provided client ID and client secret is normal. The secret is write-only after save: browser responses return only configured flags, not the stored secret. If R3 has multiple candidate endpoints or environments, save them as endpoint profiles, then activate the one that should become the active connection.
 
@@ -104,7 +104,7 @@ This sync path is intended to pull source data from Alleva, then run R3's local 
 
 When optional current-plan detail fetch is enabled, the app captures content counts and PHI-minimized structured content facts. It does not store raw treatment-plan narrative text; content facts retain source paths, text-present flags, redacted hashes, and non-name metadata needed for source coverage review.
 
-Treatment-plan sync readiness maps records by patient/client ID by default. Name-only matches are intentionally disabled; records without an approved ID mapping remain unmapped instead of being guessed from patient names. App settings includes a separate validation-only name-fallback control for approved mapping investigations, but it stays off by default.
+Treatment-plan sync readiness maps records by patient/client ID using the built-in Alleva v1 mapping. Name-only matches are intentionally disabled; records without a canonical ID mapping remain unmapped instead of being guessed from patient names. App settings includes a separate validation-only name-fallback control for controlled mapping investigations, but it stays off by default.
 
 Alleva patient-name import/display is also a separate App settings control and stays off by default. When it is off, the sync stores generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels for Alleva-sourced treatment-plan clients even if the `/clients` payload contains a name. Turning the setting off later redacts existing Alleva-sourced treatment-plan names again.
 
@@ -229,15 +229,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-api-confi
 
 ## Boundary status language
 
-The app supports configuration and connectivity testing without pretending to import live Alleva patient data. The intended status language is:
+The app supports configuration and connectivity testing plus an explicit operator-triggered read-only treatment-plan import. The intended status language is:
 
 - **configured but not connected** when local vendor/base URL/API key settings have been saved but no successful probe has run
 - **definition discovered** when an OpenAPI/Swagger definition is found and summarized
 - **connectivity passed** when a probe succeeds and returns non-secret metadata such as HTTP status, selected definition URL, title/version, path count, schema count, security scheme names, and sample paths
 - **client-credentials token blocked** when the token endpoint returns an error such as HTTP 400
-- **patient import unavailable until credentials/endpoint mapping are provided** for live patient-data import
+- **treatment-plan import not authorized** until tenant credentials, API/sync enablement, and explicit live-read authorization are configured
 
-Keep live operation tests blocked until R3/Alleva confirms the exact client ID, secret, tenant, auth style, and endpoint mapping. Do not fake live import without official tenant credentials and endpoint mapping.
+The published Alleva v1 endpoint mapping is built in and does not require a separate approval form. Keep live reads off until the exact tenant client ID, secret, auth style, and explicit live-read authorization are configured; use supervised non-PHI/test-record validation before broader rollout.
 
 ## Local report files
 

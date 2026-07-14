@@ -20,14 +20,19 @@ class _TokenClient:
     def __exit__(self, *_: object) -> None:
         return None
 
-    def post(self, url: str, *, data: dict[str, str], headers: dict[str, str]) -> httpx.Response:
+    def build_request(self, method: str, url: str, *, data: dict[str, str], headers: dict[str, str]) -> httpx.Request:
         self.calls.append((url, data, headers))
-        return httpx.Response(200, request=httpx.Request("POST", url), json={"access_token": "mock-token", "token_type": "Bearer", "expires_in": 3600})
+        return httpx.Request(method, url, data=data, headers=headers)
+
+    def send(self, request: httpx.Request, *, stream: bool) -> httpx.Response:
+        assert stream is True
+        return httpx.Response(200, request=request, json={"access_token": "mock-token", "token_type": "Bearer", "expires_in": 3600})
 
 
 class _RejectedTokenClient(_TokenClient):
-    def post(self, url: str, *, data: dict[str, str], headers: dict[str, str]) -> httpx.Response:
-        return httpx.Response(401, request=httpx.Request("POST", url), json={"error": "synthetic-private-vendor-message"})
+    def send(self, request: httpx.Request, *, stream: bool) -> httpx.Response:
+        assert stream is True
+        return httpx.Response(401, request=request, json={"error": "synthetic-private-vendor-message"})
 
 
 def test_saved_oauth_profile_uses_body_and_basic_styles_without_exposing_token(tmp_path, monkeypatch) -> None:

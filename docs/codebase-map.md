@@ -127,9 +127,9 @@ The active non-technical deployment target is Windows.
 
 ### Patient treatment-plan handling flow
 
-1. Manual uploads call `sync_from_note_set` in `backend/app/services/timeliness.py`; approved Alleva sync calls `sync_alleva_rest_payloads` in `backend/app/services/alleva_treatment_plan_sync.py`.
+1. Manual uploads call `sync_from_note_set` in `backend/app/services/timeliness.py`; authorized Alleva sync calls `sync_alleva_rest_payloads` in `backend/app/services/alleva_treatment_plan_sync.py`.
 2. Both paths upsert `TreatmentPlanClient`, `LevelOfCareHistory`, and `TreatmentPlanRecord` rows while retaining manual overrides and manager checklist reviews.
-3. Alleva records match by approved client/source ID aliases. Name fallback and patient-name import/display are separate disabled-by-default App settings.
+3. Alleva records match by canonical client/source ID aliases. Name fallback and patient-name import/display are separate disabled-by-default App settings.
 4. Optional current-plan detail fetch captures counts, structured item facts, redacted text hashes, and non-name metadata. It does not store raw treatment-plan narrative text.
 5. `evaluate_client` calculates deterministic status, `detail_payload` builds selected-client evidence/checklist output, and `treatment_plan_aggregate_payload` backs `GET /api/timeliness/clients/{client_id}/treatment-plan`.
 6. `frontend/src/App.tsx` renders the Treatment Plans queue/detail surface and `frontend/src/components/TreatmentPlanContentSummary.tsx` renders current treatment-plan content facts.
@@ -181,7 +181,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 | Risk | Current state | Impact |
 | --- | --- | --- |
 | Browser/full-stack smoke is source-checkout validated only | Beta 1.4.6-beta.1 keeps Treatment Plan Timeliness evidence, prompted/stale `frontend\dist` handling, selected-client and global 42-step checklist visibility, manager criterion notes/actions, date-clock/workflow-export behavior, simplified primary navigation, bounded lookup status/results, gated Alleva REST sync readiness, API settings consolidation, legacy audit-schema repair, due-date conflict review behavior, and example-plan upload validation on the current machine. | Target Dell Windows validation still needs the target machine before broad rollout. |
-| Live Alleva import is disabled | API harness and API profiles support readiness/testing only, with no approved endpoint mapping or tenant credentials for production import. | Do not promise or fake live patient import until R3/Alleva clears the integration gate. |
+| Live Alleva import requires tenant authorization | The built-in endpoint mapping no longer needs a separate approval form, but live reads still require saved tenant credentials and the explicit read-only tenant authorization setting. | Keep credentials encrypted, patient-name import off by default, and validate the real tenant response shape before broader rollout. |
 | LOC-change update window is unvalidated | The app ships a manager-editable 7-calendar-day preset because R3/Marleigh has not confirmed the final rule. | Must stay configurable and visibly unresolved. |
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, protected saved configuration, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, protected values, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |

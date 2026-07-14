@@ -5,6 +5,7 @@ import json
 from urllib.parse import unquote, urlsplit
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Final
 
 from sqlalchemy import text
@@ -12,9 +13,13 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.v2.api.models import AllevaContractApprovalIn
+from app.v2.models import AppSetting
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 REQUIRED_ENDPOINTS: Final = frozenset(("clients", "treatment_plans", "treatment_plan_detail", "diagnoses", "reviews", "review_detail"))
+BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-07-13"
+DEFAULT_ALLEVA_SCOPE: Final = "https://authorization.allevasoft.com/api:read"
+_BUILTIN_CONTRACT_LOCK: Final = Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +62,172 @@ def approve_contract(db: Session, payload: AllevaContractApprovalIn, approver_us
     result = db.execute(text(statement), {"version": payload.contract_version, "encrypted": encrypt_bytes(canonical), "sha256": digest, "approver": approver_user_id, "approved_at": now.isoformat(), "effective_at": payload.effective_at.astimezone(timezone.utc).isoformat()})
     db.commit()
     return ApprovedAllevaContract(int(result.lastrowid), payload.contract_version, digest, payload.effective_at, now, payload)
+
+
+def ensure_builtin_contract(
+    db: Session,
+    profile: AppSetting,
+    approver_user_id: int,
+) -> tuple[ApprovedAllevaContract, bool]:
+    with _BUILTIN_CONTRACT_LOCK:
+        return _ensure_builtin_contract(db, profile, approver_user_id)
+
+
+def _ensure_builtin_contract(
+    db: Session,
+    profile: AppSetting,
+    approver_user_id: int,
+) -> tuple[ApprovedAllevaContract, bool]:
+    current = active_contract(db)
+    if (
+        current is not None
+        and _is_builtin_contract(current, profile)
+        and contract_matches_profile(current, profile)
+    ):
+        return current, False
+
+    now = datetime.now(timezone.utc)
+    profile_fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "mapping_version": BUILT_IN_MAPPING_VERSION,
+                "api_base_url": profile.api_base_url,
+                "token_url": profile.api_oauth_token_url,
+                "token_auth_style": profile.api_token_auth_style,
+                "scope": _profile_scope(profile),
+                "pagination_limit": profile.api_pagination_limit,
+                "sync_limit": profile.alleva_treatment_plan_sync_limit,
+                "requests_per_minute": profile.api_requests_per_minute,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()[:10]
+    timestamp = now.strftime("%Y%m%d%H%M%S%f")
+    payload = _builtin_contract_payload(
+        profile,
+        contract_version=f"{BUILT_IN_MAPPING_VERSION}-{profile_fingerprint}-{timestamp}",
+        effective_at=now,
+    )
+    return approve_contract(db, payload, approver_user_id), True
+
+
+def _builtin_contract_payload(
+    profile: AppSetting,
+    *,
+    contract_version: str,
+    effective_at: datetime,
+) -> AllevaContractApprovalIn:
+    return AllevaContractApprovalIn.model_validate(
+        {
+            "contract_version": contract_version,
+            "api_base_url": profile.api_base_url,
+            "effective_at": effective_at,
+            "vendor_documentation_url": profile.openapi_url or profile.api_base_url,
+            "test_population_reference": "R3 operator-authorized built-in Alleva REST v1 mapping",
+            "oauth": {
+                "token_url": profile.api_oauth_token_url,
+                "token_auth_style": profile.api_token_auth_style,
+                "scope": _profile_scope(profile),
+            },
+            "pagination": {
+                "limit_parameter": "Limit",
+                "offset_parameter": "Cursor",
+                "maximum_page_size": profile.api_pagination_limit,
+                "maximum_records": profile.alleva_treatment_plan_sync_limit,
+                "maximum_response_bytes": 1_048_576,
+            },
+            "rate_limit": {
+                "maximum_requests_per_minute": profile.api_requests_per_minute,
+                "retry_after_seconds": 2,
+            },
+            "attachments": {"mode": "disabled", "download_allowed": False},
+            "endpoints": {
+                "clients": {
+                    "path": "/clients",
+                    "parameters": {"limit": "Limit", "offset": "Cursor"},
+                    "field_mappings": {
+                        "client_id": "id",
+                        "lifecycle_status": "status",
+                        "level_of_care": "levelOfCare",
+                        "admission_date": "admissionDateTime",
+                    },
+                },
+                "treatment_plans": {
+                    "path": "/treatment-plans",
+                    "parameters": {"limit": "Limit", "offset": "Cursor", "client_id": "ClientId"},
+                    "field_mappings": {
+                        "client_id": "client.id",
+                        "client_reference": "client.route",
+                        "plan_id": "id",
+                    },
+                },
+                "treatment_plan_detail": {
+                    "path": "/treatment-plans/{plan_id}",
+                    "parameters": {},
+                    "field_mappings": {
+                        "reason_for_admission": "reasonForAdmission",
+                        "initial_client_needs": "initialClientNeeds",
+                        "family_education_needs": "familyEducationNeeds",
+                        "last_modified": "lastModified",
+                        "problem_description": "problems.description",
+                        "behavioral_definition": "problems.behavioralDefinitions.description",
+                        "goal_description": "problems.goals.description",
+                        "objective_description": "problems.goals.objectives.description",
+                        "intervention_description": "problems.goals.objectives.interventions.description",
+                    },
+                },
+                "diagnoses": {
+                    "path": "/treatment-plans/{plan_id}/diagnosis",
+                    "parameters": {},
+                    "field_mappings": {"description": "description", "icd10_code": "code"},
+                },
+                "reviews": {
+                    "path": "/treatment-reviews",
+                    "parameters": {"limit": "Limit", "offset": "Cursor"},
+                    "field_mappings": {"review_id": "id", "treatment_plan_review_id": "treatmentPlanReviewId"},
+                },
+                "review_detail": {
+                    "path": "/treatment-reviews/{review_id}",
+                    "parameters": {},
+                    "field_mappings": {"review_date": "createdDated", "signature_date": "creatorSignatureDate"},
+                },
+            },
+        }
+    )
+
+
+def _profile_scope(profile: AppSetting) -> str:
+    return profile.api_scopes.strip() or DEFAULT_ALLEVA_SCOPE
+
+
+def _is_builtin_contract(contract: ApprovedAllevaContract, profile: AppSetting) -> bool:
+    if not contract.contract_version.startswith(f"{BUILT_IN_MAPPING_VERSION}-"):
+        return False
+    expected = _builtin_contract_payload(
+        profile,
+        contract_version=contract.contract_version,
+        effective_at=contract.effective_at,
+    )
+    return contract.payload == expected
+
+
+def contract_matches_profile(contract: ApprovedAllevaContract, profile: AppSetting) -> bool:
+    payload = contract.payload
+    connection_matches = (
+        payload.api_base_url == profile.api_base_url
+        and payload.oauth.token_url == profile.api_oauth_token_url
+        and payload.oauth.token_auth_style == profile.api_token_auth_style
+        and payload.oauth.scope == _profile_scope(profile)
+    )
+    if not contract.contract_version.startswith(f"{BUILT_IN_MAPPING_VERSION}-"):
+        return connection_matches
+    return (
+        connection_matches
+        and payload.pagination.maximum_page_size == profile.api_pagination_limit
+        and payload.pagination.maximum_records == profile.alleva_treatment_plan_sync_limit
+        and payload.rate_limit.maximum_requests_per_minute == profile.api_requests_per_minute
+    )
 
 
 def active_contract(db: Session) -> ApprovedAllevaContract | None:

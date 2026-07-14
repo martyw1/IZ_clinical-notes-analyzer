@@ -22,7 +22,9 @@ class PatientRosterItem:
 
 
 def list_patient_roster(db: Session) -> tuple[PatientRosterItem, ...]:
-    plans_by_patient = {plan.patient_id: plan for plan in list_treatment_plan_imports(db)}
+    plans_by_patient: dict[tuple[str, str], StoredTreatmentPlan] = {}
+    for plan in list_treatment_plan_imports(db):
+        plans_by_patient.setdefault((plan.patient_id, plan.source_mode), plan)
     rows = db.execute(
         text(
             "SELECT canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at "
@@ -37,7 +39,7 @@ def list_patient_roster(db: Session) -> tuple[PatientRosterItem, ...]:
             first_seen_at=str(row[3]),
             last_seen_at=str(row[4]),
             reconciled_at=str(row[5] or ""),
-            plan=plans_by_patient.get(str(row[0])),
+            plan=plans_by_patient.get((str(row[0]), str(row[1]))),
         )
         for row in rows
     )

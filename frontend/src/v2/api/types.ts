@@ -117,13 +117,11 @@ export type ApiConfiguration = {
   readonly scopes: string
   readonly paginationLimit: number
   readonly syncLimit: number
+  readonly requestsPerMinute: number
   readonly timeoutSeconds: number
   readonly apiEnabled: boolean
   readonly treatmentPlanSyncEnabled: boolean
   readonly treatmentPlanSyncApproved: boolean
-  readonly treatmentPlanEndpointMappingValidated: boolean
-  readonly activeContractVersion: string
-  readonly activeContractEffectiveAt: string
 }
 
 export type ApiHarnessPreviewRecord = {

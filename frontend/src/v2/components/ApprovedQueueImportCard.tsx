@@ -3,8 +3,6 @@ import { getApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSy
 import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, ApiHarnessJob } from '../api/types'
 
-const MISSING_CONTRACT_BLOCKER = 'No approved Alleva v1 mapping is recorded. Complete the one-time mapping setup in the API Testing Harness.'
-
 type Props = {
   readonly config: ApiConfiguration | null
   readonly token: string
@@ -51,7 +49,7 @@ export function ApprovedQueueImportCard({
           : `Queue import ended with status: ${current.status}.`)
       }
     } catch (error) {
-      setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : 'Unable to run the approved queue import.')
+      setMessage(error instanceof ApiRequestError || error instanceof Error ? error.message : 'Unable to run the queue import.')
     } finally {
       if (!keepLockedForActiveJob) setIsRunning(false)
     }
@@ -63,20 +61,12 @@ export function ApprovedQueueImportCard({
       <h2>Populate and evaluate the Treatment Plans queue</h2>
       {blockers.length > 0 ? (
         <>
-          <p className='error-banner'><strong>Queue import is blocked.</strong> Configure and approve the operational import before pulling live records.</p>
+          <p className='error-banner'><strong>Queue import is blocked.</strong> Configure the saved Alleva connection before pulling live records.</p>
           <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
-          {blockers.some((blocker) => blocker !== MISSING_CONTRACT_BLOCKER) && (
-            <button type='button' className='secondary-button' onClick={() => onNavigate('Settings')}>Open Settings</button>
-          )}
-          {!config?.activeContractVersion && (
-            <>
-              <p className='muted'>OAuth credentials authenticate the app. The one-time Alleva v1 mapping approval separately selects the patient, treatment-plan, diagnosis, and review fields that may be imported.</p>
-              <button type='button' className='secondary-button' onClick={() => onNavigate('API Testing Harness')}>Open Alleva mapping setup</button>
-            </>
-          )}
+          <button type='button' className='secondary-button' onClick={() => onNavigate('Settings')}>Open Settings</button>
         </>
       ) : (
-        <p>Approved mapping {config?.activeContractVersion} is active. This import normalizes every returned treatment plan, runs the deterministic checklist, and adds results to the queue.</p>
+        <p>The built-in Alleva v1 mapping is applied automatically when the pull starts. Every returned treatment plan is normalized, evaluated, and added to the queue.</p>
       )}
       <button type='button' onClick={() => void runImport()} disabled={isRunning || blockers.length > 0}>
         {isRunning ? 'Pulling full treatment plans...' : buttonLabel}
@@ -91,13 +81,13 @@ export function ApprovedQueueImportCard({
 }
 
 function importBlockers(config: ApiConfiguration | null): readonly string[] {
-  if (!config) return ['Loading saved API and approval status.']
+  if (!config) return ['Loading saved API configuration.']
   const blockers: string[] = []
+  if (!config.clientId.trim()) blockers.push('Save the Alleva OAuth client ID in Settings.')
   if (!config.clientSecretConfigured) blockers.push('Save the Alleva client secret in Settings.')
   if (!config.apiEnabled) blockers.push('Enable API testing in Settings.')
   if (!config.treatmentPlanSyncEnabled) blockers.push('Enable treatment-plan sync in Settings.')
-  if (!config.treatmentPlanSyncApproved || !config.treatmentPlanEndpointMappingValidated) blockers.push('Record R3/Alleva sync and endpoint-mapping approval in Settings.')
-  if (!config.activeContractVersion) blockers.push(MISSING_CONTRACT_BLOCKER)
+  if (!config.treatmentPlanSyncApproved) blockers.push('Authorize live read-only treatment-plan import for this tenant in Settings.')
   return blockers
 }
 

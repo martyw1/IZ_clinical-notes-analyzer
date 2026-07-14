@@ -100,7 +100,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     async function loadDetail(summary: TreatmentPlanListItem) {
       setIsLoadingDetail(true)
       try {
-        const payload = await getTreatmentPlanDetail(token, summary.patientId, summary.treatmentPlanId)
+        const payload = await getTreatmentPlanDetail(token, summary.patientId, summary.treatmentPlanId, summary.sourceMode)
         if (!cancelled) setSelectedPlan(payload)
       } catch (loadError) {
         if (!cancelled) setError(messageForError(loadError))
@@ -118,7 +118,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     if (!selectedPlan) return
     await saveManagerAction(token, selectedPlan.patientId, payload)
     const [detail, queue] = await Promise.all([
-      getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId),
+      getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId, selectedSummary?.sourceMode),
       getTreatmentPlans(token),
     ])
     setSelectedPlan(detail)
@@ -133,7 +133,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
   async function handleSourceDocumentDelete(sourceFileId: string) {
     if (!selectedPlan) return
     await deleteTreatmentPlanSourceDocument(token, selectedPlan.patientId, sourceFileId)
-    setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId))
+    setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId, selectedSummary?.sourceMode))
   }
 
   async function handleChecklistEvidenceExport() {
@@ -203,6 +203,7 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
               <tr>
                 <th>Patient</th>
                 <th>Treatment plan ID</th>
+                <th>Source</th>
                 <th>LOC</th>
                 <th>Next due</th>
                 <th>Status</th>
@@ -223,13 +224,14 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
                       {selectedPlanKey === planKey(item) && <span className='selected-label'>Selected</span>}
                     </button>
                   </td>
+                  <td data-label='Source'>{item.sourceMode}</td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>
                   <td data-label='Next due'>{item.nextDueDate}</td>
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
                 </tr>
               ))}
               {visibleItems.length === 0 && (
-                <tr><td colSpan={5} className='muted'>No treatment plans match the current filters.</td></tr>
+                <tr><td colSpan={6} className='muted'>No treatment plans match the current filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -252,5 +254,5 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
 }
 
 function planKey(item: TreatmentPlanListItem): string {
-  return `${item.patientId}:${item.treatmentPlanId}`
+  return `${item.patientId}:${item.sourceMode}:${item.treatmentPlanId}`
 }

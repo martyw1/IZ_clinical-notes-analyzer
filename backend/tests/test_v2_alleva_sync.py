@@ -30,16 +30,16 @@ class _MockAllevaState:
     release_clients: Event = field(default_factory=Event)
     client_items: list[dict[str, JsonValue]] = field(
         default_factory=lambda: [
-            {"clientId": "912", "isActive": True, "levelOfCare": "PHP", "admissionDate": "2026-06-01"}
+            {"id": "912", "status": "Active", "levelOfCare": "PHP", "admissionDateTime": "2026-06-01T00:00:00Z"}
         ]
     )
     plan_items: list[dict[str, JsonValue]] = field(
         default_factory=lambda: [
-            {"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"}
+            {"id": "plan-912", "client": {"id": "912", "route": "/clients/912"}, "nextReviewDue": "2026-07-01"}
         ]
     )
     detail_problem: list[str] = field(default_factory=lambda: ["Synthetic clinical problem."])
-    published_shape: bool = False
+    published_shape: bool = True
     plan_delay_seconds: float = 0.0
     active_plan_requests: list[int] = field(default_factory=lambda: [0])
     peak_plan_requests: list[int] = field(default_factory=lambda: [0])
@@ -108,7 +108,8 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
             return
         problem = type(self).state.detail_problem[0] if plan_id == "plan-912" else f"Synthetic problem for {plan_id}."
         if type(self).state.published_shape:
-            self._respond({"id": int(plan_id), "reasonForAdmission": "Synthetic recovery support.", "lastModified": "2026-07-12T12:00:00Z", "problems": [{"description": problem, "behavioralDefinitions": [{"description": "Synthetic behavior."}], "goals": [{"description": "Synthetic goal.", "objectives": [{"description": "Synthetic objective.", "interventions": [{"description": "Synthetic intervention."}]}]}]}]})
+            detail_id: str | int = int(plan_id) if plan_id.isdigit() else plan_id
+            self._respond({"id": detail_id, "reasonForAdmission": "Synthetic recovery support.", "lastModified": "2026-07-12T12:00:00Z", "problems": [{"description": problem, "behavioralDefinitions": [{"description": "Synthetic behavior."}], "goals": [{"description": "Synthetic goal.", "objectives": [{"description": "Synthetic objective.", "interventions": [{"description": "Synthetic intervention."}]}]}]}]})
             return
         self._respond({"id": plan_id, "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": problem}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
 
@@ -130,7 +131,7 @@ def _mock_alleva_server(
     block_clients: bool = False,
     client_items: list[dict[str, JsonValue]] | None = None,
     plan_items: list[dict[str, JsonValue]] | None = None,
-    published_shape: bool = False,
+    published_shape: bool = True,
     plan_delay_seconds: float = 0.0,
 ) -> Iterator[tuple[str, _MockAllevaState]]:
     defaults = _MockAllevaState()
@@ -176,11 +177,8 @@ def _plan_client_id(plan: dict[str, JsonValue]) -> str:
     return ""
 
 
-def _approve_synthetic_contract(client, headers, api_base_url: str = "https://api.allevasoft.com", token_url: str = "https://api.allevasoft.com/connect/token") -> None:
-    approved = client.post(
-        "/api/v2/alleva-sync/contracts",
-        headers=headers,
-        json={
+def _approve_synthetic_contract(_client, _headers, api_base_url: str = "https://api.allevasoft.com", token_url: str = "https://api.allevasoft.com/connect/token") -> None:
+    _store_contract({
             "contract_version": "synthetic-wire-contract-v1",
             "api_base_url": api_base_url,
             "effective_at": "2026-07-10T00:00:00+00:00",
@@ -198,16 +196,12 @@ def _approve_synthetic_contract(client, headers, api_base_url: str = "https://ap
                 "reviews": {"path": "/treatment-plans/{plan_id}/reviews", "parameters": {}, "field_mappings": {"review_id": "id"}},
                 "review_detail": {"path": "/treatment-plans/{plan_id}/reviews/{review_id}", "parameters": {}, "field_mappings": {"review_date": "reviewDate"}},
             },
-        },
+        }
     )
-    assert approved.status_code == 201, approved.text
 
 
-def _approve_published_v1_contract(client, headers, api_base_url: str, token_url: str) -> None:
-    approved = client.post(
-        "/api/v2/alleva-sync/contracts",
-        headers=headers,
-        json={
+def _approve_published_v1_contract(_client, _headers, api_base_url: str, token_url: str) -> None:
+    _store_contract({
             "contract_version": "published-alleva-v1-test",
             "api_base_url": api_base_url,
             "effective_at": "2026-07-10T00:00:00+00:00",
@@ -225,9 +219,17 @@ def _approve_published_v1_contract(client, headers, api_base_url: str, token_url
                 "reviews": {"path": "/treatment-reviews", "parameters": {"limit": "Limit", "offset": "Cursor"}, "field_mappings": {"review_id": "id", "treatment_plan_review_id": "treatmentPlanReviewId"}},
                 "review_detail": {"path": "/treatment-reviews/{review_id}", "parameters": {}, "field_mappings": {"review_date": "createdDated"}},
             },
-        },
+        }
     )
-    assert approved.status_code == 201, approved.text
+
+
+def _store_contract(payload: dict[str, object]) -> None:
+    from app.v2.api.models import AllevaContractApprovalIn
+    from app.v2.db import SessionLocal
+    from app.v2.services.alleva_contracts import approve_contract
+
+    with SessionLocal() as database:
+        approve_contract(database, AllevaContractApprovalIn.model_validate(payload), 1)
 
 
 def test_alleva_sync_is_blocked_until_explicit_approval_and_mapping_are_saved(tmp_path, monkeypatch) -> None:
@@ -244,7 +246,7 @@ def test_alleva_sync_is_blocked_until_explicit_approval_and_mapping_are_saved(tm
     ("column", "value"),
     (("expires_at", "2000-01-01T00:00:00+00:00"), ("revoked_at", "2026-07-10T00:00:00+00:00")),
 )
-def test_expired_or_revoked_contract_blocks_sync_before_worker_starts(
+def test_expired_or_revoked_manual_contract_is_replaced_before_worker_starts(
     tmp_path,
     monkeypatch,
     column: str,
@@ -257,12 +259,12 @@ def test_expired_or_revoked_contract_blocks_sync_before_worker_starts(
         "/api/api-configuration",
         headers=headers,
         json={
+            "client_id": "mock-client",
             "client_secret": "mock-secret",
             "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert configured.status_code == 200
@@ -274,17 +276,20 @@ def test_expired_or_revoked_contract_blocks_sync_before_worker_starts(
 
     import app.v2.api.alleva_sync_routes as alleva_sync_routes
 
-    def worker_must_not_start(*_args, **_kwargs):
-        raise AssertionError("contract gate must reject before the sync worker can reach OAuth or an API endpoint")
+    captured_contracts = []
 
-    monkeypatch.setattr(alleva_sync_routes.job_service, "create_treatment_plan_sync_job", worker_must_not_start)
+    def capture_without_starting(_actor_id, _actor_role, contract):
+        captured_contracts.append(contract)
+        raise ValueError("synthetic active job")
+
+    monkeypatch.setattr(alleva_sync_routes.job_service, "create_treatment_plan_sync_job", capture_without_starting)
 
     # When: an administrator invokes the real sync route.
     response = client.post("/api/v2/alleva-sync/run", headers=headers)
 
-    # Then: the route safe-denies before it can create a worker or make a network request.
+    # Then: the unusable manual record is replaced without making a network request.
     assert response.status_code == 409
-    assert "approved versioned contract" in response.json()["detail"]
+    assert captured_contracts[0].contract_version.startswith("alleva-rest-v1-built-in-")
 
 
 def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregate(tmp_path, monkeypatch) -> None:
@@ -304,7 +309,6 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
             },
         )
         assert configured.status_code == 200
@@ -319,7 +323,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
                 (job_id,),
             ).fetchone()
         assert ledger is not None
-        assert ledger[0] == "synthetic-wire-contract-v1"
+        assert ledger[0].startswith("alleva-rest-v1-built-in-")
         assert len(ledger[1]) == 64
         synced = started
         for _ in range(40):
@@ -342,7 +346,18 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
             }
         assert [(endpoint_key.split(":", 1)[0], page_number) for endpoint_key, page_number, _ in checkpoints] == [("clients", 0), ("treatment_plans", 0)]
         assert all(isinstance(payload, bytes) and b"Synthetic" not in payload for _, _, payload in checkpoints)
-        assert all(rows and all(row[0] is not None and row[1] is not None and row[2] == "synthetic-wire-contract-v1" and len(row[3]) == 64 for row in rows) for rows in provenance.values())
+        assert provenance["treatment_review_versions"] == []
+        assert all(
+            rows and all(
+                row[0] is not None
+                and row[1] is not None
+                and row[2].startswith("alleva-rest-v1-built-in-")
+                and len(row[3]) == 64
+                for row in rows
+            )
+            for table, rows in provenance.items()
+            if table != "treatment_review_versions"
+        )
         assert synced.json()["records_written"] == 1
         detail = client.get("/api/v2/treatment-plans/912", headers=headers)
         assert detail.status_code == 200
@@ -350,7 +365,13 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert detail.json()["content_snapshot"]["problems"][0]["problem_description"] == "Synthetic clinical problem."
         assert {criterion["source_endpoint"] for criterion in detail.json()["criteria_results"]} == {"Alleva REST"}
         assert {field["source_endpoint"] for field in detail.json()["content_snapshot"]["observed_fields"]} == {"Alleva REST"}
-        assert state.paths == ["/token", "/clients?limit=100&offset=0", "/treatment-plans?limit=100&offset=0&ClientId=912", "/treatment-plans/plan-912", "/treatment-plans/plan-912/diagnoses", "/treatment-plans/plan-912/reviews", "/treatment-plans/plan-912/reviews/review-912"]
+        assert state.paths == [
+            "/token",
+            "/clients?Limit=100&Cursor=0",
+            "/treatment-plans?Limit=100&Cursor=0&ClientId=912",
+            "/treatment-plans/plan-912",
+            "/treatment-plans/plan-912/diagnosis",
+        ]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
@@ -369,8 +390,8 @@ def test_approved_sync_populates_every_treatment_plan_for_the_same_patient(tmp_p
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     plan_items: list[dict[str, JsonValue]] = [
-        {"id": "plan-912", "clientId": "912", "nextReviewDue": "2026-07-01"},
-        {"id": "plan-913", "clientId": "912", "nextReviewDue": "2026-08-01"},
+        {"id": "plan-912", "client": {"id": "912", "route": "/clients/912"}, "nextReviewDue": "2026-07-01"},
+        {"id": "plan-913", "client": {"id": "912", "route": "/clients/912"}, "nextReviewDue": "2026-08-01"},
     ]
 
     with _mock_alleva_server(plan_items=plan_items) as (base_url, _state):
@@ -386,7 +407,7 @@ def test_approved_sync_populates_every_treatment_plan_for_the_same_patient(tmp_p
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
+                "requests_per_minute": 10_000,
             },
         )
         assert configured.status_code == 200
@@ -411,11 +432,11 @@ def test_patient_scoped_plan_queries_overlap_with_bounded_concurrency(tmp_path, 
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     client_items: list[dict[str, JsonValue]] = [
-        {"clientId": str(patient_id), "isActive": True}
+        {"id": str(patient_id), "status": "Active"}
         for patient_id in range(912, 916)
     ]
     plan_items: list[dict[str, JsonValue]] = [
-        {"id": f"plan-{patient_id}", "clientId": str(patient_id)}
+        {"id": f"plan-{patient_id}", "client": {"id": str(patient_id), "route": f"/clients/{patient_id}"}}
         for patient_id in range(912, 916)
     ]
 
@@ -436,7 +457,7 @@ def test_patient_scoped_plan_queries_overlap_with_bounded_concurrency(tmp_path, 
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
+                "requests_per_minute": 10_000,
             },
         )
         assert configured.status_code == 200
@@ -473,7 +494,6 @@ def test_published_alleva_v1_numeric_nested_ids_populate_queue_and_roster(tmp_pa
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
             },
         )
         assert configured.status_code == 200
@@ -514,7 +534,6 @@ def test_repeated_sync_updates_same_plan_id_and_leaves_identical_replay_unchange
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
             },
         )
         assert configured.status_code == 200
@@ -592,7 +611,6 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
             },
         )
         assert configured.status_code == 200
@@ -613,7 +631,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
             sleep(0.05)
 
         assert synced.json()["status"] == "cancelled"
-        assert state.paths == ["/token", "/clients?limit=100&offset=0"]
+        assert state.paths == ["/token", "/clients?Limit=100&Cursor=0"]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert any(item["action"] == "alleva.treatment_plan_sync.cancelled" for item in audit)
@@ -636,12 +654,12 @@ def test_unexpected_sync_worker_failure_reaches_a_terminal_audited_state(tmp_pat
         "/api/api-configuration",
         headers=headers,
         json={
+            "client_id": "mock-client",
             "client_secret": "mock-secret",
             "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert configured.status_code == 200
@@ -679,12 +697,12 @@ def test_failed_sync_keeps_its_approved_contract_binding_and_safe_failure_record
         "/api/api-configuration",
         headers=headers,
         json={
+            "client_id": "mock-client",
             "client_secret": "mock-secret",
             "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert configured.status_code == 200
@@ -716,7 +734,7 @@ def test_failed_sync_keeps_its_approved_contract_binding_and_safe_failure_record
         ).fetchone()
     assert counters_row is not None
     counters = json.loads(counters_row[0])
-    assert counters["contract_version"] == "synthetic-wire-contract-v1"
+    assert counters["contract_version"].startswith("alleva-rest-v1-built-in-")
     assert len(counters["contract_sha256"]) == 64
     assert failure_row == ("SyntheticWorkerFailure", "Sync worker failed before completion.", 0, 1)
 
@@ -736,12 +754,12 @@ def test_interrupted_sync_can_resume_as_an_idempotent_safe_replay_bound_to_origi
         "/api/api-configuration",
         headers=headers,
         json={
+            "client_id": "mock-client",
             "client_secret": "mock-secret",
             "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert configured.status_code == 200
@@ -791,12 +809,12 @@ def test_resume_revalidates_active_contract_and_configuration_before_worker_star
         json={
             "api_base_url": "https://api.allevasoft.com",
             "token_url": "https://authorization.allevasoft.com/connect/token",
+            "client_id": "mock-client",
             "client_secret": "mock-secret",
             "scopes": "plans.read",
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
             "treatment_plan_sync_approved": True,
-            "treatment_plan_endpoint_mapping_validated": True,
         },
     )
     assert configured.status_code == 200
@@ -845,10 +863,10 @@ def test_sync_reconciles_active_inactive_discharged_deleted_and_missing_clients(
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     client_items = [
-        {"clientId": "912", "isActive": True, "levelOfCare": "PHP", "admissionDate": "2026-06-01"},
-        {"clientId": "913", "isActive": False},
-        {"clientId": "914", "status": "discharged"},
-        {"clientId": "915", "status": "deleted"},
+        {"id": "912", "status": "Active", "levelOfCare": "PHP", "admissionDateTime": "2026-06-01T00:00:00Z"},
+        {"id": "913", "status": "inactive"},
+        {"id": "914", "status": "discharged"},
+        {"id": "915", "status": "deleted"},
     ]
 
     with _mock_alleva_server(client_items=client_items) as (base_url, _state):
@@ -864,7 +882,6 @@ def test_sync_reconciles_active_inactive_discharged_deleted_and_missing_clients(
                 "api_enabled": True,
                 "treatment_plan_sync_enabled": True,
                 "treatment_plan_sync_approved": True,
-                "treatment_plan_endpoint_mapping_validated": True,
             },
         )
         assert configured.status_code == 200

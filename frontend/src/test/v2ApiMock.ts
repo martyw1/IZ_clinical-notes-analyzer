@@ -59,8 +59,6 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
         apiConfigured = apiConfigured || typeof body.client_secret === 'string'
         syncEnabled = body.api_enabled === true
           && body.treatment_plan_sync_enabled === true
-          && body.treatment_plan_sync_approved === true
-          && body.treatment_plan_endpoint_mapping_validated === true
       }
       return jsonResponse(apiConfigurationPayload(apiConfigured, syncEnabled))
     }
@@ -95,7 +93,8 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
 }
 
 function pathFrom(input: RequestInfo | URL): string {
-  return typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url
+  const value = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  return new URL(value, 'http://localhost').pathname
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -328,10 +327,10 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
     timeout_seconds: 10,
     api_enabled: syncEnabled,
     treatment_plan_sync_enabled: syncEnabled,
-    treatment_plan_sync_approved: syncEnabled,
-    treatment_plan_endpoint_mapping_validated: syncEnabled,
-    active_contract_version: syncEnabled ? 'synthetic-ui-contract-v1' : null,
-    active_contract_effective_at: syncEnabled ? '2026-07-10T00:00:00+00:00' : null,
+    treatment_plan_sync_approved: true,
+    requests_per_minute: 600,
+    active_contract_version: null,
+    active_contract_effective_at: null,
   }
 }
 

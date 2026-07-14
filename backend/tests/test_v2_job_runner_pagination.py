@@ -33,9 +33,19 @@ class _RepeatingPageClient:
         )
 
     def build_request(self, method: str, url: str, **kwargs: object) -> httpx.Request:
-        return httpx.Request(method, url, params=kwargs.get("params"), headers=kwargs.get("headers"))
+        return httpx.Request(
+            method,
+            url,
+            data=kwargs.get("data"),
+            params=kwargs.get("params"),
+            headers=kwargs.get("headers"),
+        )
 
     def send(self, request: httpx.Request, *, stream: bool = False) -> httpx.Response:
+        if request.method == "POST":
+            response = self.post(str(request.url))
+            response.request = request
+            return response
         response = self.get(str(request.url).split("?", 1)[0])
         response.request = request
         return response

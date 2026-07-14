@@ -10,13 +10,13 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 
 ### 2026-07-13 V2 treatment-plan queue update
 
-- The Treatment Plans tab, Patient Roster, and API Testing Harness share the same approved operational pull. A completed pull refreshes the active list on the initiating screen.
-- The V2 sync imports every returned treatment plan for each active patient. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}` loads the selected plan without collapsing multiple plans for one patient.
+- The Treatment Plans tab, Patient Roster, and API Testing Harness share the same operational pull. A completed pull refreshes the active list on the initiating screen.
+- The V2 sync imports every returned treatment plan for each active patient. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}?source_mode=...` loads the selected plan without collapsing multiple plans for one patient. Patient, plan, roster, evaluation, and UI selection identities include the source system so matching manual and Alleva IDs cannot overwrite or display each other's detail.
 - A changed record with the same source treatment-plan ID creates an encrypted immutable successor version and replaces the visible current plan. An identical replay creates no duplicate version.
 - The completion audit records created, updated, and unchanged counts plus the exact `updated_treatment_plan_ids`; clinical narrative and patient names remain excluded from logs.
 - `Patient Roster` lists authorized patient IDs, plan IDs, lifecycle/LOC/source metadata, and plan status without patient-name fields.
 - Administrators and office managers can export the authorized current treatment-plan list and statuses as formula-safe CSV through `GET /api/v2/exports/treatment-plans.csv`.
-- These V2 changes do not open live Alleva import. The approved versioned contract, API/sync gates, external R3/Alleva approval blocker, and unvalidated LOC-change window remain in force.
+- The published Alleva v1 patient/treatment-plan mapping is now an automatic internal contract. The API and sync enable switches, encrypted credential requirement, read-only boundary, and unvalidated LOC-change window remain in force.
 
 ## Purpose
 
@@ -26,7 +26,7 @@ Alleva and uploaded files are source evidence. The compliance decision remains l
 
 ## Current Data Flow
 
-1. A treatment-plan client is created or refreshed from either a manual uploaded note set or an approved Alleva REST sync.
+1. A treatment-plan client is created or refreshed from either a manual uploaded note set or an operator-triggered Alleva REST sync.
 2. The app stores local rows for the active patient key, level-of-care history, treatment-plan records, manual overrides, and manager checklist reviews.
 3. The timeliness evaluator calculates current status from local/facility date, admission date, current LOC, latest valid treatment-plan review/update date, source-document due date, signatures, and LOC-change evidence.
 4. The selected-client detail payload builds the 42-step checklist result from `config/checklists/treatment-plan-v1.json` and enriches each step with evidence, finding text, evaluated values, manager status, manager comments, and audit context.
@@ -43,8 +43,8 @@ Manual upload:
 Alleva REST readiness and sync:
 
 - `backend/app/services/alleva_treatment_plan_sync.py` defines the approved endpoint names: `/clients`, `/treatment-plans`, `/treatment-plans/{id}`, `/treatment-plans/{id}/diagnosis`, `/treatment-reviews`, and `/treatment-reviews/{id}`.
-- Live sync is blocked unless App settings enable sync, approve live treatment-plan sync, provide credentials, and mark endpoint mapping validated.
-- Startup sync remains off by default. Manual sync uses the same gates.
+- Live sync is blocked unless App settings provide encrypted credentials and explicitly enable API use and treatment-plan sync.
+- Startup sync remains off by default. When an administrator starts a pull, the app automatically records and binds the built-in versioned Alleva v1 mapping.
 - `/clients` and `/treatment-plans` are required for sync. `/treatment-reviews` is optional but warnings are surfaced when it is unavailable.
 - Optional current-plan detail fetch can pull nested clinical content from `/treatment-plans/{id}` and diagnosis detail from `/treatment-plans/{id}/diagnosis`, subject to the configured cap.
 
@@ -52,7 +52,7 @@ API harness aggregate dry-run:
 
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` runs the clarified patient-centered flow: `GET /clients`, then `GET /treatment-plans?ClientId={patient_id}` using canonical `/clients.id`.
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` builds patient-level aggregate diagnostics from `/clients`, `/treatment-plans`, and `/treatment-reviews` without arming live sync.
-- This is readiness evidence only. It does not bypass live-sync approval, endpoint mapping, or PHI handling requirements.
+- This is readiness evidence only. It does not bypass the saved-credential, enablement, read-only, or PHI-handling requirements.
 
 ## Local Storage Model
 
@@ -150,7 +150,7 @@ API routes:
 - `POST /api/alleva/treatment-plan-sync/run`: admin-only gated manual Alleva REST sync.
 - `POST /api/api-configuration/alleva-quick-pull`: admin-only API harness quick-pull and aggregate dry-run.
 - `GET /api/emr/alleva/id-mapping`: admin-only stored ID mapping diagnostic.
-- `POST /api/emr/alleva/sync/detail-sample`: admin-only current-plan detail/diagnosis sample tool for approved mapping checks.
+- `POST /api/emr/alleva/sync/detail-sample`: admin-only current-plan detail/diagnosis sample tool for controlled mapping checks.
 
 ## Code Location Map
 

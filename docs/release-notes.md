@@ -14,7 +14,8 @@ Version metadata name: `Version 2.0 Beta release-readiness update`
 
 Summary:
 
-- Post-build 2026-07-13 update: adds the shared approved operational pull to Treatment Plans, automatic queue refresh from either pull surface, immutable same-ID update history with exact updated-ID audit details, a patient-name-free Patient Roster tab, and a manager-authorized treatment-plan/status CSV export.
+- Post-build 2026-07-13 update: adds the shared operational pull to Treatment Plans, automatic queue refresh from either pull surface, immutable same-ID update history with exact updated-ID audit details, a patient-name-free Patient Roster tab, and a manager-authorized treatment-plan/status CSV export.
+- Post-build 2026-07-13 update: removes the manual Alleva mapping-approval form and applies the published Alleva v1 mapping automatically at pull time while retaining an encrypted mapping payload plus plaintext version/checksum provenance metadata.
 - Post-build validation used only a disposable synthetic local profile and local mock Alleva service; the live-import and LOC-change external gates remain unchanged.
 
 - Aligns `VERSION`, `VERSION.json`, frontend package metadata, `/api/version`, the V2 footer, sample OpenAPI metadata, and Windows preflight on the active V2 beta version.
@@ -163,7 +164,7 @@ Summary:
 
 ## Current implementation boundaries
 
-- Live Alleva patient import remains disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, scopes, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
+- Operator-triggered read-only Alleva treatment-plan import is off by default and requires saved tenant credentials, API/sync enablement, and explicit live-read authorization. The published Alleva v1 mapping is applied automatically; supervised validation of real tenant response shapes and broader production/compliance rollout remain external release gates.
 - The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The app ships a manager-editable 7-calendar-day preset, but this must stay configurable and visibly unresolved until confirmed.
 - Manual upload remains an upload-time snapshot. Use the monthly compliance-check fallback when API refresh is unavailable.
 - Optional LLM setup exists but is disabled by default and is not the primary review path.
