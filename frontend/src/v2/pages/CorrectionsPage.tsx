@@ -68,7 +68,7 @@ export function CorrectionsPage({ token }: CorrectionsPageProps) {
           {items.map((item) => {
             const key = correctionKey(item)
             return <li key={key}>
-              <strong>Patient ID {item.patientId}</strong> <span>on {item.criterionTitle}</span>
+              <strong>MRN {item.patientId}</strong> <span>on {item.criterionTitle}</span>
               <span> Returned by {item.returnedByUsername} at {item.returnedAt}</span>
               <p>Manager note: {item.returnComment}</p>
               <label>

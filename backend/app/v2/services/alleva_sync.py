@@ -809,6 +809,7 @@ def _aggregate_from_payload(
     return aggregate.model_copy(
         update={
             "source_mode": "alleva_rest_api",
+            "source_last_updated": _mapped_text(detail, contract, "treatment_plan_detail", "last_modified"),
             "status_label": "Alleva REST sync",
             "treatment_plans": ({"plan_id": plan_id, "is_active": True, "source": "alleva_rest_api"},),
             "active_treatment_plans": ({"plan_id": plan_id, "is_active": True},),

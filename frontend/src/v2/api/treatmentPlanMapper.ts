@@ -39,7 +39,7 @@ export function mapTreatmentPlanList(payload: JsonRecord): TreatmentPlanListData
 function mapTreatmentPlanListItem(record: JsonRecord): TreatmentPlanListItem {
   return {
     patientId: readString(record, 'patient_id'),
-    patientDisplayLabel: readString(record, 'patient_display_label', 'Patient ID unavailable'),
+    patientDisplayLabel: readString(record, 'patient_display_label', 'MRN unavailable'),
     treatmentPlanId: readString(record, 'treatment_plan_id', 'Unavailable'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
@@ -57,7 +57,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
   const coverage = readRecord(record, 'evidence_coverage_summary')
   return {
     patientId: readString(record, 'patient_id'),
-    patientDisplayLabel: readString(record, 'patient_display_label', 'Patient ID unavailable'),
+    patientDisplayLabel: readString(record, 'patient_display_label', 'MRN unavailable'),
     treatmentPlanId: readString(snapshot, 'plan_id', 'Unavailable'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),

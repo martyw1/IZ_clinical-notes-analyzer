@@ -16,7 +16,6 @@ from app.v2.api.models import (
     ApiHarnessJobStart,
     DashboardOut,
     ManagerActionInput,
-    PatientRosterOut,
     ReadinessCheck,
     ReadinessOut,
     TreatmentPlanListOut,
@@ -32,7 +31,6 @@ from app.v2.services.manager_action_store import (
     save_manager_action_record,
     save_returned_correction_work_item,
 )
-from app.v2.services.patient_roster import list_patient_roster
 from app.v2.services.treatment_plan_store import (
     TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
@@ -82,7 +80,13 @@ def version() -> dict[str, JsonValue]:
 
 @router.get("/api/v2/navigation")
 def navigation(user: CurrentUser) -> dict[str, JsonValue]:
-    items = ["Status Dashboard", "Treatment Plans", "Patient Roster", "Manual Upload"]
+    items = [
+        "Status Dashboard",
+        "Patient Roster",
+        "Manual Upload",
+        "Treatment Plan Detail",
+        "Treatment Plans Roster",
+    ]
     if user.role == "counselor":
         items.append("Corrections")
     if user.role == "admin":
@@ -138,28 +142,6 @@ def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
         ],
         "status_order": TREATMENT_PLAN_STATUS_ORDER,
     }
-
-
-@router.get("/api/v2/patient-roster", response_model=PatientRosterOut)
-def patient_roster(user: CurrentUser, db: DbSession) -> PatientRosterOut:
-    allowed_ids = accessible_patient_ids(db, user)
-    items = tuple(item for item in list_patient_roster(db) if item.patient_id in allowed_ids)
-    return PatientRosterOut(
-        items=tuple(
-            {
-                "patient_id": item.patient_id,
-                "source_mode": item.source_mode,
-                "lifecycle_state": item.lifecycle_state,
-                "current_level_of_care": item.current_level_of_care,
-                "treatment_plan_id": item.treatment_plan_id,
-                "treatment_plan_status": item.treatment_plan_status,
-                "first_seen_at": item.first_seen_at,
-                "last_seen_at": item.last_seen_at,
-                "reconciled_at": item.reconciled_at,
-            }
-            for item in items
-        )
-    )
 
 
 @router.get("/api/v2/treatment-plans/{patient_id}")

@@ -16,12 +16,12 @@ def _binder_files(order: tuple[str, str]) -> list[tuple[str, tuple[str, bytes, s
     documents = {
         "identity": (
             "first-source.txt",
-            b"Patient ID: 940\nCurrent Level of Care: PHP\nAdmission Date: 2026-06-02",
+            b"MRN: 940\nCurrent Level of Care: PHP\nAdmission Date: 2026-06-02",
             "text/plain",
         ),
         "content": (
             "second-source.txt",
-            b"Patient ID: 940\nIntervention: Synthetic binder skills practice.",
+            b"MRN: 940\nIntervention: Synthetic binder skills practice.",
             "text/plain",
         ),
     }

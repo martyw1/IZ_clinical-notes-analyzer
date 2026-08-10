@@ -29,10 +29,15 @@ function New-RandomSecret([int]$Length) {
     $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
     $bytes = New-Object byte[] $Length
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $rng.GetBytes($bytes) }
+    try {
+        do {
+            $rng.GetBytes($bytes)
+            $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
+            $secret = -join $chars
+        } until ($secret -match '[A-Za-z]' -and $secret -match '[0-9]')
+    }
     finally { if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() } }
-    $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
-    return -join $chars
+    return $secret
 }
 
 function Assert-PythonVersion([string]$PythonExe) {

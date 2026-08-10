@@ -16,9 +16,9 @@ type FetchState = {
   readonly manualUploadFails?: boolean
 }
 
-export const adminNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
+export const adminNavigation = ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
 
-const counselorNavigation = ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'Manual Upload', 'Corrections', 'Help'] as const
+const counselorNavigation = ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
   const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let apiConfigured = false; let passwordResetRequired = state.mustResetPassword ?? false; let harnessPolls = 0
@@ -35,7 +35,8 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/v2/navigation') return jsonResponse({ items: state.role === 'admin' ? adminNavigation : counselorNavigation, active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return jsonResponse(dashboardPayload())
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload(state.multiPlan))
-    if (path === '/api/v2/patient-roster') return jsonResponse(patientRosterPayload())
+    if (path === '/api/v2/patient-roster') return jsonResponse(patientRosterPayload(state.multiPlan))
+    if (path === '/api/v2/treatment-plan-roster') return jsonResponse(treatmentPlanRosterPayload(state.multiPlan))
     if (path === '/api/v2/exports/treatment-plans.csv') return treatmentPlanExportResponse()
     if (path === '/api/v2/treatment-plans/812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812')))
     if (path === '/api/v2/treatment-plans/812/plan-812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812'), 'plan-812'))
@@ -54,7 +55,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
         && init.body.get('confirm_patient_id_correction') === 'true'
       if (state.manualUploadFails) return jsonResponse({ detail: 'The binder could not be processed. Check the file limits and try again.' }, 413)
       if (state.manualUploadConflict && !correctionConfirmed) {
-        return jsonResponse({ detail: 'The Patient ID override differs from the Patient ID detected in the binder. Confirm the correction to continue.' }, 409)
+        return jsonResponse({ detail: 'The MRN override differs from the MRN detected in the binder. Confirm the correction to continue.' }, 409)
       }
       return binderImportResponse(correctionConfirmed, state.manualUploadWarnings ?? false)
     }
@@ -133,14 +134,14 @@ function treatmentPlanExportResponse(): Response {
 }
 
 function importResponse(patientId: string, archived: boolean, patientIdCorrectionApplied = false): Response {
-  return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `Patient ID ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
+  return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `MRN ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
 }
 
 function binderImportResponse(patientIdCorrectionApplied: boolean, withWarnings: boolean): Response {
   return jsonResponse({
     status: withWarnings ? 'imported_with_warnings' : 'imported',
     patient_id: '914',
-    patient_display_label: 'Patient ID 914',
+    patient_display_label: 'MRN 914',
     source_mode: 'manual_upload',
     criteria_total: 42,
     encrypted_at_rest: true,
@@ -189,7 +190,7 @@ function dashboardPayload() {
 function treatmentPlansPayload(multiPlan = false) {
   const baseItem = {
     patient_id: '812',
-    patient_display_label: 'Patient ID 812',
+    patient_display_label: 'MRN 812',
     current_level_of_care: 'PHP',
     admission_date: '2026-06-01',
     status: 'Needs Review',
@@ -208,15 +209,17 @@ function treatmentPlansPayload(multiPlan = false) {
   }
 }
 
-function patientRosterPayload() {
+function patientRosterPayload(multiPlan = false) {
   return {
     items: [{
-      patient_id: '812',
+      mrn: '812',
       source_mode: 'alleva_rest_api',
       lifecycle_state: 'active',
       current_level_of_care: 'PHP',
-      treatment_plan_id: 'plan-812',
-      treatment_plan_status: 'Needs Review',
+      treatment_plans: [
+        ...(multiPlan ? [{ treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
+        { treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
+      ],
       first_seen_at: '2026-07-08T10:00:00Z',
       last_seen_at: '2026-07-12T10:00:00Z',
       reconciled_at: '2026-07-12T10:01:00Z',
@@ -224,7 +227,22 @@ function patientRosterPayload() {
   }
 }
 
-function correctionQueueItemPayload() { return { work_item_id: 71, plan_version_id: 18, patient_id: '812', patient_display_label: 'Patient ID 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
+function treatmentPlanRosterPayload(multiPlan = false) {
+  return {
+    items: [
+      ...(multiPlan ? [{
+        treatment_plan_id: 'plan-813', mrn: '812', last_updated: '2026-07-13T17:45:00Z',
+        previous_treatment_plan_id: 'plan-812', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
+      }] : []),
+      {
+        treatment_plan_id: 'plan-812', mrn: '812', last_updated: '2026-07-12T10:00:00Z',
+        previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
+      },
+    ],
+  }
+}
+
+function correctionQueueItemPayload() { return { work_item_id: 71, plan_version_id: 18, patient_id: '812', patient_display_label: 'MRN 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
 
 function workflowProfilePayload(status: 'draft' | 'published') {
   const version = { id: 71, version: 1, status, version_notes: '' }
@@ -242,7 +260,7 @@ function workflowProfilePayload(status: 'draft' | 'published') {
 function treatmentPlanDetailPayload(sourceFileDeleted = false, planId = 'plan-812') {
   return {
     patient_id: '812',
-    patient_display_label: 'Patient ID 812',
+    patient_display_label: 'MRN 812',
     source_mode: 'alleva_rest_api',
     current_level_of_care: 'PHP',
     admission_date: '2026-06-01',

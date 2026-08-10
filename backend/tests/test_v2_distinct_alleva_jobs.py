@@ -86,11 +86,10 @@ def test_active_roster_pull_is_distinct_plan_independent_and_restart_queryable(t
     assert state.paths == ["/token", "/clients?Limit=100&Cursor=0&api-version=1.0"]
     roster = client.get("/api/v2/patient-roster", headers=headers)
     assert roster.status_code == 200
-    roster_items = {item["patient_id"]: item for item in roster.json()["items"]}
+    roster_items = {item["mrn"]: item for item in roster.json()["items"]}
     assert roster_items["roster-101"]["lifecycle_state"] == "active"
     assert roster_items["roster-missing-199"]["lifecycle_state"] == "missing"
-    assert all(item["treatment_plan_id"] == "" for item in roster_items.values())
-    assert all(item["treatment_plan_status"] == "No treatment plan" for item in roster_items.values())
+    assert all(item["treatment_plans"] == [] for item in roster_items.values())
     assert "Never Persist" not in roster.text
 
     restarted = _fresh_client(tmp_path, monkeypatch)
@@ -283,13 +282,13 @@ def test_roster_job_controls_are_admin_only_while_roster_list_is_facility_scoped
         assert client.get("/api/v2/patient-roster/jobs/latest", headers=denied_headers).status_code == 403
 
     admin_ids = {
-        item["patient_id"] for item in client.get("/api/v2/patient-roster", headers=admin_headers).json()["items"]
+        item["mrn"] for item in client.get("/api/v2/patient-roster", headers=admin_headers).json()["items"]
     }
     manager_ids = {
-        item["patient_id"] for item in client.get("/api/v2/patient-roster", headers=manager_headers).json()["items"]
+        item["mrn"] for item in client.get("/api/v2/patient-roster", headers=manager_headers).json()["items"]
     }
     counselor_ids = {
-        item["patient_id"] for item in client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"]
+        item["mrn"] for item in client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"]
     }
     assert admin_ids == {"facility-visible-301", "facility-hidden-302"}
     assert manager_ids == {"facility-visible-301"}

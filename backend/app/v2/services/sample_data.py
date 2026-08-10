@@ -208,7 +208,7 @@ def treatment_plan_aggregate() -> TreatmentPlanAggregate:
     )
     return TreatmentPlanAggregate(
         patient_id="307",
-        patient_display_label="Patient ID 307",
+        patient_display_label="MRN 307",
         source_mode="synthetic_fixture",
         active_status="active",
         status_id=1049,

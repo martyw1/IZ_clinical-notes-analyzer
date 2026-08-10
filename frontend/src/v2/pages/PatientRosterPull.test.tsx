@@ -36,7 +36,7 @@ describe('Patient roster pull', () => {
       return response({ detail: `Unexpected ${method} ${path}` }, 404)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<PatientRosterPage token='token' user={adminUser} onNavigate={vi.fn()} />)
+    render(<PatientRosterPage token='token' user={adminUser} onNavigate={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
 
     // When: the administrator pulls the active patient roster.
     fireEvent.click(await screen.findByRole('button', { name: 'Pull active patient roster' }))
@@ -63,9 +63,8 @@ function configuredProfile() {
 
 function rosterItem() {
   return {
-    patient_id: 'client-812', source_mode: 'alleva_rest_api', lifecycle_state: 'active',
-    current_level_of_care: 'PHP', treatment_plan_id: 'No treatment plan',
-    treatment_plan_status: 'No treatment plan', first_seen_at: '2026-07-14T10:00:00Z',
+    mrn: 'client-812', source_mode: 'alleva_rest_api', lifecycle_state: 'active',
+    current_level_of_care: 'PHP', treatment_plans: [], first_seen_at: '2026-07-14T10:00:00Z',
     last_seen_at: '2026-07-14T10:01:00Z', reconciled_at: '2026-07-14T10:01:00Z',
   }
 }

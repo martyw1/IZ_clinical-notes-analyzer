@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { getDashboard } from '../api/client'
 import { ApiRequestError } from '../api/json'
 import type { DashboardData } from '../api/types'
+import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
 
 type DashboardPageProps = {
   readonly token: string
 }
 
 const metricLabels: Record<string, string> = {
-  active_patient_ids: 'Active patient IDs',
+  active_patient_ids: 'Active MRNs',
   overdue_plans: 'Overdue',
   urgent_plans: 'Urgent',
   due_soon_plans: 'Due soon',
@@ -65,7 +66,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
           <span className='runtime-pill'>Backend-backed</span>
         </div>
         <div className='button-row'>
-          <time dateTime={dashboard.refreshedAt}>Refreshed {new Date(dashboard.refreshedAt).toLocaleString()}</time>
+          <time dateTime={dashboard.refreshedAt}>Refreshed {formatDateTime24Hour(dashboard.refreshedAt)}</time>
           <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh dashboard</button>
         </div>
         <div className='source-card-grid'>

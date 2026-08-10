@@ -92,7 +92,7 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
     try {
       const result = await importTreatmentPlanFile(token, binderFiles, rawPatientId, confirmPatientIdCorrection)
       const warningSummary = result.status === 'imported_with_warnings' ? ' Imported with warnings.' : ''
-      const correctionSummary = result.patientIdCorrectionApplied ? ' Confirmed Patient ID correction applied.' : ''
+      const correctionSummary = result.patientIdCorrectionApplied ? ' Confirmed MRN correction applied.' : ''
       setBinderMessage(`Secure processing complete. Imported ${result.patientDisplayLabel} from ${result.fileCount} source ${result.fileCount === 1 ? 'file' : 'files'}.${warningSummary}${correctionSummary}`)
       setBinderWarnings(result.warnings)
       setBinderCounts({ parsed: result.parsedFileCount, opaque: result.opaqueFileCount })
@@ -177,11 +177,11 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
             </ul>}
           </div>
           <label>
-            Patient ID override
+            MRN override
             <input
               value={rawPatientId}
               onChange={(event) => setRawPatientId(event.currentTarget.value)}
-              placeholder='Required when the file omits Patient ID'
+              placeholder='Required when the file omits MRN'
             />
           </label>
           <label className='checkbox-row'>
@@ -191,7 +191,7 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
               onChange={(event) => setConfirmPatientIdCorrection(event.currentTarget.checked)}
               disabled={isParsing}
             />
-            I confirm this Patient ID correction when the override differs from evidence detected in the binder.
+            I confirm this MRN correction when the override differs from evidence detected in the binder.
           </label>
           {binderError && <p role='alert' className='error-banner'>{binderError}</p>}
           {binderMessage && <p role='status' className={binderWarnings.length ? 'binder-status warning' : 'binder-status'}>{binderMessage}</p>}
@@ -204,9 +204,9 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
           </ul>}
           <div className='binder-actions'>
             <button type='submit' disabled={isParsing || (correctionRequired && !confirmPatientIdCorrection)}>
-              {isParsing ? 'Securely processing binder...' : correctionRequired ? 'Retry with confirmed Patient ID' : 'Upload and securely process binder'}
+              {isParsing ? 'Securely processing binder...' : correctionRequired ? 'Retry with confirmed MRN' : 'Upload and securely process binder'}
             </button>
-            {binderImported && <button type='button' className='secondary-button' onClick={() => onNavigate('Treatment Plans')}>Review in Treatment Plans</button>}
+            {binderImported && <button type='button' className='secondary-button' onClick={() => onNavigate('Patient Roster')}>Review in Patient Roster</button>}
           </div>
         </form>
       </section>

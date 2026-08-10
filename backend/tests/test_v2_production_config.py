@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from fnmatch import fnmatch
@@ -276,3 +277,39 @@ def test_local_client_fails_closed_for_default_or_missing_security_values(tmp_pa
     assert result.returncode != 0
     assert "unsafe production configuration" in result.stderr.lower()
     assert "change-me" not in result.stderr
+
+
+def test_windows_generated_secrets_always_include_password_policy_character_classes() -> None:
+    repository_root = Path(__file__).resolve().parents[2]
+    generators = (
+        (repository_root / "scripts" / "test-api-configuration-local.ps1", "New-RandomSecret", ()),
+        (repository_root / "scripts" / "test-local-app-stack.ps1", "New-Secret", ("New-RandomBytes",)),
+        (repository_root / "scripts" / "preflight-windows.ps1", "New-RandomSecret", ()),
+    )
+
+    for script_path, function_name, dependencies in generators:
+        contents = script_path.read_text(encoding="utf-8")
+        functions: list[str] = []
+        for name in (*dependencies, function_name):
+            function = re.search(
+                rf"function {name}\b.*?^\}}",
+                contents,
+                flags=re.MULTILINE | re.DOTALL,
+            )
+            assert function is not None
+            functions.append(function.group(0))
+        probe = (
+            f"{'\n'.join(functions)}\n"
+            "$invalid = 0\n"
+            f"1..16 | ForEach-Object {{ $value = {function_name} 2; "
+            "if ($value -notmatch '[A-Za-z]' -or $value -notmatch '[0-9]') { $invalid += 1 } }\n"
+            "Write-Output $invalid"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", probe],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "0", f"{script_path.name} generated policy-invalid passwords"

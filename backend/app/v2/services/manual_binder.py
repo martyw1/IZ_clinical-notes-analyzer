@@ -202,15 +202,15 @@ def _resolve_patient_id(
     correction_needed = bool(detected and (len(detected) > 1 or (fallback and detected != (fallback,))))
     if correction_needed and not fallback:
         raise ManualFilePatientIdCorrectionRequired(
-            "Patient ID correction confirmation is required because conflicting Patient IDs were detected across the binder."
+            "MRN correction confirmation is required because conflicting MRNs were detected across the binder."
         )
     if correction_needed and not confirmed:
         raise ManualFilePatientIdCorrectionRequired(
-            "Patient ID correction confirmation is required because the binder Patient ID differs from the override."
+            "MRN correction confirmation is required because the binder MRN differs from the override."
         )
     patient_id = fallback if correction_needed else (detected[0] if detected else fallback)
     if not patient_id:
-        raise ManualFileParseError("Patient ID is required in an extractable source or the Patient ID override field.")
+        raise ManualFileParseError("MRN is required in an extractable source or the MRN override field.")
     return patient_id, correction_needed
 
 
@@ -243,5 +243,5 @@ def _warnings(
     if conflicting_fields:
         warnings.add("Conflicting scalar evidence was preserved for manager review; no file-order value was selected.")
     if correction_applied:
-        warnings.add("Patient ID correction was explicitly confirmed for this binder.")
+        warnings.add("MRN correction was explicitly confirmed for this binder.")
     return tuple(sorted(warnings))

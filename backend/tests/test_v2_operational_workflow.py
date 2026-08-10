@@ -9,6 +9,7 @@ from pypdf import PdfWriter
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from test_v2_evaluation_persistence import _aggregate
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 
 
@@ -42,6 +43,26 @@ def test_dashboard_reports_the_real_refresh_timestamp(tmp_path, monkeypatch) -> 
     payload = dashboard.json()
     assert payload["metrics"]["active_patient_ids"] == 1
     assert payload["refreshed_at"].endswith("+00:00")
+
+
+def test_dashboard_counts_unique_mrns_instead_of_treatment_plans(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    aggregate = _aggregate("975")
+    for plan_id in ("plan-975-initial", "plan-975-followup"):
+        payload = aggregate.model_dump(mode="json")
+        payload["content_snapshot"]["plan_id"] = plan_id
+        imported = client.post(
+            "/api/v2/manual-uploads/treatment-plan-aggregate",
+            headers=headers,
+            json=payload,
+        )
+        assert imported.status_code == 201
+
+    dashboard = client.get("/api/v2/dashboard", headers=headers)
+
+    assert dashboard.status_code == 200
+    assert dashboard.json()["metrics"]["active_patient_ids"] == 1
 
 
 def test_manager_action_rolls_back_when_its_audit_event_cannot_be_written(tmp_path, monkeypatch) -> None:

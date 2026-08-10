@@ -34,7 +34,8 @@ try {
     Assert-True -Condition ($LASTEXITCODE -eq 0) -Label 'encrypted_backup_command_succeeds'
     Assert-True -Condition ($backup -and (Test-Path -LiteralPath $backup.Path)) -Label 'encrypted_backup_file_created'
     Assert-True -Condition ([IO.Path]::GetExtension([string]$backup.Path) -eq '.izcnabackup') -Label 'encrypted_backup_extension'
-    Assert-True -Condition ((Get-Content -LiteralPath $backup.Path -Encoding Byte -TotalCount 8 | ForEach-Object { [char]$_ }) -join '' -eq 'IZCNABK2') -Label 'encrypted_backup_magic'
+    $backupMagic = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($backup.Path), 0, 8)
+    Assert-True -Condition ($backupMagic -eq 'IZCNABK2') -Label 'encrypted_backup_magic'
 
     Set-Content -LiteralPath (Join-Path $localData 'synthetic-state.txt') -Value 'mutated-synthetic-state' -Encoding UTF8
     & $RestoreScript -BackupPath $backup.Path -AssumeYes -NoStop

@@ -43,8 +43,14 @@ function New-RandomBytes {
 function New-Secret([int]$Length) {
     $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+=' 
     $bytes = New-RandomBytes -Length $Length
-    $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
-    return -join $chars
+    do {
+        $chars = for ($i = 0; $i -lt $Length; $i++) { $alphabet[$bytes[$i] % $alphabet.Length] }
+        $secret = -join $chars
+        if ($secret -notmatch '[A-Za-z]' -or $secret -notmatch '[0-9]') {
+            $bytes = New-RandomBytes -Length $Length
+        }
+    } until ($secret -match '[A-Za-z]' -and $secret -match '[0-9]')
+    return $secret
 }
 
 function Assert-PythonVersion {

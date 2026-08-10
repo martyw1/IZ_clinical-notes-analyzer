@@ -128,7 +128,7 @@ def record_aggregate(source: RecordAggregateSource) -> TreatmentPlanAggregate:
     evidence_coverage = aggregate.evidence_coverage_summary.model_copy(update={"plan_id": plan_id})
     return aggregate.model_copy(
         update={
-            "patient_display_label": f"Patient ID {source.patient_id}",
+            "patient_display_label": f"MRN {source.patient_id}",
             "source_mode": _source_mode(source.latest.source_system),
             "treatment_plans": source.plans,
             "treatment_reviews": source.reviews,

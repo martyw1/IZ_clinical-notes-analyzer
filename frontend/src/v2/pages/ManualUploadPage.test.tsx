@@ -5,7 +5,7 @@ import { ManualUploadPage } from './ManualUploadPage'
 describe('Manual Upload binder workflow', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('uploads the selected binder files, shows warnings, and links to Treatment Plans', async () => {
+  it('uploads the selected binder files, shows warnings, and links to Patient Roster', async () => {
     // Given: three synthetic binder sources are selected and one is removed.
     const onNavigate = vi.fn()
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -24,7 +24,7 @@ describe('Manual Upload binder workflow', () => {
     fireEvent.change(input, {
       target: {
         files: [
-          new File(['Patient ID: 944'], 'demographics.txt', { type: 'text/plain' }),
+          new File(['MRN: 944'], 'demographics.txt', { type: 'text/plain' }),
           new File(['{\\rtf1 Admission Date: 2026-06-04}'], 'dates.rtf', { type: 'application/rtf' }),
           new File(['opaque'], 'scan.png', { type: 'image/png' }),
         ],
@@ -33,8 +33,8 @@ describe('Manual Upload binder workflow', () => {
     expect(screen.getByText('3 files selected')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Remove dates.rtf' }))
     expect(screen.getByText('2 files selected')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Patient ID override'), { target: { value: '944' } })
-    fireEvent.click(screen.getByLabelText(/confirm this patient id correction/i))
+    fireEvent.change(screen.getByLabelText('MRN override'), { target: { value: '944' } })
+    fireEvent.click(screen.getByLabelText(/confirm this MRN correction/i))
 
     // When: the binder is uploaded once.
     fireEvent.click(screen.getByRole('button', { name: 'Upload and securely process binder' }))
@@ -47,26 +47,26 @@ describe('Manual Upload binder workflow', () => {
     expect(screen.queryByText('demographics.txt')).not.toBeInTheDocument()
     expect(screen.queryByText('scan.png')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Review in Treatment Plans' }))
-    expect(onNavigate).toHaveBeenCalledWith('Treatment Plans')
+    fireEvent.click(screen.getByRole('button', { name: 'Review in Patient Roster' }))
+    expect(onNavigate).toHaveBeenCalledWith('Patient Roster')
   })
 
   it('keeps binder correction errors inside the binder form without masking JSON import feedback', async () => {
-    // Given: the server requires explicit confirmation for a detected Patient ID mismatch.
-    vi.stubGlobal('fetch', vi.fn(async () => response({ detail: 'Confirm the Patient ID correction and submit again.' }, 409)))
+    // Given: the server requires explicit confirmation for a detected MRN mismatch.
+    vi.stubGlobal('fetch', vi.fn(async () => response({ detail: 'Confirm the MRN correction and submit again.' }, 409)))
     render(<ManualUploadPage token='token' onNavigate={vi.fn()} />)
     const binderForm = screen.getByRole('button', { name: 'Upload and securely process binder' }).closest('form')
     expect(binderForm).not.toBeNull()
     if (!binderForm) return
     fireEvent.change(within(binderForm).getByLabelText(/treatment-plan binder files/i), {
-      target: { files: [new File(['Patient ID: 812'], 'source.txt', { type: 'text/plain' })] },
+      target: { files: [new File(['MRN: 812'], 'source.txt', { type: 'text/plain' })] },
     })
 
     // When: the binder is submitted without correction confirmation.
     fireEvent.submit(binderForm)
 
     // Then: the binder form owns the actionable failure and the JSON form stays clear.
-    expect(await within(binderForm).findByRole('alert')).toHaveTextContent('Confirm the Patient ID correction and submit again.')
+    expect(await within(binderForm).findByRole('alert')).toHaveTextContent('Confirm the MRN correction and submit again.')
     const jsonForm = screen.getByRole('button', { name: 'Import treatment-plan aggregate' }).closest('form')
     expect(jsonForm).not.toBeNull()
     if (jsonForm) expect(within(jsonForm).queryByRole('alert')).not.toBeInTheDocument()
@@ -79,7 +79,7 @@ describe('Manual Upload binder workflow', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<ManualUploadPage token='token' onNavigate={vi.fn()} />)
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), {
-      target: { files: [new File(['Patient ID: 944'], 'source.txt', { type: 'text/plain' })] },
+      target: { files: [new File(['MRN: 944'], 'source.txt', { type: 'text/plain' })] },
     })
 
     // When: upload starts and the user tries the control again.
@@ -97,7 +97,7 @@ describe('Manual Upload binder workflow', () => {
 
 function binderResult() {
   return {
-    status: 'imported_with_warnings', patient_id: '944', patient_display_label: 'Patient ID 944',
+    status: 'imported_with_warnings', patient_id: '944', patient_display_label: 'MRN 944',
     source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true,
     source_file_archived: true, source_file_id: 'source-1', source_file_ids: ['source-1', 'source-2'],
     patient_id_correction_applied: true, file_count: 2, parsed_file_count: 1, opaque_file_count: 1,

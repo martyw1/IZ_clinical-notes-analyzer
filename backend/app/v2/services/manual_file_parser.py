@@ -18,6 +18,7 @@ from app.v2.services.manual_file_types import (
 MAX_UPLOAD_BYTES: Final = 512 * 1024
 FIELD_ALIASES: Final[Mapping[str, str]] = {
     "patient_id": "patient_id",
+    "mrn": "patient_id",
     "current_level_of_care": "current_level_of_care",
     "loc": "current_level_of_care",
     "admission_date": "admission_date",
@@ -121,11 +122,11 @@ def _parsed_fields(
     )
     if patient_id_correction_applied and not confirm_patient_id_correction:
         raise ManualFilePatientIdCorrectionRequired(
-            "Patient ID correction confirmation is required because the file Patient ID differs from the override."
+            "MRN correction confirmation is required because the file MRN differs from the override."
         )
     patient_id = fallback_patient_id if patient_id_correction_applied else detected_patient_id or fallback_patient_id
     if not patient_id:
-        raise ManualFileParseError("Patient ID is required in the file or the Patient ID override field.")
+        raise ManualFileParseError("MRN is required in the file or the MRN override field.")
     return ParsedManualFields(
         patient_id=patient_id,
         patient_id_correction_applied=patient_id_correction_applied,

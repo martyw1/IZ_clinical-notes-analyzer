@@ -6,6 +6,7 @@ from typing import Protocol
 
 
 class DashboardTreatmentPlan(Protocol):
+    patient_id: str
     overall_status: str
     missing_criteria_count: int
 
@@ -57,7 +58,7 @@ def dashboard_payload(
             },
         ],
         "metrics": {
-            "active_patient_ids": len(treatment_plans),
+            "active_patient_ids": len({row.patient_id for row in treatment_plans}),
             "overdue_plans": 0,
             "urgent_plans": 0,
             "due_soon_plans": 0,

@@ -67,13 +67,17 @@ export type TreatmentPlanListData = {
   readonly statusOrder: readonly TreatmentPlanStatus[]
 }
 
+export type PatientRosterTreatmentPlan = {
+  readonly treatmentPlanId: string
+  readonly lastUpdated: string
+}
+
 export type PatientRosterItem = {
-  readonly patientId: string
+  readonly mrn: string
   readonly sourceMode: string
   readonly lifecycleState: string
   readonly currentLevelOfCare: string
-  readonly treatmentPlanId: string
-  readonly treatmentPlanStatus: string
+  readonly treatmentPlans: readonly PatientRosterTreatmentPlan[]
   readonly firstSeenAt: string
   readonly lastSeenAt: string
   readonly reconciledAt: string
@@ -81,6 +85,25 @@ export type PatientRosterItem = {
 
 export type PatientRosterData = {
   readonly items: readonly PatientRosterItem[]
+}
+
+export type TreatmentPlanRosterItem = {
+  readonly treatmentPlanId: string
+  readonly mrn: string
+  readonly lastUpdated: string
+  readonly previousTreatmentPlanId: string
+  readonly initialTreatmentPlanId: string
+  readonly initialTreatmentPlanDate: string
+}
+
+export type TreatmentPlanRosterData = {
+  readonly items: readonly TreatmentPlanRosterItem[]
+}
+
+export type TreatmentPlanSelection = {
+  readonly mrn: string
+  readonly treatmentPlanId: string
+  readonly sourceMode: string
 }
 
 export type ManualTreatmentPlanImportResult = {

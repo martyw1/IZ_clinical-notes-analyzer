@@ -10,6 +10,7 @@ import type {
   ManagerActionPayload,
   NavigationResult,
   PatientRosterData,
+  TreatmentPlanRosterData,
   UserProfile,
   UserRole,
 } from './types'
@@ -77,12 +78,14 @@ export async function getPatientRoster(token: string): Promise<PatientRosterData
   const payload = await readRecordPayload(await request('/api/v2/patient-roster', { token }))
   return {
     items: readRecordList(payload, 'items').map((item) => ({
-      patientId: readString(item, 'patient_id'),
+      mrn: readString(item, 'mrn'),
       sourceMode: readString(item, 'source_mode', 'unknown'),
       lifecycleState: readString(item, 'lifecycle_state', 'unknown'),
       currentLevelOfCare: readString(item, 'current_level_of_care', 'Unknown'),
-      treatmentPlanId: readString(item, 'treatment_plan_id', 'No treatment plan'),
-      treatmentPlanStatus: readString(item, 'treatment_plan_status', 'No treatment plan'),
+      treatmentPlans: readRecordList(item, 'treatment_plans').map((plan) => ({
+        treatmentPlanId: readString(plan, 'treatment_plan_id'),
+        lastUpdated: readString(plan, 'last_updated', 'Unknown'),
+      })),
       firstSeenAt: readString(item, 'first_seen_at', 'Unknown'),
       lastSeenAt: readString(item, 'last_seen_at', 'Unknown'),
       reconciledAt: readString(item, 'reconciled_at', 'Not reconciled'),
@@ -148,6 +151,20 @@ function mapManualTreatmentPlanImportResult(record: Record<string, unknown>): Ma
     opaqueFileCount: readNumber(record, 'opaque_file_count'),
     overallStatus: readString(record, 'overall_status'),
     warnings: readStringList(record, 'warnings'),
+  }
+}
+
+export async function getTreatmentPlanRoster(token: string): Promise<TreatmentPlanRosterData> {
+  const payload = await readRecordPayload(await request('/api/v2/treatment-plan-roster', { token }))
+  return {
+    items: readRecordList(payload, 'items').map((item) => ({
+      treatmentPlanId: readString(item, 'treatment_plan_id'),
+      mrn: readString(item, 'mrn'),
+      lastUpdated: readString(item, 'last_updated', 'Unknown'),
+      previousTreatmentPlanId: readString(item, 'previous_treatment_plan_id'),
+      initialTreatmentPlanId: readString(item, 'initial_treatment_plan_id'),
+      initialTreatmentPlanDate: readString(item, 'initial_treatment_plan_date', 'Unknown'),
+    })),
   }
 }
 

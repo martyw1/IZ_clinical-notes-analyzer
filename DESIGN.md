@@ -119,12 +119,21 @@ All spacing derives from a base of 4px.
 - **Variants**: Treatment Plans queue, compact preview.
 - **Spacing**: compact cell padding using `--space-2` and `--space-3`.
 - **States**: hover, active selection, focus, empty, filtered-empty.
-- **Accessibility**: table roles retained; row buttons have patient-ID-only labels.
+- **Accessibility**: table roles retained; row buttons have MRN-only labels.
 - **Motion**: no row height animation.
+
+### Roster Table
+
+- **Structure**: MRN-first rows, compact provenance fields, and one primary treatment-plan action per record.
+- **Variants**: Patient Roster with a plan selector; Treatment Plans Roster with lineage columns.
+- **Spacing**: compact table cells with a minimum readable selector width; stacked labeled cells below 900px.
+- **States**: loading, empty, filtered-empty, no-plan, selectable, refresh-in-progress.
+- **Accessibility**: native select controls use MRN-specific labels; plan buttons announce both plan ID and MRN; 24-hour timestamps include an explicit timezone.
+- **Motion**: none.
 
 ### Detail Panel
 
-- **Structure**: selected client header, date-evidence timeline, source comparison, checklist findings, override notes, audit history.
+- **Structure**: selected MRN and plan header, date-evidence timeline, source comparison, checklist findings, override notes, audit history.
 - **Variants**: selected client, no-client-selected instructional empty state.
 - **Spacing**: `--space-4` sections with document-like dividers.
 - **States**: empty, loading, selected, evidence modal.

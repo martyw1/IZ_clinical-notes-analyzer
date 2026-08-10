@@ -71,7 +71,7 @@ def test_return_for_correction_creates_a_counselor_queue_item_and_submission_res
     assert open_queue.status_code == 200
     queue_item = open_queue.json()["items"][0]
     assert queue_item["patient_id"] == "951"
-    assert queue_item["patient_display_label"] == "Patient ID 951"
+    assert queue_item["patient_display_label"] == "MRN 951"
     assert queue_item["criterion_id"] == "confirm_current_loc"
     assert queue_item["criterion_title"] == "Confirm the current LOC"
     assert queue_item["return_comment"] == "Confirm the current LOC source."

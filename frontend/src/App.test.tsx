@@ -10,6 +10,12 @@ async function signIn(password = 'StrongLocalPass1') {
   await screen.findByRole('navigation', { name: /primary navigation/i })
 }
 
+async function openTreatmentPlan(planId = 'plan-812') {
+  fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
+  const selector = await screen.findByRole('combobox', { name: 'Treatment plans for MRN 812' })
+  fireEvent.change(selector, { target: { value: planId } })
+}
+
 beforeEach(() => {
   sessionStorage.clear()
 })
@@ -70,7 +76,7 @@ describe('V2 active app shell', () => {
     const nav = screen.getByRole('navigation', { name: /primary navigation/i })
     expect(within(nav).queryByRole('button', { name: 'Users' })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
-    expect(within(nav).getByRole('button', { name: 'Treatment Plans' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Treatment Plan Detail' })).toBeInTheDocument()
     expect(within(nav).getByRole('button', { name: 'Corrections' })).toBeInTheDocument()
   })
 
@@ -78,8 +84,8 @@ describe('V2 active app shell', () => {
     const fetchMock = setupFetch({ role: 'counselor' })
     await signIn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
-    expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    await openTreatmentPlan()
+    expect(await screen.findByText('MRN 812')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /return for correction/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /save override/i })).not.toBeInTheDocument()
 
@@ -102,13 +108,14 @@ describe('V2 active app shell', () => {
     setupFetch()
     await signIn()
 
-    expect(await screen.findByText('Active patient IDs')).toBeInTheDocument()
+    expect(await screen.findByText('Active MRNs')).toBeInTheDocument()
+    expect(screen.getByText('Refreshed 2026-07-11 12:00 UTC')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/LOC-change update window is unvalidated/i)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    await openTreatmentPlan()
 
-    expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(await screen.findByText('MRN 812')).toBeInTheDocument()
     expect(screen.getByText(/LOC-change clock:/)).toHaveClass('summary-grid__item--wrappable')
     expect(screen.getByText('Diagnoses')).toBeInTheDocument()
     expect(screen.getByText('Behavioral Definitions')).toBeInTheDocument()
@@ -131,10 +138,6 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /save override/i }))
     expect(await screen.findByRole('status')).toHaveTextContent('Override saved with required reason and audit event.')
 
-    fireEvent.change(screen.getByLabelText(/search patient ID or status/i), { target: { value: 'no-such-patient' } })
-    expect(await screen.findByText('No treatment plans match the current filters.')).toBeInTheDocument()
-    await waitFor(() => expect(screen.queryByText('Patient ID 812')).not.toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /save override/i })).not.toBeInTheDocument()
   })
 
   it('downloads archived source files through an authenticated backend request', async () => {
@@ -146,7 +149,7 @@ describe('V2 active app shell', () => {
     const fetchMock = setupFetch()
     await signIn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    await openTreatmentPlan()
     fireEvent.click(await screen.findByRole('button', { name: /download archived source file/i }))
 
     await waitFor(() => {
@@ -166,7 +169,7 @@ describe('V2 active app shell', () => {
     const fetchMock = setupFetch()
     await signIn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    await openTreatmentPlan()
     expect(await screen.findByText('1 archived')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /delete archived source file/i }))
 
@@ -215,7 +218,7 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText('Facility'), { target: { value: '10' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign facility' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Facility assigned.')
-    fireEvent.change(screen.getByLabelText('Patient ID assignment'), { target: { value: '812' } })
+    fireEvent.change(screen.getByLabelText('MRN assignment'), { target: { value: '812' } })
     fireEvent.change(screen.getByLabelText('Counselor assignment'), { target: { value: 'counselor' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Patient assigned to counselor.')
@@ -258,8 +261,8 @@ describe('V2 active app shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
     expect(await screen.findByRole('heading', { name: /Diagnostic treatment-plan pull/i })).toBeInTheDocument()
-    expect(screen.getByText(/does not add records to the Treatment Plans queue/i)).toBeInTheDocument()
-    expect(screen.getByText(/Queue import is blocked/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not add records to the Treatment Plans Roster/i)).toBeInTheDocument()
+    expect(screen.getByText(/Roster import is blocked/i)).toBeInTheDocument()
     expect(screen.getByText('https://authorization.allevasoft.com/api:read')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /test saved oauth credentials/i }))
     expect(await screen.findByText(/token obtained and discarded after verification/i)).toBeInTheDocument()
@@ -290,7 +293,7 @@ describe('V2 active app shell', () => {
     expect(screen.getByText('all-treatment-plans.error-log.jsonl')).toBeInTheDocument()
   })
 
-  it('runs an operational pull, evaluates it, and opens the populated Treatment Plans queue', async () => {
+  it('runs an operational pull, evaluates it, and opens the populated Treatment Plans Roster', async () => {
     const fetchMock = setupFetch()
     await signIn()
 
@@ -302,15 +305,15 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'API Testing Harness' }))
-    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate queue/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull, evaluate, and populate roster/i }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
-    fireEvent.click(screen.getByRole('button', { name: /open treatment plans queue/i }))
-    expect(await screen.findByText('Patient ID 812')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Roster populated and deterministic evaluation completed for 1 treatment plan.')
+    fireEvent.click(screen.getByRole('button', { name: /open treatment plans roster/i }))
+    expect(await screen.findByRole('heading', { name: 'Treatment Plans Roster' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.objectContaining({ method: 'POST' }))
   })
 
-  it('pulls from Treatment Plans, refreshes the populated list, and exports plan statuses', async () => {
+  it('pulls from Treatment Plans Roster, refreshes the populated list, and exports plan statuses', async () => {
     const createObjectUrl = vi.fn(() => 'blob:treatment-plan-export')
     const revokeObjectUrl = vi.fn()
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
@@ -326,12 +329,12 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByLabelText('Enable treatment-plan sync'))
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans Roster' }))
     expect(await screen.findByText('plan-812')).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /pull full treatment plans/i }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Queue populated and deterministic evaluation completed for 1 treatment plan.')
-    const queueReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/treatment-plans')
+    expect(await screen.findByRole('status')).toHaveTextContent('Roster populated and deterministic evaluation completed for 1 treatment plan.')
+    const queueReads = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/treatment-plan-roster')
     expect(queueReads.length).toBeGreaterThanOrEqual(2)
 
     fireEvent.click(screen.getByRole('button', { name: /export treatment plans and statuses/i }))
@@ -349,8 +352,8 @@ describe('V2 active app shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
     expect(screen.getByText('812')).toBeInTheDocument()
-    expect(screen.getByText('plan-812')).toBeInTheDocument()
-    expect(screen.getByText('Needs Review')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '(#plan-812) 2026-07-12 10:00 UTC' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
     expect(screen.queryByText(/synthetic patient name|first name|last name/i)).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
   })
@@ -377,14 +380,9 @@ describe('V2 active app shell', () => {
   it('keeps multiple treatment plans for one patient separately selectable', async () => {
     const fetchMock = setupFetch({ role: 'admin', multiPlan: true })
     await signIn()
-    fireEvent.click(screen.getByRole('button', { name: 'Treatment Plans' }))
-
-    expect(await screen.findByText('plan-812')).toBeInTheDocument()
-    const secondPlan = await screen.findByRole('button', { name: 'plan-813' })
-    fireEvent.click(secondPlan)
+    await openTreatmentPlan('plan-813')
 
     expect(await screen.findByRole('heading', { name: 'Treatment Plan ID plan-813' })).toBeInTheDocument()
-    expect(secondPlan).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/v2/treatment-plans/812/plan-813?source_mode=alleva_rest_api',
       expect.objectContaining({ headers: expect.any(Headers) }),
@@ -402,7 +400,7 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/normalized V2 aggregate JSON/i), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: /import treatment-plan aggregate/i }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Imported Patient ID 812 from manual_upload.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Imported MRN 812 from manual_upload.')
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/manual-uploads/treatment-plan-aggregate', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -411,8 +409,8 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
-    const textFile = new File(['Patient ID: 914\nIntervention: Weekly CBT skills practice.'], 'manual-text.txt', {
+    fireEvent.change(screen.getByLabelText(/mrn override/i), { target: { value: '914' } })
+    const textFile = new File(['MRN: 914\nIntervention: Weekly CBT skills practice.'], 'manual-text.txt', {
       type: 'text/plain',
     })
     const pdfFile = new File(['synthetic-pdf'], 'manual-plan.pdf', { type: 'application/pdf' })
@@ -426,8 +424,8 @@ describe('V2 active app shell', () => {
     expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData)
     expect((uploadCall?.[1]?.body as FormData).getAll('file')).toHaveLength(2)
     expect(screen.queryByText('manual-text.txt')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /review in treatment plans/i }))
-    expect(await screen.findByRole('heading', { name: /treatment plan workbench/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /review in patient roster/i }))
+    expect(await screen.findByRole('heading', { name: /^patient roster$/i })).toBeInTheDocument()
   })
 
   it('lets users remove and reset binder selections before upload', async () => {
@@ -435,7 +433,7 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    const first = new File(['Patient ID: 914'], 'first.txt', { type: 'text/plain' })
+    const first = new File(['MRN: 914'], 'first.txt', { type: 'text/plain' })
     const second = new File(['Synthetic binder'], 'second.pdf', { type: 'application/pdf' })
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [first, second] } })
 
@@ -451,16 +449,16 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    fireEvent.change(screen.getByLabelText(/patient id override/i), { target: { value: '914' } })
-    const file = new File(['Patient ID: 913'], 'conflict.txt', { type: 'text/plain' })
+    fireEvent.change(screen.getByLabelText(/mrn override/i), { target: { value: '914' } })
+    const file = new File(['MRN: 913'], 'conflict.txt', { type: 'text/plain' })
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/differs from the Patient ID detected/i)
-    fireEvent.click(screen.getByLabelText(/confirm this patient id correction/i))
-    fireEvent.click(screen.getByRole('button', { name: /retry with confirmed patient id/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/differs from the MRN detected/i)
+    fireEvent.click(screen.getByLabelText(/confirm this MRN correction/i))
+    fireEvent.click(screen.getByRole('button', { name: /retry with confirmed MRN/i }))
 
-    expect(await screen.findByText(/confirmed patient id correction/i)).toBeInTheDocument()
+    expect(await screen.findByText(/confirmed MRN correction/i)).toBeInTheDocument()
     const binderCalls = fetchMock.mock.calls.filter(([path]) => path === '/api/v2/manual-uploads/treatment-plan-file')
     expect(binderCalls).toHaveLength(2)
     expect((binderCalls[1]?.[1]?.body as FormData).get('confirm_patient_id_correction')).toBe('true')
@@ -471,7 +469,7 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    const parsed = new File(['Patient ID: 914'], 'parsed.txt', { type: 'text/plain' })
+    const parsed = new File(['MRN: 914'], 'parsed.txt', { type: 'text/plain' })
     const opaque = new File(['opaque'], 'legacy.doc', { type: 'application/msword' })
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [parsed, opaque] } })
     fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
@@ -489,7 +487,7 @@ describe('V2 active app shell', () => {
     await signIn()
 
     fireEvent.click(screen.getByRole('button', { name: 'Manual Upload' }))
-    const file = new File(['Patient ID: 914'], 'single.txt', { type: 'text/plain' })
+    const file = new File(['MRN: 914'], 'single.txt', { type: 'text/plain' })
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [file] } })
     const submit = screen.getByRole('button', { name: /upload and securely process binder/i })
     fireEvent.click(submit)

@@ -18,6 +18,14 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 - Administrators and office managers can export the authorized current treatment-plan list and statuses as formula-safe CSV through `GET /api/v2/exports/treatment-plans.csv`.
 - The published Alleva v1 patient/treatment-plan mapping is now an automatic internal contract. The API and sync enable switches, encrypted credential requirement, read-only boundary, and unvalidated LOC-change window remain in force.
 
+### 2026-08-10 MRN-centered roster update
+
+- MRN is now the primary patient identifier in the active V2 UI and roster contracts. The legacy aggregate field name `patient_id` remains an internal compatibility name, but new visible labels and manually parsed identifiers use MRN.
+- Primary navigation begins with Status Dashboard, Patient Roster, Manual Upload, and Treatment Plan Detail. Treatment Plans Roster is the additional Alleva-plan browsing surface.
+- Patient Roster groups every locally stored plan by MRN and source. Its Treatment Plans selector is ordered by descending last-updated time and displays `(#<plan ID>) YYYY-MM-DD HH:mm UTC`; selecting an option opens the exact plan in Treatment Plan Detail.
+- Treatment Plans Roster lists each locally synchronized Alleva plan with MRN, last-updated time, the prior plan ID, and the initial plan ID/date. Selecting an ID opens the same full Treatment Plan Detail surface.
+- API configuration, gated Alleva pull controls, encrypted persistence, role filtering, source-mode isolation, and minimum-necessary audit logging are unchanged. The live-sync authorization and unvalidated LOC-change-window gates remain in force.
+
 ## Purpose
 
 This is the current implementation reference for how patient treatment plans are handled in the app. It covers the local database model, manual upload sync, gated Alleva REST sync, the patient-level aggregate, deterministic timeliness decisions, selected-client checklist results, privacy controls, and the user-facing Treatment Plans queue.

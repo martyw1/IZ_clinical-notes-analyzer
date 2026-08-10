@@ -1,4 +1,5 @@
 import type { ApiHarnessJob } from '../api/jobTypes'
+import { formatDateTime24Hour } from './treatmentPlanFormatting'
 
 type JobStatusPanelProps = {
   readonly job: ApiHarnessJob | null
@@ -27,7 +28,7 @@ export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobSt
             <div><dt>Warnings</dt><dd>{job.warningsCount}</dd></div>
             <div><dt>Failed</dt><dd>{job.recordsFailed}</dd></div>
           </dl>
-          {job.completedAt && <p className='muted'>Last run completed {formatTimestamp(job.completedAt)}.</p>}
+          {job.completedAt && <p className='muted'>Last run completed {formatDateTime24Hour(job.completedAt)}.</p>}
         </>
       )}
       {message && <p role='status'>{message}</p>}
@@ -57,9 +58,4 @@ function phaseLabel(job: ApiHarnessJob): string {
     case 'stale_or_interrupted':
       return 'Interrupted'
   }
-}
-
-function formatTimestamp(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }

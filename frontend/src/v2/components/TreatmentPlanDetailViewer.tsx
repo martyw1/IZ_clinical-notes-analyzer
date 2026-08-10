@@ -111,7 +111,7 @@ export function TreatmentPlanDetailViewer({
           <div>
             <p className='eyebrow'>Selected Treatment Plan Detail</p>
             <h2>Treatment Plan ID {plan.treatmentPlanId}</h2>
-            <p className='muted'>Patient ID {plan.patientId}</p>
+            <p className='muted'>MRN {plan.patientId}</p>
           </div>
           <StatusBadge status={plan.status} />
         </div>
@@ -182,7 +182,13 @@ export function TreatmentPlanDetailViewer({
         </div>
         <div className='criterion-list'>
           {filteredCriteria.map((criterion) => (
-            <button key={criterion.criterionId} type='button' className='criterion-row' onClick={() => setSelectedCriterionId(criterion.criterionId)}>
+            <button
+              key={criterion.criterionId}
+              type='button'
+              className='criterion-row'
+              aria-pressed={criterion.criterionId === selectedCriterion?.criterionId}
+              onClick={() => setSelectedCriterionId(criterion.criterionId)}
+            >
               <span>{criterion.title}</span>
               <StatusBadge status={criterion.status} />
             </button>

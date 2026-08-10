@@ -100,7 +100,7 @@ export function UsersPage({ token }: UsersPageProps) {
       </form>
       <form onSubmit={assignPatientToCounselor} className='settings-form'>
         <h3>Patient assignment</h3>
-        <label>Patient ID assignment<input name='patientId' /></label>
+        <label>MRN assignment<input name='patientId' /></label>
         <label>Counselor assignment<select name='counselorUsername'>{users.filter((user) => user.role === 'counselor').map((user) => <option key={user.id} value={user.username}>{user.username}</option>)}</select></label>
         <button type='submit'>Assign patient</button>
       </form>

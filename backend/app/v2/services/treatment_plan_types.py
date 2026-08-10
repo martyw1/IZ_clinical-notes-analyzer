@@ -31,6 +31,8 @@ class StoredTreatmentPlan:
     source_mode: str
     current_level_of_care: str
     admission_date: str
+    plan_date: str
+    last_updated: str
     next_due_date: str
     overall_status: str
     missing_criteria_count: int
@@ -50,7 +52,12 @@ class TreatmentPlanSaveResult:
     disposition: TreatmentPlanSaveDisposition
 
 
-def stored_plan(aggregate: TreatmentPlanAggregate) -> StoredTreatmentPlan:
+def stored_plan(
+    aggregate: TreatmentPlanAggregate,
+    *,
+    last_updated: str = "",
+    plan_date: str = "",
+) -> StoredTreatmentPlan:
     summary = {
         key: value
         for key, value in aggregate.content_snapshot_summary.items()
@@ -63,6 +70,8 @@ def stored_plan(aggregate: TreatmentPlanAggregate) -> StoredTreatmentPlan:
         source_mode=aggregate.source_mode,
         current_level_of_care=aggregate.current_level_of_care,
         admission_date=aggregate.admission_date,
+        plan_date=plan_date or aggregate.date_clock_anchor,
+        last_updated=aggregate.source_last_updated or last_updated,
         next_due_date=aggregate.date_clock_due_date,
         overall_status=aggregate.overall_status,
         missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,

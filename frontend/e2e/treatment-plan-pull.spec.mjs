@@ -1,23 +1,19 @@
 import { expect, test } from '@playwright/test'
 
-const queueItems = [
+const treatmentPlanRosterItems = [
   {
-    patient_id: '912', patient_display_label: 'Patient ID 912', treatment_plan_id: 'plan-912',
-    current_level_of_care: 'PHP', admission_date: '2026-06-01', next_due_date: '2026-07-01',
-    status: 'Needs Review', missing_criteria_count: 0, returned_criteria_count: 0,
-    source_mode: 'alleva_rest_api', warnings: [],
+    treatment_plan_id: 'plan-912', mrn: '912', last_updated: '2026-07-12T12:00:00Z',
+    previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
   },
   {
-    patient_id: '912', patient_display_label: 'Patient ID 912', treatment_plan_id: 'plan-913',
-    current_level_of_care: 'PHP', admission_date: '2026-06-01', next_due_date: '2026-08-01',
-    status: 'Unable to Evaluate', missing_criteria_count: 0, returned_criteria_count: 0,
-    source_mode: 'alleva_rest_api', warnings: [],
+    treatment_plan_id: 'plan-913', mrn: '912', last_updated: '2026-07-13T18:45:00Z',
+    previous_treatment_plan_id: 'plan-912', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
   },
 ]
 
 function planDetail(planId) {
   return {
-    patient_id: '912', patient_display_label: 'Patient ID 912', source_mode: 'alleva_rest_api',
+    patient_id: '912', patient_display_label: 'MRN 912', source_mode: 'alleva_rest_api',
     current_level_of_care: 'PHP', admission_date: '2026-06-01', date_clock_due_date: '2026-08-01',
     overall_status: planId === 'plan-913' ? 'Unable to Evaluate' : 'Needs Review',
     content_sections_present: ['problems'], content_sections_missing: [], data_quality_warnings: [],
@@ -55,7 +51,7 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
     const respond = (payload, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) })
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
-    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Treatment Plans', 'Patient Roster', 'API Testing Harness', 'Settings'], active_runtime: 'v2' })
+    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'API Testing Harness', 'Settings'], active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/settings') return respond({ organization_name: 'R3 Recovery Services', facility_timezone: 'America/New_York', treatment_plan_master_due_days: 30, treatment_plan_php_review_interval_days: 30, treatment_plan_iop_op_review_interval_days: 90, treatment_plan_loc_change_window_days: 7, treatment_plan_loc_change_window_validated: false })
     if (path === '/api/api-configuration') return respond({ vendor_name: 'Synthetic Alleva', api_base_url: 'http://synthetic.invalid', openapi_url: 'http://synthetic.invalid/openapi.json', token_url: 'http://synthetic.invalid/token', client_id_configured: true, api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: 'plans.read', api_version: '1.0', treatment_plan_start_date: '2020-01-01T00:00:00Z', pagination_limit: 100, sync_limit: 100, requests_per_minute: 600, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true, active_contract_version: null })
@@ -80,12 +76,12 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
       rosterSynced = true
       return respond({ job_id: 'roster-ui-1', status: 'completed', progress_percent: 100, records_written: 1, records_failed: 0, warnings_count: 0, artifacts: [] })
     }
-    if (path === '/api/v2/treatment-plans') return respond({ items: synced ? queueItems : [], status_order: ['Needs Review', 'Unable to Evaluate'] })
+    if (path === '/api/v2/treatment-plan-roster') return respond({ items: synced ? treatmentPlanRosterItems : [] })
     if (path === '/api/v2/treatment-plans/912/plan-912' || path === '/api/v2/treatment-plans/912/plan-913') {
       detailRequests.push(path)
       return respond(planDetail(path.endsWith('plan-913') ? 'plan-913' : 'plan-912'))
     }
-    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ patient_id: '912', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plan_id: 'plan-913', treatment_plan_status: 'Unable to Evaluate', first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
+    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ mrn: '912', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plans: [{ treatment_plan_id: 'plan-913', last_updated: '2026-07-13T18:45:00Z' }, { treatment_plan_id: 'plan-912', last_updated: '2026-07-12T12:00:00Z' }], first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
     return respond({ detail: `Unexpected ${method} ${path}` }, 404)
   })
 
@@ -101,14 +97,13 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
   await expect(page.getByRole('button', { name: /record approved/i })).toHaveCount(0)
   await captureViewports(page, testInfo, 'alleva-automatic-mapping')
 
-  await page.getByRole('button', { name: 'Treatment Plans', exact: true }).click()
+  await page.getByRole('button', { name: 'Treatment Plans Roster', exact: true }).click()
   await page.getByRole('button', { name: 'Pull full treatment plans' }).click()
   await expect(page.getByRole('status')).toContainText('2 treatment plans')
-  await expect(page.getByRole('button', { name: 'plan-912' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'plan-913' })).toBeVisible()
-  await page.getByRole('button', { name: 'plan-913' }).click()
+  await expect(page.getByRole('button', { name: 'Open treatment plan plan-912 for MRN 912' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Open treatment plan plan-913 for MRN 912' })).toBeVisible()
+  await page.getByRole('button', { name: 'Open treatment plan plan-913 for MRN 912' }).click()
   await expect(page.getByRole('heading', { name: 'Treatment Plan ID plan-913' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'plan-913' })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByText('Synthetic problem for plan-913.')).toBeVisible()
   expect(detailRequests).toContain('/api/v2/treatment-plans/912/plan-913')
   await captureViewports(page, testInfo, 'treatment-plans-multiple-plans')
@@ -117,25 +112,26 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
   await page.getByRole('button', { name: 'Pull active patient roster' }).click()
   await expect(page.getByRole('status')).toContainText('Completed successfully. 1 record updated.')
   await expect(page.getByRole('heading', { name: 'Patient roster', exact: true })).toBeVisible()
-  await expect(page.getByText('plan-913')).toBeVisible()
-  await expect(page.getByText('Unable to Evaluate')).toBeVisible()
+  await expect(page.getByRole('option', { name: '(#plan-913) 2026-07-13 18:45 UTC' })).toBeAttached()
+  await expect(page.getByRole('option', { name: '(#plan-912) 2026-07-12 12:00 UTC' })).toBeAttached()
   await expect(page.getByText(/Patient names are excluded/i)).toBeVisible()
   await captureViewports(page, testInfo, 'patient-roster-after-pull')
+  await page.getByRole('combobox', { name: 'Treatment plans for MRN 912' }).selectOption('plan-912')
+  await expect(page.getByRole('heading', { name: 'Treatment Plan ID plan-912' })).toBeVisible()
+  expect(detailRequests).toContain('/api/v2/treatment-plans/912/plan-912')
 })
 
-test('same patient and plan IDs remain selectable by source identity', async ({ page }, testInfo) => {
+test('same MRN and plan IDs remain selectable by source identity', async ({ page }, testInfo) => {
   const sharedItems = [
     {
-      patient_id: '843', patient_display_label: 'Patient ID 843', treatment_plan_id: 'plan-shared',
-      current_level_of_care: 'IOP', admission_date: '2026-06-01', next_due_date: '2026-07-01',
-      status: 'Needs Review', missing_criteria_count: 0, returned_criteria_count: 0,
-      source_mode: 'manual_upload', warnings: [],
+      mrn: '843', source_mode: 'manual_upload', lifecycle_state: 'active', current_level_of_care: 'IOP',
+      treatment_plans: [{ treatment_plan_id: 'plan-shared', last_updated: '2026-07-13T09:00:00Z' }],
+      first_seen_at: '2026-07-13T08:00:00Z', last_seen_at: '2026-07-13T09:00:00Z', reconciled_at: '',
     },
     {
-      patient_id: '843', patient_display_label: 'Patient ID 843', treatment_plan_id: 'plan-shared',
-      current_level_of_care: 'RTC', admission_date: '2026-06-01', next_due_date: '2026-08-01',
-      status: 'Unable to Evaluate', missing_criteria_count: 0, returned_criteria_count: 0,
-      source_mode: 'alleva_rest_api', warnings: [],
+      mrn: '843', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'RTC',
+      treatment_plans: [{ treatment_plan_id: 'plan-shared', last_updated: '2026-07-14T10:00:00Z' }],
+      first_seen_at: '2026-07-14T08:00:00Z', last_seen_at: '2026-07-14T10:00:00Z', reconciled_at: '',
     },
   ]
   const detailRequests = []
@@ -147,15 +143,15 @@ test('same patient and plan IDs remain selectable by source identity', async ({ 
     const respond = (payload, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) })
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
-    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Treatment Plans'], active_runtime: 'v2' })
+    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster'], active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/api-configuration') return respond({ vendor_name: 'Synthetic Alleva', api_base_url: 'http://synthetic.invalid', openapi_url: 'http://synthetic.invalid/openapi.json', token_url: 'http://synthetic.invalid/token', client_id_configured: true, api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: 'plans.read', api_version: '1.0', treatment_plan_start_date: '2020-01-01T00:00:00Z', pagination_limit: 100, sync_limit: 100, requests_per_minute: 600, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true })
-    if (path === '/api/v2/treatment-plans') return respond({ items: sharedItems, status_order: ['Needs Review', 'Unable to Evaluate'] })
+    if (path === '/api/v2/patient-roster') return respond({ items: sharedItems })
     if (path === '/api/v2/treatment-plans/843/plan-shared') {
       detailRequests.push(route.request().url())
       const isAlleva = sourceMode === 'alleva_rest_api'
       return respond({
-        patient_id: '843', patient_display_label: 'Patient ID 843', source_mode: sourceMode,
+        patient_id: '843', patient_display_label: 'MRN 843', source_mode: sourceMode,
         current_level_of_care: isAlleva ? 'RTC' : 'IOP', admission_date: '2026-06-01',
         date_clock_due_date: isAlleva ? '2026-08-01' : '2026-07-01',
         overall_status: isAlleva ? 'Unable to Evaluate' : 'Needs Review',
@@ -175,31 +171,31 @@ test('same patient and plan IDs remain selectable by source identity', async ({ 
   await page.getByLabel('Username').fill('e2eadmin')
   await page.getByLabel('Password').fill('SyntheticUiPass1')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.getByRole('button', { name: 'Treatment Plans', exact: true }).click()
-
-  const sharedButtons = page.getByRole('button', { name: 'plan-shared' })
-  await expect(sharedButtons).toHaveCount(2)
+  await page.getByRole('button', { name: 'Patient Roster', exact: true }).click()
+  const sharedSelectors = page.getByRole('combobox', { name: 'Treatment plans for MRN 843' })
+  await expect(sharedSelectors).toHaveCount(2)
+  await sharedSelectors.nth(0).selectOption('plan-shared')
   await expect(page.getByText('Manual source detail.')).toBeVisible()
-  await sharedButtons.nth(1).click()
+  await page.getByRole('button', { name: 'Patient Roster', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Treatment plans for MRN 843' }).nth(1).selectOption('plan-shared')
   await expect(page.getByText('Alleva source detail.')).toBeVisible()
-  await expect(sharedButtons.nth(1)).toHaveAttribute('aria-pressed', 'true')
   expect(detailRequests.some((url) => url.endsWith('source_mode=manual_upload'))).toBe(true)
   expect(detailRequests.some((url) => url.endsWith('source_mode=alleva_rest_api'))).toBe(true)
   await captureViewports(page, testInfo, 'treatment-plans-source-collision')
 })
 
-test('multi-file Manual Upload processes a binder and opens Treatment Plans without retaining filenames', async ({ page }) => {
+test('multi-file Manual Upload processes a binder and opens Patient Roster without retaining filenames', async ({ page }) => {
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
     const respond = (payload, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) })
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
-    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Treatment Plans', 'Manual Upload'], active_runtime: 'v2' })
+    if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster'], active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/v2/manual-uploads/treatment-plan-file' && method === 'POST') {
       return respond({
-        status: 'imported_with_warnings', patient_id: 'synthetic-demo', patient_display_label: 'Patient ID synthetic-demo',
+        status: 'imported_with_warnings', patient_id: 'synthetic-demo', patient_display_label: 'MRN synthetic-demo',
         source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: true,
         source_file_id: 'source-1', source_file_ids: ['source-1', 'source-2'], patient_id_correction_applied: false,
         file_count: 2, parsed_file_count: 1, opaque_file_count: 1, overall_status: 'Unable to Evaluate',
@@ -207,7 +203,7 @@ test('multi-file Manual Upload processes a binder and opens Treatment Plans with
       }, 201)
     }
     if (path === '/api/api-configuration') return respond({ client_id_configured: false, client_secret_configured: false, api_enabled: false, treatment_plan_sync_enabled: false, treatment_plan_sync_approved: false })
-    if (path === '/api/v2/treatment-plans') return respond({ items: [], status_order: ['Unable to Evaluate'] })
+    if (path === '/api/v2/patient-roster') return respond({ items: [] })
     return respond({ detail: `Unexpected ${method} ${path}` }, 404)
   })
 
@@ -218,7 +214,7 @@ test('multi-file Manual Upload processes a binder and opens Treatment Plans with
   await page.getByRole('button', { name: 'Manual Upload' }).click()
 
   await page.getByLabel('Treatment-plan binder files').setInputFiles([
-    { name: 'synthetic-evidence.txt', mimeType: 'text/plain', buffer: Buffer.from('Patient ID: synthetic-demo') },
+    { name: 'synthetic-evidence.txt', mimeType: 'text/plain', buffer: Buffer.from('MRN: synthetic-demo') },
     { name: 'synthetic-scan.png', mimeType: 'image/png', buffer: Buffer.from('opaque synthetic bytes') },
   ])
   await expect(page.getByText('2 files selected')).toBeVisible()
@@ -228,6 +224,6 @@ test('multi-file Manual Upload processes a binder and opens Treatment Plans with
   await expect(page.getByText('1 stored without parsing')).toBeVisible()
   await expect(page.getByText('synthetic-evidence.txt')).toHaveCount(0)
   await expect(page.getByText('synthetic-scan.png')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Review in Treatment Plans' }).click()
-  await expect(page.getByRole('heading', { name: 'Treatment Plan Workbench' })).toBeVisible()
+  await page.getByRole('button', { name: 'Review in Patient Roster' }).click()
+  await expect(page.getByRole('heading', { name: 'Patient roster', exact: true })).toBeVisible()
 })

@@ -77,7 +77,7 @@ def test_manual_upload_patient_id_mismatch_requires_confirmed_correction(tmp_pat
     assert corrected.json()["patient_id_correction_applied"] is True
     detail = client.get("/api/v2/treatment-plans/932", headers=headers)
     assert detail.status_code == 200
-    assert any("Patient ID correction" in warning for warning in detail.json()["data_quality_warnings"])
+    assert any("MRN correction" in warning for warning in detail.json()["data_quality_warnings"])
 
     audit = client.get("/api/audit/logs", headers=headers)
     assert audit.status_code == 200

@@ -47,7 +47,7 @@ TREATMENT_PLAN_STATUS_ORDER: Final = (
 def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
     rows = db.execute(
         text(
-            "SELECT p.canonical_client_id,v.source_record_id,v.source_system,MAX(v.imported_at),MAX(v.id) FROM patients p "
+            "SELECT p.canonical_client_id,v.source_record_id,v.source_system,MAX(v.imported_at),MAX(v.id),MAX(v.plan_date) FROM patients p "
             "JOIN treatment_plan_versions v ON v.patient_id=p.id "
             "GROUP BY p.id,p.canonical_client_id,v.source_system,v.source_record_id "
             "ORDER BY MAX(v.imported_at) DESC,MAX(v.id) DESC"
@@ -63,7 +63,15 @@ def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
         )
         for row in rows
     )
-    return tuple(stored_plan(latest_evaluated_aggregate(db, aggregate)) for aggregate in aggregates if aggregate is not None)
+    return tuple(
+        stored_plan(
+            latest_evaluated_aggregate(db, aggregate),
+            last_updated=str(row[3]),
+            plan_date=str(row[5] or ""),
+        )
+        for row, aggregate in zip(rows, aggregates, strict=True)
+        if aggregate is not None
+    )
 
 
 def list_treatment_plan_queue_items(db: Session) -> tuple[TreatmentPlanQueueItem, ...]:
@@ -96,14 +104,19 @@ def save_treatment_plan_aggregate_with_disposition(
     *,
     commit: bool = True,
 ) -> TreatmentPlanSaveResult:
-    aggregate = aggregate.model_copy(update={"patient_display_label": f"Patient ID {aggregate.patient_id}"})
+    now = utc_now().astimezone(timezone.utc).isoformat()
+    aggregate = aggregate.model_copy(update={
+        "patient_display_label": f"MRN {aggregate.patient_id}",
+    })
     payload_json = aggregate.model_dump_json()
+    aggregate = aggregate.model_copy(update={
+        "source_last_updated": aggregate.source_last_updated or now,
+    })
     encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
     content_sha256 = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
     evidence_sha256 = hashlib.sha256(
         f"{aggregate.patient_id}:{aggregate.source_mode}:{aggregate.content_snapshot.plan_id}:{content_sha256}".encode("utf-8")
     ).hexdigest()
-    now = utc_now().astimezone(timezone.utc).isoformat()
     facility_id = int(db.execute(text("SELECT id FROM facilities WHERE facility_key='r3-default'")).scalar_one())
     db.execute(
         text(
@@ -141,7 +154,7 @@ def save_treatment_plan_aggregate_with_disposition(
         },
     ).first()
     if prior_same_plan is not None and str(prior_same_plan[1]) == content_sha256:
-        return TreatmentPlanSaveResult(stored_plan(aggregate), TreatmentPlanSaveDisposition.UNCHANGED)
+        return TreatmentPlanSaveResult(stored_plan(aggregate, last_updated=now), TreatmentPlanSaveDisposition.UNCHANGED)
     supersedes_version_id = int(prior_same_plan[0]) if prior_same_plan else None
     disposition = (
         TreatmentPlanSaveDisposition.UPDATED
@@ -196,7 +209,7 @@ def save_treatment_plan_aggregate_with_disposition(
         db.commit()
     else:
         db.flush()
-    return TreatmentPlanSaveResult(stored_plan(evaluated), disposition)
+    return TreatmentPlanSaveResult(stored_plan(evaluated, last_updated=now), disposition)
 
 
 def treatment_plan_aggregate_for_patient(

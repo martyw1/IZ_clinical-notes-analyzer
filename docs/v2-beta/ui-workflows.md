@@ -3,20 +3,25 @@
 Primary navigation contains only:
 
 - Status Dashboard
-- Treatment Plans
 - Patient Roster
 - Manual Upload
+- Treatment Plan Detail
+- Treatment Plans Roster
 - API Testing Harness
 - Users
 - Forensic Logs
 - Settings
 - Help
 
-The Treatment Plans Workbench includes the approved `Pull, evaluate, and populate queue` action, sticky toolbar, treatment-plan status export, risk-first status strip, queue table with patient and treatment-plan IDs, selected-client detail, content graph, source evidence, LOC history, 42-step checklist, evidence coverage map, manager actions, override history, audit refs, and counselor action export surface. The same approved operational pull remains available in API Testing Harness and populates this queue; the diagnostic preview remains non-populating.
+MRN is the primary patient identifier. Patient Roster is the second tab and shows one row per authorized MRN/source pair. Its Treatment Plans column contains every locally stored plan for that row in descending last-updated order. Options use `(#<treatment plan ID>) YYYY-MM-DD HH:mm UTC`; the old standalone Treatment Plan ID and Status columns are not present.
+
+Selecting a Patient Roster option opens the fourth tab, Treatment Plan Detail, and loads the exact MRN, treatment-plan ID, and source combination. The detail page merges the full stored treatment-plan aggregate into the readable content graph, source evidence, LOC history, 42-step checklist, evidence coverage map, manager actions, override history, audit refs, and export/source-document controls.
+
+Treatment Plans Roster lists every locally synchronized Alleva treatment plan with Treatment Plan ID, MRN, last updated, previous treatment-plan ID, and the initial plan ID/date for that MRN. Selecting an ID opens that exact plan in Treatment Plan Detail. The approved operational pull remains available on both rosters and in API Testing Harness; the diagnostic preview remains non-populating.
 
 Changed records with an existing treatment-plan ID become the current visible plan while the encrypted earlier version remains immutable. Identical replays do not create duplicates. Forensic Logs show minimum-necessary created/updated/unchanged counts and the exact updated treatment-plan IDs.
 
-Patient Roster shows only authorized patient IDs and workflow metadata: treatment-plan ID/status, lifecycle, LOC, source, and last-seen time. Patient-name fields are not part of the roster response or UI.
+Patient-name fields are not part of either roster response or UI. Local source-mode identity is retained so matching manual and Alleva identifiers cannot collapse into one selection. Treatment Plans Roster intentionally excludes manual uploads because it represents Alleva-synchronized records.
 
 Large jobs show a job card immediately, progress, cancel, retry-ready state, artifact list, and bounded preview. The browser must not receive full all-fields payloads.
 

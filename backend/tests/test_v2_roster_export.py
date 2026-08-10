@@ -35,13 +35,11 @@ def test_patient_roster_is_scoped_and_contains_no_patient_name_fields(tmp_path, 
     # Then: both authorized IDs appear, including the no-plan patient, with no name property or canary.
     assert response.status_code == 200
     items = response.json()["items"]
-    assert {item["patient_id"] for item in items} == {"roster-840", "roster-841"}
-    planned = next(item for item in items if item["patient_id"] == "roster-840")
-    unplanned = next(item for item in items if item["patient_id"] == "roster-841")
-    assert planned["treatment_plan_id"]
-    assert planned["treatment_plan_status"]
-    assert unplanned["treatment_plan_id"] == ""
-    assert unplanned["treatment_plan_status"] == "No treatment plan"
+    assert {item["mrn"] for item in items} == {"roster-840", "roster-841"}
+    planned = next(item for item in items if item["mrn"] == "roster-840")
+    unplanned = next(item for item in items if item["mrn"] == "roster-841")
+    assert planned["treatment_plans"]
+    assert unplanned["treatment_plans"] == []
     assert all("name" not in key for item in items for key in item)
     assert PRIVACY_CANARY not in response.text
 
@@ -72,21 +70,12 @@ def test_patient_roster_uses_newest_plan_when_patient_has_multiple_plans(tmp_pat
     # When: the patient roster is loaded.
     response = client.get("/api/v2/patient-roster", headers=headers)
 
-    # Then: the single patient row summarizes the most recently imported plan.
+    # Then: the single MRN row retains every plan with the newest update first.
     assert response.status_code == 200
-    assert response.json()["items"] == [
-        {
-            "patient_id": "roster-842",
-            "source_mode": "manual_upload",
-            "lifecycle_state": "active",
-            "current_level_of_care": "PHP",
-            "treatment_plan_id": "plan-newer",
-            "treatment_plan_status": response.json()["items"][0]["treatment_plan_status"],
-            "first_seen_at": response.json()["items"][0]["first_seen_at"],
-            "last_seen_at": response.json()["items"][0]["last_seen_at"],
-            "reconciled_at": "",
-        }
-    ]
+    item = response.json()["items"][0]
+    assert item["mrn"] == "roster-842"
+    assert item["current_level_of_care"] == "PHP"
+    assert [plan["treatment_plan_id"] for plan in item["treatment_plans"]] == ["plan-newer", "plan-older"]
 
 
 def test_patient_roster_keeps_same_patient_id_separate_by_source(tmp_path, monkeypatch) -> None:
@@ -123,9 +112,9 @@ def test_patient_roster_keeps_same_patient_id_separate_by_source(tmp_path, monke
     # Then: each source row retains its own newest plan and provenance.
     assert response.status_code == 200
     items = response.json()["items"]
-    matching = {item["source_mode"]: item for item in items if item["patient_id"] == "roster-843"}
-    assert matching["manual_upload"]["treatment_plan_id"] == "plan-shared"
-    assert matching["alleva_rest_api"]["treatment_plan_id"] == "plan-shared"
+    matching = {item["source_mode"]: item for item in items if item["mrn"] == "roster-843"}
+    assert matching["manual_upload"]["treatment_plans"][0]["treatment_plan_id"] == "plan-shared"
+    assert matching["alleva_rest_api"]["treatment_plans"][0]["treatment_plan_id"] == "plan-shared"
     assert matching["manual_upload"]["current_level_of_care"] != "RTC"
     assert matching["alleva_rest_api"]["current_level_of_care"] == "RTC"
     manual_detail = client.get(

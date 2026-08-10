@@ -163,6 +163,7 @@ class TreatmentPlanAggregate(V2Model):
     patient_id: str
     patient_display_label: str
     source_mode: SourceMode
+    source_last_updated: str = ""
     active_status: str
     status_id: int
     status_label: str

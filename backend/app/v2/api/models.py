@@ -123,13 +123,17 @@ class TreatmentPlanListOut(V2Model):
     status_order: tuple[str, ...]
 
 
+class PatientRosterTreatmentPlanOut(V2Model):
+    treatment_plan_id: str
+    last_updated: str
+
+
 class PatientRosterItemOut(V2Model):
-    patient_id: str
+    mrn: str
     source_mode: str
     lifecycle_state: str
     current_level_of_care: str
-    treatment_plan_id: str
-    treatment_plan_status: str
+    treatment_plans: tuple[PatientRosterTreatmentPlanOut, ...]
     first_seen_at: str
     last_seen_at: str
     reconciled_at: str
@@ -137,6 +141,19 @@ class PatientRosterItemOut(V2Model):
 
 class PatientRosterOut(V2Model):
     items: tuple[PatientRosterItemOut, ...]
+
+
+class TreatmentPlanRosterItemOut(V2Model):
+    treatment_plan_id: str
+    mrn: str
+    last_updated: str
+    previous_treatment_plan_id: str
+    initial_treatment_plan_id: str
+    initial_treatment_plan_date: str
+
+
+class TreatmentPlanRosterOut(V2Model):
+    items: tuple[TreatmentPlanRosterItemOut, ...]
 
 
 class AppSettingsUpdate(V2Model):

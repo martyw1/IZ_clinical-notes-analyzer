@@ -78,14 +78,19 @@ function Invoke-PythonSnippetFile {
 
 function New-RandomSecret {
     param([int]$Length = 64)
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+='
     $bytes = New-Object byte[] $Length
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    try { $rng.GetBytes($bytes) }
+    try {
+        do {
+            $rng.GetBytes($bytes)
+            $secret = -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
+        } until ($secret -match '[A-Za-z]' -and $secret -match '[0-9]')
+    }
     finally {
         if ($rng -and ($rng -is [System.IDisposable])) { $rng.Dispose() }
     }
-    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_!@#$%^+=' 
-    return -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
+    return $secret
 }
 
 function Find-Python {

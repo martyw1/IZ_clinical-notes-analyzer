@@ -46,7 +46,7 @@ def build_manual_aggregate(parsed: ParsedManualFields) -> TreatmentPlanAggregate
     )
     return TreatmentPlanAggregate(
         patient_id=parsed.patient_id,
-        patient_display_label=f"Patient ID {parsed.patient_id}",
+        patient_display_label=f"MRN {parsed.patient_id}",
         source_mode="manual_upload",
         active_status="active",
         status_id=0,
@@ -140,7 +140,7 @@ def _observed_fields(parsed: ParsedManualFields) -> tuple[TreatmentPlanObservedF
         ("signature_datetime", parsed.signature_datetime, "content_snapshot.signatures[0].signature_datetime", True),
     ]
     if parsed.patient_id_correction_applied:
-        rows.append(("patient_id_assignment", "Manual patient ID correction confirmed.", "patient_id", True))
+        rows.append(("patient_id_assignment", "Manual MRN correction confirmed.", "patient_id", True))
     return tuple(
         TreatmentPlanObservedField(
             field_path=field_path,
@@ -159,7 +159,7 @@ def _observed_fields(parsed: ParsedManualFields) -> tuple[TreatmentPlanObservedF
 def _data_quality_warnings(parsed: ParsedManualFields) -> tuple[str, ...]:
     parser_warning = "Manual parser accepts labeled fields only; unsupported content remains explicitly unevaluated."
     correction_warning = (
-        ("Patient ID correction was confirmed before this manual binder was imported.",)
+        ("MRN correction was confirmed before this manual binder was imported.",)
         if parsed.patient_id_correction_applied
         else ()
     )

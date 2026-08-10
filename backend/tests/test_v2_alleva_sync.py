@@ -596,7 +596,10 @@ def test_published_alleva_v1_numeric_nested_ids_populate_queue_and_roster(tmp_pa
     queue = client.get("/api/v2/treatment-plans", headers=headers).json()["items"]
     assert [(item["patient_id"], item["treatment_plan_id"]) for item in queue] == [("912", "4815")]
     roster = client.get("/api/v2/patient-roster", headers=headers).json()["items"]
-    assert [(item["patient_id"], item["treatment_plan_id"]) for item in roster] == [("912", "4815")]
+    assert [
+        (item["mrn"], item["treatment_plans"][0]["treatment_plan_id"])
+        for item in roster
+    ] == [("912", "4815")]
     assert "/treatment-plans/4815/diagnosis?api-version=1.0" in state.paths
     assert any(path.endswith("&ClientId=912") for path in state.paths if path.startswith("/treatment-plans?"))
     assert not any("clientId=" in path for path in state.paths)

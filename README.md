@@ -13,9 +13,9 @@ The normal R3 Windows user path does not require Windows administrator access, D
 Version 2.0 Beta is the current local Windows desktop beta. It includes:
 
 - A focused V2 FastAPI runtime in `backend/app/` with active V2 routes in `backend/app/v2/api/routes.py`.
-- A focused V2 React/Vite UI in `frontend/src/v2/` for Status Dashboard, Treatment Plans, Manual Upload, API Testing Harness, Users, Forensic Logs, Settings, and Help.
+- A focused V2 React/Vite UI in `frontend/src/v2/` led by Status Dashboard, an MRN-centered Patient Roster, Manual Upload, Treatment Plan Detail, an Alleva Treatment Plans Roster, API Testing Harness, Users, Forensic Logs, Settings, and Help.
 - Treatment Plan Checklist Version 1 as the canonical source in `config\checklists\treatment-plan-v1.json`; its checklist content version remains separate from the app version.
-- A selected-client Treatment Plans Workbench with patient-ID-only labels, deterministic status order, nested clinical-content viewer, 42-step checklist evidence, manager action controls, Evidence Coverage Map, and bounded Raw Field Explorer.
+- An MRN-first treatment-plan workflow: each Patient Roster row offers every locally stored plan in descending last-updated order, both rosters open an exact plan in Treatment Plan Detail, and the full nested clinical-content viewer retains checklist evidence, manager actions, Evidence Coverage Map, and bounded Raw Field Explorer.
 - A V2 API Testing Harness with `ClientId`, Pull ALL Treatment Plans job lifecycle, compact progress, cancel, redacted JSONL/TSV/schema artifacts, and bounded preview.
 - Local-first audit/version/readiness services, safe forensic log summaries, encrypted/local app-data boundaries, and frontend footer version metadata.
 - Windows preflight, local-stack smoke, API-configuration smoke, release-folder packaging, required-file validation, and forbidden-file scans for a prepared release folder.
@@ -41,7 +41,7 @@ flowchart TB
 
     subgraph Browser["Browser UI served from localhost:8000"]
         ReactApp["React app<br/>frontend/src/App.tsx"]
-        Views["Main screens<br/>Dashboard, Treatment Plans, Manual Upload,<br/>API Testing Harness, Users, Logs,<br/>Settings, Help"]
+        Views["Main screens<br/>Dashboard, Patient Roster, Manual Upload,<br/>Treatment Plan Detail, Treatment Plans Roster,<br/>API Testing Harness, Users, Logs, Settings, Help"]
         DetailUI["Treatment detail and evidence UI<br/>frontend/src/v2/components/TreatmentPlanDetailViewer.tsx"]
         JobUI["Large job progress UI<br/>frontend/src/v2/components/JobProgressCard.tsx"]
         Styles["Responsive styles and status colors<br/>frontend/src/app.css"]

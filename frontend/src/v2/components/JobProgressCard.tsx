@@ -92,7 +92,7 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
       <div>
         <p className='eyebrow'>Preview and export only</p>
         <h2>Diagnostic treatment-plan pull</h2>
-        <p>Pulls available treatment-plan metadata into a redacted preview and secret-keyed identifier-hashed local artifacts. Direct patient and treatment-plan identifiers are not written. This diagnostic does not add records to the Treatment Plans queue.</p>
+        <p>Pulls available treatment-plan metadata into a redacted preview and secret-keyed identifier-hashed local artifacts. Direct patient and treatment-plan identifiers are not written. This diagnostic does not add records to the Treatment Plans Roster.</p>
       </div>
       <div className='job-meter' role='progressbar' aria-label='API job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
         <span style={{ width: `${progress}%` }} />

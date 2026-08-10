@@ -170,7 +170,7 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
         files={
             "file": (
                 "synthetic-812.txt",
-                "Patient ID: synthetic-812\nCurrent Level of Care: PHP\nAdmission Date: 2026-07-01",
+                "MRN: synthetic-812\nCurrent Level of Care: PHP\nAdmission Date: 2026-07-01",
                 "text/plain",
             )
         },
@@ -200,7 +200,7 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
 
     # Then: the counselor can read assigned data but cannot mutate/download/export/administer.
     assert client.get("/api/v2/treatment-plans/synthetic-812", headers=counselor_headers).status_code == 200
-    assert [item["patient_id"] for item in client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"]] == ["synthetic-812"]
+    assert [item["mrn"] for item in client.get("/api/v2/patient-roster", headers=counselor_headers).json()["items"]] == ["synthetic-812"]
     assert client.post(
         "/api/v2/treatment-plans/synthetic-812/manager-actions",
         headers=counselor_headers,
