@@ -56,24 +56,24 @@ export function TreatmentPlanDetailPage({ token, user, selection, onNavigate }: 
 
   async function handleManagerAction(payload: ManagerActionPayload) {
     if (!selection) return
-    await saveManagerAction(token, selection.mrn, payload)
+    await saveManagerAction(token, selection.patientKey, payload)
     await refreshPlan()
   }
 
   async function handleSourceDocumentDownload(sourceFileId: string) {
     if (!selection) return
-    await downloadTreatmentPlanSourceDocument(token, selection.mrn, sourceFileId)
+    await downloadTreatmentPlanSourceDocument(token, selection.patientKey, sourceFileId)
   }
 
   async function handleSourceDocumentDelete(sourceFileId: string) {
     if (!selection) return
-    await deleteTreatmentPlanSourceDocument(token, selection.mrn, sourceFileId)
+    await deleteTreatmentPlanSourceDocument(token, selection.patientKey, sourceFileId)
     await refreshPlan()
   }
 
   async function handleChecklistEvidenceExport() {
     if (!selection) return
-    await downloadChecklistEvidenceExport(token, selection.mrn)
+    await downloadChecklistEvidenceExport(token, selection.patientKey)
   }
 
   if (!selection) {
@@ -106,5 +106,5 @@ export function TreatmentPlanDetailPage({ token, user, selection, onNavigate }: 
 }
 
 function loadSelectedPlan(token: string, selection: TreatmentPlanSelection): Promise<TreatmentPlanAggregate> {
-  return getTreatmentPlanDetail(token, selection.mrn, selection.treatmentPlanId, selection.sourceMode)
+  return getTreatmentPlanDetail(token, selection.patientKey, selection.treatmentPlanId, selection.sourceMode)
 }

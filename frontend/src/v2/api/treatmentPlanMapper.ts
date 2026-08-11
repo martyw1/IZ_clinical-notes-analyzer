@@ -55,10 +55,16 @@ function mapTreatmentPlanListItem(record: JsonRecord): TreatmentPlanListItem {
 export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggregate {
   const snapshot = readRecord(record, 'content_snapshot')
   const coverage = readRecord(record, 'evidence_coverage_summary')
+  const planHistory = uniqueBy(
+    readRecordList(record, 'treatment_plans').map(mapPlanHistoryItem),
+    (item) => `${item.treatmentPlanId}|${item.planDate}|${item.createdDate}|${item.lastModified}`,
+  )
   return {
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label', 'MRN unavailable'),
+    patientFullName: readString(record, 'patient_full_name'),
     treatmentPlanId: readString(snapshot, 'plan_id', 'Unavailable'),
+    lastUpdated: readString(record, 'source_last_updated', 'Unknown'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
     dueDate: readString(record, 'date_clock_due_date', readString(record, 'source_due_date', 'Unknown')),
@@ -77,17 +83,31 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     contentSectionsMissing: readStringList(record, 'content_sections_missing'),
     dataQualityWarnings: readStringList(record, 'data_quality_warnings'),
     criteria: readRecordList(record, 'criteria_results').map(mapCriterion),
-    managerReviews: readRecordList(record, 'manager_reviews').map((review) => mapManagerReview(review)),
-    overrides: readRecordList(record, 'overrides').map((review) => mapManagerReview(review, 'override', 'Override')),
+    managerReviews: uniqueBy(
+      readRecordList(record, 'manager_reviews').map((review) => mapManagerReview(review)),
+      managerReviewIdentity,
+    ),
+    overrides: uniqueBy(
+      readRecordList(record, 'overrides').map((review) => mapManagerReview(review, 'override', 'Override')),
+      managerReviewIdentity,
+    ),
+    planHistory,
+    treatmentReviews: uniqueBy(
+      readRecordList(record, 'treatment_reviews').map(mapTreatmentReview),
+      (review) => `${review.reviewId}|${review.reviewDate}|${review.signatureDate}|${review.status}`,
+    ),
     sourceDocuments: readRecordList(record, 'source_documents').map(mapSourceDocument),
     problems: readRecordList(snapshot, 'problems').map(mapProblem),
-    signatures: readRecordList(snapshot, 'signatures').map((signature) => ({
-      signatureType: readString(signature, 'signature_type'),
-      signerRoleOrType: readString(signature, 'signer_role_or_type'),
-      signatureDatetime: readString(signature, 'signature_datetime'),
-      hasSignatureData: readBoolean(signature, 'has_signature_data'),
-      signatureDataOmittedReason: readString(signature, 'signature_data_omitted_reason', 'signature data omitted'),
-    })),
+    signatures: uniqueBy(
+      readRecordList(snapshot, 'signatures').map((signature) => ({
+        signatureType: readString(signature, 'signature_type'),
+        signerRoleOrType: readString(signature, 'signer_role_or_type'),
+        signatureDatetime: readString(signature, 'signature_datetime'),
+        hasSignatureData: readBoolean(signature, 'has_signature_data'),
+        signatureDataOmittedReason: readString(signature, 'signature_data_omitted_reason', 'signature data omitted'),
+      })),
+      (signature) => `${signature.signatureType}|${signature.signerRoleOrType}|${signature.signatureDatetime}`,
+    ),
     observedFields: readRecordList(snapshot, 'observed_fields').map((field) => ({
       fieldPath: readString(field, 'field_path'),
       valueType: readString(field, 'value_type'),
@@ -119,6 +139,28 @@ function mapManagerReview(record: JsonRecord, actionFallback = 'comment', status
     actorUsername: readString(record, 'actor_username', 'unknown'),
     actorRole: readString(record, 'actor_role'),
     createdAt: readString(record, 'created_at'),
+  }
+}
+
+function managerReviewIdentity(review: ReturnType<typeof mapManagerReview>): string {
+  return `${review.criterionId}|${review.action}|${review.createdAt}|${review.actorUsername}`
+}
+
+function mapPlanHistoryItem(record: JsonRecord) {
+  return {
+    treatmentPlanId: readString(record, 'plan_id', readString(record, 'id')),
+    planDate: readString(record, 'plan_date', readString(record, 'startDate')),
+    createdDate: readString(record, 'created_date', readString(record, 'createdDate')),
+    lastModified: readString(record, 'last_modified', readString(record, 'lastModified')),
+  }
+}
+
+function mapTreatmentReview(record: JsonRecord) {
+  return {
+    reviewId: readString(record, 'id', readString(record, 'review_id')),
+    reviewDate: readString(record, 'review_date', readString(record, 'createdDated', readString(record, 'createdDate'))),
+    signatureDate: readString(record, 'signature_date', readString(record, 'creatorSignatureDate')),
+    status: readString(record, 'status', 'Recorded'),
   }
 }
 
@@ -155,24 +197,38 @@ function mapProblem(record: JsonRecord) {
   return {
     problemNumber: readString(record, 'problem_number'),
     description: readString(record, 'problem_description'),
-    diagnoses: readRecordList(record, 'diagnoses').map((diagnosis) =>
+    diagnoses: uniqueStrings(readRecordList(record, 'diagnoses').map((diagnosis) =>
       [readString(diagnosis, 'icd10_code'), readString(diagnosis, 'diagnosis_description')].filter(Boolean).join(' '),
-    ),
-    behavioralDefinitions: readRecordList(record, 'behavioral_definitions').map((definition) =>
+    )),
+    behavioralDefinitions: uniqueStrings(readRecordList(record, 'behavioral_definitions').map((definition) =>
       readString(definition, 'behavioral_definition', readString(definition, 'description')),
-    ),
-    goals: readRecordList(record, 'goals').map((goal) => ({
+    )),
+    goals: uniqueBy(readRecordList(record, 'goals').map((goal) => ({
       goalNumber: readString(goal, 'goal_number'),
       description: readString(goal, 'goal_description'),
-      objectives: readRecordList(goal, 'objectives').map((objective) => ({
+      objectives: uniqueBy(readRecordList(goal, 'objectives').map((objective) => ({
         objectiveNumber: readString(objective, 'objective_number'),
         description: readString(objective, 'objective_description'),
-        interventions: readRecordList(objective, 'interventions').map((intervention) =>
+        interventions: uniqueStrings(readRecordList(objective, 'interventions').map((intervention) =>
           readString(intervention, 'intervention_description'),
-        ),
-      })),
-    })),
+        )),
+      })), (objective) => `${objective.objectiveNumber}|${objective.description}`),
+    })), (goal) => `${goal.goalNumber}|${goal.description}`),
   }
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return [...new Set(values.filter(Boolean))]
+}
+
+function uniqueBy<T>(values: readonly T[], identity: (value: T) => string): readonly T[] {
+  const seen = new Set<string>()
+  return values.filter((value) => {
+    const key = identity(value)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function toSeverity(value: string): 'info' | 'medium' | 'high' {

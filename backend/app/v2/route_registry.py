@@ -75,6 +75,7 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/treatment-plans"),
             ("GET", "/api/v2/treatment-plans/{patient_id}"),
             ("GET", "/api/v2/treatment-plans/{patient_id}/{treatment_plan_id}"),
+            ("GET", "/api/v2/patients/{patient_id}"),
             ("GET", "/api/v2/patient-roster"),
             ("GET", "/api/v2/treatment-plan-roster"),
         }

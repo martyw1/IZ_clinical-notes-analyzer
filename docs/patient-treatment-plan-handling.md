@@ -14,7 +14,7 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 - The V2 sync imports every attributable treatment plan in the bounded global collection across all patient lifecycle states. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}?source_mode=...` loads the selected plan without collapsing multiple plans for one patient. Patient, plan, roster, evaluation, and UI selection identities include the source system so matching manual and Alleva IDs cannot overwrite or display each other's detail.
 - A changed record with the same source treatment-plan ID creates an encrypted immutable successor version and replaces the visible current plan. An identical replay creates no duplicate version.
 - The completion audit records created, updated, and unchanged counts plus the exact `updated_treatment_plan_ids`; clinical narrative and patient names remain excluded from logs.
-- `Patient Roster` lists authorized patient IDs, plan IDs, lifecycle/LOC/source metadata, and plan status without patient-name fields.
+- `Patient Roster` lists authorized MRNs, full names, lifecycle/LOC/source metadata, and every linked treatment plan. Names remain excluded from logs and audit detail.
 - Administrators and office managers can export the authorized current treatment-plan list and statuses as formula-safe CSV through `GET /api/v2/exports/treatment-plans.csv`.
 - The published Alleva v1 patient/treatment-plan mapping is now an automatic internal contract. The API and sync enable switches, encrypted credential requirement, read-only boundary, and unvalidated LOC-change window remain in force.
 
@@ -26,6 +26,17 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 - Treatment Plans Roster lists each locally synchronized Alleva plan with MRN, last-updated time, the prior plan ID, and the initial plan ID/date. Selecting an ID opens the same full Treatment Plan Detail surface.
 - The operational pull reads the complete bounded global `/treatment-plans` collection and maps every plan to `/clients.mrn` through its validated `/clients.id` relationship. Older plans and plans for inactive, discharged, or deleted clients are not discarded.
 - API configuration, gated Alleva pull controls, encrypted persistence, role filtering, source-mode isolation, and minimum-necessary audit logging are unchanged. The live-sync authorization and unvalidated LOC-change-window gates remain in force.
+- Windows desktop launch disables Uvicorn's raw request-path access log because patient and plan detail routes contain restricted identifiers. Metadata-only forensic audit events remain enabled.
+
+### 2026-08-11 complete patient and plan workflow
+
+- Navigation now begins with Status Dashboard, Patient Roster, Patient Record Detail, Treatment Plan Detail, and Treatment Plans Roster. Patient Roster is the normal starting point after login.
+- Every `/clients` record with a nonblank `patient.mrn` is retained as a patient, including patients with no treatment plan. The complete source client object is versioned, encrypted at rest, and decrypted only after patient-read authorization.
+- Authorized rosters and detail views display the full patient name derived from the encrypted client snapshot. Names are never used for identity matching and never enter forensic audit details.
+- Patient Record Detail renders the selected patient's complete source record in readable semantic sections and lists all linked treatment plans newest-first by the plan's source-updated timestamp.
+- Treatment Plans Roster preserves every valid global plan ID. Plans with a validated `/clients.id` relationship display the corresponding `/clients.mrn` and link to Patient Record Detail; plans without a resolvable MRN remain available as explicitly unlinked Treatment Plan Detail records.
+- Treatment Plan Detail composes the selected plan's identity, source dates, lineage, clinical hierarchy, diagnoses, behavioral definitions, goals, objectives, interventions, signatures, reviews, checklist evidence, warnings, source archive, and raw diagnostics into one document-like view.
+- Source-updated timestamps are preserved exactly. Valid values sort by their UTC instant, deterministic ties use plan ID, and missing or invalid values sort last; import, access, and capture times are not substituted.
 
 ## Purpose
 
@@ -97,7 +108,7 @@ The alias list below applies only to historical/local-sync readiness paths:
 
 Name-only joins are disabled by default and are for validation only when explicitly enabled. Ambiguous ID or name matches remain unmapped instead of guessed.
 
-Patient-name import/display is also disabled by default. When disabled, Alleva-sourced clients store a generated `no-name-found_YYYY-MM-DD_HHMMSS` display label even if `/clients` returns a name. Saving App settings with name import/display off redacts existing Alleva-sourced treatment-plan display names again.
+The V2 MRN workflow derives authorized full-name display only from the latest encrypted patient source snapshot. Names are not stored in the `patients` identity row, are never used to join records, and are omitted from audit and diagnostic output.
 
 Treatment-plan element values are stored only after direct-identifier redaction and patient identifier fields are omitted before content snapshot storage. Detail capture stores counts, structured item kinds/labels, source paths, redacted text values, text-present flags, redacted text hashes, and non-name metadata.
 

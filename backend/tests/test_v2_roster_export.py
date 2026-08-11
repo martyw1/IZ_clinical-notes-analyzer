@@ -9,7 +9,7 @@ from test_v2_evaluation_persistence import PRIVACY_CANARY, _aggregate
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 
 
-def test_patient_roster_is_scoped_and_contains_no_patient_name_fields(tmp_path, monkeypatch) -> None:
+def test_patient_roster_is_scoped_and_uses_empty_name_when_no_patient_snapshot_exists(tmp_path, monkeypatch) -> None:
     # Given: one patient with a current plan and one reconciled patient without a plan.
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -32,7 +32,7 @@ def test_patient_roster_is_scoped_and_contains_no_patient_name_fields(tmp_path, 
     # When: an authorized administrator opens the roster.
     response = client.get("/api/v2/patient-roster", headers=headers)
 
-    # Then: both authorized IDs appear, including the no-plan patient, with no name property or canary.
+    # Then: both authorized IDs appear, including the no-plan patient, with an empty name fallback and no canary.
     assert response.status_code == 200
     items = response.json()["items"]
     assert {item["mrn"] for item in items} == {"roster-840", "roster-841"}
@@ -40,7 +40,7 @@ def test_patient_roster_is_scoped_and_contains_no_patient_name_fields(tmp_path, 
     unplanned = next(item for item in items if item["mrn"] == "roster-841")
     assert planned["treatment_plans"]
     assert unplanned["treatment_plans"] == []
-    assert all("name" not in key for item in items for key in item)
+    assert all(item["full_name"] == "" for item in items)
     assert PRIVACY_CANARY not in response.text
 
 

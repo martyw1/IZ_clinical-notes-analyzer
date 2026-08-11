@@ -16,40 +16,45 @@ export function RawFieldExplorer({ plan }: RawFieldExplorerProps) {
   }, [plan.observedFields, query])
 
   return (
-    <section className='panel table-panel'>
-      <div className='section-heading'>
-        <div>
+    <section className='panel table-panel raw-field-panel'>
+      <details>
+        <summary>
+          <span>
           <p className='eyebrow'>Bounded diagnostics</p>
-          <h2>Raw Field Explorer</h2>
-        </div>
-        <label>
+          <strong>Raw Field Explorer</strong>
+          </span>
+          <span className='muted'>{plan.observedFields.length} source paths</span>
+        </summary>
+        <div className='raw-field-content'>
+          <label>
           Search fields
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder='Search field path' />
-        </label>
-      </div>
-      <table className='raw-field-table'>
-        <thead>
-          <tr>
-            <th>Field path</th>
-            <th>Type</th>
-            <th>State</th>
-            <th>Safe preview</th>
-            <th>Checklist</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fields.map((field) => (
-            <tr key={field.fieldPath}>
-              <td data-label='Field path'>{field.fieldPath}</td>
-              <td data-label='Type'>{field.valueType}</td>
-              <td data-label='State'>{field.state}</td>
-              <td data-label='Safe preview'>{field.sampleRedactedValue}</td>
-              <td data-label='Checklist'>{field.usedByChecklist ? 'Used' : 'Unused'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className='muted'>Default display is capped at 100 paths. Long values are truncated to safe previews.</p>
+          </label>
+          <table className='raw-field-table'>
+            <thead>
+              <tr>
+                <th>Field path</th>
+                <th>Type</th>
+                <th>State</th>
+                <th>Safe preview</th>
+                <th>Checklist</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fields.map((field) => (
+                <tr key={field.fieldPath}>
+                  <td data-label='Field path'>{field.fieldPath}</td>
+                  <td data-label='Type'>{field.valueType}</td>
+                  <td data-label='State'>{field.state}</td>
+                  <td data-label='Safe preview'>{field.sampleRedactedValue}</td>
+                  <td data-label='Checklist'>{field.usedByChecklist ? 'Used' : 'Unused'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className='muted'>Default display is capped at 100 paths. Long values are truncated to safe previews.</p>
+        </div>
+      </details>
     </section>
   )
 }

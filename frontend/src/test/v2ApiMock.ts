@@ -16,9 +16,9 @@ type FetchState = {
   readonly manualUploadFails?: boolean
 }
 
-export const adminNavigation = ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
+export const adminNavigation = ['Status Dashboard', 'Patient Roster', 'Patient Record Detail', 'Treatment Plan Detail', 'Treatment Plans Roster', 'Manual Upload', 'API Testing Harness', 'Users', 'Forensic Logs', 'Settings', 'Help'] as const
 
-const counselorNavigation = ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'Corrections', 'Help'] as const
+const counselorNavigation = ['Status Dashboard', 'Patient Roster', 'Patient Record Detail', 'Treatment Plan Detail', 'Treatment Plans Roster', 'Manual Upload', 'Corrections', 'Help'] as const
 
 export function setupFetch(state: FetchState = { role: 'admin' }) {
   const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let apiConfigured = false; let passwordResetRequired = state.mustResetPassword ?? false; let harnessPolls = 0
@@ -37,6 +37,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/v2/treatment-plans') return jsonResponse(treatmentPlansPayload(state.multiPlan))
     if (path === '/api/v2/patient-roster') return jsonResponse(patientRosterPayload(state.multiPlan))
     if (path === '/api/v2/treatment-plan-roster') return jsonResponse(treatmentPlanRosterPayload(state.multiPlan))
+    if (path === '/api/v2/patients/812') return jsonResponse(patientRecordDetailPayload(state.multiPlan))
     if (path === '/api/v2/exports/treatment-plans.csv') return treatmentPlanExportResponse()
     if (path === '/api/v2/treatment-plans/812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812')))
     if (path === '/api/v2/treatment-plans/812/plan-812') return jsonResponse(treatmentPlanDetailPayload(deletedSourceFileIds.has('source-file-812'), 'plan-812'))
@@ -213,6 +214,7 @@ function patientRosterPayload(multiPlan = false) {
   return {
     items: [{
       mrn: '812',
+      full_name: 'Alex Example',
       source_mode: 'alleva_rest_api',
       lifecycle_state: 'active',
       current_level_of_care: 'PHP',
@@ -231,11 +233,11 @@ function treatmentPlanRosterPayload(multiPlan = false) {
   return {
     items: [
       ...(multiPlan ? [{
-        treatment_plan_id: 'plan-813', mrn: '812', last_updated: '2026-07-13T17:45:00Z',
+        treatment_plan_id: 'plan-813', mrn: '812', patient_key: '812', linked_to_mrn: true, full_name: 'Alex Example', last_updated: '2026-07-13T17:45:00Z',
         previous_treatment_plan_id: 'plan-812', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
       }] : []),
       {
-        treatment_plan_id: 'plan-812', mrn: '812', last_updated: '2026-07-12T10:00:00Z',
+        treatment_plan_id: 'plan-812', mrn: '812', patient_key: '812', linked_to_mrn: true, full_name: 'Alex Example', last_updated: '2026-07-12T10:00:00Z',
         previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
       },
     ],
@@ -261,6 +263,7 @@ function treatmentPlanDetailPayload(sourceFileDeleted = false, planId = 'plan-81
   return {
     patient_id: '812',
     patient_display_label: 'MRN 812',
+    patient_full_name: 'Alex Example',
     source_mode: 'alleva_rest_api',
     current_level_of_care: 'PHP',
     admission_date: '2026-06-01',
@@ -412,6 +415,33 @@ function jobPayload(status = 'completed') {
 
 function syncJobPayload(status: string) {
   return { ...jobPayload(), job_id: 'sync-912', job_type: 'approved_treatment_plan_sync', status, records_written: status === 'completed' ? 1 : 0, records_failed: 0, warnings_count: 0 }
+}
+
+function patientRecordDetailPayload(multiPlan = false) {
+  return {
+    mrn: '812',
+    full_name: 'Alex Example',
+    source_mode: 'alleva_rest_api',
+    lifecycle_state: 'active',
+    current_level_of_care: 'PHP',
+    source_last_updated: '2026-07-12T10:00:00Z',
+    first_seen_at: '2026-07-08T10:00:00Z',
+    last_seen_at: '2026-07-12T10:00:00Z',
+    reconciled_at: '2026-07-12T10:01:00Z',
+    treatment_plans: [
+      ...(multiPlan ? [{ treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
+      { treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
+    ],
+    patient_record: {
+      id: 'source-812',
+      mrn: '812',
+      firstName: 'Alex',
+      lastName: 'Example',
+      email: 'alex.synthetic@example.invalid',
+      levelOfCare: 'PHP',
+      patientPreferences: { transportationNotes: 'Weekly transportation support' },
+    },
+  }
 }
 
 function rosterJobPayload(status: string) {

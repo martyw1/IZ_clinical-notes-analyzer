@@ -26,12 +26,13 @@ describe('Treatment Plan Detail selection', () => {
       <TreatmentPlanDetailPage
         token='token'
         user={viewer}
-        selection={{ mrn: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
       />,
     )
 
     expect(await screen.findByRole('heading', { name: 'Treatment Plan ID plan-813' })).toBeInTheDocument()
+    expect(screen.getByText('Alex Example')).toBeInTheDocument()
     expect(screen.getByText('MRN MRN-812')).toBeInTheDocument()
     expect(screen.getByText(/Structured clinical rationale from every mapped treatment-plan piece/i)).toBeInTheDocument()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -54,7 +55,7 @@ describe('Treatment Plan Detail selection', () => {
       <TreatmentPlanDetailPage
         token='token'
         user={viewer}
-        selection={{ mrn: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
       />,
     )
@@ -75,6 +76,7 @@ function detailPayload() {
   return {
     patient_id: 'MRN-812',
     patient_display_label: 'MRN MRN-812',
+    patient_full_name: 'Alex Example',
     source_mode: 'alleva_rest_api',
     current_level_of_care: 'PHP',
     admission_date: '2026-06-01',

@@ -91,6 +91,12 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
         required_columns["app_settings"].update(name for name, _definition in APP_SETTING_PROTOCOL_EXTENSIONS)
     if expected_version >= 8:
         required_columns["patients"].add("source_patient_id")
+    if expected_version >= 9:
+        required_columns["patient_source_snapshots"] = {
+            "id", "patient_id", "source_system", "source_record_id", "version_ordinal",
+            "normalized_snapshot_encrypted", "content_sha256", "source_last_updated", "captured_at",
+            "supersedes_snapshot_id", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256",
+        }
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",

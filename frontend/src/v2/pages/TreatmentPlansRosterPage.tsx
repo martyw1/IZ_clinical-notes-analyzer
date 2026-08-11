@@ -3,7 +3,7 @@ import { getTreatmentPlanRoster } from '../api/client'
 import { downloadTreatmentPlanListExport } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
 import { getApiConfiguration } from '../api/settingsClient'
-import type { ApiConfiguration, TreatmentPlanRosterData, TreatmentPlanSelection, UserProfile } from '../api/types'
+import type { ApiConfiguration, PatientSelection, TreatmentPlanRosterData, TreatmentPlanSelection, UserProfile } from '../api/types'
 import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
 import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
 
@@ -11,6 +11,7 @@ type TreatmentPlansRosterPageProps = {
   readonly token: string
   readonly user: UserProfile
   readonly onNavigate: (view: string) => void
+  readonly onSelectPatient: (selection: PatientSelection) => void
   readonly onSelectTreatmentPlan: (selection: TreatmentPlanSelection) => void
 }
 
@@ -24,6 +25,7 @@ export function TreatmentPlansRosterPage({
   token,
   user,
   onNavigate,
+  onSelectPatient,
   onSelectTreatmentPlan,
 }: TreatmentPlansRosterPageProps) {
   const [roster, setRoster] = useState<TreatmentPlanRosterData | null>(null)
@@ -36,9 +38,11 @@ export function TreatmentPlansRosterPage({
     return (roster?.items ?? []).filter((item) => (
       !normalized
       || item.mrn.toLowerCase().includes(normalized)
+      || item.fullName.toLowerCase().includes(normalized)
       || item.treatmentPlanId.toLowerCase().includes(normalized)
       || item.previousTreatmentPlanId.toLowerCase().includes(normalized)
       || item.initialTreatmentPlanId.toLowerCase().includes(normalized)
+      || (!item.linkedToMrn && 'not linked to an mrn'.includes(normalized))
     ))
   }, [query, roster?.items])
 
@@ -101,8 +105,8 @@ export function TreatmentPlansRosterPage({
           </div>
         </div>
         <label>
-          Search MRN or treatment plan ID
-          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='MRN or treatment plan ID' />
+          Search MRN, patient name, or treatment plan ID
+          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='MRN, patient name, or treatment plan ID' />
         </label>
         <table>
           <thead>
@@ -116,14 +120,17 @@ export function TreatmentPlansRosterPage({
           </thead>
           <tbody>
             {visibleItems.map((item) => (
-              <tr key={`${item.mrn}:${item.treatmentPlanId}`} role='row'>
+              <tr key={`${item.patientKey}:${item.treatmentPlanId}`} role='row'>
                 <td role='cell' data-label='Treatment Plan ID' headers='plan-roster-id'>
                   <button
                     type='button'
                     className='link-button'
-                    aria-label={`Open treatment plan ${item.treatmentPlanId} for MRN ${item.mrn}`}
+                    aria-label={item.linkedToMrn
+                      ? `Open treatment plan ${item.treatmentPlanId} for MRN ${item.mrn}`
+                      : `Open treatment plan ${item.treatmentPlanId}, not linked to an MRN`}
                     onClick={() => onSelectTreatmentPlan({
                       mrn: item.mrn,
+                      patientKey: item.patientKey,
                       treatmentPlanId: item.treatmentPlanId,
                       sourceMode: 'alleva_rest_api',
                     })}
@@ -131,7 +138,21 @@ export function TreatmentPlansRosterPage({
                     {item.treatmentPlanId}
                   </button>
                 </td>
-                <td role='cell' data-label='MRN' headers='plan-roster-mrn'><strong>{item.mrn}</strong></td>
+                <td role='cell' data-label='MRN' headers='plan-roster-mrn'>
+                  {item.linkedToMrn ? (
+                    <>
+                      <button
+                        type='button'
+                        className='link-button patient-record-link'
+                        aria-label={`Open patient record for ${item.fullName || 'Name unavailable'}, MRN ${item.mrn}`}
+                        onClick={() => onSelectPatient({ mrn: item.mrn, patientKey: item.patientKey, sourceMode: 'alleva_rest_api' })}
+                      >
+                        {item.mrn}
+                      </button>
+                      <span className='patient-name-secondary'>{item.fullName || 'Name unavailable'}</span>
+                    </>
+                  ) : <strong>Not linked to an MRN</strong>}
+                </td>
                 <td role='cell' data-label='Last Updated' headers='plan-roster-last-updated'><time dateTime={item.lastUpdated}>{formatDateTime24Hour(item.lastUpdated)}</time></td>
                 <td role='cell' data-label='Previous Treatment Plan ID' headers='plan-roster-previous-id'>{item.previousTreatmentPlanId || 'Initial plan'}</td>
                 <td role='cell' data-label='Initial Treatment Plan' headers='plan-roster-initial'>{`(#${item.initialTreatmentPlanId}) ${item.initialTreatmentPlanDate}`}</td>

@@ -124,17 +124,17 @@ All spacing derives from a base of 4px.
 
 ### Roster Table
 
-- **Structure**: MRN-first rows, compact provenance fields, and one primary treatment-plan action per record.
-- **Variants**: Patient Roster with a plan selector; Treatment Plans Roster with lineage columns.
+- **Structure**: MRN-first rows with authorized full name, compact provenance fields, and one primary treatment-plan action per record.
+- **Variants**: Patient Roster with an MRN patient-detail action and plan selector; Treatment Plans Roster with linked MRN patient-detail actions, plan actions, lineage columns, and noninteractive unlinked-plan identity.
 - **Spacing**: compact table cells with a minimum readable selector width; stacked labeled cells below 900px.
 - **States**: loading, empty, filtered-empty, no-plan, selectable, refresh-in-progress.
-- **Accessibility**: native select controls use MRN-specific labels; plan buttons announce both plan ID and MRN; 24-hour timestamps include an explicit timezone.
+- **Accessibility**: MRN buttons announce the full name and MRN; native select controls use MRN-specific labels; plan buttons announce both plan ID and MRN; 24-hour timestamps include an explicit timezone.
 - **Motion**: none.
 
 ### Detail Panel
 
-- **Structure**: selected MRN and plan header, date-evidence timeline, source comparison, checklist findings, override notes, audit history.
-- **Variants**: selected client, no-client-selected instructional empty state.
+- **Structure**: selected patient identity and full name followed by document-like semantic sections with source paths and no repeated raw field dump.
+- **Variants**: Patient Record Detail with every source field and treatment-plan selector; Treatment Plan Detail with identity/provenance, date evidence, clinical hierarchy, review/signature history, checklist evidence, warnings, source archive, and raw diagnostics; no-selection instructional empty state.
 - **Spacing**: `--space-4` sections with document-like dividers.
 - **States**: empty, loading, selected, evidence modal.
 - **Accessibility**: section labels describe evidence purpose, not visual styling.

@@ -239,6 +239,6 @@ def test_builtin_mapping_replaces_valid_custom_contract_and_refreshes_changed_li
     assert changed.status_code == 200
     assert client.post("/api/v2/alleva-sync/run", headers=headers).status_code == 409
     refreshed = captured_contracts[-1].payload
-    assert refreshed.pagination.maximum_page_size == 25
+    assert refreshed.pagination.maximum_page_size == 75
     assert refreshed.pagination.maximum_records == 75
     assert refreshed.rate_limit.maximum_requests_per_minute == 900

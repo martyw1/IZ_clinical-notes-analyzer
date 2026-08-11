@@ -19,7 +19,7 @@ const adminUser: UserProfile = {
 describe('Patient roster pull', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('pulls the active roster through the roster job and refreshes visible data', async () => {
+  it('pulls the complete roster through the roster job and refreshes visible data', async () => {
     // Given: an authorized Alleva profile and an initially empty local roster.
     let rosterReads = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -36,10 +36,10 @@ describe('Patient roster pull', () => {
       return response({ detail: `Unexpected ${method} ${path}` }, 404)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<PatientRosterPage token='token' user={adminUser} onNavigate={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
+    render(<PatientRosterPage token='token' user={adminUser} onNavigate={vi.fn()} onSelectPatient={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
 
-    // When: the administrator pulls the active patient roster.
-    fireEvent.click(await screen.findByRole('button', { name: 'Pull active patient roster' }))
+    // When: the administrator pulls the complete patient roster.
+    fireEvent.click(await screen.findByRole('button', { name: 'Pull patient roster' }))
 
     // Then: the roster-specific endpoint runs, warning completion is visible, and the roster refreshes.
     expect(await screen.findByText('client-812')).toBeInTheDocument()
@@ -63,7 +63,7 @@ function configuredProfile() {
 
 function rosterItem() {
   return {
-    mrn: 'client-812', source_mode: 'alleva_rest_api', lifecycle_state: 'active',
+    mrn: 'client-812', full_name: 'Synthetic Patient', source_mode: 'alleva_rest_api', lifecycle_state: 'active',
     current_level_of_care: 'PHP', treatment_plans: [], first_seen_at: '2026-07-14T10:00:00Z',
     last_seen_at: '2026-07-14T10:01:00Z', reconciled_at: '2026-07-14T10:01:00Z',
   }

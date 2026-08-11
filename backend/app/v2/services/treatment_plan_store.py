@@ -21,6 +21,7 @@ from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
 from app.v2.services.clinical_evidence_store import persist_clinical_evidence
 from app.v2.services.evaluation_store import PlanEvaluationTarget, latest_evaluated_aggregate, persist_plan_evaluation
 from app.v2.services.migrated_treatment_plan import assemble_treatment_plan_aggregate
+from app.v2.services.patient_snapshot_store import latest_patient_source_snapshot
 from app.v2.services.alleva_contracts import SyncImportProvenance
 from app.v2.services.treatment_plan_types import (
     StoredTreatmentPlan,
@@ -64,13 +65,23 @@ def list_treatment_plan_imports(db: Session) -> tuple[StoredTreatmentPlan, ...]:
         for row in rows
     )
     return tuple(
-        stored_plan(
-            latest_evaluated_aggregate(db, aggregate),
-            last_updated=str(row[3]),
-            plan_date=str(row[5] or ""),
-        )
+        _stored_import(db, aggregate, str(row[3]), str(row[5] or ""))
         for row, aggregate in zip(rows, aggregates, strict=True)
         if aggregate is not None
+    )
+
+
+def _stored_import(
+    db: Session,
+    aggregate: TreatmentPlanAggregate,
+    imported_at: str,
+    plan_date: str,
+) -> StoredTreatmentPlan:
+    evaluated = latest_evaluated_aggregate(db, aggregate)
+    return stored_plan(
+        evaluated,
+        last_updated=evaluated.source_last_updated or imported_at,
+        plan_date=plan_date,
     )
 
 
@@ -84,6 +95,8 @@ def save_treatment_plan_aggregate(
     aggregate: TreatmentPlanAggregate,
     actor: User,
     sync_provenance: SyncImportProvenance | None = None,
+    source_patient_id: str | None = None,
+    lifecycle_state: str = "active",
     *,
     commit: bool = True,
 ) -> StoredTreatmentPlan:
@@ -92,6 +105,8 @@ def save_treatment_plan_aggregate(
         aggregate,
         actor,
         sync_provenance=sync_provenance,
+        source_patient_id=source_patient_id,
+        lifecycle_state=lifecycle_state,
         commit=commit,
     ).stored_plan
 
@@ -101,13 +116,18 @@ def save_treatment_plan_aggregate_with_disposition(
     aggregate: TreatmentPlanAggregate,
     actor: User,
     sync_provenance: SyncImportProvenance | None = None,
+    source_patient_id: str | None = None,
+    lifecycle_state: str = "active",
     *,
     commit: bool = True,
 ) -> TreatmentPlanSaveResult:
     now = utc_now().astimezone(timezone.utc).isoformat()
-    aggregate = aggregate.model_copy(update={
-        "patient_display_label": f"MRN {aggregate.patient_id}",
-    })
+    patient_display_label = (
+        aggregate.patient_display_label
+        if aggregate.patient_display_label == "Not linked to an MRN"
+        else f"MRN {aggregate.patient_id}"
+    )
+    aggregate = aggregate.model_copy(update={"patient_display_label": patient_display_label})
     payload_json = aggregate.model_dump_json()
     aggregate = aggregate.model_copy(update={
         "source_last_updated": aggregate.source_last_updated or now,
@@ -121,10 +141,17 @@ def save_treatment_plan_aggregate_with_disposition(
     db.execute(
         text(
             """INSERT OR IGNORE INTO patients(
-                facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at
-            ) VALUES(:facility_id,:client_id,:source_system,'active',:seen_at,:seen_at)"""
+                facility_id,canonical_client_id,source_patient_id,source_system,lifecycle_state,first_seen_at,last_seen_at
+            ) VALUES(:facility_id,:client_id,:source_patient_id,:source_system,:lifecycle_state,:seen_at,:seen_at)"""
         ),
-        {"facility_id": facility_id, "client_id": aggregate.patient_id, "source_system": aggregate.source_mode, "seen_at": now},
+        {
+            "facility_id": facility_id,
+            "client_id": aggregate.patient_id,
+            "source_patient_id": source_patient_id,
+            "source_system": aggregate.source_mode,
+            "lifecycle_state": lifecycle_state,
+            "seen_at": now,
+        },
     )
     patient_id = int(
         db.execute(
@@ -133,6 +160,18 @@ def save_treatment_plan_aggregate_with_disposition(
             ),
             {"facility_id": facility_id, "source_system": aggregate.source_mode, "client_id": aggregate.patient_id},
         ).scalar_one()
+    )
+    db.execute(
+        text(
+            "UPDATE patients SET source_patient_id=COALESCE(source_patient_id,:source_patient_id),"
+            "lifecycle_state=:lifecycle_state,last_seen_at=:seen_at WHERE id=:patient_id"
+        ),
+        {
+            "patient_id": patient_id,
+            "source_patient_id": source_patient_id,
+            "lifecycle_state": lifecycle_state,
+            "seen_at": now,
+        },
     )
     latest = db.execute(
         text(
@@ -176,7 +215,7 @@ def save_treatment_plan_aggregate_with_disposition(
             "source_system": aggregate.source_mode,
             "source_record_id": aggregate.content_snapshot.plan_id,
             "version_ordinal": version_ordinal,
-            "plan_date": aggregate.date_clock_anchor,
+            "plan_date": _source_plan_date(aggregate),
             "signature_date": signature_date(aggregate),
             "admission_date": aggregate.admission_date,
             "next_due": aggregate.date_clock_due_date,
@@ -212,6 +251,15 @@ def save_treatment_plan_aggregate_with_disposition(
     return TreatmentPlanSaveResult(stored_plan(evaluated, last_updated=now), disposition)
 
 
+def _source_plan_date(aggregate: TreatmentPlanAggregate) -> str:
+    for record in reversed(aggregate.treatment_plans):
+        for key in ("plan_date", "startDate", "created_date", "createdDate"):
+            value = record.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return aggregate.date_clock_anchor
+
+
 def treatment_plan_aggregate_for_patient(
     db: Session,
     patient_id: str,
@@ -229,6 +277,9 @@ def treatment_plan_aggregate_for_patient(
     if aggregate is None:
         return None
     aggregate = latest_evaluated_aggregate(db, aggregate)
+    snapshot = latest_patient_source_snapshot(db, patient_id, source_system)
+    if snapshot is not None:
+        aggregate = aggregate.model_copy(update={"patient_full_name": snapshot.full_name})
     source_documents = source_documents_for_patient(db, patient_id)
     persisted_reviews = manager_review_dicts_for_patient(db, patient_id)
     if not persisted_reviews and not source_documents:

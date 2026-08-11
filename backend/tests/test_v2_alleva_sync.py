@@ -46,6 +46,7 @@ class _MockAllevaState:
     peak_plan_requests: list[int] = field(default_factory=lambda: [0])
     plan_request_lock: Lock = field(default_factory=Lock)
     global_plan_collection: bool = True
+    ignore_collection_cursor: bool = False
 
 
 class _MockAllevaHandler(BaseHTTPRequestHandler):
@@ -71,7 +72,12 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
             type(self).state.clients_started.set()
             if type(self).state.block_clients:
                 type(self).state.release_clients.wait(timeout=3)
-            self._respond({"items": type(self).state.client_items})
+            clients = type(self).state.client_items
+            if type(self).state.ignore_collection_cursor:
+                query = parse_qs(urlparse(self.path).query)
+                limit = int(query.get("Limit", [str(len(clients) or 1)])[0])
+                clients = clients[:limit]
+            self._respond({"items": clients})
             return
         if path == "/treatment-plans":
             query = parse_qs(urlparse(self.path).query)
@@ -95,6 +101,8 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
                 if not patient_ids:
                     offset = int(query.get("Cursor", ["0"])[0])
                     limit = int(query.get("Limit", [str(len(plans) or 1)])[0])
+                    if type(self).state.ignore_collection_cursor:
+                        offset = 0
                     plans = plans[offset : offset + limit]
                 self._respond({"items": plans})
             finally:
@@ -117,10 +125,22 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 4 and path_parts[2] == "reviews":
             self._respond({"id": path_parts[3], "reviewDate": "2026-06-15"})
             return
+        plan_item = next(
+            (item for item in type(self).state.plan_items if str(item.get("id", "")) == plan_id),
+            {},
+        )
         problem = type(self).state.detail_problem[0] if plan_id == "plan-912" else f"Synthetic problem for {plan_id}."
         if type(self).state.published_shape:
             detail_id: str | int = int(plan_id) if plan_id.isdigit() else plan_id
-            self._respond({"id": detail_id, "reasonForAdmission": "Synthetic recovery support.", "lastModified": "2026-07-12T12:00:00Z", "problems": [{"description": problem, "behavioralDefinitions": [{"description": "Synthetic behavior."}], "goals": [{"description": "Synthetic goal.", "objectives": [{"description": "Synthetic objective.", "interventions": [{"description": "Synthetic intervention."}]}]}]}]})
+            self._respond({
+                "id": detail_id,
+                "client": plan_item.get("client"),
+                "startDate": plan_item.get("startDate", "2026-07-01T12:00:00Z"),
+                "createdDate": plan_item.get("createdDate", "2026-07-01T12:00:00Z"),
+                "reasonForAdmission": "Synthetic recovery support.",
+                "lastModified": plan_item.get("lastModified", "2026-07-12T12:00:00Z"),
+                "problems": [{"description": problem, "behavioralDefinitions": [{"description": "Synthetic behavior."}], "goals": [{"description": "Synthetic goal.", "objectives": [{"description": "Synthetic objective.", "interventions": [{"description": "Synthetic intervention."}]}]}]}],
+            })
             return
         self._respond({"id": plan_id, "reasonForAdmission": "Synthetic recovery support.", "problems": [{"problemDescription": problem}], "diagnoses": [{"diagnosisDescription": "Synthetic diagnosis.", "icd10Code": "F10.20"}], "goals": [{"goalDescription": "Synthetic goal."}], "objectives": [{"objectiveDescription": "Synthetic objective."}], "interventions": [{"interventionDescription": "Synthetic intervention."}], "staffSignatureDate": "2026-06-02"})
 
@@ -145,6 +165,7 @@ def _mock_alleva_server(
     published_shape: bool = True,
     plan_delay_seconds: float = 0.0,
     global_plan_collection: bool = True,
+    ignore_collection_cursor: bool = False,
 ) -> Iterator[tuple[str, _MockAllevaState]]:
     defaults = _MockAllevaState()
     resolved_clients = client_items or defaults.client_items
@@ -155,6 +176,7 @@ def _mock_alleva_server(
         published_shape=published_shape,
         plan_delay_seconds=plan_delay_seconds,
         global_plan_collection=global_plan_collection,
+        ignore_collection_cursor=ignore_collection_cursor,
     )
 
     class IsolatedMockAllevaHandler(_MockAllevaHandler):
@@ -386,8 +408,8 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert {field["source_endpoint"] for field in detail.json()["content_snapshot"]["observed_fields"]} == {"Alleva REST"}
         assert state.paths == [
             "/token",
-            "/clients?Limit=100&Cursor=0&api-version=1.0",
-            "/treatment-plans?Limit=100&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
+                "/clients?Limit=5000&Cursor=0&api-version=1.0",
+                "/treatment-plans?Limit=5000&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
             "/treatment-plans/plan-912?api-version=1.0",
             "/treatment-plans/plan-912/diagnosis?api-version=1.0",
         ]
@@ -734,7 +756,7 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
             sleep(0.05)
 
         assert synced.json()["status"] == "cancelled"
-        assert state.paths == ["/token", "/clients?Limit=100&Cursor=0&api-version=1.0"]
+        assert state.paths == ["/token", "/clients?Limit=5000&Cursor=0&api-version=1.0"]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert any(item["action"] == "alleva.treatment_plan_sync.cancelled" for item in audit)
@@ -879,7 +901,7 @@ def test_interrupted_sync_can_resume_as_an_idempotent_safe_replay_bound_to_origi
     resumed = client.post(f"/api/v2/alleva-sync/jobs/{original_job_id}/resume", headers=headers)
 
     # Then: the retry has its own durable job record, exact original contract, and safe replay provenance.
-    assert resumed.status_code == 202
+    assert resumed.status_code == 202, resumed.text
     resumed_job_id = resumed.json()["job_id"]
     assert resumed_job_id != original_job_id
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"

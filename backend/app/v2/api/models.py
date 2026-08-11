@@ -130,6 +130,7 @@ class PatientRosterTreatmentPlanOut(V2Model):
 
 class PatientRosterItemOut(V2Model):
     mrn: str
+    full_name: str
     source_mode: str
     lifecycle_state: str
     current_level_of_care: str
@@ -146,6 +147,9 @@ class PatientRosterOut(V2Model):
 class TreatmentPlanRosterItemOut(V2Model):
     treatment_plan_id: str
     mrn: str
+    patient_key: str
+    linked_to_mrn: bool
+    full_name: str
     last_updated: str
     previous_treatment_plan_id: str
     initial_treatment_plan_id: str
@@ -154,6 +158,20 @@ class TreatmentPlanRosterItemOut(V2Model):
 
 class TreatmentPlanRosterOut(V2Model):
     items: tuple[TreatmentPlanRosterItemOut, ...]
+
+
+class PatientRecordDetailOut(V2Model):
+    mrn: str
+    full_name: str
+    source_mode: str
+    lifecycle_state: str
+    current_level_of_care: str
+    source_last_updated: str
+    first_seen_at: str
+    last_seen_at: str
+    reconciled_at: str
+    treatment_plans: tuple[PatientRosterTreatmentPlanOut, ...]
+    patient_record: dict[str, JsonValue]
 
 
 class AppSettingsUpdate(V2Model):
@@ -245,7 +263,7 @@ class AllevaPaginationContract(V2Model):
     offset_parameter: str = Field(min_length=1, max_length=80)
     maximum_page_size: int = Field(ge=1, le=5000)
     maximum_records: int = Field(ge=1, le=5000)
-    maximum_response_bytes: int = Field(ge=1, le=10_000_000)
+    maximum_response_bytes: int = Field(ge=1, le=16 * 1024 * 1024)
 
 
 class AllevaRateLimitContract(V2Model):

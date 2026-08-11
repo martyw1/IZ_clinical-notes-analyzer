@@ -162,6 +162,7 @@ class SourceDocumentRef(V2Model):
 class TreatmentPlanAggregate(V2Model):
     patient_id: str
     patient_display_label: str
+    patient_full_name: str = ""
     source_mode: SourceMode
     source_last_updated: str = ""
     active_status: str

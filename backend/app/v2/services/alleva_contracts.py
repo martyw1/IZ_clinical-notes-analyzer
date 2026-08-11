@@ -17,7 +17,8 @@ from app.v2.models import AppSetting
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 REQUIRED_ENDPOINTS: Final = frozenset(("clients", "treatment_plans", "treatment_plan_detail", "diagnoses", "reviews", "review_detail"))
-BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-08-10-mrn-global-plans"
+BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-08-11-unpaged-complete-mrn-plans"
+BUILT_IN_MAX_RESPONSE_BYTES: Final = 16 * 1024 * 1024
 DEFAULT_ALLEVA_SCOPE: Final = "https://authorization.allevasoft.com/api:read"
 _BUILTIN_CONTRACT_LOCK: Final = Lock()
 
@@ -118,9 +119,12 @@ def _builtin_contract_payload(
             "pagination": {
                 "limit_parameter": "Limit",
                 "offset_parameter": "Cursor",
-                "maximum_page_size": profile.api_pagination_limit,
+                "maximum_page_size": max(
+                    profile.api_pagination_limit,
+                    profile.alleva_treatment_plan_sync_limit,
+                ),
                 "maximum_records": profile.alleva_treatment_plan_sync_limit,
-                "maximum_response_bytes": 1_048_576,
+                "maximum_response_bytes": BUILT_IN_MAX_RESPONSE_BYTES,
             },
             "rate_limit": {
                 "maximum_requests_per_minute": profile.api_requests_per_minute,
@@ -239,8 +243,10 @@ def contract_matches_profile(contract: ApprovedAllevaContract, profile: AppSetti
         and contract.contract_version.startswith(
             f"{BUILT_IN_MAPPING_VERSION}-{_profile_fingerprint(profile)}-"
         )
-        and payload.pagination.maximum_page_size == profile.api_pagination_limit
+        and payload.pagination.maximum_page_size
+        == max(profile.api_pagination_limit, profile.alleva_treatment_plan_sync_limit)
         and payload.pagination.maximum_records == profile.alleva_treatment_plan_sync_limit
+        and payload.pagination.maximum_response_bytes == BUILT_IN_MAX_RESPONSE_BYTES
         and payload.rate_limit.maximum_requests_per_minute == profile.api_requests_per_minute
     )
 

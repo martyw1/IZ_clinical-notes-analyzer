@@ -5,6 +5,7 @@ import { DataQualityWarningsPanel } from './DataQualityWarningsPanel'
 import { RawFieldExplorer } from './RawFieldExplorer'
 import { StatusBadge } from './StatusBadge'
 import { SourceFileArchiveControls } from './SourceFileArchiveControls'
+import { formatDateTime24Hour } from './treatmentPlanFormatting'
 import type { CriterionResult, ManagerReview, TreatmentPlanAggregate } from '../types/treatmentPlan'
 
 type TreatmentPlanDetailViewerProps = {
@@ -23,6 +24,18 @@ function messageForError(error: unknown): string {
 
 function managerReviewKey(review: ManagerReview, index: number): string {
   return `${review.criterionId}-${review.action}-${review.createdAt}-${index}`
+}
+
+function displayDate(value: string): string {
+  return value && value !== 'Unknown' ? formatDateTime24Hour(value) : 'Unknown'
+}
+
+function diagnosisParts(value: string): { readonly code: string; readonly description: string } {
+  const [possibleCode, ...description] = value.split(' ')
+  if (/^[A-Z][0-9]/i.test(possibleCode) && description.length) {
+    return { code: possibleCode, description: description.join(' ') }
+  }
+  return { code: '', description: value }
 }
 
 export function TreatmentPlanDetailViewer({
@@ -104,72 +117,121 @@ export function TreatmentPlanDetailViewer({
     }
   }
 
+  const selectedPlanHistory = plan.planHistory[0]
+
   return (
-    <div className='detail-grid'>
-      <section className='panel'>
+    <div className='detail-grid treatment-plan-document'>
+      <section className='panel detail-identity-panel'>
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Selected Treatment Plan Detail</p>
             <h2>Treatment Plan ID {plan.treatmentPlanId}</h2>
-            <p className='muted'>MRN {plan.patientId}</p>
+            {plan.patientFullName && <p className='patient-full-name'>{plan.patientFullName}</p>}
+            <p className='muted'>{plan.patientDisplayLabel}</p>
           </div>
           <StatusBadge status={plan.status} />
         </div>
-        <div className='summary-grid'>
-          <span>Current LOC: {plan.currentLevelOfCare}</span>
-          <span>Admission: <time dateTime={plan.admissionDate}>{plan.admissionDate}</time></span>
-          <span>Next due: <time dateTime={plan.dueDate}>{plan.dueDate}</time></span>
-          <span>Source due: {plan.sourceDueDate}</span>
-          <span className='summary-grid__item--wrappable'>LOC-change clock: {plan.locChangeDueDate}</span>
-          <span>Evaluated: {plan.evaluationDate} ({plan.facilityTimezone})</span>
-          <span>Checklist/rules: {plan.checklistVersion} / {plan.rulesVersion}</span>
-          <span>Source: {plan.sourceMode}</span>
-        </div>
+        <dl className='plan-fact-grid'>
+          <div><dt>Level of care</dt><dd>{plan.currentLevelOfCare}</dd></div>
+          <div><dt>Source</dt><dd>{plan.sourceMode}</dd></div>
+          <div><dt>Last updated</dt><dd>{displayDate(plan.lastUpdated)}</dd></div>
+          <div><dt>Evaluation</dt><dd>{displayDate(plan.evaluationDate)} · {plan.facilityTimezone}</dd></div>
+        </dl>
         <label>
-          Search treatment-plan content
+          Search checklist evidence
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder='Search criteria and evidence' />
         </label>
       </section>
 
-      <section className='panel content-panel'>
-        <h2>Clinical Content</h2>
-        <p><strong>Reason for admission:</strong> {plan.reasonForAdmission}</p>
-        <p><strong>Initial client needs:</strong> {plan.initialClientNeeds}</p>
-        <p><strong>Family education needs:</strong> {plan.familyEducationNeeds}</p>
-        {plan.problems.map((problem) => (
-          <details key={problem.problemNumber} open>
-            <summary>Problem {problem.problemNumber}: {problem.description}</summary>
-            <h3>Diagnoses</h3>
-            <ul>{problem.diagnoses.map((diagnosis) => <li key={diagnosis}>{diagnosis}</li>)}</ul>
-            <h3>Behavioral Definitions</h3>
-            <ul>{problem.behavioralDefinitions.map((definition) => <li key={definition}>{definition}</li>)}</ul>
-            <h3>Goals</h3>
-            {problem.goals.map((goal) => (
-              <details key={goal.goalNumber} open>
-                <summary>Goal {goal.goalNumber}: {goal.description}</summary>
-                {goal.objectives.map((objective) => (
-                  <details key={objective.objectiveNumber} open>
-                    <summary>Objective {objective.objectiveNumber}: {objective.description}</summary>
-                    <h4>Interventions</h4>
-                    <ul>{objective.interventions.map((intervention) => <li key={intervention}>{intervention}</li>)}</ul>
-                  </details>
-                ))}
-              </details>
-            ))}
-          </details>
-        ))}
+      <section className='panel plan-timeline-panel'>
+        <p className='eyebrow'>Dates and source comparison</p>
+        <h2>Plan timeline</h2>
+        <ol className='plan-timeline'>
+          <li><span>Admission</span><time dateTime={plan.admissionDate}>{displayDate(plan.admissionDate)}</time></li>
+          <li><span>Plan created</span><time dateTime={selectedPlanHistory?.planDate || selectedPlanHistory?.createdDate}>{displayDate(selectedPlanHistory?.planDate || selectedPlanHistory?.createdDate || 'Unknown')}</time></li>
+          <li><span>Source last updated</span><time dateTime={plan.lastUpdated}>{displayDate(plan.lastUpdated)}</time></li>
+        </ol>
+        <dl className='source-comparison-grid'>
+          <div><dt>Source due date</dt><dd>{displayDate(plan.sourceDueDate)}</dd></div>
+          <div><dt>Computed due date</dt><dd>{displayDate(plan.dueDate)}</dd></div>
+          <div><dt>LOC-change clock</dt><dd>{plan.locChangeDueDate}</dd></div>
+          <div><dt>Checklist / rules</dt><dd>{plan.checklistVersion} / {plan.rulesVersion}</dd></div>
+        </dl>
       </section>
 
-      <section className='panel'>
-        <h2>Signatures</h2>
-        {plan.signatures.map((signature) => (
-          <dl key={signature.signatureType} className='signature-grid'>
-            <div><dt>Type</dt><dd>{signature.signatureType}</dd></div>
-            <div><dt>Signer role</dt><dd>{signature.signerRoleOrType}</dd></div>
-            <div><dt>Signed</dt><dd>{signature.signatureDatetime}</dd></div>
-            <div><dt>Image/base64</dt><dd>{signature.signatureDataOmittedReason}</dd></div>
-          </dl>
+      <section className='panel content-panel clinical-document'>
+        <p className='eyebrow'>Merged source content</p>
+        <h2>Clinical overview</h2>
+        <dl className='clinical-overview-grid'>
+          <div><dt>Reason for admission</dt><dd>{plan.reasonForAdmission}</dd></div>
+          <div><dt>Initial client needs</dt><dd>{plan.initialClientNeeds}</dd></div>
+          <div><dt>Family education needs</dt><dd>{plan.familyEducationNeeds}</dd></div>
+        </dl>
+        {plan.problems.map((problem) => (
+          <article className='clinical-problem' key={`${problem.problemNumber}:${problem.description}`}>
+            <header>
+              <p className='eyebrow'>Problem {problem.problemNumber}</p>
+              <h3>{problem.description || 'Description unavailable'}</h3>
+            </header>
+            {problem.diagnoses.length > 0 && <div className='clinical-subsection'>
+              <h4>Diagnoses</h4>
+              <ul className='clinical-list'>{problem.diagnoses.map((diagnosis) => {
+                const parts = diagnosisParts(diagnosis)
+                return <li key={diagnosis}>{parts.code && <code>{parts.code}</code>}<span>{parts.description}</span></li>
+              })}</ul>
+            </div>}
+            {problem.behavioralDefinitions.length > 0 && <div className='clinical-subsection'>
+              <h4>Behavioral definitions</h4>
+              <ul className='clinical-list'>{problem.behavioralDefinitions.map((definition) => <li key={definition}>{definition}</li>)}</ul>
+            </div>}
+            {problem.goals.map((goal) => (
+              <section className='clinical-goal' key={`${goal.goalNumber}:${goal.description}`}>
+                <p className='eyebrow'>Goal {goal.goalNumber}</p>
+                <h4>{goal.description || 'Description unavailable'}</h4>
+                {goal.objectives.map((objective) => (
+                  <div className='clinical-objective' key={`${objective.objectiveNumber}:${objective.description}`}>
+                    <h5>Objective {objective.objectiveNumber}</h5>
+                    <p>{objective.description || 'Description unavailable'}</p>
+                    {objective.interventions.length > 0 && <>
+                      <h6>Interventions</h6>
+                      <ul className='clinical-list'>{objective.interventions.map((intervention) => <li key={intervention}>{intervention}</li>)}</ul>
+                    </>}
+                  </div>
+                ))}
+              </section>
+            ))}
+          </article>
         ))}
+        {plan.problems.length === 0 && <p className='muted'>No structured problem, goal, objective, or intervention content was returned.</p>}
+      </section>
+
+      <section className='panel review-history-panel'>
+        <p className='eyebrow'>Signatures and source reviews</p>
+        <h2>Clinical review history</h2>
+        <div className='review-history-grid'>
+          <div>
+            <h3>Signatures</h3>
+            {plan.signatures.length > 0 ? <ul className='review-timeline'>{plan.signatures.map((signature) => (
+              <li key={`${signature.signatureType}:${signature.signatureDatetime}`}>
+                <strong>{signature.signatureType}</strong>
+                <span>{signature.signerRoleOrType}</span>
+                <time dateTime={signature.signatureDatetime}>{displayDate(signature.signatureDatetime)}</time>
+                <small>{signature.signatureDataOmittedReason}</small>
+              </li>
+            ))}</ul> : <p className='muted'>No signature metadata was returned.</p>}
+          </div>
+          <div>
+            <h3>Treatment reviews</h3>
+            {plan.treatmentReviews.length > 0 ? <ul className='review-timeline'>{plan.treatmentReviews.map((review) => (
+              <li key={`${review.reviewId}:${review.reviewDate}:${review.signatureDate}`}>
+                <strong>{review.status}</strong>
+                <span>Review {review.reviewId || 'ID unavailable'}</span>
+                <time dateTime={review.reviewDate}>{displayDate(review.reviewDate)}</time>
+                {review.signatureDate && <small>Signed {displayDate(review.signatureDate)}</small>}
+              </li>
+            ))}</ul> : <p className='muted'>No treatment-review records were returned for this plan.</p>}
+          </div>
+        </div>
       </section>
 
       <section className='panel checklist-panel'>

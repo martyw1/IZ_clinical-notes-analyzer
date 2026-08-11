@@ -167,10 +167,11 @@ def project_patient_identity(
     aggregate: TreatmentPlanAggregate,
     patient_id: str,
 ) -> TreatmentPlanAggregate:
+    patient_display_label = "Not linked to an MRN" if patient_id.startswith("unlinked-") else f"MRN {patient_id}"
     return aggregate.model_copy(
         update={
             "patient_id": patient_id,
-            "patient_display_label": f"MRN {patient_id}",
+            "patient_display_label": patient_display_label,
             "content_snapshot": aggregate.content_snapshot.model_copy(update={"patient_id": patient_id}),
             "evidence_coverage_summary": aggregate.evidence_coverage_summary.model_copy(
                 update={"patient_id": patient_id}

@@ -74,6 +74,12 @@ def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() 
     assert "$ready = $false" in launcher_contents
 
 
+def test_windows_checkout_runtime_disables_access_logging_for_patient_routes() -> None:
+    runtime_launcher = Path(__file__).resolve().parents[2] / "scripts" / "startup-windows-local.ps1"
+
+    assert "--no-access-log" in runtime_launcher.read_text(encoding="utf-8")
+
+
 def test_windows_checkout_launcher_passes_enabled_switches_without_string_boolean_values() -> None:
     launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
     launcher_contents = launcher.read_text(encoding="utf-8")

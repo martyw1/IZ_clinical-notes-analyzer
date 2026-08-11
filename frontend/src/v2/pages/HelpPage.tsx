@@ -3,10 +3,11 @@ export function HelpPage() {
     <section className='panel'>
       <p className='eyebrow'>Help</p>
       <h2>Version 2.0 Beta workflow</h2>
-      <p>Use Treatment Plans as the primary workbench. Patient names are excluded by default, and clinical narrative text does not enter forensic logs.</p>
+      <p>Start with Patient Roster to find every patient by MRN and full name. Patient names and clinical narrative text never enter forensic logs.</p>
       <ul>
-        <li>Review the queue by status strip risk order.</li>
-        <li>Select a treatment plan from an MRN row to inspect the full treatment-plan detail graph.</li>
+        <li>Select an MRN to open the complete Patient Record Detail.</li>
+        <li>Select any treatment plan from a patient row to open its complete Treatment Plan Detail.</li>
+        <li>Use Treatment Plans Roster to browse every linked or unlinked plan in the source system.</li>
         <li>Return, approve, comment, or override checklist criteria with required reason.</li>
         <li>Use API Testing Harness jobs for large pulls so the browser stays responsive.</li>
       </ul>

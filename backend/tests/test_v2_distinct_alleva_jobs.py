@@ -22,7 +22,14 @@ from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 TERMINAL = {"completed", "completed_with_warnings", "failed", "cancelled"}
 
 
-def _configure(client, headers: dict[str, str], base_url: str, *, pagination_limit: int = 100) -> None:
+def _configure(
+    client,
+    headers: dict[str, str],
+    base_url: str,
+    *,
+    pagination_limit: int = 100,
+    sync_limit: int = 100,
+) -> None:
     response = client.patch(
         "/api/api-configuration",
         headers=headers,
@@ -33,7 +40,7 @@ def _configure(client, headers: dict[str, str], base_url: str, *, pagination_lim
             "client_secret": "synthetic-secret",
             "scopes": "plans.read",
             "pagination_limit": pagination_limit,
-            "sync_limit": 100,
+            "sync_limit": sync_limit,
             "requests_per_minute": 10_000,
             "api_enabled": True,
             "treatment_plan_sync_enabled": True,
@@ -60,7 +67,7 @@ def _wait(client, headers: dict[str, str], route: str) -> dict[str, JsonValue]:
 def test_active_roster_pull_is_distinct_plan_independent_and_restart_queryable(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
-    clients = [{"id": "roster-source-101", "mrn": "roster-101", "status": "Active", "firstName": "Never Persist"}]
+    clients = [{"id": "roster-source-101", "mrn": "roster-101", "status": "Active", "firstName": "Synthetic Patient"}]
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
         facility_id = database.execute("SELECT id FROM facilities WHERE facility_key='r3-default'").fetchone()[0]
@@ -90,7 +97,7 @@ def test_active_roster_pull_is_distinct_plan_independent_and_restart_queryable(t
     assert roster_items["roster-101"]["lifecycle_state"] == "active"
     assert roster_items["roster-missing-199"]["lifecycle_state"] == "missing"
     assert all(item["treatment_plans"] == [] for item in roster_items.values())
-    assert "Never Persist" not in roster.text
+    assert roster_items["roster-101"]["full_name"] == "Synthetic Patient"
 
     restarted = _fresh_client(tmp_path, monkeypatch)
     restarted_headers = _auth_headers(restarted)
@@ -164,7 +171,7 @@ def test_partial_roster_pagination_upserts_seen_without_deactivating_unseen(tmp_
         database.commit()
 
     with _partial_roster_server() as base_url:
-        _configure(client, headers, base_url, pagination_limit=2)
+        _configure(client, headers, base_url, pagination_limit=2, sync_limit=2)
         started = client.post("/api/v2/patient-roster/pull", headers=headers)
         assert started.status_code == 202
         completed = _wait(client, headers, f"/api/v2/patient-roster/jobs/{started.json()['job_id']}")
@@ -222,16 +229,19 @@ def test_approved_sync_warning_completes_good_details_and_deduplicates_on_rerun(
         second_result = _wait(client, headers, f"/api/v2/alleva-sync/jobs/{second.json()['job_id']}")
 
     assert first_result["status"] == "completed_with_warnings"
-    assert first_result["records_written"] == 1
+    assert first_result["records_written"] == 2
     assert first_result["records_failed"] == 1
     assert second_result["status"] == "completed_with_warnings"
     assert second_result["records_written"] == 0
     assert second_result["records_failed"] == 1
     queue = client.get("/api/v2/treatment-plans", headers=headers).json()["items"]
-    assert [(item["patient_id"], item["treatment_plan_id"]) for item in queue] == [("912", "plan-912")]
+    assert {(item["patient_id"], item["treatment_plan_id"]) for item in queue} == {
+        ("912", "plan-912"),
+        ("912", "plan-bad"),
+    }
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
-        assert database.execute("SELECT COUNT(*) FROM treatment_plan_versions").fetchone()[0] == 1
+        assert database.execute("SELECT COUNT(*) FROM treatment_plan_versions").fetchone()[0] == 2
         encrypted = database.execute("SELECT normalized_snapshot_encrypted FROM treatment_plan_versions").fetchone()[0]
     assert isinstance(encrypted, bytes)
     assert b"Synthetic clinical problem" not in encrypted

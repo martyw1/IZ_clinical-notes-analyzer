@@ -103,7 +103,7 @@ try {
     Write-Info "Starting local app on http://localhost:$port"
 
     if (-not $NoBrowser) { Start-Process "http://localhost:$port" }
-    & $pythonExe -m uvicorn app.desktop_main:app --app-dir (Join-Path $RootDir 'backend') --host 127.0.0.1 --port $port
+    & $pythonExe -m uvicorn app.desktop_main:app --app-dir (Join-Path $RootDir 'backend') --host 127.0.0.1 --port $port --no-access-log
     if ($LASTEXITCODE -ne 0) { throw 'Local FastAPI server exited with an error.' }
 }
 catch {

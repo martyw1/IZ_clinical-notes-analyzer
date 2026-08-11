@@ -9,6 +9,7 @@ import type {
   ManualTreatmentPlanImportResult,
   ManagerActionPayload,
   NavigationResult,
+  PatientRecordDetail,
   PatientRosterData,
   TreatmentPlanRosterData,
   UserProfile,
@@ -79,6 +80,7 @@ export async function getPatientRoster(token: string): Promise<PatientRosterData
   return {
     items: readRecordList(payload, 'items').map((item) => ({
       mrn: readString(item, 'mrn'),
+      fullName: readString(item, 'full_name'),
       sourceMode: readString(item, 'source_mode', 'unknown'),
       lifecycleState: readString(item, 'lifecycle_state', 'unknown'),
       currentLevelOfCare: readString(item, 'current_level_of_care', 'Unknown'),
@@ -104,6 +106,33 @@ export async function getTreatmentPlanDetail(
   return mapTreatmentPlanAggregate(await readRecordPayload(
     await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}${suffix}${query}`, { token }),
   ))
+}
+
+export async function getPatientRecordDetail(
+  token: string,
+  patientId: string,
+  sourceMode?: string,
+): Promise<PatientRecordDetail> {
+  const query = sourceMode ? `?source_mode=${encodeURIComponent(sourceMode)}` : ''
+  const record = await readRecordPayload(
+    await request(`/api/v2/patients/${encodeURIComponent(patientId)}${query}`, { token }),
+  )
+  return {
+    mrn: readString(record, 'mrn'),
+    fullName: readString(record, 'full_name'),
+    sourceMode: readString(record, 'source_mode', 'unknown'),
+    lifecycleState: readString(record, 'lifecycle_state', 'unknown'),
+    currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
+    sourceLastUpdated: readString(record, 'source_last_updated', 'Unknown'),
+    firstSeenAt: readString(record, 'first_seen_at', 'Unknown'),
+    lastSeenAt: readString(record, 'last_seen_at', 'Unknown'),
+    reconciledAt: readString(record, 'reconciled_at', 'Not reconciled'),
+    treatmentPlans: readRecordList(record, 'treatment_plans').map((plan) => ({
+      treatmentPlanId: readString(plan, 'treatment_plan_id'),
+      lastUpdated: readString(plan, 'last_updated', 'Unknown'),
+    })),
+    patientRecord: readRecord(record, 'patient_record'),
+  }
 }
 
 export async function importTreatmentPlanAggregate(token: string, payload: JsonRecord): Promise<ManualTreatmentPlanImportResult> {
@@ -160,6 +189,9 @@ export async function getTreatmentPlanRoster(token: string): Promise<TreatmentPl
     items: readRecordList(payload, 'items').map((item) => ({
       treatmentPlanId: readString(item, 'treatment_plan_id'),
       mrn: readString(item, 'mrn'),
+      patientKey: readString(item, 'patient_key'),
+      linkedToMrn: readBoolean(item, 'linked_to_mrn'),
+      fullName: readString(item, 'full_name'),
       lastUpdated: readString(item, 'last_updated', 'Unknown'),
       previousTreatmentPlanId: readString(item, 'previous_treatment_plan_id'),
       initialTreatmentPlanId: readString(item, 'initial_treatment_plan_id'),

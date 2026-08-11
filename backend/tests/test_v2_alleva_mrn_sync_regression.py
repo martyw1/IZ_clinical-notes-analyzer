@@ -2,33 +2,49 @@ from __future__ import annotations
 
 import sqlite3
 
+from test_v2_auth_rbac import _create_user
 from test_v2_alleva_sync import JsonValue, _completed_sync, _mock_alleva_server
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 
 
-def test_sync_uses_true_mrn_and_imports_every_global_plan_for_all_lifecycles(tmp_path, monkeypatch) -> None:
+def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_patient(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     client_items: list[dict[str, JsonValue]] = [
-        {"id": "source-101", "mrn": "MRN-0042", "status": "Active"},
-        {"id": "source-202", "mrn": "MRN-0099", "status": "Discharged"},
+        {"id": "source-101", "mrn": "MRN-0042", "firstName": "Alex", "lastName": "Example", "status": "Active", "levelOfCare": "PHP", "email": "alex.synthetic@example.invalid"},
+        {"id": "source-202", "mrn": "MRN-0099", "firstName": "Blair", "lastName": "Example", "status": "Discharged"},
+        {"id": "source-303", "mrn": "MRN-0123", "firstName": "Casey", "lastName": "Example", "status": "Inactive"},
+        {"id": "source-404", "mrn": "MRN-0555", "firstName": "Devon", "lastName": "Example", "status": "Active", "levelOfCare": "IOP"},
     ]
-    plan_items: list[dict[str, JsonValue]] = [
-        {
-            "id": f"plan-{index}",
-            "client": {
-                "id": "source-101" if index <= 5 else "source-202",
-                "route": f"/clients/{'source-101' if index <= 5 else 'source-202'}",
-            },
-            "lastModified": f"2026-07-{index:02d}T12:00:00Z",
-        }
-        for index in range(1, 9)
-    ]
+    plan_counts = {"source-101": 6, "source-202": 8, "source-303": 2}
+    plan_items: list[dict[str, JsonValue]] = []
+    index = 0
+    for source_patient_id, count in plan_counts.items():
+        for _ in range(count):
+            index += 1
+            plan_items.append({
+                "id": f"plan-{index}",
+                "client": {"id": source_patient_id, "route": f"/clients/{source_patient_id}"},
+                "startDate": f"2026-01-{index:02d}T09:00:00Z",
+                "lastModified": f"2026-07-{index:02d}T12:00:00Z",
+            })
+    plan_items.append({
+        "id": "plan-unlinked",
+        "client": {"id": "source-not-returned", "route": "/clients/source-not-returned"},
+        "startDate": "2025-12-01T09:00:00Z",
+        "lastModified": "2026-07-17T12:00:00Z",
+    })
+    plan_items.append({
+        "id": "plan-ownerless",
+        "startDate": "2025-11-01T09:00:00Z",
+        "lastModified": "2026-07-18T12:00:00Z",
+    })
 
     with _mock_alleva_server(
         client_items=client_items,
         plan_items=plan_items,
         global_plan_collection=True,
+        ignore_collection_cursor=True,
     ) as (base_url, state):
         configured = client.patch(
             "/api/api-configuration",
@@ -51,22 +67,66 @@ def test_sync_uses_true_mrn_and_imports_every_global_plan_for_all_lifecycles(tmp
         synced = _completed_sync(client, headers)
 
     assert synced["status"] == "completed"
-    assert synced["records_written"] == 8
+    assert synced["records_written"] == 18
     plan_paths = [path for path in state.paths if path.startswith("/treatment-plans?")]
     assert plan_paths == [
-        "/treatment-plans?Limit=3&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
-        "/treatment-plans?Limit=3&Cursor=3&api-version=1.0&StartDate=2000-01-01T16%3A03",
-        "/treatment-plans?Limit=3&Cursor=6&api-version=1.0&StartDate=2000-01-01T16%3A03",
+        "/treatment-plans?Limit=20&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
     ]
 
     patient_roster = client.get("/api/v2/patient-roster", headers=headers).json()["items"]
-    assert [(item["mrn"], len(item["treatment_plans"])) for item in patient_roster] == [
-        ("MRN-0042", 5),
-        ("MRN-0099", 3),
-    ]
+    assert {item["mrn"]: len(item["treatment_plans"]) for item in patient_roster} == {
+        "MRN-0042": 6,
+        "MRN-0555": 0,
+        "MRN-0099": 8,
+        "MRN-0123": 2,
+    }
+    assert {item["mrn"]: item["full_name"] for item in patient_roster} == {
+        "MRN-0042": "Alex Example",
+        "MRN-0555": "Devon Example",
+        "MRN-0099": "Blair Example",
+        "MRN-0123": "Casey Example",
+    }
     plan_roster = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
-    assert len(plan_roster) == 8
-    assert {item["mrn"] for item in plan_roster} == {"MRN-0042", "MRN-0099"}
+    assert len(plan_roster) == 18
+    assert {item["mrn"] for item in plan_roster} == {"", "MRN-0042", "MRN-0099", "MRN-0123"}
+    assert {item["full_name"] for item in plan_roster if item["mrn"] == "MRN-0042"} == {"Alex Example"}
+    assert next(item for item in plan_roster if item["treatment_plan_id"] == "plan-1")["last_updated"] == "2026-07-01T12:00:00Z"
+    assert next(item for item in plan_roster if item["mrn"] == "MRN-0042")["initial_treatment_plan_date"] == "2026-01-01T09:00:00Z"
+    unlinked = next(item for item in plan_roster if item["treatment_plan_id"] == "plan-unlinked")
+    assert unlinked["mrn"] == ""
+    assert unlinked["linked_to_mrn"] is False
+    assert unlinked["full_name"] == ""
+    assert unlinked["patient_key"].startswith("unlinked-")
+    assert "source-not-returned" not in str(plan_roster)
+    detail = client.get(
+        f"/api/v2/treatment-plans/{unlinked['patient_key']}/plan-unlinked?source_mode=alleva_rest_api",
+        headers=headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["patient_display_label"] == "Not linked to an MRN"
+    ownerless = next(item for item in plan_roster if item["treatment_plan_id"] == "plan-ownerless")
+    assert ownerless["mrn"] == ""
+    assert ownerless["linked_to_mrn"] is False
+    assert ownerless["patient_key"].startswith("unlinked-")
+    assert ownerless["patient_key"] != unlinked["patient_key"]
+    linked_detail = client.get(
+        "/api/v2/treatment-plans/MRN-0042/plan-1?source_mode=alleva_rest_api",
+        headers=headers,
+    )
+    assert linked_detail.status_code == 200
+    assert linked_detail.json()["patient_full_name"] == "Alex Example"
+    patient_detail = client.get(
+        "/api/v2/patients/MRN-0555?source_mode=alleva_rest_api",
+        headers=headers,
+    )
+    assert patient_detail.status_code == 200
+    assert patient_detail.json()["full_name"] == "Devon Example"
+    assert patient_detail.json()["current_level_of_care"] == "IOP"
+    assert patient_detail.json()["treatment_plans"] == []
+    assert patient_detail.json()["patient_record"]["mrn"] == "MRN-0555"
+    _, counselor_headers = _create_user(client, headers, "patient-detail-counselor", "counselor")
+    denied = client.get("/api/v2/patients/MRN-0042?source_mode=alleva_rest_api", headers=counselor_headers)
+    assert denied.status_code == 403
     assert "source-101" not in str(patient_roster)
     assert "source-202" not in str(plan_roster)
 
@@ -76,7 +136,22 @@ def test_sync_uses_true_mrn_and_imports_every_global_plan_for_all_lifecycles(tmp
             "SELECT canonical_client_id,source_patient_id FROM patients "
             "WHERE source_system='alleva_rest_api' ORDER BY canonical_client_id"
         ).fetchall()
-    assert identities == [("MRN-0042", "source-101"), ("MRN-0099", "source-202")]
+        encrypted_snapshots = database.execute(
+            "SELECT normalized_snapshot_encrypted FROM patient_source_snapshots ORDER BY id"
+        ).fetchall()
+    assert identities[:4] == [
+        ("MRN-0042", "source-101"),
+        ("MRN-0099", "source-202"),
+        ("MRN-0123", "source-303"),
+        ("MRN-0555", "source-404"),
+    ]
+    assert all(identity[0].startswith("unlinked-") for identity in identities[4:])
+    assert {identity[1] for identity in identities[4:]} == {None, "source-not-returned"}
+    assert len(encrypted_snapshots) == 4
+    assert all(bytes(row[0]).startswith(b"IZCNA1:") for row in encrypted_snapshots)
+    assert b"Alex Example" not in database_path.read_bytes()
+    audit = client.get("/api/audit/logs", headers=headers).json()["items"]
+    assert "Alex Example" not in str(audit)
 
 
 def test_reconciliation_rekeys_legacy_patient_without_changing_child_foreign_keys(tmp_path, monkeypatch) -> None:

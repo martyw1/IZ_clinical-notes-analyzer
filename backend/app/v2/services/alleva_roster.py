@@ -20,6 +20,7 @@ from app.v2.services.alleva_sync import (
     AllevaSyncError,
     ApprovedRequestRateLimiter,
     _client_observations,
+    _client_snapshot_inputs,
     _client_source_ids,
     _endpoint_path,
     _endpoint_request_parameters,
@@ -27,6 +28,7 @@ from app.v2.services.alleva_sync import (
     _oauth_token,
     _records,
 )
+from app.v2.services.patient_snapshot_store import persist_patient_source_snapshots
 
 RosterTerminalStatus = Literal["completed", "completed_with_warnings"]
 MAX_ROSTER_PAGES: Final = 5_000
@@ -132,6 +134,12 @@ def run_roster_pull(
         complete_snapshot,
         reconciled_at,
     )
+    persist_patient_source_snapshots(
+        db,
+        _client_snapshot_inputs(tuple(records), contract),
+        reconciled_at,
+    )
+    db.commit()
     return RosterPullResult(
         status="completed" if complete_snapshot and warning_count == 0 else "completed_with_warnings",
         observed_count=len(records),

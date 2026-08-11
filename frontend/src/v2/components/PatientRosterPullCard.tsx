@@ -35,8 +35,8 @@ export function PatientRosterPullCard({ config, token, onNavigate, onCompleted }
   return (
     <section className='panel' aria-label='Active patient roster pull'>
       <p className='eyebrow'>Patient data</p>
-      <h2>Refresh the active patient roster</h2>
-      <p>Pulls the active client list into the name-free local roster. Treatment plans are not required for a patient to appear.</p>
+      <h2>Refresh the patient roster</h2>
+      <p>Pulls every available client into the MRN-first roster with authorized full-name display. Treatment plans are not required for a patient to appear.</p>
       {blockers.length > 0 && (
         <div className='preflight-blockers'>
           <p><strong>Roster pull is blocked.</strong></p>
@@ -45,7 +45,7 @@ export function PatientRosterPullCard({ config, token, onNavigate, onCompleted }
         </div>
       )}
       <button type='button' onClick={() => void action.run()} disabled={action.isActive || blockers.length > 0}>
-        {action.isActive ? 'Pulling active patient roster...' : 'Pull active patient roster'}
+        {action.isActive ? 'Pulling patient roster...' : 'Pull patient roster'}
       </button>
       <JobStatusPanel job={action.job} isActive={action.isActive} message={action.message} error={action.error} onRetry={() => void action.run()} />
     </section>

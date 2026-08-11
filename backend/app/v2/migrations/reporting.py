@@ -7,7 +7,7 @@ from pathlib import Path
 from app.v2.migrations.lifecycle_types import TableCount
 
 REPORT_TABLES = (
-    "facilities", "patients", "patient_assignments", "loc_history",
+    "facilities", "patients", "patient_source_snapshots", "patient_assignments", "loc_history",
     "treatment_plan_versions", "treatment_review_versions", "diagnosis_snapshots",
     "source_documents", "evaluation_runs", "criterion_results", "manager_dispositions",
     "correction_work_items", "correction_submissions", "sync_jobs", "sync_checkpoints",

@@ -52,6 +52,20 @@ export type ManagerReview = {
   readonly createdAt: string
 }
 
+export type TreatmentPlanHistoryItem = {
+  readonly treatmentPlanId: string
+  readonly planDate: string
+  readonly createdDate: string
+  readonly lastModified: string
+}
+
+export type ClinicalTreatmentReview = {
+  readonly reviewId: string
+  readonly reviewDate: string
+  readonly signatureDate: string
+  readonly status: string
+}
+
 export type SourceDocument = {
   readonly sourceFileId: string
   readonly sourceKind: string
@@ -67,7 +81,9 @@ export type SourceDocument = {
 export type TreatmentPlanAggregate = {
   readonly patientId: string
   readonly patientDisplayLabel: string
+  readonly patientFullName: string
   readonly treatmentPlanId: string
+  readonly lastUpdated: string
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly dueDate: string
@@ -88,6 +104,8 @@ export type TreatmentPlanAggregate = {
   readonly criteria: readonly CriterionResult[]
   readonly managerReviews: readonly ManagerReview[]
   readonly overrides: readonly ManagerReview[]
+  readonly planHistory: readonly TreatmentPlanHistoryItem[]
+  readonly treatmentReviews: readonly ClinicalTreatmentReview[]
   readonly sourceDocuments: readonly SourceDocument[]
   readonly problems: readonly ContentProblem[]
   readonly signatures: readonly {

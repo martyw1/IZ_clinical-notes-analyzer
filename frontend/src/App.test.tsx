@@ -116,11 +116,12 @@ describe('V2 active app shell', () => {
     await openTreatmentPlan()
 
     expect(await screen.findByText('MRN 812')).toBeInTheDocument()
-    expect(screen.getByText(/LOC-change clock:/)).toHaveClass('summary-grid__item--wrappable')
+    expect(screen.getByText('LOC-change clock')).toBeInTheDocument()
+    expect(screen.getByText('Unvalidated — configurable')).toBeInTheDocument()
     expect(screen.getByText('Diagnoses')).toBeInTheDocument()
-    expect(screen.getByText('Behavioral Definitions')).toBeInTheDocument()
-    expect(screen.getByText('Goals')).toBeInTheDocument()
-    expect(screen.getByText(/Objective 1:/)).toBeInTheDocument()
+    expect(screen.getByText('Behavioral definitions')).toBeInTheDocument()
+    expect(screen.getByText('Improve recovery stability.')).toBeInTheDocument()
+    expect(screen.getByText('Objective 1')).toBeInTheDocument()
     expect(screen.getByText('Interventions')).toBeInTheDocument()
     expect(screen.getByText(/signature image\/base64 never returned/i)).toBeInTheDocument()
     expect(screen.getByText('Persisted manager actions')).toBeInTheDocument()
@@ -344,7 +345,7 @@ describe('V2 active app shell', () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:treatment-plan-export')
   })
 
-  it('shows a patient roster without patient names', async () => {
+  it('shows patient names and opens the complete patient record from the MRN', async () => {
     const fetchMock = setupFetch()
     await signIn()
 
@@ -352,13 +353,17 @@ describe('V2 active app shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
     expect(screen.getByText('812')).toBeInTheDocument()
+    expect(screen.getByText('Alex Example')).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '(#plan-812) 2026-07-12 10:00 UTC' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/synthetic patient name|first name|last name/i)).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open patient record for Alex Example, MRN 812' }))
+    expect(await screen.findByRole('heading', { name: 'Alex Example' })).toBeInTheDocument()
+    expect(screen.getByText('alex.synthetic@example.invalid')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patients/812?source_mode=alleva_rest_api', expect.objectContaining({ headers: expect.any(Headers) }))
   })
 
-  it('pulls active patients from the patient roster and refreshes the roster list', async () => {
+  it('pulls every patient from the patient roster and refreshes the roster list', async () => {
     const fetchMock = setupFetch()
     await signIn()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
@@ -369,7 +374,7 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
-    fireEvent.click(await screen.findByRole('button', { name: /pull active patient roster/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /pull patient roster/i }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Completed successfully. 1 record updated.')
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster/pull', expect.objectContaining({ method: 'POST' }))

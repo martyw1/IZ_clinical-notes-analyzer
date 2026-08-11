@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiRequestError } from './api/json'
 import { getCurrentUser, getNavigation, login } from './api/client'
-import type { TreatmentPlanSelection, UserProfile } from './api/types'
+import type { PatientSelection, TreatmentPlanSelection, UserProfile } from './api/types'
 import { AppShell } from './components/AppShell'
 import { ApiHarnessPage } from './pages/ApiHarnessPage'
 import { CorrectionsPage } from './pages/CorrectionsPage'
@@ -10,6 +10,7 @@ import { ForensicLogsPage } from './pages/ForensicLogsPage'
 import { HelpPage } from './pages/HelpPage'
 import { ManualUploadPage } from './pages/ManualUploadPage'
 import { PatientRosterPage } from './pages/PatientRosterPage'
+import { PatientRecordDetailPage } from './pages/PatientRecordDetailPage'
 import { PasswordResetPage } from './pages/PasswordResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlanDetailPage } from './pages/TreatmentPlanDetailPage'
@@ -36,19 +37,23 @@ function pageFor(
   user: UserProfile,
   onNavigate: (view: string) => void,
   selection: TreatmentPlanSelection | null,
+  patientSelection: PatientSelection | null,
+  onSelectPatient: (selection: PatientSelection) => void,
   onSelectTreatmentPlan: (selection: TreatmentPlanSelection) => void,
 ) {
   switch (view) {
     case 'Status Dashboard':
       return <DashboardPage token={token} />
     case 'Patient Roster':
-      return <PatientRosterPage token={token} user={user} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <PatientRosterPage token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+    case 'Patient Record Detail':
+      return <PatientRecordDetailPage token={token} selection={patientSelection} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} onNavigate={onNavigate} />
     case 'Treatment Plan Detail':
       return <TreatmentPlanDetailPage token={token} user={user} selection={selection} onNavigate={onNavigate} />
     case 'Treatment Plans Roster':
-      return <TreatmentPlansRosterPage token={token} user={user} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <TreatmentPlansRosterPage token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Corrections':
       return <CorrectionsPage token={token} />
     case 'API Testing Harness':
@@ -70,6 +75,7 @@ export function AppV2() {
   const [session, setSession] = useState<Session | null>(null)
   const [activeView, setActiveView] = useState('Status Dashboard')
   const [selectedTreatmentPlan, setSelectedTreatmentPlan] = useState<TreatmentPlanSelection | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<PatientSelection | null>(null)
   const [authError, setAuthError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
 
@@ -108,6 +114,7 @@ export function AppV2() {
       sessionStorage.setItem(tokenStorageKey, loginResult.accessToken)
       setActiveView(navigation.items[0] ?? 'Status Dashboard')
       setSelectedTreatmentPlan(null)
+      setSelectedPatient(null)
       setSession({ token: loginResult.accessToken, user, navigationItems: navigation.items })
     } catch (error) {
       sessionStorage.removeItem(tokenStorageKey)
@@ -122,6 +129,7 @@ export function AppV2() {
     setSession(null)
     setActiveView('Status Dashboard')
     setSelectedTreatmentPlan(null)
+    setSelectedPatient(null)
   }
 
   async function refreshSessionUser(token: string) {
@@ -164,6 +172,11 @@ export function AppV2() {
     setActiveView('Treatment Plan Detail')
   }
 
+  function handlePatientSelection(selection: PatientSelection) {
+    setSelectedPatient(selection)
+    setActiveView('Patient Record Detail')
+  }
+
   return (
     <AppShell
       activeView={activeView}
@@ -178,6 +191,8 @@ export function AppV2() {
         session.user,
         setActiveView,
         selectedTreatmentPlan,
+        selectedPatient,
+        handlePatientSelection,
         handleTreatmentPlanSelection,
       )}
     </AppShell>

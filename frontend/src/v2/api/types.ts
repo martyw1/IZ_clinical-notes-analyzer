@@ -1,4 +1,5 @@
 import type { TreatmentPlanStatus } from '../types/treatmentPlan'
+import type { JsonRecord } from './json'
 
 export type UserRole = 'admin' | 'office_manager' | 'counselor' | 'viewer'
 export type AuthState = 'bootstrap_required' | 'password_change_required' | 'active' | 'locked_until'
@@ -74,6 +75,7 @@ export type PatientRosterTreatmentPlan = {
 
 export type PatientRosterItem = {
   readonly mrn: string
+  readonly fullName: string
   readonly sourceMode: string
   readonly lifecycleState: string
   readonly currentLevelOfCare: string
@@ -90,6 +92,9 @@ export type PatientRosterData = {
 export type TreatmentPlanRosterItem = {
   readonly treatmentPlanId: string
   readonly mrn: string
+  readonly patientKey: string
+  readonly linkedToMrn: boolean
+  readonly fullName: string
   readonly lastUpdated: string
   readonly previousTreatmentPlanId: string
   readonly initialTreatmentPlanId: string
@@ -102,8 +107,29 @@ export type TreatmentPlanRosterData = {
 
 export type TreatmentPlanSelection = {
   readonly mrn: string
+  readonly patientKey: string
   readonly treatmentPlanId: string
   readonly sourceMode: string
+}
+
+export type PatientSelection = {
+  readonly mrn: string
+  readonly patientKey: string
+  readonly sourceMode: string
+}
+
+export type PatientRecordDetail = {
+  readonly mrn: string
+  readonly fullName: string
+  readonly sourceMode: string
+  readonly lifecycleState: string
+  readonly currentLevelOfCare: string
+  readonly sourceLastUpdated: string
+  readonly firstSeenAt: string
+  readonly lastSeenAt: string
+  readonly reconciledAt: string
+  readonly treatmentPlans: readonly PatientRosterTreatmentPlan[]
+  readonly patientRecord: JsonRecord
 }
 
 export type ManualTreatmentPlanImportResult = {

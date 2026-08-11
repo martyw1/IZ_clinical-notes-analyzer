@@ -125,6 +125,7 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
     with closing(sqlite3.connect(database_path)) as connection:
         connection.execute("DELETE FROM schema_migrations WHERE version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
         connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        connection.execute('DROP TABLE "patient_source_snapshots"')
         for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
             connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
         connection.execute('ALTER TABLE app_settings DROP COLUMN "api_requests_per_minute"')

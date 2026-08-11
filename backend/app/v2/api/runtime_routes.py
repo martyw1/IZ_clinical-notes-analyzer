@@ -16,6 +16,7 @@ from app.v2.api.models import (
     ApiHarnessJobStart,
     DashboardOut,
     ManagerActionInput,
+    PatientRecordDetailOut,
     ReadinessCheck,
     ReadinessOut,
     TreatmentPlanListOut,
@@ -31,6 +32,7 @@ from app.v2.services.manager_action_store import (
     save_manager_action_record,
     save_returned_correction_work_item,
 )
+from app.v2.services.patient_record import patient_record_detail
 from app.v2.services.treatment_plan_store import (
     TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
@@ -83,9 +85,10 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
     items = [
         "Status Dashboard",
         "Patient Roster",
-        "Manual Upload",
+        "Patient Record Detail",
         "Treatment Plan Detail",
         "Treatment Plans Roster",
+        "Manual Upload",
     ]
     if user.role == "counselor":
         items.append("Corrections")
@@ -184,6 +187,42 @@ def treatment_plan_detail_by_id(
         target_entity_id=f"{patient_id}:{source_mode or 'any'}:{treatment_plan_id}",
     )
     return aggregate
+
+
+@router.get("/api/v2/patients/{patient_id}", response_model=PatientRecordDetailOut)
+def patient_detail(
+    patient_id: str,
+    user: CurrentUser,
+    db: DbSession,
+    source_mode: SourceMode | None = None,
+) -> PatientRecordDetailOut:
+    require_patient_read(db, user, patient_id)
+    detail = patient_record_detail(db, patient_id, source_mode)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Patient record not found")
+    record_audit_event(
+        db,
+        action="patient_record.detail.viewed",
+        actor=user,
+        target_entity_type="patient",
+        target_entity_id=f"{patient_id}:{source_mode or 'any'}",
+    )
+    return PatientRecordDetailOut(
+        mrn=detail.mrn,
+        full_name=detail.full_name,
+        source_mode=detail.source_mode,
+        lifecycle_state=detail.lifecycle_state,
+        current_level_of_care=detail.current_level_of_care,
+        source_last_updated=detail.source_last_updated,
+        first_seen_at=detail.first_seen_at,
+        last_seen_at=detail.last_seen_at,
+        reconciled_at=detail.reconciled_at,
+        treatment_plans=tuple(
+            {"treatment_plan_id": plan.treatment_plan_id, "last_updated": plan.last_updated}
+            for plan in detail.treatment_plans
+        ),
+        patient_record=detail.patient_record,
+    )
 
 
 @router.post("/api/v2/treatment-plans/{patient_id}/manager-actions")

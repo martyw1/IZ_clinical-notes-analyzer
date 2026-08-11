@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -14,7 +15,16 @@ from urllib.parse import unquote, urljoin, urlsplit
 import httpx
 from sqlalchemy.orm import Session
 
-from app.v2.domain.schemas import TreatmentPlanAggregate
+from app.v2.domain.schemas import (
+    JsonValue,
+    TreatmentPlanAggregate,
+    TreatmentPlanGoal,
+    TreatmentPlanIntervention,
+    TreatmentPlanObjective,
+    TreatmentPlanObservedField,
+    TreatmentPlanProblem,
+    TreatmentPlanSignatureMetadata,
+)
 from app.v2.models import AppSetting, User
 from app.v2.services.bounded_http import ResponseTooLarge
 from app.v2.services.manual_file_aggregate import build_manual_aggregate
@@ -41,6 +51,10 @@ from app.v2.services.alleva_protocol import (
     read_headers,
 )
 from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
+from app.v2.services.patient_snapshot_store import (
+    PatientSourceSnapshotInput,
+    persist_patient_source_snapshots,
+)
 from app.v2.services.treatment_plan_store import (
     TreatmentPlanSaveDisposition,
     save_treatment_plan_aggregate_with_disposition,
@@ -48,6 +62,8 @@ from app.v2.services.treatment_plan_store import (
 
 MAX_SYNC_ROWS: Final = 5_000
 MAX_SYNC_HTTP_WORKERS: Final = 8
+UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-"
+UNLINKED_PATIENT_LABEL: Final = "Not linked to an MRN"
 DEFAULT_ENDPOINT_FIELD_MAPPINGS: Final = {
     "clients": {
         "client_id": "clientId", "mrn": "mrn", "lifecycle_status": "status", "deleted": "isDeleted",
@@ -127,6 +143,8 @@ class PlanImportCandidate:
     client_payload: dict[str, object]
     plan_payload: dict[str, object]
     plan_id: str
+    source_patient_id: str | None
+    linked_to_mrn: bool
 
 
 def run_treatment_plan_sync(
@@ -168,15 +186,23 @@ def run_treatment_plan_sync(
                 plan_checkpoints,
                 rate_limiter,
             )
+            reconciled_at = datetime.now(timezone.utc).isoformat()
             reconcile_sync_patients(
                 db,
                 sync_job_id,
                 _client_observations(clients, contract),
                 _client_source_ids(clients, contract),
                 len(clients) < min(contract.payload.pagination.maximum_records, MAX_SYNC_ROWS),
-                datetime.now(timezone.utc).isoformat(),
+                reconciled_at,
             )
             provenance = sync_import_provenance(db, sync_job_id) if sync_job_id else None
+            persist_patient_source_snapshots(
+                db,
+                _client_snapshot_inputs(clients, contract),
+                reconciled_at,
+                provenance,
+            )
+            db.commit()
             summary = _save_client_aggregates(
                 db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter,
             )
@@ -414,12 +440,38 @@ def _save_client_aggregates(
             raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
         plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
         source_patient_id = _plan_source_patient_id(plan, contract)
-        patient_identity = clients_by_source.get(source_patient_id)
-        if not plan_id or patient_identity is None:
+        if not plan_id:
             skipped += 1
             continue
+        if not source_patient_id:
+            candidates.append(
+                PlanImportCandidate(
+                    _unlinked_patient_key(f"treatment-plan:{plan_id}"),
+                    {},
+                    plan,
+                    plan_id,
+                    None,
+                    False,
+                )
+            )
+            continue
+        patient_identity = clients_by_source.get(source_patient_id)
+        if patient_identity is None:
+            candidates.append(
+                PlanImportCandidate(
+                    _unlinked_patient_key(source_patient_id),
+                    {},
+                    plan,
+                    plan_id,
+                    source_patient_id,
+                    False,
+                )
+            )
+            continue
         mrn, client_payload = patient_identity
-        candidates.append(PlanImportCandidate(mrn, client_payload, plan, plan_id))
+        candidates.append(
+            PlanImportCandidate(mrn, client_payload, plan, plan_id, source_patient_id, True)
+        )
 
     def fetch_detail(candidate: PlanImportCandidate) -> dict[str, object]:
         return _plan_detail(
@@ -446,7 +498,42 @@ def _save_client_aggregates(
 
     for candidate, detail in zip(candidates, details, strict=True):
         if detail is None:
+            detail = candidate.plan_payload
+        detail_plan_id = _mapped_text(detail, contract, "treatment_plans", "plan_id")
+        detail_source_patient_id = _plan_source_patient_id(detail, contract)
+        list_source_patient_id = _plan_source_patient_id(candidate.plan_payload, contract)
+        if (
+            (detail_plan_id and detail_plan_id != candidate.plan_id)
+            or (
+                detail_source_patient_id
+                and list_source_patient_id
+                and detail_source_patient_id != list_source_patient_id
+            )
+        ):
+            failed_details += 1
             continue
+        effective_source_patient_id = list_source_patient_id or detail_source_patient_id
+        if not list_source_patient_id and effective_source_patient_id:
+            patient_identity = clients_by_source.get(effective_source_patient_id)
+            if patient_identity is None:
+                candidate = PlanImportCandidate(
+                    _unlinked_patient_key(effective_source_patient_id),
+                    {},
+                    candidate.plan_payload,
+                    candidate.plan_id,
+                    effective_source_patient_id,
+                    False,
+                )
+            else:
+                mrn, client_payload = patient_identity
+                candidate = PlanImportCandidate(
+                    mrn,
+                    client_payload,
+                    candidate.plan_payload,
+                    candidate.plan_id,
+                    effective_source_patient_id,
+                    True,
+                )
         aggregate = _aggregate_from_payload(
             candidate.patient_id,
             candidate.client_payload,
@@ -455,11 +542,15 @@ def _save_client_aggregates(
             candidate.plan_id,
             contract,
         )
+        if not candidate.linked_to_mrn:
+            aggregate = aggregate.model_copy(update={"patient_display_label": UNLINKED_PATIENT_LABEL})
         saved = save_treatment_plan_aggregate_with_disposition(
             db,
             aggregate,
             actor,
             sync_provenance=sync_provenance,
+            source_patient_id=candidate.source_patient_id,
+            lifecycle_state="active" if candidate.linked_to_mrn else "unlinked",
         )
         match saved.disposition:
             case TreatmentPlanSaveDisposition.CREATED:
@@ -474,12 +565,35 @@ def _save_client_aggregates(
     return SyncImportSummary(created, updated, unchanged, skipped, failed_details, tuple(updated_plan_ids))
 
 
+def _unlinked_patient_key(source_patient_id: str) -> str:
+    digest = hashlib.sha256(source_patient_id.encode("utf-8")).hexdigest()[:24]
+    return f"{UNLINKED_PATIENT_KEY_PREFIX}{digest}"
+
+
 def _client_observations(
     clients: tuple[dict[str, object], ...],
     contract: ApprovedAllevaContract,
 ) -> tuple[AllevaPatientObservation, ...]:
     return tuple(
         AllevaPatientObservation(source_patient_id, mrn, _client_lifecycle(payload, contract))
+        for payload in clients
+        if (source_patient_id := _mapped_text(payload, contract, "clients", "client_id"))
+        and (mrn := _mapped_text(payload, contract, "clients", "mrn"))
+    )
+
+
+def _client_snapshot_inputs(
+    clients: tuple[dict[str, object], ...],
+    contract: ApprovedAllevaContract,
+) -> tuple[PatientSourceSnapshotInput, ...]:
+    return tuple(
+        PatientSourceSnapshotInput(
+            mrn=mrn,
+            source_patient_id=source_patient_id,
+            source_system="alleva_rest_api",
+            source_last_updated=_record_last_updated(payload),
+            record=payload,
+        )
         for payload in clients
         if (source_patient_id := _mapped_text(payload, contract, "clients", "client_id"))
         and (mrn := _mapped_text(payload, contract, "clients", "mrn"))
@@ -508,6 +622,17 @@ def _client_lifecycle(payload: dict[str, object], contract: ApprovedAllevaContra
     if payload.get(active_key) is False or status == "inactive":
         return "inactive"
     return "active"
+
+
+def _record_last_updated(payload: dict[str, object]) -> str:
+    for key in (
+        "updatedAt", "lastUpdated", "lastUpdatedDate", "modifiedAt", "modifiedDate",
+        "dateUpdated", "createdAt",
+    ):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _plan_belongs_to_patient(
@@ -685,6 +810,231 @@ def _endpoint_records(
     )
 
 
+def _alleva_text(payload: dict[str, object], *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+    return ""
+
+
+def _alleva_objects(payload: dict[str, object], key: str) -> tuple[dict[str, object], ...]:
+    value = payload.get(key)
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _alleva_diagnoses(
+    values: tuple[dict[str, object], ...],
+    source_prefix: str,
+) -> tuple[dict[str, JsonValue], ...]:
+    return tuple(
+        {
+            "diagnosis_number": _alleva_text(value, "diagnosisNumber", "id") or str(index + 1),
+            "diagnosis_description": _alleva_text(value, "description", "diagnosisDescription"),
+            "icd10_code": _alleva_text(value, "icD10Code", "icd10Code", "code"),
+            "is_primary": value.get("isPrimary") is True,
+            "is_active": value.get("isActive") is not False,
+            "source_json_path": f"{source_prefix}[{index}]",
+        }
+        for index, value in enumerate(values)
+    )
+
+
+def _alleva_interventions(
+    values: tuple[dict[str, object], ...],
+    source_prefix: str,
+) -> tuple[TreatmentPlanIntervention, ...]:
+    return tuple(
+        TreatmentPlanIntervention(
+            intervention_number=_alleva_text(value, "interventionNumber", "id") or str(index + 1),
+            intervention_description=_alleva_text(value, "description", "interventionDescription"),
+            source_json_path=f"{source_prefix}[{index}]",
+            is_wiley=value.get("isWiley") is True,
+            is_evidence_based=value.get("isEvidenceBased") is not False,
+        )
+        for index, value in enumerate(values)
+    )
+
+
+def _alleva_objectives(
+    values: tuple[dict[str, object], ...],
+    source_prefix: str,
+) -> tuple[TreatmentPlanObjective, ...]:
+    return tuple(
+        TreatmentPlanObjective(
+            objective_number=_alleva_text(value, "objectiveNumber", "id") or str(index + 1),
+            objective_description=_alleva_text(value, "description", "objectiveDescription"),
+            source_json_path=f"{source_prefix}[{index}]",
+            interventions=_alleva_interventions(
+                _alleva_objects(value, "interventions"),
+                f"{source_prefix}[{index}].interventions",
+            ),
+        )
+        for index, value in enumerate(values)
+    )
+
+
+def _alleva_goals(
+    values: tuple[dict[str, object], ...],
+    source_prefix: str,
+) -> tuple[TreatmentPlanGoal, ...]:
+    return tuple(
+        TreatmentPlanGoal(
+            goal_number=_alleva_text(value, "goalNumber", "id") or str(index + 1),
+            goal_description=_alleva_text(value, "description", "goalDescription"),
+            source_json_path=f"{source_prefix}[{index}]",
+            objectives=_alleva_objectives(
+                _alleva_objects(value, "objectives"),
+                f"{source_prefix}[{index}].objectives",
+            ),
+        )
+        for index, value in enumerate(values)
+    )
+
+
+def _alleva_problems(detail: dict[str, object]) -> tuple[TreatmentPlanProblem, ...]:
+    problems: list[TreatmentPlanProblem] = []
+    top_level_diagnoses = _alleva_objects(detail, "diagnoses")
+    for index, value in enumerate(_alleva_objects(detail, "problems")):
+        source_prefix = f"content_snapshot.problems[{index}]"
+        diagnoses = _alleva_objects(value, "diagnoses")
+        if index == 0 and not diagnoses:
+            diagnoses = top_level_diagnoses
+        behavioral_definitions = tuple(
+            {
+                "behavioral_definition_number": _alleva_text(item, "behavioralDefinitionNumber", "id")
+                or str(definition_index + 1),
+                "behavioral_definition": _alleva_text(item, "description", "behavioralDefinition"),
+                "source_json_path": f"{source_prefix}.behavioral_definitions[{definition_index}]",
+            }
+            for definition_index, item in enumerate(_alleva_objects(value, "behavioralDefinitions"))
+        )
+        problems.append(
+            TreatmentPlanProblem(
+                problem_number=_alleva_text(value, "problemNumber", "id") or str(index + 1),
+                problem_description=_alleva_text(value, "description", "problemDescription"),
+                source_json_path=source_prefix,
+                diagnoses=_alleva_diagnoses(diagnoses, f"{source_prefix}.diagnoses"),
+                behavioral_definitions=behavioral_definitions,
+                goals=_alleva_goals(_alleva_objects(value, "goals"), f"{source_prefix}.goals"),
+            )
+        )
+    return tuple(problems)
+
+
+def _alleva_signatures(
+    detail: dict[str, object],
+    contract: ApprovedAllevaContract,
+) -> tuple[TreatmentPlanSignatureMetadata, ...]:
+    signatures: list[TreatmentPlanSignatureMetadata] = []
+    for field_name, value in detail.items():
+        if not field_name.lower().endswith("signature") or not isinstance(value, dict):
+            continue
+        signature_data = value.get("data")
+        signature_text = signature_data if isinstance(signature_data, str) else ""
+        signature_role = field_name.removesuffix("Signature") or "unknown"
+        signatures.append(
+            TreatmentPlanSignatureMetadata(
+                signature_type=field_name,
+                has_signature_data=bool(signature_text),
+                signer_role_or_type=_alleva_text(value, "type", "signerType", "role") or signature_role,
+                signature_datetime=_alleva_text(
+                    value,
+                    "signatureDateTime",
+                    "signatureDatetime",
+                    "signedAt",
+                    "date",
+                ),
+                signature_data_length=len(signature_text),
+                signature_data_omitted_reason="Signature binary is excluded from the normalized clinical snapshot.",
+                source_json_path=f"content_snapshot.{field_name}",
+            )
+        )
+    if signatures:
+        return tuple(signatures)
+    legacy_date = _mapped_text(detail, contract, "treatment_plan_detail", "signature_date")
+    if not legacy_date:
+        return ()
+    return (
+        TreatmentPlanSignatureMetadata(
+            signature_type="staffSignatureDate",
+            has_signature_data=False,
+            signer_role_or_type="staff",
+            signature_datetime=legacy_date,
+            signature_data_length=0,
+            signature_data_omitted_reason="Only the source signature timestamp was returned.",
+            source_json_path="content_snapshot.staffSignatureDate",
+        ),
+    )
+
+
+def _alleva_observed_fields(detail: dict[str, object]) -> tuple[TreatmentPlanObservedField, ...]:
+    observations: Counter[tuple[str, str, str]] = Counter()
+
+    def visit(value: object, path: str) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                visit(child, f"{path}.{key}" if path else key)
+            return
+        if isinstance(value, list):
+            for child in value:
+                visit(child, f"{path}[]")
+            return
+        if value is None:
+            value_type = "null"
+            state = "missing"
+        elif isinstance(value, bool):
+            value_type = "boolean"
+            state = "present"
+        elif isinstance(value, int | float):
+            value_type = "number"
+            state = "present"
+        else:
+            value_type = "string"
+            state = "present" if isinstance(value, str) and value.strip() else "missing"
+        observations[(path, value_type, state)] += 1
+
+    visit(detail, "detail")
+    checklist_fragments = (
+        "reasonForAdmission",
+        "initialClientNeeds",
+        "familyEducationNeeds",
+        ".description",
+        "signatureDateTime",
+    )
+    return tuple(
+        TreatmentPlanObservedField(
+            field_path=path,
+            value_type=value_type,
+            state=state,
+            sample_redacted_value="",
+            source_endpoint="Alleva REST",
+            occurrence_count=count,
+            used_by_checklist=any(fragment in path for fragment in checklist_fragments),
+            mapped_app_field="",
+        )
+        for (path, value_type, state), count in sorted(observations.items())
+    )
+
+
+def _alleva_snapshot_summary(problems: tuple[TreatmentPlanProblem, ...], signature_count: int) -> dict[str, JsonValue]:
+    goals = tuple(goal for problem in problems for goal in problem.goals)
+    objectives = tuple(objective for goal in goals for objective in goal.objectives)
+    return {
+        "problem_count": len(problems),
+        "diagnosis_count": sum(len(problem.diagnoses) for problem in problems),
+        "behavioral_definition_count": sum(len(problem.behavioral_definitions) for problem in problems),
+        "goal_count": len(goals),
+        "objective_count": len(objectives),
+        "intervention_count": sum(len(objective.interventions) for objective in objectives),
+        "signature_metadata_count": signature_count,
+    }
+
+
 def _aggregate_from_payload(
     patient_id: str,
     client: dict[str, object],
@@ -723,25 +1073,47 @@ def _aggregate_from_payload(
         })
         for criterion in aggregate.criteria_results
     )
+    problems = _alleva_problems(detail)
+    signatures = _alleva_signatures(detail, contract)
     snapshot = aggregate.content_snapshot.model_copy(update={
         "plan_id": plan_id,
         "source_mode": "alleva_rest_api",
-        "observed_fields": tuple(field.model_copy(update={"source_endpoint": "Alleva REST"}) for field in aggregate.content_snapshot.observed_fields),
+        "content_hash": hashlib.sha256(
+            json.dumps(detail, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        "problems": problems,
+        "signatures": signatures,
+        "observed_fields": _alleva_observed_fields(detail),
     })
     evidence_coverage = aggregate.evidence_coverage_summary.model_copy(update={"plan_id": plan_id})
+    plan_date = _alleva_text(detail, "startDate", "createdDate") or _alleva_text(plan, "startDate", "createdDate")
+    created_date = _alleva_text(detail, "createdDate") or _alleva_text(plan, "createdDate")
+    last_modified = (
+        _mapped_text(detail, contract, "treatment_plan_detail", "last_modified")
+        or _alleva_text(plan, "lastModified")
+    )
+    plan_record: dict[str, JsonValue] = {
+        "plan_id": plan_id,
+        "plan_date": plan_date,
+        "created_date": created_date,
+        "last_modified": last_modified,
+        "is_active": True,
+        "source": "alleva_rest_api",
+    }
     return aggregate.model_copy(
         update={
             "source_mode": "alleva_rest_api",
-            "source_last_updated": _mapped_text(detail, contract, "treatment_plan_detail", "last_modified"),
+            "source_last_updated": last_modified,
             "status_label": "Alleva REST sync",
-            "treatment_plans": ({"plan_id": plan_id, "is_active": True, "source": "alleva_rest_api"},),
-            "active_treatment_plans": ({"plan_id": plan_id, "is_active": True},),
-            "latest_created_active_plan": {"plan_id": plan_id, "label": "Alleva REST treatment plan"},
+            "treatment_plans": (plan_record,),
+            "active_treatment_plans": (plan_record,),
+            "latest_created_active_plan": plan_record,
             "current_plan_selection_reason": "Latest mapped active Alleva treatment plan",
             "treatment_review_data_status": "available" if isinstance(detail.get("review_detail"), dict) else "not_requested",
             "treatment_reviews": (detail["review_detail"],) if isinstance(detail.get("review_detail"), dict) else (),
             "source_evidence": evidence,
             "criteria_results": criteria,
+            "content_snapshot_summary": _alleva_snapshot_summary(problems, len(signatures)),
             "content_snapshot": snapshot,
             "evidence_coverage_summary": evidence_coverage,
             "data_quality_warnings": aggregate.data_quality_warnings + ("Alleva REST treatment-plan sync is read-only; source payload remains encrypted at rest.",),

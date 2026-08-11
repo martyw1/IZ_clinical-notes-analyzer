@@ -18,6 +18,7 @@ def patient_roster(user: CurrentUser, db: DbSession) -> PatientRosterOut:
         items=tuple(
             {
                 "mrn": item.mrn,
+                "full_name": item.full_name,
                 "source_mode": item.source_mode,
                 "lifecycle_state": item.lifecycle_state,
                 "current_level_of_care": item.current_level_of_care,
@@ -45,12 +46,15 @@ def treatment_plan_roster(user: CurrentUser, db: DbSession) -> TreatmentPlanRost
             {
                 "treatment_plan_id": item.treatment_plan_id,
                 "mrn": item.mrn,
+                "patient_key": item.patient_key,
+                "linked_to_mrn": item.linked_to_mrn,
+                "full_name": item.full_name,
                 "last_updated": item.last_updated,
                 "previous_treatment_plan_id": item.previous_treatment_plan_id,
                 "initial_treatment_plan_id": item.initial_treatment_plan_id,
                 "initial_treatment_plan_date": item.initial_treatment_plan_date,
             }
             for item in list_treatment_plan_roster(db)
-            if item.mrn in allowed_ids
+            if item.patient_key in allowed_ids
         )
     )
