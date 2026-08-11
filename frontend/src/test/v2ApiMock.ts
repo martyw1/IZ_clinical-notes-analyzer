@@ -374,7 +374,7 @@ function apiConfigurationPayload(configured: boolean, syncEnabled: boolean) {
     api_version: '1.0',
     treatment_plan_start_date: '2020-01-01T00:00:00Z',
     pagination_limit: 500,
-    sync_limit: 100,
+    sync_limit: 5000,
     timeout_seconds: 10,
     api_enabled: syncEnabled,
     treatment_plan_sync_enabled: syncEnabled,

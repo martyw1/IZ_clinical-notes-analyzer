@@ -7,6 +7,7 @@ from app.v2.migrations.schema_clinical import CLINICAL_STATEMENTS
 from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS, CORE_STATEMENTS, USER_EXTENSIONS
 from app.v2.migrations.schema_evaluation_ledger import EVALUATION_LEDGER_STATEMENTS
 from app.v2.migrations.schema_hardening import HARDENING_STATEMENTS
+from app.v2.migrations.schema_patient_identity import PATIENT_IDENTITY_STATEMENTS
 from app.v2.migrations.schema_sync import SYNC_STATEMENTS
 from app.v2.migrations.schema_sync_provenance import SYNC_PROVENANCE_STATEMENTS
 from app.v2.migrations.schema_workflow import WORKFLOW_STATEMENTS
@@ -53,6 +54,7 @@ MIGRATIONS = (
         "persist_alleva_protocol_and_legacy_settings_migration_state",
         (),
     ),
+    _migration(8, "separate_alleva_mrn_from_source_patient_id", PATIENT_IDENTITY_STATEMENTS),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

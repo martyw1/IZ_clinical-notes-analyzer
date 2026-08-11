@@ -11,7 +11,7 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 ### 2026-07-13 V2 treatment-plan queue update
 
 - The Treatment Plans tab, Patient Roster, and API Testing Harness share the same operational pull. A completed pull refreshes the active list on the initiating screen.
-- The V2 sync imports every returned treatment plan for each active patient. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}?source_mode=...` loads the selected plan without collapsing multiple plans for one patient. Patient, plan, roster, evaluation, and UI selection identities include the source system so matching manual and Alleva IDs cannot overwrite or display each other's detail.
+- The V2 sync imports every attributable treatment plan in the bounded global collection across all patient lifecycle states. `GET /api/v2/treatment-plans` and the CSV export expose the current revision of every distinct treatment-plan ID; `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}?source_mode=...` loads the selected plan without collapsing multiple plans for one patient. Patient, plan, roster, evaluation, and UI selection identities include the source system so matching manual and Alleva IDs cannot overwrite or display each other's detail.
 - A changed record with the same source treatment-plan ID creates an encrypted immutable successor version and replaces the visible current plan. An identical replay creates no duplicate version.
 - The completion audit records created, updated, and unchanged counts plus the exact `updated_treatment_plan_ids`; clinical narrative and patient names remain excluded from logs.
 - `Patient Roster` lists authorized patient IDs, plan IDs, lifecycle/LOC/source metadata, and plan status without patient-name fields.
@@ -20,10 +20,11 @@ The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel 
 
 ### 2026-08-10 MRN-centered roster update
 
-- MRN is now the primary patient identifier in the active V2 UI and roster contracts. The legacy aggregate field name `patient_id` remains an internal compatibility name, but new visible labels and manually parsed identifiers use MRN.
+- Alleva `/clients.mrn` is the primary patient identifier in V2 persistence, API routes, UI, roster contracts, evaluation, and exports. The legacy aggregate property name `patient_id` remains an internal compatibility name whose value is the MRN. Alleva `/clients.id` is stored separately only as the source relationship key used to attribute treatment plans.
 - Primary navigation begins with Status Dashboard, Patient Roster, Manual Upload, and Treatment Plan Detail. Treatment Plans Roster is the additional Alleva-plan browsing surface.
 - Patient Roster groups every locally stored plan by MRN and source. Its Treatment Plans selector is ordered by descending last-updated time and displays `(#<plan ID>) YYYY-MM-DD HH:mm UTC`; selecting an option opens the exact plan in Treatment Plan Detail.
 - Treatment Plans Roster lists each locally synchronized Alleva plan with MRN, last-updated time, the prior plan ID, and the initial plan ID/date. Selecting an ID opens the same full Treatment Plan Detail surface.
+- The operational pull reads the complete bounded global `/treatment-plans` collection and maps every plan to `/clients.mrn` through its validated `/clients.id` relationship. Older plans and plans for inactive, discharged, or deleted clients are not discarded.
 - API configuration, gated Alleva pull controls, encrypted persistence, role filtering, source-mode isolation, and minimum-necessary audit logging are unchanged. The live-sync authorization and unvalidated LOC-change-window gates remain in force.
 
 ## Purpose
@@ -58,7 +59,7 @@ Alleva REST readiness and sync:
 
 API harness aggregate dry-run:
 
-- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` runs the clarified patient-centered flow: `GET /clients`, then `GET /treatment-plans?ClientId={patient_id}` using canonical `/clients.id`.
+- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` remains a diagnostic flow: `GET /clients`, then `GET /treatment-plans?ClientId={source_patient_id}` using `/clients.id`. It does not define the canonical local patient identity; operational records use `/clients.mrn`.
 - `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` builds patient-level aggregate diagnostics from `/clients`, `/treatment-plans`, and `/treatment-reviews` without arming live sync.
 - This is readiness evidence only. It does not bypass the saved-credential, enablement, read-only, or PHI-handling requirements.
 
@@ -76,9 +77,15 @@ Runtime SQLite, uploads, logs, reports, and `.env` stay under `%LOCALAPPDATA%\IZ
 
 ## Matching and Privacy
 
-Patient matching uses approved ID aliases before any fallback:
+Current V2 operational matching is strict:
 
-- For the patient-centered API harness contract, treatment-plan joins use only `GET /clients.id` and treatment-plan `client: "/clients/{id}"`. The alias list below remains historical/local-sync readiness context, not the production patient-centered treatment-plan join rule.
+- `/clients.mrn` is the canonical patient identity.
+- `/clients.id` is the separate source relationship key.
+- each treatment-plan relationship must resolve to exactly one observed `/clients.id` before the plan can be attributed to that client's MRN.
+
+The alias list below applies only to historical/local-sync readiness paths:
+
+- For the diagnostic patient-centered API harness contract, treatment-plan joins use only `GET /clients.id` and treatment-plan `client: "/clients/{id}"`. The alias list below remains historical/local-sync readiness context, not the operational V2 MRN identity rule.
 - `clientId`
 - `leadId`
 - `patientId`

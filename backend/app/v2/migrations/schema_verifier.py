@@ -89,6 +89,8 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
         required_columns["app_settings"].add("api_requests_per_minute")
     if expected_version >= 7:
         required_columns["app_settings"].update(name for name, _definition in APP_SETTING_PROTOCOL_EXTENSIONS)
+    if expected_version >= 8:
+        required_columns["patients"].add("source_patient_id")
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",

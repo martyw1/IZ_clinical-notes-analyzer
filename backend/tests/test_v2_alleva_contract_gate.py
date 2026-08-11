@@ -20,7 +20,7 @@ def _complete_contract() -> dict[str, object]:
         "rate_limit": {"maximum_requests_per_minute": 60, "retry_after_seconds": 1},
         "attachments": {"mode": "metadata_only", "download_allowed": False},
         "endpoints": {
-            "clients": {"path": "/clients", "parameters": {"limit": "limit", "offset": "offset"}, "field_mappings": {"client_id": "clientId"}},
+            "clients": {"path": "/clients", "parameters": {"limit": "limit", "offset": "offset"}, "field_mappings": {"client_id": "clientId", "mrn": "mrn"}},
             "treatment_plans": {"path": "/treatment-plans", "parameters": {"limit": "limit", "offset": "offset", "client_id": "ClientId"}, "field_mappings": {"client_id": "clientId", "plan_id": "id"}},
             "treatment_plan_detail": {"path": "/treatment-plans/{plan_id}", "parameters": {}, "field_mappings": {"signature_date": "staffSignatureDate"}},
             "diagnoses": {"path": "/treatment-plans/{plan_id}/diagnoses", "parameters": {}, "field_mappings": {"description": "diagnosisDescription"}},

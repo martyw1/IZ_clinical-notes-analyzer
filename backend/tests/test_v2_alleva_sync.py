@@ -31,7 +31,7 @@ class _MockAllevaState:
     release_clients: Event = field(default_factory=Event)
     client_items: list[dict[str, JsonValue]] = field(
         default_factory=lambda: [
-            {"id": "912", "status": "Active", "levelOfCare": "PHP", "admissionDateTime": "2026-06-01T00:00:00Z"}
+            {"id": "912", "mrn": "912", "status": "Active", "levelOfCare": "PHP", "admissionDateTime": "2026-06-01T00:00:00Z"}
         ]
     )
     plan_items: list[dict[str, JsonValue]] = field(
@@ -45,6 +45,7 @@ class _MockAllevaState:
     active_plan_requests: list[int] = field(default_factory=lambda: [0])
     peak_plan_requests: list[int] = field(default_factory=lambda: [0])
     plan_request_lock: Lock = field(default_factory=Lock)
+    global_plan_collection: bool = True
 
 
 class _MockAllevaHandler(BaseHTTPRequestHandler):
@@ -75,7 +76,7 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
         if path == "/treatment-plans":
             query = parse_qs(urlparse(self.path).query)
             patient_ids = query.get("ClientId", [])
-            if len(patient_ids) != 1 or "clientId" in query:
+            if "clientId" in query or (not type(self).state.global_plan_collection and len(patient_ids) != 1):
                 self.send_error(400, "Exact ClientId query parameter is required")
                 return
             with type(self).state.plan_request_lock:
@@ -87,11 +88,14 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
             try:
                 if type(self).state.plan_delay_seconds:
                     sleep(type(self).state.plan_delay_seconds)
-                patient_id = patient_ids[0]
-                plans = [
-                    plan for plan in type(self).state.plan_items
-                    if _plan_client_id(plan) == patient_id
-                ]
+                plans = type(self).state.plan_items
+                if patient_ids:
+                    patient_id = patient_ids[0]
+                    plans = [plan for plan in plans if _plan_client_id(plan) == patient_id]
+                if not patient_ids:
+                    offset = int(query.get("Cursor", ["0"])[0])
+                    limit = int(query.get("Limit", [str(len(plans) or 1)])[0])
+                    plans = plans[offset : offset + limit]
                 self._respond({"items": plans})
             finally:
                 with type(self).state.plan_request_lock:
@@ -140,14 +144,17 @@ def _mock_alleva_server(
     plan_items: list[dict[str, JsonValue]] | None = None,
     published_shape: bool = True,
     plan_delay_seconds: float = 0.0,
+    global_plan_collection: bool = True,
 ) -> Iterator[tuple[str, _MockAllevaState]]:
     defaults = _MockAllevaState()
+    resolved_clients = client_items or defaults.client_items
     state = _MockAllevaState(
         block_clients=block_clients,
-        client_items=client_items or defaults.client_items,
+        client_items=[_with_synthetic_mrn(item) for item in resolved_clients],
         plan_items=plan_items or defaults.plan_items,
         published_shape=published_shape,
         plan_delay_seconds=plan_delay_seconds,
+        global_plan_collection=global_plan_collection,
     )
 
     class IsolatedMockAllevaHandler(_MockAllevaHandler):
@@ -184,6 +191,11 @@ def _plan_client_id(plan: dict[str, JsonValue]) -> str:
     return ""
 
 
+def _with_synthetic_mrn(item: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    mrn = item.get("mrn") or item.get("id") or item.get("clientId")
+    return {**item, "mrn": mrn} if isinstance(mrn, str | int) and not isinstance(mrn, bool) else item
+
+
 def _approve_synthetic_contract(_client, _headers, api_base_url: str = "https://api.allevasoft.com", token_url: str = "https://api.allevasoft.com/connect/token") -> None:
     _store_contract({
             "contract_version": "synthetic-wire-contract-v1",
@@ -196,7 +208,7 @@ def _approve_synthetic_contract(_client, _headers, api_base_url: str = "https://
             "rate_limit": {"maximum_requests_per_minute": 10_000, "retry_after_seconds": 1},
             "attachments": {"mode": "metadata_only", "download_allowed": False},
             "endpoints": {
-                "clients": {"path": "/clients", "parameters": {}, "field_mappings": {"client_id": "clientId"}},
+                "clients": {"path": "/clients", "parameters": {}, "field_mappings": {"client_id": "clientId", "mrn": "mrn"}},
                 "treatment_plans": {"path": "/treatment-plans", "parameters": {"client_id": "ClientId"}, "field_mappings": {"client_id": "clientId", "plan_id": "id"}},
                 "treatment_plan_detail": {"path": "/treatment-plans/{plan_id}", "parameters": {}, "field_mappings": {"signature_date": "staffSignatureDate"}},
                 "diagnoses": {"path": "/treatment-plans/{plan_id}/diagnoses", "parameters": {}, "field_mappings": {"description": "diagnosisDescription"}},
@@ -219,7 +231,7 @@ def _approve_published_v1_contract(_client, _headers, api_base_url: str, token_u
             "rate_limit": {"maximum_requests_per_minute": 10_000, "retry_after_seconds": 1},
             "attachments": {"mode": "disabled", "download_allowed": False},
             "endpoints": {
-                "clients": {"path": "/clients", "parameters": {"limit": "Limit", "offset": "Cursor"}, "field_mappings": {"client_id": "id", "lifecycle_status": "status", "level_of_care": "levelOfCare", "admission_date": "admissionDateTime"}},
+                "clients": {"path": "/clients", "parameters": {"limit": "Limit", "offset": "Cursor"}, "field_mappings": {"client_id": "id", "mrn": "mrn", "lifecycle_status": "status", "level_of_care": "levelOfCare", "admission_date": "admissionDateTime"}},
                 "treatment_plans": {"path": "/treatment-plans", "parameters": {"limit": "Limit", "offset": "Cursor", "client_id": "ClientId"}, "field_mappings": {"client_id": "client.id", "client_reference": "client.route", "plan_id": "id"}},
                 "treatment_plan_detail": {"path": "/treatment-plans/{plan_id}", "parameters": {}, "field_mappings": {"reason_for_admission": "reasonForAdmission", "last_modified": "lastModified", "problem_description": "problems.description", "behavioral_definition": "problems.behavioralDefinitions.description", "goal_description": "problems.goals.description", "objective_description": "problems.goals.objectives.description", "intervention_description": "problems.goals.objectives.interventions.description"}},
                 "diagnoses": {"path": "/treatment-plans/{plan_id}/diagnosis", "parameters": {}, "field_mappings": {"description": "description", "icd10_code": "code"}},
@@ -375,7 +387,7 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert state.paths == [
             "/token",
             "/clients?Limit=100&Cursor=0&api-version=1.0",
-            "/treatment-plans?Limit=100&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03&ClientId=912",
+            "/treatment-plans?Limit=100&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
             "/treatment-plans/plan-912?api-version=1.0",
             "/treatment-plans/plan-912/diagnosis?api-version=1.0",
         ]
@@ -516,7 +528,7 @@ def test_patient_scoped_single_plan_pages_do_not_repeat_ignored_vendor_cursor(tm
     assert synced["records_written"] == 10
 
 
-def test_patient_scoped_plan_queries_overlap_with_bounded_concurrency(tmp_path, monkeypatch) -> None:
+def test_global_plan_collection_is_requested_once_without_patient_filter(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     client_items: list[dict[str, JsonValue]] = [
@@ -555,11 +567,10 @@ def test_patient_scoped_plan_queries_overlap_with_bounded_concurrency(tmp_path, 
 
     assert synced["status"] == "completed"
     assert synced["records_written"] == 4
-    assert state.peak_plan_requests[0] >= 2
+    assert state.peak_plan_requests[0] == 1
     plan_queries = [path for path in state.paths if path.startswith("/treatment-plans?")]
-    assert {parse_qs(urlparse(path).query)["ClientId"][0] for path in plan_queries} == {
-        "912", "913", "914", "915",
-    }
+    assert len(plan_queries) == 1
+    assert "ClientId" not in parse_qs(urlparse(plan_queries[0]).query)
 
 
 def test_published_alleva_v1_numeric_nested_ids_populate_queue_and_roster(tmp_path, monkeypatch) -> None:
@@ -601,7 +612,8 @@ def test_published_alleva_v1_numeric_nested_ids_populate_queue_and_roster(tmp_pa
         for item in roster
     ] == [("912", "4815")]
     assert "/treatment-plans/4815/diagnosis?api-version=1.0" in state.paths
-    assert any(path.endswith("&ClientId=912") for path in state.paths if path.startswith("/treatment-plans?"))
+    assert any(path.startswith("/treatment-plans?") for path in state.paths)
+    assert not any("ClientId=" in path for path in state.paths)
     assert not any("clientId=" in path for path in state.paths)
     assert not any(path.startswith("/treatment-reviews") for path in state.paths)
 

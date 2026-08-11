@@ -46,7 +46,7 @@ def _configure(client, headers: dict[str, str], base_url: str, *, pagination_lim
 
 def _wait(client, headers: dict[str, str], route: str) -> dict[str, JsonValue]:
     current = client.get(route, headers=headers)
-    for _ in range(80):
+    for _ in range(200):
         assert current.status_code == 200
         if current.json()["status"] in TERMINAL:
             return current.json()
@@ -60,7 +60,7 @@ def _wait(client, headers: dict[str, str], route: str) -> dict[str, JsonValue]:
 def test_active_roster_pull_is_distinct_plan_independent_and_restart_queryable(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
-    clients = [{"id": "roster-101", "status": "Active", "firstName": "Never Persist"}]
+    clients = [{"id": "roster-source-101", "mrn": "roster-101", "status": "Active", "firstName": "Never Persist"}]
     database_path = tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3"
     with sqlite3.connect(database_path) as database:
         facility_id = database.execute("SELECT id FROM facilities WHERE facility_key='r3-default'").fetchone()[0]
@@ -117,7 +117,10 @@ class _PartialRosterHandler(BaseHTTPRequestHandler):
         type(self).requests.append(self.path)
         cursor = parse_qs(urlparse(self.path).query).get("Cursor", ["0"])[0]
         if cursor == "0":
-            self._respond(200, {"items": [{"id": "seen-201", "status": "Active"}, {"id": "seen-202", "status": "Active"}]})
+            self._respond(200, {"items": [
+                {"id": "seen-source-201", "mrn": "seen-201", "status": "Active"},
+                {"id": "seen-source-202", "mrn": "seen-202", "status": "Active"},
+            ]})
             return
         self._respond(503, {"error": "sensitive vendor detail must not surface"})
 

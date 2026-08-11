@@ -15,7 +15,12 @@ from app.v2.services.clinical_snapshot_codec import AggregateSnapshot, ClinicalS
 from app.v2.services.deterministic_evaluator import EvaluationBundle, evaluate_plan_version, facility_local_date
 from app.v2.services.evaluation_projection import apply_evaluation
 from app.v2.services.rule_package import DeterministicRulePackage, load_rule_package
-from app.v2.services.migrated_treatment_plan import PlanVersionRow, RecordAggregateSource, record_aggregate
+from app.v2.services.migrated_treatment_plan import (
+    PlanVersionRow,
+    RecordAggregateSource,
+    project_patient_identity,
+    record_aggregate,
+)
 from app.v2.services.alleva_contracts import SyncImportProvenance
 
 EvaluationTrigger = Literal[
@@ -138,7 +143,7 @@ def reevaluate_all_plan_versions(db: Session, trigger: EvaluationTrigger) -> Eva
         snapshot = codec.decode_plan(row[7])
         match snapshot:
             case AggregateSnapshot(aggregate=aggregate):
-                version_aggregate = aggregate
+                version_aggregate = project_patient_identity(aggregate, str(row[1]))
             case PlanRecordSnapshot(record=record):
                 version_row = PlanVersionRow(
                     str(row[2]), str(row[3]), int(row[4]), str(row[5] or "Unknown"), str(row[6] or "Unknown"), row[7],

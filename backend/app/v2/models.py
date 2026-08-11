@@ -58,7 +58,7 @@ class AppSetting(Base):
     legacy_api_settings_migration_state: Mapped[str] = mapped_column(String(80), default="")
     emr_api_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
     api_pagination_limit: Mapped[int] = mapped_column(Integer, default=100)
-    alleva_treatment_plan_sync_limit: Mapped[int] = mapped_column(Integer, default=250)
+    alleva_treatment_plan_sync_limit: Mapped[int] = mapped_column(Integer, default=5000)
     api_requests_per_minute: Mapped[int] = mapped_column(Integer, default=600)
     emr_api_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     alleva_treatment_plan_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

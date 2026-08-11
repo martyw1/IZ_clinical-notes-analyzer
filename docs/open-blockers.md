@@ -42,19 +42,20 @@ Status: Mapping accepted for operator-triggered use; supervised live validation 
 
 Current implementation state: Version 2.0 Beta includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires a client ID, encrypted secret, API and sync enablement, and explicit live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and stored as an encrypted versioned contract when a pull begins; there is no separate mapping-approval form. Startup sync remains disabled. Supervised validation against R3's live tenant, credential rotation, and compliance release approval remain open production-readiness tasks.
 
-Current patient-centered API harness contract:
+Current operational import contract:
 
 ```text
 GET /clients
-GET /treatment-plans?ClientId={patient_id}
+GET /treatment-plans (bounded global pages)
 ```
 
-Current patient-centered rules:
+Current operational rules:
 
-- `patient_id` is the canonical Alleva client ID from `GET /clients.id`.
-- `ClientId` is case-sensitive.
-- Treatment-plan ownership is validated by parsing the treatment-plan `client` value, expected as `/clients/{id}`.
-- `chartId`, `externalId`, `mrn`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not production treatment-plan join keys.
+- `/clients.mrn` is the canonical local patient key.
+- `/clients.id` is stored separately as the Alleva source relationship key.
+- Treatment-plan ownership is validated from `client.id`, `client.route`, or a string `/clients/{id}`, then mapped to the corresponding MRN.
+- The complete bounded global treatment-plan collection is read across active, inactive, discharged, and deleted client states so older plans are retained.
+- `chartId`, `externalId`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not substitutes for MRN.
 - Treatment-review list data is not a reliable patient join source. Do not join treatment reviews by `clientName`.
 
 The API harness also includes a `patient_treatment_plan_aggregates` dry-run report for combining `/clients`, `/treatment-plans`, and safely attributable treatment-review evidence into PHI-minimized aggregate diagnostics. This remains readiness/testing evidence only. It does not remove the tenant credential, API/sync enablement, pagination/rate-limit, PHI handling, supervised live validation, or LOC-change blocker requirements.
@@ -66,8 +67,8 @@ Current diagnostic behavior: manual sync reports the specific failing stage inst
 Required before live startup sync:
 
 - Confirm which Alleva tenant/environment and credentials R3 may use.
-- Confirm active-client endpoint and active/discharged filtering.
-- Confirm treatment-plan endpoint behavior, including patient-centered `ClientId` casing in the approved tenant.
+- Confirm client endpoint MRN completeness and active/discharged lifecycle semantics.
+- Confirm global treatment-plan pagination and date-filter behavior in the approved tenant.
 - Confirm treatment-plan detail, diagnosis, and advanced-form endpoint behavior if those fields are needed for completeness review.
 - Confirm whether a trusted source can supply stable treatment-review IDs for direct treatment-review detail retrieval.
 - Confirm pagination/cursor/date range behavior and rate limits.
@@ -77,8 +78,8 @@ Required before live startup sync:
 Required resolution evidence:
 
 - R3/Alleva confirms the exact approved endpoints and runtime payload fields.
-- The patient-centered harness proves a synthetic or approved non-PHI patient can be retrieved with `GET /clients` plus `GET /treatment-plans?ClientId={patient_id}`.
-- The returned treatment-plan `client` value validates to `/clients/{id}` for the queried patient.
+- The operational importer proves that approved non-PHI clients supply both `id` and `mrn`, and that bounded global treatment-plan pagination reaches a terminal page.
+- Every imported treatment-plan relationship validates to one observed `/clients.id` and is stored under the matching `/clients.mrn`.
 - Required signature/date/completion fields are present or documented as unavailable with deterministic missing-data behavior.
 - A documented decision exists for treatment-review due-date availability through a trusted review ID or an explicit unavailable state.
 
@@ -112,7 +113,7 @@ Current evidence:
 
 - Prior validation reached the public Alleva Swagger UI and v1/v2 Swagger JSON.
 - The 2026-06-21 Swagger/OpenAPI mapping export lists 424 endpoints and 2303 unique fields.
-- The current patient-centered contract uses `GET /clients` and `GET /treatment-plans?ClientId={patient_id}`.
+- The current operational contract uses `GET /clients` plus bounded global `GET /treatment-plans` pages; the patient-filtered `ClientId` route remains available only in diagnostic harness flows.
 - Advanced-form endpoints remain protected operation paths and still require approved runtime access before use.
 - Prior supplied client-credentials attempts did not produce a working access-token response.
 - Sanitized report files are written under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports`.

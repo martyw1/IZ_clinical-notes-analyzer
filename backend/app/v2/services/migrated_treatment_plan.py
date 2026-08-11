@@ -58,7 +58,7 @@ def assemble_treatment_plan_aggregate(
     for _, snapshot in reversed(decoded_plans):
         if isinstance(snapshot, AggregateSnapshot):
             records = tuple(item.record for _, item in decoded_plans if isinstance(item, PlanRecordSnapshot))
-            return _merge_aggregate(snapshot.aggregate, records, reviews)
+            return _merge_aggregate(project_patient_identity(snapshot.aggregate, patient_id), records, reviews)
     records = tuple(snapshot.record for _, snapshot in decoded_plans if isinstance(snapshot, PlanRecordSnapshot))
     return record_aggregate(RecordAggregateSource(patient_id, plans[-1], records, reviews))
 
@@ -159,6 +159,22 @@ def _merge_aggregate(
         update={
             "treatment_plans": record_plans + aggregate.treatment_plans,
             "treatment_reviews": aggregate.treatment_reviews + reviews,
+        }
+    )
+
+
+def project_patient_identity(
+    aggregate: TreatmentPlanAggregate,
+    patient_id: str,
+) -> TreatmentPlanAggregate:
+    return aggregate.model_copy(
+        update={
+            "patient_id": patient_id,
+            "patient_display_label": f"MRN {patient_id}",
+            "content_snapshot": aggregate.content_snapshot.model_copy(update={"patient_id": patient_id}),
+            "evidence_coverage_summary": aggregate.evidence_coverage_summary.model_copy(
+                update={"patient_id": patient_id}
+            ),
         }
     )
 

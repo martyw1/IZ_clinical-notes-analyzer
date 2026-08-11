@@ -36,6 +36,10 @@ def test_backfill_preserves_multi_plan_review_documents_and_role_mapping(tmp_pat
         assert connection.execute("SELECT plan_version_id FROM source_documents").fetchone()[0] is not None
         patient_columns = tuple(row[1] for row in connection.execute("PRAGMA table_info('patients')"))
         assert all("name" not in column for column in patient_columns)
+        assert "source_patient_id" in patient_columns
+        assert connection.execute(
+            "SELECT alleva_treatment_plan_sync_limit FROM app_settings"
+        ).fetchone() == (5000,)
     assert report.table_count("treatment_plan_versions") == 2
     assert report.table_count("treatment_review_versions") == 2
 
@@ -124,6 +128,8 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
         for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
             connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')
         connection.execute('ALTER TABLE app_settings DROP COLUMN "api_requests_per_minute"')
+        connection.execute('DROP INDEX "uq_patients_source_identity"')
+        connection.execute('ALTER TABLE patients DROP COLUMN "source_patient_id"')
         connection.commit()
     original_database_bytes = database_path.read_bytes()
 

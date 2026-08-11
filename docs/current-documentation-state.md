@@ -33,19 +33,20 @@ Historical validation reports, PRD notes, and earlier implementation analyses ma
 
 ## Current Alleva API State
 
-The current patient-centered treatment-plan contract is:
+The current operational treatment-plan contract is:
 
 ```text
 GET /clients
-GET /treatment-plans?ClientId={patient_id}
+GET /treatment-plans (bounded global pages)
 ```
 
 Current contract rules:
 
-- `patient_id` is the canonical Alleva client ID from `GET /clients.id`.
-- `ClientId` is case-sensitive in the treatment-plan query.
-- Treatment-plan ownership is validated from the returned treatment-plan `client` string, expected as `/clients/{id}`.
-- `chartId`, `externalId`, `mrn`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not production treatment-plan join keys.
+- `/clients.mrn` is the canonical local patient identity and the value exposed through the legacy `patient_id` property.
+- `/clients.id` is retained separately as the source patient ID used for treatment-plan relationship validation.
+- Treatment-plan ownership is validated from `client.id`, `client.route`, or a string `/clients/{id}`, then mapped to the matching MRN.
+- The operational pull collects older and newer plans across every lifecycle state; it does not issue one filtered list request per active client.
+- `chartId`, `externalId`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not substitutes for MRN.
 - Active client status prefers `status.id` when available; observed/defined status IDs are `1049` for Active and `1356` for Discharged.
 - `dischargeDate` / `dischargeDateTime` from `GET /clients` is documented as planned/scheduled discharge, not actual system discharge.
 - `isActive` is treatment-plan active status. `isComplete` means EMR submission/completion and does not mean inactive, closed, superseded, or current.

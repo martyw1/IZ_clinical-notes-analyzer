@@ -11,14 +11,16 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.v2.models import AppSetting
-from app.v2.services.alleva_contracts import ApprovedAllevaContract, reconcile_sync_patients
+from app.v2.services.alleva_contracts import ApprovedAllevaContract
+from app.v2.services.alleva_patient_identity import reconcile_sync_patients
 from app.v2.services.alleva_protocol import AllevaReadProtocol, read_headers
 from app.v2.services.alleva_sync import (
     MAX_SYNC_ROWS,
     AllevaSyncCancelled,
     AllevaSyncError,
     ApprovedRequestRateLimiter,
-    _client_lifecycles,
+    _client_observations,
+    _client_source_ids,
     _endpoint_path,
     _endpoint_request_parameters,
     _get_with_retry,
@@ -89,7 +91,9 @@ def run_roster_pull(
                 )
                 page = _records(response.json())
                 if len(page) > requested:
-                    raise AllevaSyncError("Alleva roster response exceeded the approved page size.")
+                    if len(records) + len(page) > record_limit:
+                        raise AllevaSyncError("Alleva roster response exceeded the approved collection limit.")
+                    complete_snapshot = True
             except AllevaSyncCancelled:
                 raise
             except (httpx.HTTPError, json.JSONDecodeError, ValueError, AllevaSyncError):
@@ -109,22 +113,27 @@ def run_roster_pull(
             if on_page is not None:
                 on_page(page_number, cursor, tuple(page))
             page_number += 1
-            if len(page) < requested:
+            if complete_snapshot or len(page) < requested:
                 complete_snapshot = True
                 break
             cursor += requested
 
     if not complete_snapshot:
         warning_count = 1
+    observations = _client_observations(tuple(records), contract)
+    source_patient_ids = _client_source_ids(tuple(records), contract)
+    if len(observations) < len(source_patient_ids):
+        warning_count = 1
     reconcile_sync_patients(
         db,
         external_job_id,
-        _client_lifecycles(tuple(records), contract),
+        observations,
+        source_patient_ids,
         complete_snapshot,
         reconciled_at,
     )
     return RosterPullResult(
-        status="completed" if complete_snapshot else "completed_with_warnings",
+        status="completed" if complete_snapshot and warning_count == 0 else "completed_with_warnings",
         observed_count=len(records),
         warning_count=warning_count,
         complete_snapshot=complete_snapshot,

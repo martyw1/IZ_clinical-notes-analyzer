@@ -17,7 +17,7 @@ from app.v2.models import AppSetting
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 REQUIRED_ENDPOINTS: Final = frozenset(("clients", "treatment_plans", "treatment_plan_detail", "diagnoses", "reviews", "review_detail"))
-BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-07-13-exact-read-protocol"
+BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-08-10-mrn-global-plans"
 DEFAULT_ALLEVA_SCOPE: Final = "https://authorization.allevasoft.com/api:read"
 _BUILTIN_CONTRACT_LOCK: Final = Lock()
 
@@ -133,6 +133,7 @@ def _builtin_contract_payload(
                     "parameters": {"limit": "Limit", "offset": "Cursor"},
                     "field_mappings": {
                         "client_id": "id",
+                        "mrn": "mrn",
                         "lifecycle_status": "status",
                         "level_of_care": "levelOfCare",
                         "admission_date": "admissionDateTime",
@@ -458,93 +459,6 @@ def set_sync_cancellation_requested(db: Session, external_job_id: str) -> None:
     db.commit()
 
 
-def reconcile_sync_patients(
-    db: Session,
-    external_job_id: str,
-    observed_lifecycles: dict[str, str],
-    completed_snapshot: bool,
-    reconciled_at: str,
-) -> None:
-    facility_id = int(db.execute(text("SELECT id FROM facilities WHERE facility_key='r3-default'")).scalar_one())
-    existing = {
-        str(row["canonical_client_id"]): int(row["id"])
-        for row in db.execute(
-            text(
-                "SELECT id,canonical_client_id FROM patients "
-                "WHERE facility_id=:facility_id AND source_system='alleva_rest_api'"
-            ),
-            {"facility_id": facility_id},
-        ).mappings()
-    }
-    for client_id, lifecycle_state in observed_lifecycles.items():
-        db.execute(
-            text(
-                "INSERT OR IGNORE INTO patients("
-                "facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at"
-                ") VALUES(:facility_id,:client_id,'alleva_rest_api',:lifecycle_state,:reconciled_at,:reconciled_at,:reconciled_at)"
-            ),
-            {
-                "facility_id": facility_id,
-                "client_id": client_id,
-                "lifecycle_state": lifecycle_state,
-                "reconciled_at": reconciled_at,
-            },
-        )
-        patient_id = int(
-            db.execute(
-                text(
-                    "SELECT id FROM patients WHERE facility_id=:facility_id "
-                    "AND source_system='alleva_rest_api' AND canonical_client_id=:client_id"
-                ),
-                {"facility_id": facility_id, "client_id": client_id},
-            ).scalar_one()
-        )
-        db.execute(
-            text(
-                "UPDATE patients SET lifecycle_state=:lifecycle_state,last_seen_at=:reconciled_at,reconciled_at=:reconciled_at "
-                "WHERE id=:patient_id"
-            ),
-            {"patient_id": patient_id, "lifecycle_state": lifecycle_state, "reconciled_at": reconciled_at},
-        )
-        _insert_reconciliation_outcome(db, external_job_id, patient_id, client_id, lifecycle_state, reconciled_at)
-        existing.pop(client_id, None)
-    if completed_snapshot:
-        for client_id, patient_id in existing.items():
-            db.execute(
-                text("UPDATE patients SET lifecycle_state='missing',reconciled_at=:reconciled_at WHERE id=:patient_id"),
-                {"patient_id": patient_id, "reconciled_at": reconciled_at},
-            )
-            _insert_reconciliation_outcome(db, external_job_id, patient_id, client_id, "missing", reconciled_at)
-    db.commit()
-
-
-def _insert_reconciliation_outcome(
-    db: Session,
-    external_job_id: str,
-    patient_id: int,
-    client_id: str,
-    outcome: str,
-    created_at: str,
-) -> None:
-    evidence_sha256 = hashlib.sha256(f"{external_job_id}:{client_id}:{outcome}".encode("utf-8")).hexdigest()
-    db.execute(
-        text(
-            "INSERT OR IGNORE INTO reconciliation_outcomes("
-            "job_id,patient_id,source_kind,source_record_id,outcome,evidence_sha256,created_at"
-            ") SELECT id,:patient_id,'alleva_client',:client_id,:outcome,:evidence_sha256,:created_at "
-            "FROM sync_jobs WHERE external_job_id=:job_id"
-        ),
-        {
-            "job_id": external_job_id,
-            "patient_id": patient_id,
-            "client_id": client_id,
-            "outcome": outcome,
-            "evidence_sha256": evidence_sha256,
-            "created_at": created_at,
-        },
-    )
-
-
 def _counter_values(raw: str | None) -> dict[str, object]:
     if not raw:
         return {}
@@ -580,6 +494,8 @@ def _validate_contract(payload: AllevaContractApprovalIn) -> None:
         raise ValueError("Review detail path must contain {review_id}.")
     if payload.endpoints["treatment_plans"].parameters.get("client_id") != "ClientId":
         raise ValueError("Treatment-plan retrieval must map the canonical patient query to Alleva's exact ClientId parameter.")
+    if not payload.endpoints["clients"].field_mappings.get("mrn"):
+        raise ValueError("Client retrieval must map Alleva's MRN field as the canonical patient identity.")
     plan_mappings = payload.endpoints["treatment_plans"].field_mappings
     if not plan_mappings.get("client_id") and not plan_mappings.get("client_reference"):
         raise ValueError("Treatment-plan retrieval must map a returned patient relationship for ownership validation.")
