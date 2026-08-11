@@ -76,6 +76,43 @@ function Assert-LiveVerificationEvidence {
     }
 }
 
+function Assert-SafeEvidenceNode {
+    param(
+        [object]$Value,
+        [string[]]$AllowedKeys,
+        [int]$Depth = 0
+    )
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($entry in $Value.GetEnumerator()) {
+            $key = [string]$entry.Key
+            if ($Depth -eq 0 -and $key -notin $AllowedKeys) {
+                throw 'Live workflow evidence contains a non-allowlisted key.'
+            }
+            if ($Depth -gt 0 -and $key -match '(?i)mrn|name|client|source|patient|payload|field|credential|secret|token|cipher') {
+                throw 'Live workflow evidence contains sensitive nested metadata.'
+            }
+            Assert-SafeEvidenceNode -Value $entry.Value -AllowedKeys $AllowedKeys -Depth ($Depth + 1)
+        }
+        if ($Depth -gt 0) {
+            throw 'Live workflow evidence must contain only flat aggregate metadata.'
+        }
+        return
+    }
+    if ($Value -is [pscustomobject] -or ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string])) {
+        throw 'Live workflow evidence must contain only flat aggregate metadata.'
+    }
+    if ($Value -is [string]) {
+        if ($Value -notin @('', 'completed') -and $Value -notmatch '^[0-9a-f]{64}$') {
+            throw 'Live workflow evidence contains a non-allowlisted string value.'
+        }
+        return
+    }
+    if ($null -eq $Value -or $Value -isnot [ValueType]) {
+        throw 'Live workflow evidence contains an unsupported value.'
+    }
+}
+
 function Write-SafeEvidence {
     param(
         [hashtable]$Evidence,
@@ -95,16 +132,7 @@ function Write-SafeEvidence {
         'encrypted_snapshot_envelopes_valid', 'snapshot_schema_versions_valid',
         'audit_privacy_valid', 'duration_seconds'
     )
-    foreach ($key in $Evidence.Keys) {
-        if ($key -notin $allowedKeys) {
-            throw 'Live workflow evidence contains a non-allowlisted key.'
-        }
-    }
-    foreach ($value in $Evidence.Values) {
-        if ($value -is [string] -and $value -notin @('', 'completed') -and $value -notmatch '^[0-9a-f]{64}$') {
-            throw 'Live workflow evidence contains a non-allowlisted string value.'
-        }
-    }
+    Assert-SafeEvidenceNode -Value $Evidence -AllowedKeys $allowedKeys
     $json = $Evidence | ConvertTo-Json -Depth 4 -Compress
     if ($json -match '(?i)bearer|IZCNA1:|/clients/|@') {
         throw 'Live workflow evidence failed its privacy check.'
@@ -246,8 +274,16 @@ if ($SelfTest) {
     $sensitiveRejected = $false
     try { Write-SafeEvidence @{ terminal_status = 'Synthetic Patient Example' } -Quiet }
     catch { $sensitiveRejected = $true }
+    $nestedSensitiveRejected = $false
+    try {
+        Write-SafeEvidence @{
+            terminal_status = 'completed'
+            linkage_valid = @{ mrn = 'MRN-SYNTHETIC'; patient_name = 'Synthetic Patient Example' }
+        } -Quiet
+    }
+    catch { $nestedSensitiveRejected = $true }
     if (-not ($completedAccepted -and $blockedRejected -and $failedRejected -and $malformedRejected -and
-        $falseInvariantRejected -and $countMismatchRejected -and $sensitiveRejected)) {
+        $falseInvariantRejected -and $countMismatchRejected -and $sensitiveRejected -and $nestedSensitiveRejected)) {
         throw 'Live workflow self-test failed terminal or privacy validation.'
     }
     Write-SafeEvidence @{ self_test_passed = $true }
