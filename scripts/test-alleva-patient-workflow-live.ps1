@@ -8,11 +8,73 @@ param(
     [string]$ReferenceMrn = '',
     [int]$PollTimeoutSeconds = 1200,
     [switch]$ReuseCompletedSync,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$SelfTestBlockedChild
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$blockedMessage = 'LIVE_SYNC_BLOCKED: approved configuration is not ready'
+
+function Test-ApprovedLiveGate {
+    param(
+        [bool]$Configured,
+        [bool]$Authorized,
+        [bool]$Trusted,
+        [bool]$MappingValid
+    )
+
+    return $Configured -and $Authorized -and $Trusted -and $MappingValid
+}
+
+function Assert-LiveVerificationEvidence {
+    param([hashtable]$Evidence)
+
+    $requiredTrue = @(
+        'gate_configured', 'gate_authorized', 'gate_trusted', 'gate_mapping_valid',
+        'reference_case_valid', 'linkage_valid', 'patient_plan_order_valid',
+        'plan_roster_order_valid', 'patient_detail_contracts_valid',
+        'plan_detail_contracts_valid', 'display_label_consistency_valid',
+        'encrypted_snapshot_envelopes_valid', 'snapshot_schema_versions_valid',
+        'audit_privacy_valid'
+    )
+    foreach ($key in $requiredTrue) {
+        if (-not $Evidence.ContainsKey($key) -or -not [bool]$Evidence[$key]) {
+            throw 'LIVE_SYNC_FAILED: workflow verification invariant failed'
+        }
+    }
+    $requiredCounts = @(
+        'client_count', 'patient_count', 'global_plan_count', 'linked_plan_count',
+        'unlinked_plan_count', 'patient_only_count', 'accounted_plan_count',
+        'six_plan_patient_count', 'maximum_plans_per_patient',
+        'patient_detail_check_count', 'plan_detail_check_count', 'encrypted_snapshot_count',
+        'duration_seconds'
+    )
+    foreach ($key in $requiredCounts) {
+        if (-not $Evidence.ContainsKey($key) -or [int]$Evidence[$key] -lt 0) {
+            throw 'LIVE_SYNC_FAILED: workflow verification evidence is incomplete'
+        }
+    }
+    if ([string]$Evidence.terminal_status -ne 'completed') {
+        throw 'LIVE_SYNC_FAILED: operational sync did not complete cleanly'
+    }
+    if ([int]$Evidence.client_count -ne [int]$Evidence.patient_count) {
+        throw 'LIVE_SYNC_FAILED: client and patient counts do not conserve'
+    }
+    if ([int]$Evidence.global_plan_count -ne [int]$Evidence.accounted_plan_count -or
+        [int]$Evidence.accounted_plan_count -ne ([int]$Evidence.linked_plan_count + [int]$Evidence.unlinked_plan_count)) {
+        throw 'LIVE_SYNC_FAILED: treatment plan counts do not conserve'
+    }
+    if ([int]$Evidence.patient_only_count -gt [int]$Evidence.patient_count -or
+        [int]$Evidence.encrypted_snapshot_count -lt [int]$Evidence.patient_count -or
+        [int]$Evidence.patient_detail_check_count -lt 1 -or
+        [int]$Evidence.plan_detail_check_count -lt 1) {
+        throw 'LIVE_SYNC_FAILED: required patient, detail, or encrypted snapshot evidence is missing'
+    }
+    if ([string]$Evidence.mapping_hash -notmatch '^[0-9a-f]{64}$') {
+        throw 'LIVE_SYNC_FAILED: approved mapping evidence is missing'
+    }
+}
 
 function Write-SafeEvidence {
     param(
@@ -39,7 +101,7 @@ function Write-SafeEvidence {
         }
     }
     foreach ($value in $Evidence.Values) {
-        if ($value -is [string] -and $value -notin @('', 'completed', 'completed_with_warnings') -and $value -notmatch '^[0-9a-f]{64}$') {
+        if ($value -is [string] -and $value -notin @('', 'completed') -and $value -notmatch '^[0-9a-f]{64}$') {
             throw 'Live workflow evidence contains a non-allowlisted string value.'
         }
     }
@@ -89,6 +151,14 @@ function Test-DescendingUpdated {
     return $true
 }
 
+if ($SelfTestBlockedChild) {
+    if (-not (Test-ApprovedLiveGate -Configured $true -Authorized $true -Trusted $true -MappingValid $false)) {
+        [Console]::Error.WriteLine($blockedMessage)
+        exit 1
+    }
+    exit 0
+}
+
 if ($SelfTest) {
     if (-not (Test-DescendingUpdated @(
         [pscustomobject]@{ last_updated = '2026-01-02T00:00:00Z' },
@@ -97,25 +167,87 @@ if ($SelfTest) {
     ))) {
         throw 'Live workflow self-test failed descending timestamp validation.'
     }
+    $validEvidence = @{
+        gate_configured = $true
+        gate_authorized = $true
+        gate_trusted = $true
+        gate_mapping_valid = $true
+        mapping_hash = 'a' * 64
+        terminal_status = 'completed'
+        client_count = 2
+        patient_count = 2
+        global_plan_count = 3
+        linked_plan_count = 2
+        unlinked_plan_count = 1
+        patient_only_count = 1
+        six_plan_patient_count = 0
+        maximum_plans_per_patient = 2
+        accounted_plan_count = 3
+        patient_detail_check_count = 1
+        plan_detail_check_count = 1
+        encrypted_snapshot_count = 2
+        duration_seconds = 1
+        reference_case_valid = $true
+        linkage_valid = $true
+        patient_plan_order_valid = $true
+        plan_roster_order_valid = $true
+        patient_detail_contracts_valid = $true
+        plan_detail_contracts_valid = $true
+        display_label_consistency_valid = $true
+        encrypted_snapshot_envelopes_valid = $true
+        snapshot_schema_versions_valid = $true
+        audit_privacy_valid = $true
+    }
     $completedAccepted = $false
     try {
-        Write-SafeEvidence @{ terminal_status = 'completed'; linkage_valid = $true } -Quiet
+        Assert-LiveVerificationEvidence $validEvidence
         $completedAccepted = $true
     }
     catch {}
     $blockedRejected = $false
-    try { Write-SafeEvidence @{ terminal_status = 'blocked' } -Quiet }
-    catch { $blockedRejected = $true }
+    $blockedStdoutPath = [System.IO.Path]::GetTempFileName()
+    $blockedStderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $blockedProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath), '-SelfTestBlockedChild'
+        ) -RedirectStandardOutput $blockedStdoutPath -RedirectStandardError $blockedStderrPath -WindowStyle Hidden -Wait -PassThru
+        $blockedStdout = [System.IO.File]::ReadAllText($blockedStdoutPath).Trim()
+        $blockedStderr = [System.IO.File]::ReadAllText($blockedStderrPath).Trim()
+        $blockedRejected = $blockedProcess.ExitCode -ne 0 -and -not $blockedStdout -and $blockedStderr -eq $blockedMessage
+    }
+    finally {
+        [System.IO.File]::Delete($blockedStdoutPath)
+        [System.IO.File]::Delete($blockedStderrPath)
+    }
     $failedRejected = $false
-    try { Write-SafeEvidence @{ terminal_status = 'failed' } -Quiet }
+    try {
+        $failedEvidence = $validEvidence.Clone()
+        $failedEvidence.terminal_status = 'failed'
+        Assert-LiveVerificationEvidence $failedEvidence
+    }
     catch { $failedRejected = $true }
     $malformedRejected = $false
-    try { Write-SafeEvidence @{ unexpected_payload = $true } -Quiet }
+    try { Assert-LiveVerificationEvidence @{ terminal_status = 'completed' } }
     catch { $malformedRejected = $true }
+    $falseInvariantRejected = $false
+    try {
+        $invalidEvidence = $validEvidence.Clone()
+        $invalidEvidence.linkage_valid = $false
+        Assert-LiveVerificationEvidence $invalidEvidence
+    }
+    catch { $falseInvariantRejected = $true }
+    $countMismatchRejected = $false
+    try {
+        $mismatchedEvidence = $validEvidence.Clone()
+        $mismatchedEvidence.accounted_plan_count = 2
+        Assert-LiveVerificationEvidence $mismatchedEvidence
+    }
+    catch { $countMismatchRejected = $true }
     $sensitiveRejected = $false
     try { Write-SafeEvidence @{ terminal_status = 'Synthetic Patient Example' } -Quiet }
     catch { $sensitiveRejected = $true }
-    if (-not ($completedAccepted -and $blockedRejected -and $failedRejected -and $malformedRejected -and $sensitiveRejected)) {
+    if (-not ($completedAccepted -and $blockedRejected -and $failedRejected -and $malformedRejected -and
+        $falseInvariantRejected -and $countMismatchRejected -and $sensitiveRejected)) {
         throw 'Live workflow self-test failed terminal or privacy validation.'
     }
     Write-SafeEvidence @{ self_test_passed = $true }
@@ -137,7 +269,10 @@ $gateTrusted = $apiOrigin.Scheme -eq 'https' -and $tokenOrigin.Scheme -eq 'https
     $tokenOrigin.Host -eq 'allevasoft.com' -or $tokenOrigin.Host.EndsWith('.allevasoft.com', [StringComparison]::OrdinalIgnoreCase)
 )
 $gateMappingValid = -not [string]::IsNullOrWhiteSpace([string]$configuration.active_contract_version)
-if (-not $gateConfigured -or -not $gateAuthorized -or -not $gateTrusted) { throw 'Live workflow gates are not configured, authorized, and trusted.' }
+if (-not (Test-ApprovedLiveGate -Configured $gateConfigured -Authorized $gateAuthorized -Trusted $gateTrusted -MappingValid $gateMappingValid)) {
+    [Console]::Error.WriteLine($blockedMessage)
+    exit 1
+}
 
 $job = if ($ReuseCompletedSync) {
     Invoke-Api -Method GET -Path '/api/v2/alleva-sync-last-run' -Headers $headers
@@ -153,7 +288,7 @@ if (-not $ReuseCompletedSync) {
         if ($job.status -in @('completed', 'completed_with_warnings', 'failed', 'cancelled')) { break }
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
 }
-if ($job.status -notin @('completed', 'completed_with_warnings')) { throw 'Live workflow sync did not complete successfully.' }
+if ($job.status -ne 'completed') { throw 'LIVE_SYNC_FAILED: operational sync did not complete cleanly' }
 $configuration = Invoke-Api -Method GET -Path '/api/api-configuration' -Headers $headers
 $gateMappingValid = -not [string]::IsNullOrWhiteSpace([string]$configuration.active_contract_version)
 
@@ -312,4 +447,5 @@ $evidence = @{
     audit_privacy_valid = $auditPrivacyValid
     duration_seconds = [int]([DateTimeOffset]::UtcNow - $startedAt).TotalSeconds
 }
+Assert-LiveVerificationEvidence $evidence
 Write-SafeEvidence $evidence
