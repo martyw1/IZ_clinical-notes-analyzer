@@ -12,6 +12,7 @@ EXPECTED_COLUMNS = {
     "facilities": ("id", "facility_key", "display_name", "timezone", "is_active", "created_at", "updated_at"),
     "user_facilities": ("user_id", "facility_id", "assigned_by_user_id", "assigned_at"),
     "patients": ("id", "facility_id", "canonical_client_id", "source_system", "lifecycle_state", "first_seen_at", "last_seen_at", "reconciled_at", "source_patient_id"),
+    "patient_snapshot_versions": ("id", "patient_id", "source_system", "source_record_id", "version_ordinal", "source_last_updated", "snapshot_schema_version", "snapshot_encrypted", "content_sha256", "captured_at", "supersedes_snapshot_id", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256"),
     "patient_assignments": ("patient_id", "counselor_user_id", "assigned_by_user_id", "assigned_at", "ended_at", "is_active"),
     "loc_history": ("id", "patient_id", "loc_code", "source_system", "source_record_id", "effective_date", "recorded_at", "reconciliation_state", "evidence_sha256"),
     "treatment_plan_versions": ("id", "patient_id", "source_system", "source_record_id", "version_ordinal", "plan_date", "signature_date", "admission_date", "source_next_review_due", "normalized_snapshot_encrypted", "content_sha256", "evidence_sha256", "imported_at", "supersedes_version_id", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256"),
@@ -33,6 +34,7 @@ EXPECTED_COLUMNS = {
 EXPECTED_FOREIGN_KEYS = {
     "user_facilities": {("user_id", "users"), ("facility_id", "facilities"), ("assigned_by_user_id", "users")},
     "patients": {("facility_id", "facilities")},
+    "patient_snapshot_versions": {("patient_id", "patients"), ("supersedes_snapshot_id", "patient_snapshot_versions"), ("sync_job_id", "sync_jobs"), ("approval_record_id", "alleva_contract_approvals")},
     "patient_assignments": {("patient_id", "patients"), ("counselor_user_id", "users"), ("assigned_by_user_id", "users")},
     "loc_history": {("patient_id", "patients")},
     "treatment_plan_versions": {("patient_id", "patients"), ("supersedes_version_id", "treatment_plan_versions"), ("sync_job_id", "sync_jobs"), ("approval_record_id", "alleva_contract_approvals")},
@@ -56,6 +58,7 @@ EXPECTED_UNIQUE_KEYS = {
     "facilities": {("facility_key",)},
     "user_facilities": {("user_id", "facility_id")},
     "patients": {("facility_id", "source_system", "canonical_client_id"), ("facility_id", "source_system", "source_patient_id")},
+    "patient_snapshot_versions": {("patient_id", "source_system", "source_record_id", "content_sha256"), ("patient_id", "version_ordinal")},
     "patient_assignments": {("patient_id", "counselor_user_id", "assigned_at"), ("patient_id", "counselor_user_id")},
     "loc_history": {("patient_id", "source_system", "source_record_id", "effective_date", "evidence_sha256")},
     "treatment_plan_versions": {("patient_id", "source_system", "source_record_id", "content_sha256"), ("patient_id", "version_ordinal")},
@@ -125,6 +128,17 @@ def test_version_rows_are_immutable_and_uniqueness_is_enforced(tmp_path) -> None
                 "INSERT INTO treatment_plan_versions(patient_id,source_system,source_record_id,version_ordinal,normalized_snapshot_encrypted,content_sha256,evidence_sha256,imported_at) VALUES(?,?,?,?,?,?,?,?)",
                 (plan[1], plan[2], plan[3], 99, plan[9], plan[10], plan[11], plan[12]),
             )
+        patient_id = connection.execute("SELECT id FROM patients ORDER BY id LIMIT 1").fetchone()[0]
+        connection.execute(
+            "INSERT INTO patient_snapshot_versions(patient_id,source_system,source_record_id,version_ordinal,"
+            "source_last_updated,snapshot_schema_version,snapshot_encrypted,content_sha256,captured_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (patient_id, "alleva_rest_api", "synthetic-source", 1, "", 1, b"encrypted", "p" * 64, "2026-07-10T00:00:00+00:00"),
+        )
+        snapshot_id = connection.execute("SELECT id FROM patient_snapshot_versions").fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute("UPDATE patient_snapshot_versions SET source_last_updated='2030-01-01' WHERE id=?", (snapshot_id,))
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute("DELETE FROM patient_snapshot_versions WHERE id=?", (snapshot_id,))
 
     # Then: the original immutable row remains unchanged.
     with sqlite3.connect(database_path) as connection:

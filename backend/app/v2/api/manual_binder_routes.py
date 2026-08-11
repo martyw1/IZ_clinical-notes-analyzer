@@ -166,13 +166,17 @@ def _read_binder_files(files: tuple[UploadFile, ...]) -> tuple[ManualBinderFile,
 def _record_binder_audit(db: DbSession, user: ManagerUser, payload: ManualBinderAuditInput) -> None:
     parsed = payload.parsed
     source_ids = payload.source_ids
+    scope = patient_scope(db, parsed.aggregate.patient_id)
+    if scope is None:
+        raise HTTPException(status_code=500, detail="Stored patient identity is unavailable")
+    audit_patient_id = str(scope.patient_row_id)
     for source_id, source in zip(source_ids, parsed.sources, strict=False):
         record_audit_event(
             db,
             action="manual_upload.source_file.archived",
             actor=user,
             target_entity_type="treatment_plan",
-            target_entity_id=parsed.aggregate.patient_id,
+            target_entity_id=audit_patient_id,
             details={
                 "source_file_id": source_id,
                 "source_format": source.source_format,
@@ -187,7 +191,7 @@ def _record_binder_audit(db: DbSession, user: ManagerUser, payload: ManualBinder
             action="manual_upload.patient_id.corrected",
             actor=user,
             target_entity_type="treatment_plan",
-            target_entity_id=parsed.aggregate.patient_id,
+            target_entity_id=audit_patient_id,
             details={
                 "patient_id_correction_applied": True,
                 "source_patient_id_present": True,
@@ -200,7 +204,7 @@ def _record_binder_audit(db: DbSession, user: ManagerUser, payload: ManualBinder
         action="manual_upload.treatment_plan_file.imported",
         actor=user,
         target_entity_type="treatment_plan",
-        target_entity_id=parsed.aggregate.patient_id,
+        target_entity_id=audit_patient_id,
         details={
             "source_mode": "manual_upload",
             "file_count": len(parsed.sources),

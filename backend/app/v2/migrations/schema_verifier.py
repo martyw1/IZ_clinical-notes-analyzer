@@ -92,9 +92,9 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
     if expected_version >= 8:
         required_columns["patients"].add("source_patient_id")
     if expected_version >= 9:
-        required_columns["patient_source_snapshots"] = {
+        required_columns["patient_snapshot_versions"] = {
             "id", "patient_id", "source_system", "source_record_id", "version_ordinal",
-            "normalized_snapshot_encrypted", "content_sha256", "source_last_updated", "captured_at",
+            "source_last_updated", "snapshot_schema_version", "snapshot_encrypted", "content_sha256", "captured_at",
             "supersedes_snapshot_id", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256",
         }
     if expected_version >= 2:

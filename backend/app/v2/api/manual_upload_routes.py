@@ -57,12 +57,15 @@ def import_treatment_plan_aggregate(
     if aggregate.source_mode != "manual_upload":
         raise HTTPException(status_code=400, detail="Manual aggregate uploads must use source_mode=manual_upload")
     row = save_treatment_plan_aggregate(db, aggregate, user)
+    saved_scope = patient_scope(db, row.patient_id)
+    if saved_scope is None:
+        raise HTTPException(status_code=500, detail="Stored patient identity is unavailable")
     record_audit_event(
         db,
         action="manual_upload.treatment_plan_aggregate.imported",
         actor=user,
         target_entity_type="treatment_plan",
-        target_entity_id=row.patient_id,
+        target_entity_id=str(saved_scope.patient_row_id),
         details={"source_mode": row.source_mode, "criteria_total": len(aggregate.criteria_results)},
     )
     return ManualTreatmentPlanImportOut(
@@ -85,7 +88,7 @@ def delete_treatment_plan_source_document(
     user: ManagerUser,
     db: DbSession,
 ) -> ManualSourceFileDeleteOut:
-    require_patient_manager(db, user, patient_id)
+    scope = require_patient_manager(db, user, patient_id)
     try:
         deleted = delete_manual_source_file(db, patient_id, source_file_id)
     except FileNotFoundError as exc:
@@ -95,7 +98,7 @@ def delete_treatment_plan_source_document(
         action="manual_upload.source_file.deleted",
         actor=user,
         target_entity_type="treatment_plan",
-        target_entity_id=patient_id,
+        target_entity_id=str(scope.patient_row_id),
         details={
             "source_file_id": deleted.source_file_id,
             "source_format": deleted.source_format,
@@ -114,7 +117,7 @@ def download_treatment_plan_source_document(
     user: ManagerUser,
     db: DbSession,
 ) -> Response:
-    require_patient_manager(db, user, patient_id)
+    scope = require_patient_manager(db, user, patient_id)
     try:
         download = download_manual_source_file(db, patient_id, source_file_id)
     except FileNotFoundError as exc:
@@ -124,7 +127,7 @@ def download_treatment_plan_source_document(
         action="manual_upload.source_file.downloaded",
         actor=user,
         target_entity_type="treatment_plan",
-        target_entity_id=patient_id,
+        target_entity_id=str(scope.patient_row_id),
         details={
             "source_file_id": source_file_id,
             "source_format": download.source_format,

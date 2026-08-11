@@ -105,7 +105,7 @@ def assign_patient(
         action="patient.assignment.created",
         actor=actor,
         target_entity_type="patient",
-        target_entity_id=patient_id,
+        target_entity_id=str(patient[0]),
         details={"counselor_user_id": int(counselor[0])},
         commit=False,
     )

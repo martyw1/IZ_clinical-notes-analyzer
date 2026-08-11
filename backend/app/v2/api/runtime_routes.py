@@ -7,7 +7,8 @@ from typing import Final
 
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from app.core.config import BUILD_CHANNEL, settings
 from app.services.version import JsonValue, build_version_payload
@@ -121,6 +122,45 @@ def _app_setting(db: DbSession) -> AppSetting:
     return db.execute(select(AppSetting)).scalar_one()
 
 
+def _patient_row_id(db: Session, patient_id: str, source_mode: SourceMode | None = None) -> int:
+    row = db.execute(
+        text(
+            "SELECT id FROM patients WHERE canonical_client_id=:patient_id "
+            "AND (:source_mode IS NULL OR source_system=:source_mode) "
+            "ORDER BY CASE WHEN source_system='alleva_rest_api' THEN 0 ELSE 1 END,id DESC LIMIT 1"
+        ),
+        {"patient_id": patient_id, "source_mode": source_mode},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Patient record not found")
+    return int(row[0])
+
+
+def _treatment_plan_version_id(
+    db: Session,
+    patient_id: str,
+    treatment_plan_id: str,
+    source_mode: SourceMode | None,
+) -> tuple[int, int]:
+    row = db.execute(
+        text(
+            "SELECT v.id,p.id FROM treatment_plan_versions v "
+            "JOIN patients p ON p.id=v.patient_id "
+            "WHERE p.canonical_client_id=:patient_id AND v.source_record_id=:treatment_plan_id "
+            "AND (:source_mode IS NULL OR v.source_system=:source_mode) "
+            "ORDER BY v.version_ordinal DESC,v.id DESC LIMIT 1"
+        ),
+        {
+            "patient_id": patient_id,
+            "treatment_plan_id": treatment_plan_id,
+            "source_mode": source_mode,
+        },
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Treatment plan not found")
+    return int(row[0]), int(row[1])
+
+
 @router.get("/api/v2/treatment-plans", response_model=TreatmentPlanListOut)
 def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     allowed_ids = accessible_patient_ids(db, user)
@@ -158,7 +198,20 @@ def treatment_plan_detail(
     aggregate = treatment_plan_aggregate_for_patient(db, patient_id, source_system=source_mode)
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
-    record_audit_event(db, action="treatment_plan.detail.viewed", actor=user, target_entity_type="treatment_plan", target_entity_id=patient_id)
+    plan_version_id, patient_row_id = _treatment_plan_version_id(
+        db,
+        patient_id,
+        aggregate.content_snapshot.plan_id,
+        aggregate.source_mode,
+    )
+    record_audit_event(
+        db,
+        action="treatment_plan.detail.viewed",
+        actor=user,
+        target_entity_type="treatment_plan_version",
+        target_entity_id=str(plan_version_id),
+        details={"patient_row_id": patient_row_id},
+    )
     return aggregate
 
 
@@ -179,12 +232,19 @@ def treatment_plan_detail_by_id(
     )
     if aggregate is None:
         raise HTTPException(status_code=404, detail="Treatment plan not found")
+    plan_version_id, patient_row_id = _treatment_plan_version_id(
+        db,
+        patient_id,
+        treatment_plan_id,
+        aggregate.source_mode,
+    )
     record_audit_event(
         db,
         action="treatment_plan.detail.viewed",
         actor=user,
-        target_entity_type="treatment_plan",
-        target_entity_id=f"{patient_id}:{source_mode or 'any'}:{treatment_plan_id}",
+        target_entity_type="treatment_plan_version",
+        target_entity_id=str(plan_version_id),
+        details={"patient_row_id": patient_row_id},
     )
     return aggregate
 
@@ -205,7 +265,12 @@ def patient_detail(
         action="patient_record.detail.viewed",
         actor=user,
         target_entity_type="patient",
-        target_entity_id=f"{patient_id}:{source_mode or 'any'}",
+        target_entity_id=str(detail.patient_row_id),
+        details={
+            "snapshot_id": detail.snapshot_id,
+            "snapshot_version_count": detail.snapshot_version_count,
+            "field_count": detail.field_count,
+        },
     )
     return PatientRecordDetailOut(
         mrn=detail.mrn,
@@ -255,12 +320,13 @@ def save_manager_action(patient_id: str, payload: ManagerActionInput, user: Curr
             )
         except CorrectionAssignmentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+    patient_row_id = _patient_row_id(db, patient_id)
     record_audit_event(
         db,
         action=f"manager.criterion.{payload.action}",
         actor=user,
         target_entity_type="treatment_plan_criterion",
-        target_entity_id=f"{patient_id}:{payload.criterion_id}",
+        target_entity_id=f"{patient_row_id}:{payload.criterion_id}",
         details={"criterion_id": payload.criterion_id, "action": payload.action, "has_comment": bool(payload.comment)},
     )
     return {
@@ -349,7 +415,20 @@ def redacted_checklist_export(patient_id: str, user: ManagerUser, db: DbSession)
         preview = criterion.evidence_refs[0].safe_preview if criterion.evidence_refs else ""
         path = criterion.source_json_paths[0] if criterion.source_json_paths else ""
         writer.writerow(tuple(_safe_csv_cell(value) for value in (criterion.criterion_id, criterion.result_status, criterion.finding_message, path, preview, "review")))
-    record_audit_event(db, action="export.redacted_checklist_evidence", actor=user, target_entity_type="treatment_plan", target_entity_id=patient_id)
+    plan_version_id, patient_row_id = _treatment_plan_version_id(
+        db,
+        patient_id,
+        aggregate.content_snapshot.plan_id,
+        aggregate.source_mode,
+    )
+    record_audit_event(
+        db,
+        action="export.redacted_checklist_evidence",
+        actor=user,
+        target_entity_type="treatment_plan_version",
+        target_entity_id=str(plan_version_id),
+        details={"patient_row_id": patient_row_id},
+    )
     return Response(
         content=output.getvalue(),
         media_type="text/csv",

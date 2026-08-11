@@ -33,7 +33,7 @@ def refresh_treatment_plan_evaluation(
     user: ManagerUser,
     db: DbSession,
 ) -> EvaluationRefreshOut:
-    require_patient_manager(db, user, patient_id)
+    scope = require_patient_manager(db, user, patient_id)
     try:
         aggregate = treatment_plan_aggregate_for_patient(db, patient_id)
         if aggregate is None:
@@ -43,7 +43,7 @@ def refresh_treatment_plan_evaluation(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     record_audit_event(
         db, action="treatment_plan.evaluation.refreshed", actor=user,
-        target_entity_type="treatment_plan", target_entity_id=patient_id,
+        target_entity_type="patient", target_entity_id=str(scope.patient_row_id),
         details={
             "versions_evaluated": refreshed.versions_evaluated,
             "evaluation_date": refreshed.evaluation_date,

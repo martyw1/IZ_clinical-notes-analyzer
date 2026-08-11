@@ -24,6 +24,27 @@ def test_plan_source_update_order_uses_utc_instants_then_plan_id() -> None:
     )
 
 
+def test_missing_source_timestamp_remains_blank_after_persistence(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    payload = _aggregate("MRN-NO-SOURCE-TIME").model_dump(mode="json")
+    payload["source_last_updated"] = ""
+    payload["content_snapshot"]["plan_id"] = "plan-no-source-time"
+
+    saved = client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate",
+        headers=headers,
+        json=payload,
+    )
+    roster = client.get("/api/v2/patient-roster", headers=headers)
+
+    assert saved.status_code == 201
+    assert roster.status_code == 200
+    assert roster.json()["items"][0]["treatment_plans"] == [
+        {"treatment_plan_id": "plan-no-source-time", "last_updated": ""}
+    ]
+
+
 def test_patient_roster_lists_every_plan_for_each_mrn_in_latest_updated_order(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)

@@ -129,9 +129,6 @@ def save_treatment_plan_aggregate_with_disposition(
     )
     aggregate = aggregate.model_copy(update={"patient_display_label": patient_display_label})
     payload_json = aggregate.model_dump_json()
-    aggregate = aggregate.model_copy(update={
-        "source_last_updated": aggregate.source_last_updated or now,
-    })
     encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
     content_sha256 = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
     evidence_sha256 = hashlib.sha256(

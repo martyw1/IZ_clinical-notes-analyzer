@@ -62,7 +62,7 @@ from app.v2.services.treatment_plan_store import (
 
 MAX_SYNC_ROWS: Final = 5_000
 MAX_SYNC_HTTP_WORKERS: Final = 8
-UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-"
+UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-plan-"
 UNLINKED_PATIENT_LABEL: Final = "Not linked to an MRN"
 DEFAULT_ENDPOINT_FIELD_MAPPINGS: Final = {
     "clients": {
@@ -441,12 +441,11 @@ def _save_client_aggregates(
         plan_id = _mapped_text(plan, contract, "treatment_plans", "plan_id")
         source_patient_id = _plan_source_patient_id(plan, contract)
         if not plan_id:
-            skipped += 1
-            continue
+            raise AllevaSyncError("Alleva returned a treatment plan without its required plan identifier.")
         if not source_patient_id:
             candidates.append(
                 PlanImportCandidate(
-                    _unlinked_patient_key(f"treatment-plan:{plan_id}"),
+                    _unlinked_patient_key(plan_id),
                     {},
                     plan,
                     plan_id,
@@ -459,11 +458,11 @@ def _save_client_aggregates(
         if patient_identity is None:
             candidates.append(
                 PlanImportCandidate(
-                    _unlinked_patient_key(source_patient_id),
+                    _unlinked_patient_key(plan_id),
                     {},
                     plan,
                     plan_id,
-                    source_patient_id,
+                    None,
                     False,
                 )
             )
@@ -511,17 +510,27 @@ def _save_client_aggregates(
             )
         ):
             failed_details += 1
-            continue
+            candidate = PlanImportCandidate(
+                _unlinked_patient_key(candidate.plan_id),
+                {},
+                candidate.plan_payload,
+                candidate.plan_id,
+                None,
+                False,
+            )
+            detail = candidate.plan_payload
+            detail_source_patient_id = ""
+            list_source_patient_id = ""
         effective_source_patient_id = list_source_patient_id or detail_source_patient_id
         if not list_source_patient_id and effective_source_patient_id:
             patient_identity = clients_by_source.get(effective_source_patient_id)
             if patient_identity is None:
                 candidate = PlanImportCandidate(
-                    _unlinked_patient_key(effective_source_patient_id),
+                    _unlinked_patient_key(candidate.plan_id),
                     {},
                     candidate.plan_payload,
                     candidate.plan_id,
-                    effective_source_patient_id,
+                    None,
                     False,
                 )
             else:
@@ -565,8 +574,8 @@ def _save_client_aggregates(
     return SyncImportSummary(created, updated, unchanged, skipped, failed_details, tuple(updated_plan_ids))
 
 
-def _unlinked_patient_key(source_patient_id: str) -> str:
-    digest = hashlib.sha256(source_patient_id.encode("utf-8")).hexdigest()[:24]
+def _unlinked_patient_key(plan_id: str) -> str:
+    digest = hashlib.sha256(plan_id.encode("utf-8")).hexdigest()[:24]
     return f"{UNLINKED_PATIENT_KEY_PREFIX}{digest}"
 
 

@@ -28,6 +28,8 @@ class PatientSourceSnapshotInput:
 
 @dataclass(frozen=True, slots=True)
 class PatientSourceSnapshot:
+    snapshot_id: int
+    version_ordinal: int
     patient_key: str
     source_system: str
     full_name: str
@@ -60,7 +62,7 @@ def persist_patient_source_snapshots(
         patient_row_id = int(patient_row[0])
         existing = db.execute(
             text(
-                "SELECT id FROM patient_source_snapshots "
+                "SELECT id FROM patient_snapshot_versions "
                 "WHERE patient_id=:patient_id AND source_system=:source_system "
                 "AND source_record_id=:source_record_id AND content_sha256=:content_sha256 LIMIT 1"
             ),
@@ -75,20 +77,20 @@ def persist_patient_source_snapshots(
             continue
         latest = db.execute(
             text(
-                "SELECT id,version_ordinal FROM patient_source_snapshots "
+                "SELECT id,version_ordinal FROM patient_snapshot_versions "
                 "WHERE patient_id=:patient_id ORDER BY version_ordinal DESC,id DESC LIMIT 1"
             ),
             {"patient_id": patient_row_id},
         ).first()
         db.execute(
             text(
-                """INSERT INTO patient_source_snapshots(
-                    patient_id,source_system,source_record_id,version_ordinal,normalized_snapshot_encrypted,
-                    content_sha256,source_last_updated,captured_at,supersedes_snapshot_id,
+                """INSERT INTO patient_snapshot_versions(
+                    patient_id,source_system,source_record_id,version_ordinal,source_last_updated,
+                    snapshot_schema_version,snapshot_encrypted,content_sha256,captured_at,supersedes_snapshot_id,
                     sync_job_id,approval_record_id,contract_version,contract_sha256
                 ) VALUES(
-                    :patient_id,:source_system,:source_record_id,:version_ordinal,:encrypted_snapshot,
-                    :content_sha256,:source_last_updated,:captured_at,:supersedes_snapshot_id,
+                    :patient_id,:source_system,:source_record_id,:version_ordinal,:source_last_updated,
+                    1,:encrypted_snapshot,:content_sha256,:captured_at,:supersedes_snapshot_id,
                     :sync_job_id,:approval_record_id,:contract_version,:contract_sha256
                 )"""
             ),
@@ -113,10 +115,10 @@ def persist_patient_source_snapshots(
 def latest_patient_source_snapshots(db: Session) -> dict[tuple[str, str], PatientSourceSnapshot]:
     rows = db.execute(
         text(
-            "SELECT p.canonical_client_id,s.source_system,s.normalized_snapshot_encrypted,"
-            "s.content_sha256,s.source_last_updated FROM patient_source_snapshots s "
+            "SELECT s.id,s.version_ordinal,p.canonical_client_id,s.source_system,s.snapshot_encrypted,"
+            "s.content_sha256,s.source_last_updated FROM patient_snapshot_versions s "
             "JOIN patients p ON p.id=s.patient_id "
-            "WHERE s.id=(SELECT latest.id FROM patient_source_snapshots latest "
+            "WHERE s.id=(SELECT latest.id FROM patient_snapshot_versions latest "
             "WHERE latest.patient_id=s.patient_id ORDER BY latest.version_ordinal DESC,latest.id DESC LIMIT 1)"
         )
     ).all()
@@ -139,13 +141,23 @@ def latest_patient_source_snapshot(
 
 
 def patient_full_name(record: Mapping[str, object]) -> str:
+    preferred = _first_text(
+        record,
+        (
+            "fullName", "clientName", "displayName", "name",
+            "name.fullName", "name.clientName", "name.displayName",
+        ),
+    )
+    if preferred:
+        return preferred
     first = _first_text(record, ("name.legalFirstName", "name.firstName", "name.first", "legalFirstName", "firstName", "first_name"))
     middle = _first_text(record, ("name.middleName", "name.middle", "middleName", "middle_name"))
     last = _first_text(record, ("name.legalLastName", "name.lastName", "name.last", "legalLastName", "lastName", "last_name"))
-    assembled = " ".join(value for value in (first, middle, last) if value)
+    suffix = _first_text(record, ("name.suffix", "suffix"))
+    assembled = " ".join(value for value in (first, middle, last, suffix) if value)
     if assembled:
         return assembled
-    return _first_text(record, ("name.displayName", "name.fullName", "fullName", "displayName", "patientName", "clientName"))
+    return "Name unavailable"
 
 
 def patient_current_level_of_care(record: Mapping[str, object]) -> str:
@@ -160,19 +172,21 @@ def patient_current_level_of_care(record: Mapping[str, object]) -> str:
 
 def _snapshot_from_row(row: Sequence[object]) -> PatientSourceSnapshot:
     values = tuple(row)
-    encrypted = bytes(values[2])
+    encrypted = bytes(values[4])
     canonical = decrypt_bytes(encrypted)
-    if hashlib.sha256(canonical).hexdigest() != str(values[3]):
+    if hashlib.sha256(canonical).hexdigest() != str(values[5]):
         raise HTTPException(status_code=500, detail="Stored patient snapshot failed integrity verification")
     try:
         record = PATIENT_RECORD_ADAPTER.validate_json(canonical)
     except ValidationError as exc:
         raise HTTPException(status_code=500, detail="Stored patient snapshot is invalid") from exc
     return PatientSourceSnapshot(
-        patient_key=str(values[0]),
-        source_system=str(values[1]),
+        snapshot_id=int(values[0]),
+        version_ordinal=int(values[1]),
+        patient_key=str(values[2]),
+        source_system=str(values[3]),
         full_name=patient_full_name(record),
-        source_last_updated=str(values[4] or ""),
+        source_last_updated=str(values[6] or ""),
         record=record,
     )
 

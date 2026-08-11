@@ -45,6 +45,7 @@ class _MockAllevaState:
     active_plan_requests: list[int] = field(default_factory=lambda: [0])
     peak_plan_requests: list[int] = field(default_factory=lambda: [0])
     plan_request_lock: Lock = field(default_factory=Lock)
+    detail_id_overrides: dict[str, str] = field(default_factory=dict)
     global_plan_collection: bool = True
     ignore_collection_cursor: bool = False
 
@@ -131,7 +132,8 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
         )
         problem = type(self).state.detail_problem[0] if plan_id == "plan-912" else f"Synthetic problem for {plan_id}."
         if type(self).state.published_shape:
-            detail_id: str | int = int(plan_id) if plan_id.isdigit() else plan_id
+            returned_plan_id = type(self).state.detail_id_overrides.get(plan_id, plan_id)
+            detail_id: str | int = int(returned_plan_id) if returned_plan_id.isdigit() else returned_plan_id
             self._respond({
                 "id": detail_id,
                 "client": plan_item.get("client"),
@@ -166,6 +168,7 @@ def _mock_alleva_server(
     plan_delay_seconds: float = 0.0,
     global_plan_collection: bool = True,
     ignore_collection_cursor: bool = False,
+    detail_id_overrides: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, _MockAllevaState]]:
     defaults = _MockAllevaState()
     resolved_clients = client_items or defaults.client_items
@@ -177,6 +180,7 @@ def _mock_alleva_server(
         plan_delay_seconds=plan_delay_seconds,
         global_plan_collection=global_plan_collection,
         ignore_collection_cursor=ignore_collection_cursor,
+        detail_id_overrides=detail_id_overrides or {},
     )
 
     class IsolatedMockAllevaHandler(_MockAllevaHandler):
@@ -472,6 +476,70 @@ def test_approved_sync_populates_every_treatment_plan_for_the_same_patient(tmp_p
     assert second_detail.json()["content_snapshot"]["plan_id"] == "plan-913"
 
 
+def test_sync_fails_when_global_collection_omits_required_plan_id(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    plan_items: list[dict[str, JsonValue]] = [
+        {"client": {"id": "912", "route": "/clients/912"}},
+    ]
+    with _mock_alleva_server(plan_items=plan_items) as (base_url, _state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "requests_per_minute": 10_000,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+        synced = _completed_sync(client, headers)
+
+    assert synced["status"] == "failed"
+    assert client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"] == []
+
+
+def test_detail_identity_conflict_preserves_global_plan_as_unlinked(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    with _mock_alleva_server(detail_id_overrides={"plan-912": "different-plan"}) as (base_url, _state):
+        configured = client.patch(
+            "/api/api-configuration",
+            headers=headers,
+            json={
+                "api_base_url": base_url,
+                "token_url": f"{base_url}/token",
+                "client_id": "mock-client",
+                "client_secret": "mock-secret",
+                "scopes": "plans.read",
+                "api_enabled": True,
+                "treatment_plan_sync_enabled": True,
+                "treatment_plan_sync_approved": True,
+                "requests_per_minute": 10_000,
+            },
+        )
+        assert configured.status_code == 200
+        _approve_synthetic_contract(client, headers, base_url, f"{base_url}/token")
+        synced = _completed_sync(client, headers)
+
+    assert synced["status"] == "completed_with_warnings"
+    assert synced["records_written"] == 1
+    roster = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
+    assert len(roster) == 1
+    assert roster[0]["treatment_plan_id"] == "plan-912"
+    assert roster[0]["mrn"] == ""
+    assert roster[0]["full_name"] == ""
+    assert roster[0]["linked_to_mrn"] is False
+    assert roster[0]["patient_key"].startswith("unlinked-plan-")
+
+
 def test_patient_plan_list_accepts_vendor_page_larger_than_fair_request_within_global_budget(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
@@ -713,7 +781,7 @@ def _completed_sync(client, headers: dict[str, str]) -> dict[str, JsonValue]:
     payload = started.json()
     for _ in range(80):
         payload = client.get(f"/api/v2/alleva-sync/jobs/{payload['job_id']}", headers=headers).json()
-        if payload["status"] in {"completed", "failed", "cancelled"}:
+        if payload["status"] in {"completed", "completed_with_warnings", "failed", "cancelled"}:
             return payload
         sleep(0.05)
     raise AssertionError("synthetic sync did not reach a terminal state")

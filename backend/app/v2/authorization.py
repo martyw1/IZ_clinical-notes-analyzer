@@ -108,7 +108,7 @@ def require_patient_read(db: Session, user: User, patient_id: str) -> PatientSco
     if scope is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Treatment-plan aggregate not found")
     if scope.canonical_client_id not in accessible_patient_ids(db, user):
-        deny(db, user, family="patient_read", target_id=patient_id)
+        deny(db, user, family="patient_read", target_id=str(scope.patient_row_id))
     return scope
 
 

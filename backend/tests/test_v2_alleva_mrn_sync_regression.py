@@ -96,7 +96,7 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
     assert unlinked["mrn"] == ""
     assert unlinked["linked_to_mrn"] is False
     assert unlinked["full_name"] == ""
-    assert unlinked["patient_key"].startswith("unlinked-")
+    assert unlinked["patient_key"].startswith("unlinked-plan-")
     assert "source-not-returned" not in str(plan_roster)
     detail = client.get(
         f"/api/v2/treatment-plans/{unlinked['patient_key']}/plan-unlinked?source_mode=alleva_rest_api",
@@ -107,7 +107,7 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
     ownerless = next(item for item in plan_roster if item["treatment_plan_id"] == "plan-ownerless")
     assert ownerless["mrn"] == ""
     assert ownerless["linked_to_mrn"] is False
-    assert ownerless["patient_key"].startswith("unlinked-")
+    assert ownerless["patient_key"].startswith("unlinked-plan-")
     assert ownerless["patient_key"] != unlinked["patient_key"]
     linked_detail = client.get(
         "/api/v2/treatment-plans/MRN-0042/plan-1?source_mode=alleva_rest_api",
@@ -137,7 +137,7 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
             "WHERE source_system='alleva_rest_api' ORDER BY canonical_client_id"
         ).fetchall()
         encrypted_snapshots = database.execute(
-            "SELECT normalized_snapshot_encrypted FROM patient_source_snapshots ORDER BY id"
+            "SELECT snapshot_schema_version,snapshot_encrypted FROM patient_snapshot_versions ORDER BY id"
         ).fetchall()
     assert identities[:4] == [
         ("MRN-0042", "source-101"),
@@ -145,13 +145,39 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
         ("MRN-0123", "source-303"),
         ("MRN-0555", "source-404"),
     ]
-    assert all(identity[0].startswith("unlinked-") for identity in identities[4:])
-    assert {identity[1] for identity in identities[4:]} == {None, "source-not-returned"}
+    assert all(identity[0].startswith("unlinked-plan-") for identity in identities[4:])
+    assert {identity[1] for identity in identities[4:]} == {None}
     assert len(encrypted_snapshots) == 4
-    assert all(bytes(row[0]).startswith(b"IZCNA1:") for row in encrypted_snapshots)
+    assert {row[0] for row in encrypted_snapshots} == {1}
+    assert all(bytes(row[1]).startswith(b"IZCNA1:") for row in encrypted_snapshots)
     assert b"Alex Example" not in database_path.read_bytes()
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     assert "Alex Example" not in str(audit)
+    for protected_value in (
+        "MRN-0042",
+        "MRN-0099",
+        "MRN-0123",
+        "MRN-0555",
+        "source-101",
+        "source-202",
+        "source-303",
+        "source-404",
+    ):
+        assert protected_value not in str(audit)
+
+
+def test_patient_full_name_uses_authoritative_fields_then_structured_name() -> None:
+    from app.v2.services.patient_snapshot_store import patient_full_name
+
+    assert patient_full_name({"fullName": "Preferred Name", "firstName": "Ignored"}) == "Preferred Name"
+    assert patient_full_name({"name": "Top Level Name", "firstName": "Ignored"}) == "Top Level Name"
+    assert patient_full_name({
+        "firstName": "Synthetic",
+        "middleName": "Q",
+        "lastName": "Patient",
+        "suffix": "Jr.",
+    }) == "Synthetic Q Patient Jr."
+    assert patient_full_name({}) == "Name unavailable"
 
 
 def test_reconciliation_rekeys_legacy_patient_without_changing_child_foreign_keys(tmp_path, monkeypatch) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.v2.api.deps import CurrentUser, DbSession
-from app.v2.authorization import Role, accessible_patient_ids, deny, require_patient_read
+from app.v2.authorization import Role, accessible_patient_ids, deny, patient_scope, require_patient_read
 from app.v2.api.models import CorrectionQueueItemOut, CorrectionQueueOut, CorrectionSubmissionInput
 from app.v2.domain.schemas import JsonValue
 from app.v2.services.audit_store import record_audit_event
@@ -50,9 +50,11 @@ def correction_queue(user: CurrentUser, db: DbSession) -> CorrectionQueueOut:
 
 @router.post("/api/v2/treatment-plans/{patient_id}/correction-submissions")
 def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
+    known_scope = patient_scope(db, patient_id)
+    audit_patient_id = str(known_scope.patient_row_id) if known_scope is not None else ""
     if user.role != Role.COUNSELOR.value:
-        deny(db, user, family="correction_submission", target_id=patient_id)
-    require_patient_read(db, user, patient_id)
+        deny(db, user, family="correction_submission", target_id=audit_patient_id)
+    scope = require_patient_read(db, user, patient_id)
     if treatment_plan_aggregate_for_patient(db, patient_id) is None:
         raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
     if not correction_work_item_is_open_for(
@@ -62,7 +64,7 @@ def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user:
         criterion_id=payload.criterion_id,
         counselor_user_id=user.id,
     ):
-        deny(db, user, family="correction_submission", target_id=patient_id)
+        deny(db, user, family="correction_submission", target_id=str(scope.patient_row_id))
     saved = save_manager_action_record(
         db, patient_id=patient_id, criterion_id=payload.criterion_id, action="correction_submitted",
         comment=payload.comment.strip(), override_reason="", actor=user,
@@ -81,6 +83,6 @@ def submit_correction(patient_id: str, payload: CorrectionSubmissionInput, user:
         refresh_patient_version(db, aggregate, "correction", commit=False)
     record_audit_event(
         db, action="correction.submitted", actor=user, target_entity_type="treatment_plan_criterion",
-        target_entity_id=f"{patient_id}:{payload.criterion_id}", details={"criterion_id": payload.criterion_id, "has_comment": True},
+        target_entity_id=f"{scope.patient_row_id}:{payload.criterion_id}", details={"criterion_id": payload.criterion_id, "has_comment": True},
     )
     return {"status": "submitted", "patient_id": patient_id, "criterion_id": payload.criterion_id, "created_at": saved.created_at.isoformat()}

@@ -82,7 +82,8 @@ def test_manual_upload_patient_id_mismatch_requires_confirmed_correction(tmp_pat
     audit = client.get("/api/audit/logs", headers=headers)
     assert audit.status_code == 200
     correction_event = next(item for item in audit.json()["items"] if item["action"] == "manual_upload.patient_id.corrected")
-    assert correction_event["target_entity_id"] == "932"
+    assert correction_event["target_entity_id"].isdigit()
+    assert "932" not in str(correction_event)
     assert correction_event["details"]["patient_id_correction_applied"] is True
     assert "931" not in str(correction_event["details"])
     assert "synthetic-patient-id-mismatch" not in str(correction_event["details"])
