@@ -27,7 +27,13 @@
   --status-conflicting-evidence: #7c3aed;
   --status-unable-to-evaluate: #374151;
   --status-compliant: #2f7d4f;
+  --space-1: 4px;
   --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
 }
 
 * {
@@ -513,6 +519,44 @@ dd,
   min-width: 760px;
 }
 
+.raw-field-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.raw-field-summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-field-summary::before {
+  content: '\25B6';
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.raw-field-panel details[open] > .raw-field-summary::before {
+  transform: rotate(90deg);
+}
+
+.raw-field-summary__label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.raw-field-summary__eyebrow {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.raw-field-summary__count {
+  white-space: nowrap;
+}
+
 .raw-field-table td[data-label='Field path'],
 .raw-field-table td[data-label='Type'],
 .raw-field-table td[data-label='State'],
@@ -624,12 +668,36 @@ dd,
   font-weight: 700;
 }
 
+.patient-identity {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .patient-name-secondary {
   display: block;
   margin-top: var(--space-1);
   color: var(--text-muted);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.evidence-coverage-metric {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.evidence-coverage-metric > :first-child {
+  min-width: 0;
+}
+
+.evidence-coverage-metric > :last-child {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .patient-full-name,

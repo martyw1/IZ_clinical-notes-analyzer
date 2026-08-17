@@ -144,8 +144,10 @@ def patient_full_name(record: Mapping[str, object]) -> str:
     preferred = _first_text(
         record,
         (
-            "fullName", "clientName", "displayName", "name",
-            "name.fullName", "name.clientName", "name.displayName",
+            "name.clientFullName", "name.ClientFullName", "name.client_full_name",
+            "clientFullName", "ClientFullName", "client_full_name",
+            "name.fullName", "fullName", "name.clientName", "clientName",
+            "name.displayName", "displayName", "name",
         ),
     )
     if preferred:

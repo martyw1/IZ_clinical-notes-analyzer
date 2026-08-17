@@ -11,9 +11,9 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     client_items: list[dict[str, JsonValue]] = [
-        {"id": "source-101", "mrn": "MRN-0042", "firstName": "Alex", "lastName": "Example", "status": "Active", "levelOfCare": "PHP", "email": "alex.synthetic@example.invalid"},
-        {"id": "source-202", "mrn": "MRN-0099", "firstName": "Blair", "lastName": "Example", "status": "Discharged"},
-        {"id": "source-303", "mrn": "MRN-0123", "firstName": "Casey", "lastName": "Example", "status": "Inactive"},
+        {"id": "source-101", "mrn": "MRN-0042", "name": {"clientFullName": "Alex Example"}, "status": "Active", "levelOfCare": "PHP", "email": "alex.synthetic@example.invalid"},
+        {"id": "source-202", "mrn": "MRN-0099", "clientFullName": "Blair Example", "status": "Discharged"},
+        {"id": "source-303", "mrn": "MRN-0123", "ClientFullName": "Casey Example", "status": "Inactive"},
         {"id": "source-404", "mrn": "MRN-0555", "firstName": "Devon", "lastName": "Example", "status": "Active", "levelOfCare": "IOP"},
     ]
     plan_counts = {"source-101": 6, "source-202": 8, "source-303": 2}
@@ -169,6 +169,9 @@ def test_sync_uses_true_mrn_and_imports_every_unpaged_global_plan_for_every_pati
 def test_patient_full_name_uses_authoritative_fields_then_structured_name() -> None:
     from app.v2.services.patient_snapshot_store import patient_full_name
 
+    assert patient_full_name({"name": {"clientFullName": "Nested Client Name"}, "fullName": "Ignored"}) == "Nested Client Name"
+    assert patient_full_name({"clientFullName": "Direct Client Name", "fullName": "Ignored"}) == "Direct Client Name"
+    assert patient_full_name({"ClientFullName": "Pascal Client Name", "fullName": "Ignored"}) == "Pascal Client Name"
     assert patient_full_name({"fullName": "Preferred Name", "firstName": "Ignored"}) == "Preferred Name"
     assert patient_full_name({"name": "Top Level Name", "firstName": "Ignored"}) == "Top Level Name"
     assert patient_full_name({

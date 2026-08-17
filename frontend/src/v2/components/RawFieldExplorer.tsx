@@ -18,12 +18,12 @@ export function RawFieldExplorer({ plan }: RawFieldExplorerProps) {
   return (
     <section className='panel table-panel raw-field-panel'>
       <details>
-        <summary>
-          <span>
-          <p className='eyebrow'>Bounded diagnostics</p>
-          <strong>Raw Field Explorer</strong>
+        <summary className='raw-field-summary'>
+          <span className='raw-field-summary__label'>
+            <span className='eyebrow raw-field-summary__eyebrow'>Bounded diagnostics</span>
+            <strong>Raw Field Explorer</strong>
           </span>
-          <span className='muted'>{plan.observedFields.length} source paths</span>
+          <span className='muted raw-field-summary__count'>{plan.observedFields.length} source paths</span>
         </summary>
         <div className='raw-field-content'>
           <label>

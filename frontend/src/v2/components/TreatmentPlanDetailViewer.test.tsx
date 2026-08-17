@@ -89,5 +89,8 @@ test('renders one readable selected-plan document with timeline, full clinical h
   expect(screen.getByText('Synthetic diagnosis one.')).toBeInTheDocument()
   expect(screen.getByText('Synthetic diagnosis two.')).toBeInTheDocument()
   expect(screen.getByText('Synthetic intervention two.')).toBeInTheDocument()
+  const rawFieldSummary = screen.getByText('Raw Field Explorer').closest('summary')
+  expect(rawFieldSummary).toHaveClass('raw-field-summary')
+  expect(rawFieldSummary?.querySelector('.raw-field-summary__count')).toHaveTextContent('0 source paths')
   expect(container.querySelectorAll('details[open]')).toHaveLength(0)
 })

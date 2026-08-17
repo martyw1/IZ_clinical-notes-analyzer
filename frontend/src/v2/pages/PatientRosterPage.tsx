@@ -89,15 +89,17 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
             {visibleItems.map((item) => (
               <tr key={`${item.mrn}:${item.sourceMode}`} role='row'>
                 <td role='cell' data-label='MRN' headers='patient-roster-mrn'>
-                  <button
-                    type='button'
-                    className='link-button patient-record-link'
-                    aria-label={`Open patient record for ${item.fullName || 'Name unavailable'}, MRN ${item.mrn}`}
-                    onClick={() => onSelectPatient({ mrn: item.mrn, patientKey: item.mrn, sourceMode: item.sourceMode })}
-                  >
-                    {item.mrn}
-                  </button>
-                  <span className='patient-name-secondary'>{item.fullName || 'Name unavailable'}</span>
+                  <span className='patient-identity'>
+                    <button
+                      type='button'
+                      className='link-button patient-record-link'
+                      aria-label={`Open patient record for ${item.fullName || 'Name unavailable'}, MRN ${item.mrn}`}
+                      onClick={() => onSelectPatient({ mrn: item.mrn, patientKey: item.mrn, sourceMode: item.sourceMode })}
+                    >
+                      {item.mrn}
+                    </button>
+                    <span className='patient-name-secondary'>{item.fullName || 'Name unavailable'}</span>
+                  </span>
                 </td>
                 <td role='cell' data-label='Treatment Plans' headers='patient-roster-plans'>
                   <select

@@ -140,7 +140,7 @@ export function TreatmentPlansRosterPage({
                 </td>
                 <td role='cell' data-label='MRN' headers='plan-roster-mrn'>
                   {item.linkedToMrn ? (
-                    <>
+                    <span className='patient-identity'>
                       <button
                         type='button'
                         className='link-button patient-record-link'
@@ -150,7 +150,7 @@ export function TreatmentPlansRosterPage({
                         {item.mrn}
                       </button>
                       <span className='patient-name-secondary'>{item.fullName || 'Name unavailable'}</span>
-                    </>
+                    </span>
                   ) : <strong>Not linked to an MRN</strong>}
                 </td>
                 <td role='cell' data-label='Last Updated' headers='plan-roster-last-updated'><time dateTime={item.lastUpdated}>{formatDateTime24Hour(item.lastUpdated)}</time></td>

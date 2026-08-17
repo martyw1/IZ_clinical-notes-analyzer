@@ -2,11 +2,13 @@ import { expect, test } from '@playwright/test'
 
 const treatmentPlanRosterItems = [
   {
-    treatment_plan_id: 'plan-912', mrn: '912', last_updated: '2026-07-12T12:00:00Z',
+    treatment_plan_id: 'plan-912', mrn: '912', patient_key: '912', linked_to_mrn: true,
+    full_name: 'Synthetic Patient', last_updated: '2026-07-12T12:00:00Z',
     previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
   },
   {
-    treatment_plan_id: 'plan-913', mrn: '912', last_updated: '2026-07-13T18:45:00Z',
+    treatment_plan_id: 'plan-913', mrn: '912', patient_key: '912', linked_to_mrn: true,
+    full_name: 'Synthetic Patient', last_updated: '2026-07-13T18:45:00Z',
     previous_treatment_plan_id: 'plan-912', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
   },
 ]
@@ -81,7 +83,7 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
       detailRequests.push(path)
       return respond(planDetail(path.endsWith('plan-913') ? 'plan-913' : 'plan-912'))
     }
-    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ mrn: '912', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plans: [{ treatment_plan_id: 'plan-913', last_updated: '2026-07-13T18:45:00Z' }, { treatment_plan_id: 'plan-912', last_updated: '2026-07-12T12:00:00Z' }], first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
+    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ mrn: '912', full_name: 'Synthetic Patient', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plans: [{ treatment_plan_id: 'plan-913', last_updated: '2026-07-13T18:45:00Z' }, { treatment_plan_id: 'plan-912', last_updated: '2026-07-12T12:00:00Z' }], first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
     return respond({ detail: `Unexpected ${method} ${path}` }, 404)
   })
 
@@ -102,19 +104,21 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
   await expect(page.getByRole('status')).toContainText('2 treatment plans')
   await expect(page.getByRole('button', { name: 'Open treatment plan plan-912 for MRN 912' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Open treatment plan plan-913 for MRN 912' })).toBeVisible()
+  await expect(page.getByText('Synthetic Patient')).toHaveCount(2)
+  await captureViewports(page, testInfo, 'treatment-plans-multiple-plans')
   await page.getByRole('button', { name: 'Open treatment plan plan-913 for MRN 912' }).click()
   await expect(page.getByRole('heading', { name: 'Treatment Plan ID plan-913' })).toBeVisible()
   await expect(page.getByText('Synthetic problem for plan-913.')).toBeVisible()
   expect(detailRequests).toContain('/api/v2/treatment-plans/912/plan-913')
-  await captureViewports(page, testInfo, 'treatment-plans-multiple-plans')
+  await captureViewports(page, testInfo, 'treatment-plan-detail-raw-field-summary')
 
   await page.getByRole('button', { name: 'Patient Roster' }).click()
-  await page.getByRole('button', { name: 'Pull active patient roster' }).click()
+  await page.getByRole('button', { name: 'Pull patient roster' }).click()
   await expect(page.getByRole('status')).toContainText('Completed successfully. 1 record updated.')
   await expect(page.getByRole('heading', { name: 'Patient roster', exact: true })).toBeVisible()
   await expect(page.getByRole('option', { name: '(#plan-913) 2026-07-13 18:45 UTC' })).toBeAttached()
   await expect(page.getByRole('option', { name: '(#plan-912) 2026-07-12 12:00 UTC' })).toBeAttached()
-  await expect(page.getByText(/Patient names are excluded/i)).toBeVisible()
+  await expect(page.getByText('Synthetic Patient')).toBeVisible()
   await captureViewports(page, testInfo, 'patient-roster-after-pull')
   await page.getByRole('combobox', { name: 'Treatment plans for MRN 912' }).selectOption('plan-912')
   await expect(page.getByRole('heading', { name: 'Treatment Plan ID plan-912' })).toBeVisible()

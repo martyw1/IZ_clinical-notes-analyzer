@@ -305,12 +305,12 @@ export function TreatmentPlanDetailViewer({
       <section className='panel'>
         {canManage && <div className='button-row'><button type='button' className='secondary-button' onClick={() => void onExportChecklistEvidence()}>Export minimum-necessary checklist evidence</button></div>}
         <h2>Evidence Coverage Map</h2>
-        <div className='summary-grid'>
-          <span>Criteria total: {plan.evidenceCoverageSummary.criteriaTotal}</span>
-          <span>With evidence: {plan.evidenceCoverageSummary.criteriaWithEvidence}</span>
-          <span>Missing evidence: {plan.evidenceCoverageSummary.criteriaMissingEvidence}</span>
-          <span>Conflicting evidence: {plan.evidenceCoverageSummary.criteriaConflicting}</span>
-          <span>Runtime-only fields: {plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span>
+        <div className='summary-grid evidence-coverage-summary'>
+          <span className='evidence-coverage-metric'><span>Criteria total:</span> <span>{plan.evidenceCoverageSummary.criteriaTotal}</span></span>
+          <span className='evidence-coverage-metric'><span>With evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaWithEvidence}</span></span>
+          <span className='evidence-coverage-metric'><span>Missing evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaMissingEvidence}</span></span>
+          <span className='evidence-coverage-metric'><span>Conflicting evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaConflicting}</span></span>
+          <span className='evidence-coverage-metric'><span>Runtime-only fields:</span> <span>{plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span></span>
         </div>
         <p>Used, missing, unmapped, and unused content are separated so managers can see what the checklist did and did not evaluate.</p>
       </section>
