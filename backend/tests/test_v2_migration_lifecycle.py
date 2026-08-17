@@ -61,6 +61,79 @@ def test_ambiguous_manager_linkage_is_needs_review_and_migration_is_idempotent(t
     assert second.applied_versions == ()
 
 
+def test_shipped_snapshot_v9_upgrades_without_losing_encrypted_rows(tmp_path) -> None:
+    # Given: a database created by the originally shipped version-nine snapshot migration.
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    encrypted_snapshot = b"synthetic-encrypted-snapshot"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute('DROP TRIGGER "patient_snapshot_versions_no_update"')
+        connection.execute('DROP TRIGGER "patient_snapshot_versions_no_delete"')
+        connection.execute('DROP INDEX "ix_patient_snapshot_versions_latest"')
+        connection.execute(
+            'ALTER TABLE "patient_snapshot_versions" RENAME COLUMN "snapshot_encrypted" '
+            'TO "normalized_snapshot_encrypted"'
+        )
+        connection.execute('ALTER TABLE "patient_snapshot_versions" DROP COLUMN "snapshot_schema_version"')
+        connection.execute('ALTER TABLE "patient_snapshot_versions" RENAME TO "patient_source_snapshots"')
+        connection.execute(
+            'CREATE INDEX ix_patient_source_snapshots_latest '
+            'ON patient_source_snapshots(patient_id,version_ordinal DESC,id DESC)'
+        )
+        connection.execute(
+            "CREATE TRIGGER patient_source_snapshots_no_update BEFORE UPDATE ON patient_source_snapshots "
+            "BEGIN SELECT RAISE(ABORT,'patient_source_snapshots are immutable'); END"
+        )
+        connection.execute(
+            "CREATE TRIGGER patient_source_snapshots_no_delete BEFORE DELETE ON patient_source_snapshots "
+            "BEGIN SELECT RAISE(ABORT,'patient_source_snapshots are immutable'); END"
+        )
+        connection.execute("DELETE FROM schema_migrations WHERE version>9")
+        connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>9")
+        connection.execute(
+            "UPDATE schema_migrations SET name=?,checksum_sha256=? WHERE version=9",
+            (
+                "persist_encrypted_patient_source_snapshots",
+                "667ce83647d45166358925a3269f5de1acc2ebedbf7fda3ee516d68d09f952e4",
+            ),
+        )
+        patient_id = connection.execute("SELECT id FROM patients ORDER BY id LIMIT 1").fetchone()[0]
+        connection.execute(
+            "INSERT INTO patient_source_snapshots("
+            "patient_id,source_system,source_record_id,version_ordinal,normalized_snapshot_encrypted,"
+            "content_sha256,source_last_updated,captured_at) VALUES(?,?,?,?,?,?,?,?)",
+            (
+                patient_id,
+                "synthetic-emr",
+                "synthetic-record",
+                1,
+                encrypted_snapshot,
+                "a" * 64,
+                "2026-08-01T00:00:00+00:00",
+                "2026-08-01T00:00:00+00:00",
+            ),
+        )
+        connection.commit()
+
+    # When: the production migration lifecycle encounters that shipped database.
+    report = run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+
+    # Then: a forward migration preserves the encrypted row and records an encrypted backup.
+    with closing(sqlite3.connect(database_path)) as connection:
+        migrated = connection.execute(
+            "SELECT snapshot_schema_version,snapshot_encrypted FROM patient_snapshot_versions"
+        ).fetchone()
+        old_table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='patient_source_snapshots'"
+        ).fetchone()
+    assert migrated == (1, encrypted_snapshot)
+    assert old_table is None
+    assert report.source_schema == 9
+    assert report.target_schema == LATEST_SCHEMA_VERSION
+    assert report.applied_versions == (10,)
+    assert report.backup_path is not None
+
+
 def test_dry_run_reports_counts_and_hashes_without_writing(tmp_path) -> None:
     # Given: an unmigrated synthetic legacy database.
     database_path = create_legacy_database(tmp_path)

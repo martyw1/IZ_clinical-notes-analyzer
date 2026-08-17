@@ -45,7 +45,11 @@ def _apply_reference_migrations(connection: sqlite3.Connection, expected_version
             match = OBJECT_PATTERN.match(statement)
             if match is not None:
                 objects.append(SchemaObject(_object_kind(match.group(1)), match.group(2)))
-    return tuple(objects)
+    surviving_objects = {
+        (str(row[0]), str(row[1]))
+        for row in connection.execute("SELECT type,name FROM sqlite_master WHERE type IN ('table','index','trigger')")
+    }
+    return tuple(schema_object for schema_object in objects if (schema_object.kind, schema_object.name) in surviving_objects)
 
 
 def _verify_object(
