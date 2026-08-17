@@ -1,0 +1,706 @@
+{
+  "schema": "iz-lane1-task-graph-v1",
+  "source": {
+    "approved_plan_sha256": "f8a6bcafef1cb78bba94575095744d3d929ba0a4922dc67088f37b80ceb2be8e",
+    "base_ref": "8c1edc460c2af354f74417cf27d26abaf72ccc70",
+    "repository": "martyw1/IZ_clinical-notes-analyzer",
+    "repository_id": 1172715348
+  },
+  "tasks": [
+    {
+      "blocks": [
+        2,
+        5,
+        6,
+        10,
+        14,
+        21,
+        25,
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [],
+      "heading": "Lock portable application behavior with synthetic characterization tests",
+      "parallel_with": [],
+      "task_id": 1,
+      "wave": "Wave 1 trust bootstrap"
+    },
+    {
+      "blocks": [
+        3,
+        4,
+        7,
+        8,
+        9,
+        13,
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        1
+      ],
+      "heading": "Split immutable resource discovery from mutable data bootstrap",
+      "parallel_with": [
+        5,
+        6
+      ],
+      "task_id": 2,
+      "wave": "Wave 2"
+    },
+    {
+      "blocks": [
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2
+      ],
+      "heading": "Make application construction side-effect-free and initialize exactly once",
+      "parallel_with": [
+        4,
+        7
+      ],
+      "task_id": 3,
+      "wave": "Wave 3"
+    },
+    {
+      "blocks": [
+        8,
+        9,
+        10,
+        13,
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2
+      ],
+      "heading": "Define secure runtime state, ownership, and desktop-control primitives",
+      "parallel_with": [
+        3,
+        7
+      ],
+      "task_id": 4,
+      "wave": "Wave 3"
+    },
+    {
+      "blocks": [
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        1
+      ],
+      "heading": "Track, cancel, drain, and persist every background worker",
+      "parallel_with": [
+        2,
+        6
+      ],
+      "task_id": 5,
+      "wave": "Wave 2"
+    },
+    {
+      "blocks": [
+        7,
+        13,
+        19,
+        20,
+        21
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        1
+      ],
+      "heading": "Replace broad release mirroring with a shared allowlist and fail-closed scanner",
+      "parallel_with": [
+        2,
+        5
+      ],
+      "task_id": 6,
+      "wave": "Wave 2"
+    },
+    {
+      "blocks": [
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2,
+        6
+      ],
+      "heading": "Implement shared packaged preflight and native-dialog contracts",
+      "parallel_with": [
+        3,
+        4
+      ],
+      "task_id": 7,
+      "wave": "Wave 3"
+    },
+    {
+      "blocks": [
+        11,
+        14,
+        15,
+        21
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2,
+        4,
+        7
+      ],
+      "heading": "Implement the Windows x64 desktop platform adapter",
+      "parallel_with": [
+        9,
+        10,
+        13
+      ],
+      "task_id": 8,
+      "wave": "Wave 4"
+    },
+    {
+      "blocks": [
+        12,
+        14,
+        16,
+        21
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2,
+        4,
+        7
+      ],
+      "heading": "Implement the Apple Silicon macOS platform adapter",
+      "parallel_with": [
+        8,
+        10,
+        13
+      ],
+      "task_id": 9,
+      "wave": "Wave 4"
+    },
+    {
+      "blocks": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        1,
+        4,
+        7
+      ],
+      "heading": "Implement the common versioned operator backup and rollback-safe restore core",
+      "parallel_with": [
+        8,
+        9
+      ],
+      "task_id": 10,
+      "wave": "Wave 4"
+    },
+    {
+      "blocks": [
+        17
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        7,
+        8,
+        10
+      ],
+      "heading": "Preserve Windows DPAPI backups through the new operator core",
+      "parallel_with": [
+        12,
+        14
+      ],
+      "task_id": 11,
+      "wave": "Wave 5"
+    },
+    {
+      "blocks": [
+        18
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        7,
+        9,
+        10
+      ],
+      "heading": "Add macOS Keychain same-user backup key protection",
+      "parallel_with": [
+        11,
+        14
+      ],
+      "task_id": 12,
+      "wave": "Wave 5"
+    },
+    {
+      "blocks": [
+        17,
+        18
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        2,
+        4,
+        6,
+        7,
+        10
+      ],
+      "heading": "Implement shared redacted diagnostics and guarded uninstall operations",
+      "parallel_with": [
+        11,
+        12,
+        14
+      ],
+      "task_id": 13,
+      "wave": "Wave 5"
+    },
+    {
+      "blocks": [
+        15,
+        16,
+        21
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10
+      ],
+      "heading": "Wire the shared desktop controller from bootstrap through clean shutdown",
+      "parallel_with": [
+        11,
+        12
+      ],
+      "task_id": 14,
+      "wave": "Wave 5"
+    },
+    {
+      "blocks": [
+        17,
+        19,
+        22,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        8,
+        14
+      ],
+      "heading": "Rewire Windows double-click launch and stop to the shared controller",
+      "parallel_with": [
+        16
+      ],
+      "task_id": 15,
+      "wave": "Wave 6"
+    },
+    {
+      "blocks": [
+        18,
+        20,
+        23,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        9,
+        14
+      ],
+      "heading": "Add Finder-accessible Apple Silicon launch and Utilities lifecycle surfaces",
+      "parallel_with": [
+        15
+      ],
+      "task_id": 16,
+      "wave": "Wave 6"
+    },
+    {
+      "blocks": [
+        19,
+        22,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        11,
+        13,
+        15
+      ],
+      "heading": "Route Windows backup, restore, diagnostics, and uninstall through shared operations",
+      "parallel_with": [
+        18
+      ],
+      "task_id": 17,
+      "wave": "Wave 7"
+    },
+    {
+      "blocks": [
+        20,
+        23,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        12,
+        13,
+        16
+      ],
+      "heading": "Wire macOS Utilities backup, restore, diagnostics, and uninstall flows",
+      "parallel_with": [
+        17
+      ],
+      "task_id": 18,
+      "wave": "Wave 7"
+    },
+    {
+      "blocks": [
+        21,
+        22,
+        24,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        6,
+        15,
+        17
+      ],
+      "heading": "Build the Windows x64 release folder and ZIP from explicit native inputs",
+      "parallel_with": [
+        20
+      ],
+      "task_id": 19,
+      "wave": "Wave 8"
+    },
+    {
+      "blocks": [
+        21,
+        23,
+        24,
+        25
+      ],
+      "can_parallel": true,
+      "depends_on": [
+        6,
+        16,
+        18
+      ],
+      "heading": "Build native ARM64 macOS app bundles and DMG",
+      "parallel_with": [
+        19
+      ],
+      "task_id": 20,
+      "wave": "Wave 8"
+    },
+    {
+      "blocks": [
+        22,
+        23,
+        24,
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        1,
+        6,
+        8,
+        9,
+        14,
+        19,
+        20
+      ],
+      "heading": "Expand CI into shared and native desktop lanes with real receipts",
+      "parallel_with": [],
+      "task_id": 21,
+      "wave": "Wave 9"
+    },
+    {
+      "blocks": [
+        23,
+        24,
+        25,
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        15,
+        17,
+        19,
+        21
+      ],
+      "heading": "Execute the exact Windows release artifact through its full lifecycle",
+      "parallel_with": [],
+      "task_id": 22,
+      "wave": "Wave 10"
+    },
+    {
+      "blocks": [
+        24,
+        25,
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        16,
+        18,
+        20,
+        21,
+        22
+      ],
+      "heading": "Execute the exact ARM64 DMG artifact through its full lifecycle",
+      "parallel_with": [],
+      "task_id": 23,
+      "wave": "Wave 11"
+    },
+    {
+      "blocks": [
+        25,
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "heading": "Add fail-closed native release signing and notarization plumbing",
+      "parallel_with": [],
+      "task_id": 24,
+      "wave": "Wave 12"
+    },
+    {
+      "blocks": [
+        26
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        1,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        22,
+        23,
+        24
+      ],
+      "heading": "Document cross-platform operation, support, testing, and release-state truthfully",
+      "parallel_with": [],
+      "task_id": 25,
+      "wave": "Wave 13"
+    },
+    {
+      "blocks": [
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        1,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "heading": "Enforce the non-bypassable Lane 1 portability barrier",
+      "parallel_with": [],
+      "task_id": 26,
+      "wave": "Wave 14 barrier"
+    },
+    {
+      "blocks": [
+        28,
+        31,
+        32
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26
+      ],
+      "heading": "Commit the shared measurement foundation and validate native harness contracts",
+      "parallel_with": [],
+      "task_id": 27,
+      "wave": "Wave 15"
+    },
+    {
+      "blocks": [
+        29,
+        31,
+        32
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        27
+      ],
+      "heading": "Implement and adversarially validate the Windows packaged startup harness",
+      "parallel_with": [],
+      "task_id": 28,
+      "wave": "Wave 16"
+    },
+    {
+      "blocks": [
+        30,
+        31,
+        32
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        28
+      ],
+      "heading": "Implement and adversarially validate the ARM64 macOS package harness",
+      "parallel_with": [],
+      "task_id": 29,
+      "wave": "Wave 17"
+    },
+    {
+      "blocks": [
+        31,
+        32,
+        34
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        29
+      ],
+      "heading": "Implement and adversarially validate authenticated endpoint measurement",
+      "parallel_with": [],
+      "task_id": 30,
+      "wave": "Wave 18"
+    },
+    {
+      "blocks": [
+        32,
+        35,
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        27,
+        28,
+        29,
+        30
+      ],
+      "heading": "Commit one immutable control and capture every formal native baseline",
+      "parallel_with": [],
+      "task_id": 31,
+      "wave": "Wave 19"
+    },
+    {
+      "blocks": [
+        33,
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "heading": "Evaluate and conditionally optimize deterministic startup reevaluation",
+      "parallel_with": [],
+      "task_id": 32,
+      "wave": "Wave 20"
+    },
+    {
+      "blocks": [
+        34,
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        32
+      ],
+      "heading": "Compare Windows onefile versus onedir and conditionally select the measured mode",
+      "parallel_with": [],
+      "task_id": 33,
+      "wave": "Wave 21"
+    },
+    {
+      "blocks": [
+        35,
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        30,
+        33
+      ],
+      "heading": "Measure and conditionally batch treatment-plan/roster query paths",
+      "parallel_with": [],
+      "task_id": 34,
+      "wave": "Wave 22"
+    },
+    {
+      "blocks": [
+        36
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        31,
+        34
+      ],
+      "heading": "Defer or conditionally introduce measured frontend route splitting",
+      "parallel_with": [],
+      "task_id": 35,
+      "wave": "Wave 23"
+    },
+    {
+      "blocks": [
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "can_parallel": false,
+      "depends_on": [
+        26,
+        31,
+        32,
+        33,
+        34,
+        35
+      ],
+      "heading": "Certify the final cross-platform performance lane without semantic drift",
+      "parallel_with": [],
+      "task_id": 36,
+      "wave": "Wave 24"
+    }
+  ]
+}
