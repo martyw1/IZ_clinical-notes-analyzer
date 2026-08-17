@@ -74,6 +74,27 @@ def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() 
     assert "$ready = $false" in launcher_contents
 
 
+def test_windows_checkout_launcher_opens_browser_only_after_runtime_readiness() -> None:
+    # Given: the source-checkout runtime owns its server process and browser launch.
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "startup-windows-local.ps1"
+
+    # When: the browser and readiness operations are inspected in execution order.
+    launcher_contents = launcher.read_text(encoding="utf-8")
+    server_start = "$serverProcess = Start-Process"
+    readiness_call = "Wait-ForReadiness -Process $serverProcess -Port $port"
+    browser_call = 'if (-not $NoBrowser) { Start-Process "http://localhost:$port" }'
+    server_wait = "Wait-Process -Id $serverProcess.Id"
+
+    # Then: the runtime starts first, readiness succeeds, the browser opens, and supervision continues.
+    assert server_start in launcher_contents
+    assert readiness_call in launcher_contents
+    assert browser_call in launcher_contents
+    assert server_wait in launcher_contents
+    assert launcher_contents.index(server_start) < launcher_contents.index(readiness_call)
+    assert launcher_contents.index(readiness_call) < launcher_contents.index(browser_call)
+    assert launcher_contents.index(browser_call) < launcher_contents.index(server_wait)
+
+
 def test_windows_checkout_runtime_disables_access_logging_for_patient_routes() -> None:
     runtime_launcher = Path(__file__).resolve().parents[2] / "scripts" / "startup-windows-local.ps1"
 

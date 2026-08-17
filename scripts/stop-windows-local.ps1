@@ -124,18 +124,29 @@ function Test-IsStartupPowerShell {
 }
 
 function Test-IsAppUvicorn {
-    param([string]$Name, [string]$CommandLine, [string]$ExecutablePath)
+    param(
+        [string]$Name,
+        [string]$CommandLine,
+        [string]$ExecutablePath,
+        [bool]$OwnsConfiguredPort
+    )
 
     $hasRepoBackend = Test-CommandLineContainsPath -CommandLine $CommandLine -Path $BackendDir
+    $repoPythonDir = Join-Path $BackendDir '.venv\Scripts'
+    $hasRepoPython = $ExecutablePath.Contains((ConvertTo-NormalizedText $repoPythonDir))
     $hasUvicorn = $CommandLine.Contains('-m uvicorn')
     $hasAppTarget = (
         $CommandLine.Contains('app.desktop_main:app') -or
         $CommandLine.Contains('app.main:app')
     )
-    $hasAppDir = $CommandLine.Contains('--app-dir')
     $isPythonLike = ($Name -in @('python.exe', 'pythonw.exe')) -or $ExecutablePath.Contains('\python')
 
-    return ($isPythonLike -and $hasUvicorn -and $hasAppTarget -and $hasAppDir -and $hasRepoBackend)
+    return (
+        $isPythonLike -and
+        $hasUvicorn -and
+        $hasAppTarget -and
+        ($hasRepoBackend -or $hasRepoPython -or $OwnsConfiguredPort)
+    )
 }
 
 function Test-IsBundledRuntime {
@@ -179,6 +190,8 @@ function Get-AppProcessTargets {
 
         $reasons = @()
         $priority = 50
+        $pidText = [string]$process.ProcessId
+        $ownsConfiguredPort = $portOwners.ContainsKey($pidText)
 
         if (Test-IsLauncherCmd -Name $name -CommandLine $commandLine) {
             $reasons += 'launcher cmd running Start-IZ-Clinical-Notes-Analyzer.cmd'
@@ -190,7 +203,7 @@ function Get-AppProcessTargets {
             $priority = [Math]::Min($priority, 10)
         }
 
-        if (Test-IsAppUvicorn -Name $name -CommandLine $commandLine -ExecutablePath $executablePath) {
+        if (Test-IsAppUvicorn -Name $name -CommandLine $commandLine -ExecutablePath $executablePath -OwnsConfiguredPort $ownsConfiguredPort) {
             if ($commandLine.Contains('app.main:app')) {
                 $reasons += 'repo backend smoke-test Uvicorn server app.main:app'
             }
@@ -210,7 +223,6 @@ function Get-AppProcessTargets {
             $priority = [Math]::Min($priority, 30)
         }
 
-        $pidText = [string]$process.ProcessId
         if ($reasons.Count -gt 0 -and $portOwners.ContainsKey($pidText)) {
             $reasons += $portOwners[$pidText]
         }

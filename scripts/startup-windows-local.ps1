@@ -13,6 +13,7 @@ $EnvFile = Join-Path $AppDataRoot '.env'
 $Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $LogFile = Join-Path $LogDir "startup-windows-local-$Timestamp.log"
 $TranscriptStarted = $false
+$serverProcess = $null
 
 function Write-Info($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [INFO] $Message" }
 function Write-Pass($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [PASS] $Message" -ForegroundColor Green }
@@ -54,6 +55,34 @@ function Assert-PortAvailable {
     finally {
         if ($listener) { $listener.Stop() }
     }
+}
+
+function Wait-ForReadiness {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [int]$Port
+    )
+
+    $deadline = (Get-Date).AddMinutes(10)
+    do {
+        if ($Process.HasExited) {
+            throw "Startup readiness check failed because the local runtime exited with code $($Process.ExitCode)."
+        }
+        $ready = $false
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/api/readiness" -TimeoutSec 2
+            $ready = $response.StatusCode -eq 200 -and $response.Content -match '"status"'
+        }
+        catch {
+        }
+        if ($Process.HasExited) {
+            throw "Startup readiness check failed because the local runtime exited with code $($Process.ExitCode)."
+        }
+        if ($ready) { return }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+
+    throw 'Startup readiness check failed because the local runtime did not become ready within 10 minutes.'
 }
 
 function Invoke-Preflight {
@@ -102,9 +131,23 @@ try {
     Write-Pass 'Startup checks completed without the legacy dependency-check false failure path.'
     Write-Info "Starting local app on http://localhost:$port"
 
+    $serverProcess = Start-Process -FilePath $pythonExe -ArgumentList @(
+        '-m',
+        'uvicorn',
+        'app.desktop_main:app',
+        '--app-dir',
+        "`"$(Join-Path $RootDir 'backend')`"",
+        '--host',
+        '127.0.0.1',
+        '--port',
+        [string]$port,
+        '--no-access-log'
+    ) -WorkingDirectory (Join-Path $RootDir 'backend') -NoNewWindow -PassThru
+    Wait-ForReadiness -Process $serverProcess -Port $port
     if (-not $NoBrowser) { Start-Process "http://localhost:$port" }
-    & $pythonExe -m uvicorn app.desktop_main:app --app-dir (Join-Path $RootDir 'backend') --host 127.0.0.1 --port $port --no-access-log
-    if ($LASTEXITCODE -ne 0) { throw 'Local FastAPI server exited with an error.' }
+    Wait-Process -Id $serverProcess.Id
+    $serverProcess.Refresh()
+    if ($serverProcess.ExitCode -ne 0) { throw 'Local FastAPI server exited with an error.' }
 }
 catch {
     Write-Error "Startup failed: $($_.Exception.Message)"
@@ -112,5 +155,8 @@ catch {
     throw
 }
 finally {
+    if ($serverProcess -and -not $serverProcess.HasExited) {
+        Stop-Process -Id $serverProcess.Id -ErrorAction SilentlyContinue
+    }
     if ($TranscriptStarted) { Stop-Transcript | Out-Null }
 }
