@@ -6,6 +6,8 @@ Current release channel: `beta-local-desktop-v2`.
 
 Current release date in version metadata: `2026-07-11`.
 
+Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
+
 ## 2.0.0-beta.2 - V2 release-readiness update
 
 Build: `2026.07.11.1`

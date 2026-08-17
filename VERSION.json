@@ -4,7 +4,7 @@
   "build": "2026.07.11.1",
   "release_channel": "beta-local-desktop-v2",
   "release_date": "2026-07-11",
-  "git_branch": "codex/v2-production-readiness",
+  "git_branch": "main",
   "stability": "beta",
   "is_prerelease": true,
   "version_name": "Version 2.0 Beta release-readiness update",

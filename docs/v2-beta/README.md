@@ -1,6 +1,6 @@
 # IZ Clinical Notes Analyzer Version 2.0 Beta
 
-Version `2.0.0-beta.2` / build `2026.07.11.1` is the active local-desktop prerelease runtime on branch `codex/v2-production-readiness`.
+Version `2.0.0-beta.2` / build `2026.07.11.1` is the active local-desktop prerelease runtime on branch `main`.
 
 The active backend lives in `backend/app/` and exposes a V2 boundary under `/api/v2`. The active frontend lives in `frontend/src/` and renders the V2 Treatment Plans Workbench. The pre-2.0 runtime is archived under `deprecated/v1/` for traceability and regression comparison.
 

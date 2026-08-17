@@ -1,5 +1,22 @@
 # Codex completion log - 2026-05-14
 
+## 2026-08-16 near-final Windows beta repository snapshot
+
+- Preserved the validated near-final Windows beta source on `main` with the annotated rollback tag `windows-near-final-beta-2026-08-16`; this repository snapshot does not change app version `2.0.0-beta.2`, build `2026.07.11.1`, or channel `beta-local-desktop-v2`.
+- Consolidated active development onto `main` only. An audited legacy safety-branch commit containing generated raw patient/treatment-plan diagnostic exports was intentionally not merged, tagged, staged, or printed; local output and the local Alleva data-integrity audit workbook remain on the workstation and are ignored by Git.
+- Verification passed backend pytest (`242 passed, 1 skipped`), frontend Vitest (`42 passed`), the production frontend build, PowerShell validation under Windows PowerShell 5.1 and PowerShell 7.6.4 (`58 passed, 0 failed` in each), retained-script AST parsing, release-safety canaries and repository scanning, the Windows stop-process isolation test, and an actual checkout startup/readiness/stop roundtrip using disposable local app data.
+- Chromium Playwright passed both changed operational scenarios. Nine fresh full-page captures at 375, 768, and 1280 pixels were directly reviewed after responsive roster/detail repairs; two independent visual QA passes reported `PASS` with high confidence and no clipping, overlap, hierarchy, or capture-integrity blockers.
+- Live Alleva import/sync approvals and the unvalidated configurable LOC-change treatment-plan window remain unchanged and gated. No cross-platform build work is included in this snapshot.
+
+## 2026-07-14 Alleva diagnostic-tool consolidation and complete XLSX export
+
+- Consolidated `diag-build-tools` to one supported PowerShell/CMD pair and one operator README after a recorded S0 safety gate; removed exactly seven HEAD-equal, unreferenced legacy wrappers, launchers, READMEs, and package-manifest files.
+- Added complete, page-safe patient-roster retrieval with every returned field and explicit untruncated patient-name columns, plus full treatment-plan list/detail retrieval with separate source scopes and bounded serial retries.
+- Added a dependency-free, atomic XLSX writer with Summary, Patient Roster, Patient Fields, Treatment Plans, and split Treatment Plan Fields sheets; every sheet has frozen headers and filters, long values are chunked safely, and incomplete retrieval can never be labeled COMPLETE.
+- Kept exports containing PHI explicit and local while restricting structured event logs to allowlisted status, duration, endpoint-label, and aggregate-count metadata. Live Alleva use remains gated pending the existing tenant/vendor/compliance approvals.
+- Verification passed the exact synthetic Pester suite under Windows PowerShell 5.1 and PowerShell 7 (`42 passed, 0 failed, 0 pending` in each), retained-script AST parsing, real CMD SelfTest from a path containing spaces, missing-script failure propagation, reference/deletion accounting, and ignored runtime preservation checks.
+- Final validation also passed backend pytest (`226 passed, 1 skipped`), frontend Vitest (`32 passed`), the frontend production build, all release-safety canaries, structural rejection of a corrupted workbook, and a native Office16 Excel read-only open of all five expected sheets with filters and frozen headers. Excel closed without a test-created process remaining, and all dedicated synthetic validation artifacts were removed.
+
 ## 2026-07-13 V2 treatment-plan pull, roster, and status export
 
 - Added the approved operational pull directly to Treatment Plans and Patient Roster and reused the same path in API Testing Harness; successful pulls refresh and populate the active list.
@@ -135,6 +152,19 @@
 - Updated release-facing README, changelog, Windows user/deployment/UAT docs, blocker notes, PRD implementation note, validation report, and completion log.
 - Validation passed backend tests, frontend tests/build, Windows preflight, Windows local stack smoke, and visible browser smoke against a temporary localhost instance with synthetic data.
 - Computer Use was attempted twice but was blocked because the local native pipe was unavailable on this laptop.
+
+## 2026-07-14 Alleva diagnostic/export final-review remediation
+
+- Kept the supported `diag-build-tools/Invoke-AllevaEndUserTools.ps1` and `Run-AllevaEndUserTools.cmd` pair and did not restore deleted legacy diagnostic duplicates.
+- Made complete exports start the patient-roster and treatment-plan collections independently at cursor `0`, honor configured `MaxPages` as a hard bounded cap, and publish INCOMPLETE when the cap is exhausted before a proven terminal response.
+- Limited detail retries to timeouts, HTTP 429, and HTTP 500 through 599; bounded hostile numeric/date `Retry-After` values without integer overflow; and URI-escaped treatment-plan IDs.
+- Reconciled list/detail identities independently with ordinal ID comparison. Conflicts, including case-distinct patient or plan IDs, retain raw source fields, blank ambiguous associations, record `IDENTITY_CONFLICT`, and force INCOMPLETE rather than attributing data to the wrong patient.
+- Replaced whole-roster/whole-plan in-memory lists and the patient map with four DPAPI-encrypted row spools plus a DPAPI-encrypted, HMAC-addressed disk patient index. Workbook worksheet validation now uses a forward-only `XmlReader` rather than worksheet DOM loading.
+- Added collision-resistant generic export filenames, CSV value and remote-header formula neutralization, and focused-export filenames/logging that do not contain patient-supplied identifiers.
+- Protected the entire standalone diagnostic connection configuration with Windows DPAPI, added recognized legacy plaintext migration through atomic no-backup replacement, fail-closed unknown envelopes, failure cleanup, and masked configuration display.
+- Made the owned patient-index directory safely recreatable before shard writes and made every spool/index cleanup independent so later artifacts and all entropy/key arrays are handled even after an earlier cleanup error.
+- Validation used synthetic data only. Full Windows PowerShell 5.1 and PowerShell 7.6.3 Pester suites each passed 58/58 after remediation; the CMD happy and missing-script paths were exercised. A 100,000-row streaming workbook probe produced 100,000 rows with `RetainedRowCount=0`, five worksheets, 18.87 seconds elapsed, and a 4.5 MB managed-memory delta. The 1,250-patient end-to-end export/CMD test passed.
+- Removed only the exact approved verifier temp directory after absolute-path, parent, basename, and reparse-point containment checks. No live Alleva request, dependency installation, commit, push, or Git-history operation occurred.
 
 ## 2026-06-04 v0.5.0 S0/S1 audit and conservative cleanup
 - Synced `main` to `695080d`, created baseline tag `baseline-pre-codex-20260604-164125`, and worked on `refactor/codex-v0.5.0`.

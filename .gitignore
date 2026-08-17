@@ -46,6 +46,8 @@ backend/.venv-*
 # Local reference artifacts that may contain PHI or recording exports
 /Product Requirements Document.docx
 /walkthroughs/
+/output/
+/docs/Alleva_Data_Integrity_Audit_*.xlsx
 
 .alleva.local.ps1
 App Credentials Info.md
