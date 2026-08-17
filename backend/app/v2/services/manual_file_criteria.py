@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Final, Mapping
 
-from app.core.config import REPO_ROOT
+from app.core.config import RESOURCE_ROOT
 from app.v2.domain.schemas import ContentEvidenceRef, JsonValue, ReviewStatus, TreatmentPlanCriterionResult
 from app.v2.services.manual_file_types import ManualFileParseError, ParsedManualFields
 
@@ -151,7 +151,7 @@ def _criterion_evidence_source(key: str, title: str, parsed: ParsedManualFields)
 
 
 def _load_checklist_steps() -> tuple[Mapping[str, JsonValue], ...]:
-    checklist_path = REPO_ROOT / "config" / "checklists" / "treatment-plan-v1.json"
+    checklist_path = RESOURCE_ROOT / "config" / "checklists" / "treatment-plan-v1.json"
     payload = json.loads(checklist_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("steps"), list):
         raise ManualFileParseError("Treatment Plan Checklist Version 1 could not be loaded.")

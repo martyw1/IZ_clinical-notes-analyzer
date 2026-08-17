@@ -6,19 +6,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from app.core.platform_paths import PlatformPathContext, resolve_local_app_data_dir, resolve_resource_root
+
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
 APP_VERSION: Final = "2.0.0-beta.2"
 BUILD_CHANNEL: Final = "beta-local-desktop-v2"
 
 
 def resolve_repository_root(module_path: Path, bundled_data_root: Path | None) -> Path:
-    if bundled_data_root is not None:
-        return bundled_data_root
-    return module_path.resolve().parents[3]
+    return resolve_resource_root(module_path, bundled_data_root)
 
 
 _bundled_data_root = getattr(sys, "_MEIPASS", None) if getattr(sys, "frozen", False) else None
-REPO_ROOT: Final = resolve_repository_root(Path(__file__), Path(_bundled_data_root) if _bundled_data_root else None)
+RESOURCE_ROOT: Final = resolve_resource_root(Path(__file__), Path(_bundled_data_root) if _bundled_data_root else None)
+REPO_ROOT: Final = RESOURCE_ROOT
 RESTRICTED_ENVIRONMENTS: Final = frozenset({"production", "local-client"})
 UNSAFE_SECURITY_VALUES: Final = frozenset(
     {
@@ -94,13 +95,16 @@ def _validate_restricted_configuration(candidate: Settings) -> None:
 
 
 def _local_app_data_root() -> Path:
-    configured = os.environ.get("IZ_CNA_LOCAL_APP_DATA_DIR", "").strip()
-    if configured:
-        return Path(configured)
-    base = os.environ.get("LOCALAPPDATA", "").strip()
-    if base:
-        return Path(base) / APP_NAME
-    return REPO_ROOT / ".local-app-data"
+    return resolve_local_app_data_dir(
+        RESOURCE_ROOT,
+        PlatformPathContext(
+            platform_name=sys.platform,
+            environment=os.environ,
+            home=Path.home(),
+            cwd=Path.cwd(),
+            frozen=bool(getattr(sys, "frozen", False)),
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)

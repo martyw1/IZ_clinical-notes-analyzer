@@ -5,7 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from app.core.config import APP_VERSION, BUILD_CHANNEL, REPO_ROOT, settings
+from app.core.config import APP_VERSION, BUILD_CHANNEL, RESOURCE_ROOT, settings
 
 JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
@@ -14,7 +14,7 @@ UNKNOWN = "unknown"
 
 
 def _metadata_path() -> Path:
-    return REPO_ROOT / "VERSION.json"
+    return RESOURCE_ROOT / "VERSION.json"
 
 
 def _read_metadata() -> dict[str, JsonValue]:
@@ -34,7 +34,7 @@ def _git_value(*args: str) -> str:
     try:
         completed = subprocess.run(
             ["git", *args],
-            cwd=REPO_ROOT,
+            cwd=RESOURCE_ROOT,
             check=True,
             capture_output=True,
             text=True,
