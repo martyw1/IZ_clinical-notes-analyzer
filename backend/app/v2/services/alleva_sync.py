@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 import hashlib
 import json
 from threading import Lock
 import time
 from datetime import datetime, timezone
-from typing import Final, assert_never
+from typing import Final, Protocol, assert_never
 from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
@@ -147,6 +147,41 @@ class PlanImportCandidate:
     linked_to_mrn: bool
 
 
+class PlanDetailFuture(Protocol):
+    def result(self) -> dict[str, object]: ...
+
+
+class PlanDetailSubmitter(Protocol):
+    def fetch(
+        self,
+        function: Callable[[PlanImportCandidate], dict[str, object]],
+        candidate: PlanImportCandidate,
+    ) -> PlanDetailFuture: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _InlinePlanDetailFuture:
+    function: Callable[[PlanImportCandidate], dict[str, object]]
+    candidate: PlanImportCandidate
+
+    def result(self) -> dict[str, object]:
+        return self.function(self.candidate)
+
+
+class _InlinePlanDetailSubmitter:
+    def fetch(
+        self,
+        function: Callable[[PlanImportCandidate], dict[str, object]],
+        candidate: PlanImportCandidate,
+    ) -> PlanDetailFuture:
+        return _InlinePlanDetailFuture(function, candidate)
+
+
+@contextmanager
+def _inline_detail_executor(_worker_count: int) -> Iterator[PlanDetailSubmitter]:
+    yield _InlinePlanDetailSubmitter()
+
+
 def run_treatment_plan_sync(
     db: Session,
     profile: AppSetting,
@@ -156,6 +191,7 @@ def run_treatment_plan_sync(
     on_page: Callable[[str, int, str, str, tuple[dict[str, object], ...]], None] | None = None,
     sync_job_id: str | None = None,
     resumed_from_job_id: str | None = None,
+    detail_executor_factory: Callable[[int], AbstractContextManager[PlanDetailSubmitter]] = _inline_detail_executor,
 ) -> AllevaSyncResult:
     if is_cancelled():
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before it started.")
@@ -204,7 +240,8 @@ def run_treatment_plan_sync(
             )
             db.commit()
             summary = _save_client_aggregates(
-                db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter,
+                db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance,
+                rate_limiter, detail_executor_factory,
             )
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
@@ -420,6 +457,7 @@ def _save_client_aggregates(
     is_cancelled: Callable[[], bool],
     sync_provenance: SyncImportProvenance | None,
     rate_limiter: ApprovedRequestRateLimiter,
+    detail_executor_factory: Callable[[int], AbstractContextManager[PlanDetailSubmitter]],
 ) -> SyncImportSummary:
     created = 0
     updated = 0
@@ -487,15 +525,20 @@ def _save_client_aggregates(
     details: list[dict[str, object] | None] = [None] * len(candidates)
     if candidates:
         worker_count = min(MAX_SYNC_HTTP_WORKERS, len(candidates))
-        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="alleva-plan-detail") as executor:
-            futures = tuple(executor.submit(fetch_detail, candidate) for candidate in candidates)
+        with detail_executor_factory(worker_count) as executor:
+            futures = tuple(executor.fetch(fetch_detail, candidate) for candidate in candidates)
             for index, future in enumerate(futures):
                 try:
                     details[index] = future.result()
                 except (httpx.HTTPError, json.JSONDecodeError, ValueError, ResponseTooLarge):
                     failed_details += 1
 
+    if is_cancelled():
+        raise AllevaSyncCancelled("desktop_shutdown_in_progress")
+
     for candidate, detail in zip(candidates, details, strict=True):
+        if is_cancelled():
+            raise AllevaSyncCancelled("desktop_shutdown_in_progress")
         if detail is None:
             detail = candidate.plan_payload
         detail_plan_id = _mapped_text(detail, contract, "treatment_plans", "plan_id")

@@ -93,11 +93,29 @@ def _ensure_app_settings(db: Session) -> None:
 
 
 def _mark_interrupted_jobs_stale(db: Session) -> None:
-    rows = db.execute(select(ApiHarnessJobRecord).where(ApiHarnessJobRecord.status.in_(("queued", "running", "writing")))).scalars()
+    rows = tuple(
+        db.execute(
+            select(ApiHarnessJobRecord).where(
+                ApiHarnessJobRecord.status.in_(("queued", "running", "writing"))
+            )
+        ).scalars()
+    )
     for row in rows:
+        interrupted_at = utc_now()
         row.status = "stale_or_interrupted"
-        row.failed_at = utc_now()
-        row.updated_at = utc_now()
+        row.cancel_requested = True
+        row.failed_at = interrupted_at
+        row.updated_at = interrupted_at
+        row.current_endpoint = "startup_recovery"
+        if row.job_type == "approved_treatment_plan_sync":
+            db.execute(
+                text(
+                    "UPDATE sync_jobs SET status='stale_or_interrupted',cancel_requested=1,"
+                    "completed_at=COALESCE(completed_at,:completed_at) "
+                    "WHERE external_job_id=:job_id AND status IN ('queued','running','writing')"
+                ),
+                {"completed_at": interrupted_at, "job_id": row.job_id},
+            )
 
 
 def _ensure_admin_facilities(db: Session) -> None:
