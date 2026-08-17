@@ -2,9 +2,29 @@
 
 Initial date: 2026-06-04
 
-Latest update: 2026-07-10
+Latest update: 2026-07-14
 
 Scope: historical cleanup records, legacy Docker/PostgreSQL removal records, and S1 ordinary repository/release containment.
+
+## 2026-07-14 S0/S1 Alleva Diagnostic Entry-Point Consolidation
+
+S0 passed before any tracked deletion. The retained `Invoke-AllevaEndUserTools.ps1` / `Run-AllevaEndUserTools.cmd` pair parsed cleanly, passed the exact synthetic regression suite under Windows PowerShell 5.1 and PowerShell 7 with `42 passed, 0 failed, 0 pending` in each runtime, and completed a real CMD `SelfTest -NoPause` run with one COMPLETE synthetic workbook and one PASS result. The nine-file tracked baseline was recorded; every removal candidate was byte-for-byte equal to its HEAD blob. A full tracked-source reference scan found no active consumer; its only outside-candidate match was a non-functional introductory comment in the retained script, removed during S1.
+
+The S0 preservation snapshot inspected no runtime filename or content. The ignored local settings, logs, and exports paths were all absent (`0` files, `0` bytes), untracked, and unstaged before cleanup. The same metadata-only snapshot is repeated after S1. No unrelated `depricated/` content or user-owned runtime data was touched.
+
+S1 removed exactly these seven obsolete tracked files after the S0 pass:
+
+| Removed path | Reason | S0/S1 safety proof |
+|---|---|---|
+| `diag-build-tools/Invoke-AllevaBackendQuickPulls.ps1` | Compatibility wrapper for the superseded remote diagnostics entry point. | HEAD-equal before deletion; no active reference outside the removal set. |
+| `diag-build-tools/Run-AllevaBackendQuickPulls.cmd` | Compatibility launcher for the superseded remote diagnostics entry point. | HEAD-equal before deletion; no active reference outside the removal set. |
+| `diag-build-tools/Invoke-AllevaRemoteDiagnostics.ps1` | Older diagnostic implementation replaced by the retained complete-export tool. | HEAD-equal before deletion; no active launcher, test, packaging, backend, or frontend consumer. |
+| `diag-build-tools/Run-AllevaRemoteDiagnostics.cmd` | Launcher for the older diagnostic implementation. | HEAD-equal before deletion; no active reference outside the removal set. |
+| `diag-build-tools/README-AllevaBackendQuickPulls.md` | Documentation for the removed compatibility wrapper. | HEAD-equal before deletion; superseded by `diag-build-tools/README.md`. |
+| `diag-build-tools/README-AllevaRemoteDiagnostics.md` | Documentation for the removed older implementation. | HEAD-equal before deletion; superseded by `diag-build-tools/README.md`. |
+| `diag-build-tools/PACKAGE-MANIFEST-AllevaRemoteDiagnostics.txt` | Obsolete manifest for the removed package. | HEAD-equal before deletion; its recorded package no longer represents the supported pair. |
+
+The supported tracked folder surface is now one PowerShell script, one CMD launcher, and one README. Post-S1 validation confirms the exact seven unstaged deletions, no stale active references, retained AST/test/SelfTest success, clear nonzero missing-script behavior, and an unchanged ignored-runtime metadata snapshot. Detailed sanitized station evidence is stored under ignored `.omo/evidence/` and is not packaged.
 
 ## 2026-07-10 S0 Incident Containment (No Removals)
 
@@ -85,6 +105,10 @@ As of the 2026-06-28 cleanup pass, Docker, PostgreSQL, nginx, old Compose artifa
 - Re-run `git status --short --ignored` before staging to verify runtime/secret artifacts are not included.
 - Re-run reference checks before deleting any retained legacy doc/script.
 - Review any local credential files and remove them from the source checkout when confirmed generated/local-only.
+
+## 2026-07-14 External Verifier Temp Cleanup
+
+Removed only `C:\Users\r3developer\AppData\Local\Temp\IZ Todo6 verifier c5c7960da1c74818b582767ec50a4a68` after resolving the absolute target and verifying that its parent was the current-user OS temp root, its basename matched the approved value exactly, it was a directory, and it was not a reparse point. The post-removal existence check returned false. No other temp directory, repository path, legacy file, or user-owned artifact was removed in this step.
 
 ## Historical Validation
 

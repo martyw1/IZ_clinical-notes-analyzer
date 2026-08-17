@@ -14,13 +14,16 @@ rem ----------------------------------------------------------------------------
 set "SCRIPT_DIR=%~dp0"
 set "PS_SCRIPT=%SCRIPT_DIR%Invoke-AllevaEndUserTools.ps1"
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+set "SHOULD_PAUSE=1"
+if not "%~1"=="" set "SHOULD_PAUSE=0"
 
 echo.
 echo ================================================================
 echo  R3 / Alleva End-User Data Pull Tool
 echo ================================================================
 echo.
-echo This tool calls Alleva directly. Logs and exports may contain PHI.
+echo This tool calls Alleva directly. Excel exports contain PHI.
+echo Structured event logs contain status and aggregate counts only.
 echo Keep generated files local, access-controlled, and out of Git/email/chat.
 echo.
 
@@ -30,7 +33,7 @@ if not exist "%PS_SCRIPT%" (
     echo.
     echo Make sure this launcher is in the same folder as Invoke-AllevaEndUserTools.ps1.
     echo.
-    pause
+    if "%SHOULD_PAUSE%"=="1" pause
     exit /b 1
 )
 
@@ -41,7 +44,7 @@ if not exist "%POWERSHELL_EXE%" (
     echo Try opening PowerShell manually and run:
     echo   powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"
     echo.
-    pause
+    if "%SHOULD_PAUSE%"=="1" pause
     exit /b 1
 )
 
@@ -49,7 +52,7 @@ cd /d "%SCRIPT_DIR%"
 
 echo Starting PowerShell menu...
 echo.
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
@@ -64,5 +67,5 @@ echo   "%SCRIPT_DIR%logs"
 echo Exports are normally written under:
 echo   "%SCRIPT_DIR%exports"
 echo.
-pause
+if "%SHOULD_PAUSE%"=="1" pause
 exit /b %EXIT_CODE%
