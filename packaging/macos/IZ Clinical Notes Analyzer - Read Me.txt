@@ -1,0 +1,3 @@
+IZ Clinical Notes Analyzer
+
+Drag “IZ Clinical Notes Analyzer.app” and “IZ Clinical Notes Analyzer Utilities.app” to the Applications shortcut, or open Utilities and choose “Install/Upgrade for Me”. The app stores its local profile outside the application bundle.
