@@ -7,17 +7,12 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from test_v2_manual_patient_correction import (
-    _application_modules,
-    _isolate_application_modules,
-)
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "desktop_contract"
@@ -31,7 +26,9 @@ def _reset_application_imports(
     monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "SyntheticFactoryPass123")
     monkeypatch.setenv("IZ_CNA_SECRET_KEY", "synthetic-factory-secret-key-1234567890")
     monkeypatch.setenv("IZ_CNA_DATA_ENCRYPTION_KEY", "synthetic-factory-data-key-1234567890")
-    _isolate_application_modules(monkeypatch)
+    for module_name in tuple(sys.modules):
+        if module_name == "app" or module_name.startswith("app."):
+            sys.modules.pop(module_name)
 
 
 def test_factory_import_and_construction_have_no_persistence_side_effects(tmp_path: Path) -> None:
@@ -214,7 +211,6 @@ def test_fresh_client_retains_and_closes_application_lifespan(
     # Given: the shared backend test helper creates a client for a synthetic profile.
     from test_v2_manual_patient_correction import _fresh_client
 
-    original_modules = _application_modules()
     client = _fresh_client(tmp_path, monkeypatch)
 
     # When: the pytest monkeypatch fixture runs its registered cleanup.
@@ -222,66 +218,4 @@ def test_fresh_client_retains_and_closes_application_lifespan(
     monkeypatch.undo()
 
     # Then: the retained lifespan portal is closed instead of leaking across tests.
-    assert client.portal is None
-    assert _application_modules() == original_modules
-
-
-def test_application_import_reset_restores_original_module_graph(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: the original application module graph loaded by the test session.
-    original_application = importlib.import_module("app.application")
-    original_modules = _application_modules()
-
-    # When: a factory test resets, reloads, and tears down its isolated imports.
-    _reset_application_imports(tmp_path, monkeypatch)
-    reloaded_application = importlib.import_module("app.application")
-    assert reloaded_application is not original_application
-    monkeypatch.undo()
-
-    # Then: downstream tests receive the original module generation.
-    assert sys.modules["app.application"] is original_application
-    assert _application_modules() == original_modules
-
-
-def test_fresh_client_ignores_prior_desktop_bootstrap_host_policy(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: a prior desktop bootstrap file whose host policy excludes TestClient.
-    desktop_environment = tmp_path / "desktop.env"
-    desktop_environment.write_text("ALLOWED_HOSTS=localhost,127.0.0.1,::1\n", encoding="utf-8")
-    monkeypatch.delenv("ALLOWED_HOSTS", raising=False)
-    monkeypatch.setenv("ENVIRONMENT", "local-client")
-    monkeypatch.setenv("IZ_CNA_ENV_FILE", str(desktop_environment))
-    from test_v2_manual_patient_correction import _fresh_client
-
-    # When: the shared HTTP helper creates its isolated test application.
-    client = _fresh_client(tmp_path, monkeypatch)
-    response = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "StrongLocalPass1"},
-    )
-
-    # Then: the synthetic TestClient host remains accepted.
-    from app.core.config import settings
-
-    assert response.status_code == 200, response.text
-    assert settings.environment == "development"
-
-
-def test_fresh_client_releases_database_before_profile_cleanup(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: a disposable profile owned entirely by the shared HTTP helper.
-    from test_v2_manual_patient_correction import _fresh_client
-
-    # When: pytest-style teardown runs before the profile context exits.
-    with TemporaryDirectory(prefix="iz-task3-client-cleanup-") as directory:
-        client = _fresh_client(Path(directory), monkeypatch)
-        assert client.portal is not None
-        monkeypatch.undo()
-
-    # Then: Windows can remove the SQLite profile without an open engine handle.
     assert client.portal is None

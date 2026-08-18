@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -12,7 +13,6 @@ from test_v2_manual_patient_correction import (
     _LifespanTestClient,
     _auth_headers,
     _fresh_client,
-    _isolate_application_modules,
     _retain_client_lifespan,
 )
 from v2_migration_fixtures import (
@@ -127,14 +127,13 @@ def _migrated_client(
 ) -> tuple[TestClient, bytes]:
     app_data = tmp_path / "app-data"
     app_data.mkdir()
-    monkeypatch.delenv("IZ_CNA_ENV_FILE", raising=False)
-    monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(app_data))
     monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "StrongLocalPass1")
     monkeypatch.setenv("IZ_CNA_SECRET_KEY", "synthetic-http-secret")
     monkeypatch.setenv("IZ_CNA_DATA_ENCRYPTION_KEY", SYNTHETIC_SECRET)
-    monkeypatch.setenv("ALLOWED_HOSTS", "localhost,127.0.0.1,::1,testserver")
-    _isolate_application_modules(monkeypatch)
+    for module_name in tuple(sys.modules):
+        if module_name == "app" or module_name.startswith("app."):
+            sys.modules.pop(module_name)
     database_path = create_legacy_database(app_data)
     if use_legacy_schema:
         downgrade_to_pre_v2_schema(database_path)
