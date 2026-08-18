@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.core.config import RESOURCE_ROOT
+from app.core.config import REPO_ROOT
 
 
 class RuleModel(BaseModel):
@@ -65,8 +65,8 @@ def load_rule_package(
     checklist_path: Path | None = None,
     rules_path: Path | None = None,
 ) -> DeterministicRulePackage:
-    checklist_source = checklist_path or RESOURCE_ROOT / "config" / "checklists" / "treatment-plan-v1.json"
-    rules_source = rules_path or RESOURCE_ROOT / "config" / "rules" / "alleva_treatment_plan_completeness_rules.yaml"
+    checklist_source = checklist_path or REPO_ROOT / "config" / "checklists" / "treatment-plan-v1.json"
+    rules_source = rules_path or REPO_ROOT / "config" / "rules" / "alleva_treatment_plan_completeness_rules.yaml"
     try:
         checklist = ChecklistDocument.model_validate(json.loads(checklist_source.read_text(encoding="utf-8-sig")))
     except (OSError, json.JSONDecodeError, ValidationError) as exc:

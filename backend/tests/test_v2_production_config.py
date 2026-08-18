@@ -8,8 +8,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 
 def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(monkeypatch) -> None:
     # Given: PyInstaller --noconsole runs with sys.stdout unavailable to Uvicorn's default formatter.
@@ -187,24 +185,18 @@ def test_windows_frozen_runtime_explicitly_packages_desktop_asgi_entrypoint() ->
     assert "--hidden-import app.desktop_main" in build_script_contents
 
 
-def test_resolve_resource_root_uses_frozen_bundle_data_root(tmp_path: Path) -> None:
-    # Given: a PyInstaller extraction location, source module, and separate local profile.
+def test_resolve_repository_root_uses_frozen_bundle_data_root(tmp_path: Path) -> None:
+    # Given: a PyInstaller extraction location and a source-style module path.
     bundled_root = tmp_path / "frozen-bundle"
     module_path = tmp_path / "source" / "backend" / "app" / "core" / "config.py"
-    local_root = tmp_path / "local-profile"
 
-    # When: stdlib-only packaged path resolution selects immutable and mutable roots.
-    from app.core.platform_paths import PlatformPathContext, resolve_local_app_data_dir, resolve_resource_root
+    # When: packaged-runtime configuration resolves its resource root.
+    from app.core.config import resolve_repository_root
 
-    resource_root = resolve_resource_root(module_path, bundled_root)
-    context = PlatformPathContext("win32", {"IZ_CNA_LOCAL_APP_DATA_DIR": str(local_root)}, tmp_path, tmp_path / "working", True)
-    data_root = resolve_local_app_data_dir(resource_root, context)
+    actual = resolve_repository_root(module_path, bundled_root)
 
-    # Then: resources remain in the bundle while every mutable path stays outside it.
-    assert resource_root == bundled_root.resolve()
-    assert data_root == local_root.resolve()
-    assert data_root != resource_root
-    assert not bundled_root.exists() and not local_root.exists()
+    # Then: deterministic rules are read from the bundled data directory.
+    assert actual == bundled_root
 
 
 def _config_probe(env_file: Path, overrides: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -314,7 +306,6 @@ def test_local_client_fails_closed_for_default_or_missing_security_values(tmp_pa
     assert "change-me" not in result.stderr
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="PowerShell generators are Windows-only")
 def test_windows_generated_secrets_always_include_password_policy_character_classes() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     generators = (
