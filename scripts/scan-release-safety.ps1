@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Repository', 'Directory', 'Zip')][string]$Scope = 'Repository',
+    [ValidateSet('Repository', 'Directory', 'Zip')]
+    [string]$Scope = 'Repository',
     [string]$Path = '',
     [string]$ExpectedHead = '',
     [switch]$AllowDirty
@@ -8,6 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'release-safety.ps1')
 
@@ -26,14 +28,25 @@ try {
             Assert-ZipHasNoForbiddenItems -ZipPath $Path
         }
     }
+
     Write-Output 'schema=release-safety-v1'
     Write-Output "scope=$($Scope.ToLowerInvariant())"
     Write-Output 'result=PASS'
     exit 0
 } catch {
+    $safeReasons = @(
+        'dirty_worktree',
+        'stale_repository_state',
+        'malformed_expected_head',
+        'malformed_repository_head',
+        'git_metadata_command_failed',
+        'directory_path_required',
+        'zip_path_required'
+    )
+    $reason = if ($safeReasons -contains $_.Exception.Message) { $_.Exception.Message } else { 'forbidden_items_detected' }
     Write-Output 'schema=release-safety-v1'
     Write-Output "scope=$($Scope.ToLowerInvariant())"
     Write-Output 'result=FAIL'
-    Write-Output "reason=$($_.Exception.Message)"
+    Write-Output "reason=$reason"
     exit 2
 }
