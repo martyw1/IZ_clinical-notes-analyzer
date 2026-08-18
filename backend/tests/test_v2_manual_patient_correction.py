@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,45 @@ class _LifespanTestClient(TestClient):
         super().close()
 
 
+def _isolate_application_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_modules = _application_modules()
+    for module_name in tuple(sys.modules):
+        if module_name == "app" or module_name.startswith("app."):
+            sys.modules.pop(module_name)
+    previous_undo = monkeypatch.undo
+
+    def restore_modules_and_undo() -> None:
+        monkeypatch.undo = previous_undo
+        try:
+            _restore_application_modules(original_modules)
+        finally:
+            previous_undo()
+
+    monkeypatch.undo = restore_modules_and_undo
+
+
+def _application_modules() -> dict[str, ModuleType]:
+    return {
+        name: module
+        for name, module in sys.modules.items()
+        if (name == "app" or name.startswith("app.")) and isinstance(module, ModuleType)
+    }
+
+
+def _restore_application_modules(original_modules: dict[str, ModuleType]) -> None:
+    for module_name in tuple(sys.modules):
+        if module_name == "app" or module_name.startswith("app."):
+            sys.modules.pop(module_name)
+    sys.modules.update(original_modules)
+    for module_name, module in original_modules.items():
+        if "." not in module_name:
+            continue
+        parent_name, attribute = module_name.rsplit(".", 1)
+        parent = original_modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attribute, module)
+
+
 def _retain_client_lifespan(
     client: _LifespanTestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -26,8 +66,14 @@ def _retain_client_lifespan(
     previous_undo = monkeypatch.undo
 
     def close_client_and_undo() -> None:
+        monkeypatch.undo = previous_undo
         try:
-            client.close()
+            try:
+                client.close()
+            finally:
+                from app.v2.db import engine
+
+                engine.dispose()
         finally:
             previous_undo()
 
@@ -36,13 +82,14 @@ def _retain_client_lifespan(
 
 
 def _fresh_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.delenv("IZ_CNA_ENV_FILE", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(tmp_path / "app-data"))
     monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "StrongLocalPass1")
     monkeypatch.setenv("IZ_CNA_SECRET_KEY", "test-secret-key-for-v2-manual-correction")
     monkeypatch.setenv("IZ_CNA_DATA_ENCRYPTION_KEY", "test-data-encryption-key-for-v2-manual-correction")
-    for module_name in tuple(sys.modules):
-        if module_name == "app" or module_name.startswith("app."):
-            sys.modules.pop(module_name)
+    monkeypatch.setenv("ALLOWED_HOSTS", "localhost,127.0.0.1,::1,testserver")
+    _isolate_application_modules(monkeypatch)
     from app.main import create_app
 
     return _retain_client_lifespan(_LifespanTestClient(create_app()), monkeypatch)
