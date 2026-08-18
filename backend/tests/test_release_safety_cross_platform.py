@@ -618,7 +618,7 @@ def test_manifest_valid_framework_and_applications_symlinks_pass(tmp_path: Path)
     # Then both links pass and link text/target hashes are recorded.
     assert result.returncode == 0, result.stdout + result.stderr
     entries = json.loads(result.stdout)["entries"]
-    assert {entry["path"] for entry in entries if entry["type"] == "symlink"} == {str(row["destination"]).removeprefix("dmg://") for row in rows}
+    assert {entry["path"] for entry in entries if entry["type"] == "symlink"} == {str(row["destination"]).removeprefix("dmg://") for row in rows if row["kind"] == "symlink"}
     assert all("link_target" in entry for entry in entries if entry["type"] == "symlink")
 
 
