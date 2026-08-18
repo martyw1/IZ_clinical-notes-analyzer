@@ -3,15 +3,11 @@ from __future__ import annotations
 import json
 import threading
 import time
-from collections.abc import Callable, Iterator
-from concurrent.futures import Future, ThreadPoolExecutor, wait
-from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final, Protocol, assert_never
+from typing import Final, assert_never
 from uuid import uuid4
 
-from fastapi import HTTPException
 from app.core.config import settings
 from app.services.audit import log_event
 from app.v2.db import SessionLocal
@@ -23,12 +19,7 @@ from app.v2.services.job_runner import (
     DiagnosticPullFailed,
     fetch_paged_records,
 )
-from app.v2.services.alleva_sync import (
-    AllevaSyncCancelled,
-    AllevaSyncError,
-    PlanImportCandidate,
-    run_treatment_plan_sync,
-)
+from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, run_treatment_plan_sync
 from app.v2.services.alleva_roster import run_roster_pull
 from app.v2.services.alleva_contracts import (
     ApprovedAllevaContract,
@@ -59,217 +50,6 @@ ARTIFACT_NAMES: Final = (
     "all-treatment-plans.error-log.jsonl",
     "audit-summary.json",
 )
-DESKTOP_SHUTDOWN_IN_PROGRESS: Final = "desktop_shutdown_in_progress"
-
-
-class DesktopShutdownInProgressError(HTTPException):
-    def __init__(self) -> None:
-        super().__init__(status_code=503, detail=DESKTOP_SHUTDOWN_IN_PROGRESS)
-
-
-@dataclass(frozen=True, slots=True)
-class DrainResult:
-    cooperative: bool
-    survivors: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class WorkerRegistryNotDrainedError(RuntimeError):
-    survivors: tuple[str, ...]
-
-    def __str__(self) -> str:
-        return f"tracked workers remain: {', '.join(self.survivors)}"
-
-
-class _FutureWaiter(Protocol):
-    def __call__(
-        self,
-        futures: set[Future[dict[str, object]]],
-        *,
-        timeout: float,
-    ) -> tuple[set[Future[dict[str, object]]], set[Future[dict[str, object]]]]: ...
-
-
-class _RegisteredDetailExecutor:
-    def __init__(self, registry: WorkerRegistry, job_id: str, executor: ThreadPoolExecutor) -> None:
-        self._registry = registry
-        self._job_id = job_id
-        self._executor = executor
-
-    def fetch(
-        self,
-        function: Callable[[PlanImportCandidate], dict[str, object]],
-        candidate: PlanImportCandidate,
-    ) -> Future[dict[str, object]]:
-        return self._registry.submit_detail(self._job_id, self._executor, function, candidate)
-
-
-class WorkerRegistry:
-    def __init__(
-        self,
-        *,
-        clock: Callable[[], float] = time.monotonic,
-        future_wait: _FutureWaiter = wait,
-        thread_join: Callable[[threading.Thread, float], None] | None = None,
-    ) -> None:
-        self.lock = threading.RLock()
-        self._clock = clock
-        self._future_wait = future_wait
-        self._thread_join = thread_join or (lambda thread, timeout: thread.join(timeout))
-        self._accepting_jobs = True
-        self._threads: dict[str, threading.Thread] = {}
-        self._executors: dict[str, set[ThreadPoolExecutor]] = {}
-        self._futures: dict[str, set[Future[dict[str, object]]]] = {}
-        self._cancel_events: dict[str, threading.Event] = {}
-        self._admitted: set[str] = set()
-        self._interrupted: set[str] = set()
-
-    @property
-    def accepting_jobs(self) -> bool:
-        with self.lock:
-            return self._accepting_jobs
-
-    @property
-    def tracked_work_count(self) -> int:
-        with self.lock:
-            return (
-                len(self._admitted)
-                + len(self._threads)
-                + sum(map(len, self._futures.values()))
-                + sum(map(len, self._executors.values()))
-            )
-
-    def ensure_accepting(self) -> None:
-        if not self._accepting_jobs:
-            raise DesktopShutdownInProgressError()
-
-    def admit_job(self, job_id: str) -> None:
-        with self.lock:
-            self.ensure_accepting()
-            self._admitted.add(job_id)
-            self._cancel_events[job_id] = threading.Event()
-
-    def start_worker(self, job_id: str, target: Callable[[], None]) -> None:
-        with self.lock:
-            if job_id not in self._admitted:
-                self.admit_job(job_id)
-
-            def run() -> None:
-                try:
-                    if not self.is_cancelled(job_id):
-                        target()
-                finally:
-                    with self.lock:
-                        self._threads.pop(job_id, None)
-                        self._admitted.discard(job_id)
-
-            thread = threading.Thread(target=run, daemon=True, name=f"desktop-job-{job_id}")
-            self._threads[job_id] = thread
-            self._admitted.discard(job_id)
-            thread.start()
-
-    @contextmanager
-    def detail_executor(self, job_id: str, worker_count: int, prefix: str = "alleva-plan-detail") -> Iterator[_RegisteredDetailExecutor]:
-        with self.lock:
-            if not self._accepting_jobs or self.is_cancelled(job_id):
-                raise AllevaSyncCancelled(DESKTOP_SHUTDOWN_IN_PROGRESS)
-            executor = ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix=prefix)
-            self._executors.setdefault(job_id, set()).add(executor)
-        try:
-            yield _RegisteredDetailExecutor(self, job_id, executor)
-        finally:
-            executor.shutdown(wait=True, cancel_futures=True)
-            with self.lock:
-                executors = self._executors.get(job_id)
-                if executors is not None:
-                    executors.discard(executor)
-                    if not executors:
-                        self._executors.pop(job_id, None)
-
-    def submit_detail(
-        self,
-        job_id: str,
-        executor: ThreadPoolExecutor,
-        function: Callable[[PlanImportCandidate], dict[str, object]],
-        candidate: PlanImportCandidate,
-    ) -> Future[dict[str, object]]:
-        with self.lock:
-            if not self._accepting_jobs or self.is_cancelled(job_id):
-                raise AllevaSyncCancelled(DESKTOP_SHUTDOWN_IN_PROGRESS)
-            future = executor.submit(function, candidate)
-            self._futures.setdefault(job_id, set()).add(future)
-            future.add_done_callback(lambda completed: self._remove_future(job_id, completed))
-            return future
-
-    def _remove_future(self, job_id: str, future: Future[dict[str, object]]) -> None:
-        with self.lock:
-            futures = self._futures.get(job_id)
-            if futures is not None:
-                futures.discard(future)
-                if not futures:
-                    self._futures.pop(job_id, None)
-
-    def is_cancelled(self, job_id: str) -> bool:
-        with self.lock:
-            event = self._cancel_events.get(job_id)
-            return not self._accepting_jobs or (event.is_set() if event is not None else False)
-
-    def cancel_job(self, job_id: str) -> None:
-        with self.lock:
-            self._cancel_events.setdefault(job_id, threading.Event()).set()
-            executors = tuple(self._executors.get(job_id, ()))
-            futures = tuple(self._futures.get(job_id, ()))
-        for future in futures:
-            future.cancel()
-        for executor in executors:
-            executor.shutdown(wait=False, cancel_futures=True)
-
-    def request_shutdown(self) -> tuple[str, ...]:
-        with self.lock:
-            self._accepting_jobs = False
-            job_ids = self._tracked_job_ids()
-        for job_id in job_ids:
-            self.cancel_job(job_id)
-        return job_ids
-
-    def drain(self, timeout_seconds: float = 15.0) -> DrainResult:
-        self.request_shutdown()
-        deadline = self._clock() + timeout_seconds
-        with self.lock:
-            futures = {future for values in self._futures.values() for future in values}
-            threads = tuple(self._threads.values())
-        remaining = max(0.0, deadline - self._clock())
-        if futures and remaining > 0.0:
-            self._future_wait(futures, timeout=remaining)
-        for thread in threads:
-            remaining = max(0.0, deadline - self._clock())
-            self._thread_join(thread, remaining)
-        with self.lock:
-            survivors = self._tracked_job_ids()
-            self._interrupted.update(survivors)
-        return DrainResult(not survivors, survivors)
-
-    def _tracked_job_ids(self) -> tuple[str, ...]:
-        return tuple(sorted(self._admitted | set(self._threads) | set(self._executors) | set(self._futures)))
-
-    def is_interrupted(self, job_id: str) -> bool:
-        with self.lock:
-            return job_id in self._interrupted
-
-    def join_tracked_for_test(self) -> None:
-        with self.lock:
-            threads = tuple(self._threads.values())
-        for thread in threads:
-            thread.join(timeout=1)
-
-    def reset_for_test_or_new_process(self) -> None:
-        with self.lock:
-            if self._tracked_job_ids():
-                raise WorkerRegistryNotDrainedError(self._tracked_job_ids())
-            self._accepting_jobs = True
-            self._cancel_events.clear()
-            self._admitted.clear()
-            self._interrupted.clear()
 
 
 def _now() -> str:
@@ -345,8 +125,7 @@ class DiagnosticAuditEvent:
 
 
 class ApiHarnessJobService:
-    def __init__(self, worker_registry: WorkerRegistry | None = None) -> None:
-        self._workers = worker_registry or WorkerRegistry()
+    def __init__(self) -> None:
         self._jobs: dict[str, MutableJob] = {}
         self._connections: dict[str, HarnessConnection] = {}
         self._sync_actor_ids: dict[str, int] = {}
@@ -354,19 +133,10 @@ class ApiHarnessJobService:
         self._sync_resume_sources: dict[str, str] = {}
         self._roster_actor_ids: dict[str, int] = {}
         self._roster_contracts: dict[str, ApprovedAllevaContract] = {}
-        self._lock = self._workers.lock
-
-    @property
-    def accepting_jobs(self) -> bool:
-        return self._workers.accepting_jobs
-
-    @property
-    def tracked_work_count(self) -> int:
-        return self._workers.tracked_work_count
+        self._lock = threading.Lock()
 
     def create_all_fields_job(self, connection: HarnessConnection, actor_id: str = "admin", actor_role: str = "admin") -> ApiHarnessJob:
         job_id = f"job-{uuid4().hex[:12]}"
-        self._workers.admit_job(job_id)
         output_dir = settings.api_harness_runs_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
         created = _now()
@@ -409,7 +179,7 @@ class ApiHarnessJobService:
                 details={"job_type": job.job_type, "redaction_mode": "redacted"},
             ),
         )
-        self._start_worker(job_id)
+        threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
     def create_treatment_plan_sync_job(
@@ -420,15 +190,6 @@ class ApiHarnessJobService:
         resumed_from_job_id: str | None = None,
     ) -> ApiHarnessJob:
         job_id = f"sync-{uuid4().hex[:12]}"
-        with self._lock:
-            self._workers.ensure_accepting()
-            if any(
-                existing.job_type == "approved_treatment_plan_sync"
-                and existing.status in {"queued", "running", "writing"}
-                for existing in self._jobs.values()
-            ):
-                raise ValueError("An approved treatment-plan sync is already running.")
-            self._workers.admit_job(job_id)
         output_dir = settings.api_harness_runs_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
         created = _now()
@@ -441,6 +202,12 @@ class ApiHarnessJobService:
             cancel_requested=False, last_heartbeat_at=created,
         )
         with self._lock:
+            if any(
+                existing.job_type == "approved_treatment_plan_sync"
+                and existing.status in {"queued", "running", "writing"}
+                for existing in self._jobs.values()
+            ):
+                raise ValueError("An approved treatment-plan sync is already running.")
             self._jobs[job_id] = job
             self._sync_actor_ids[job_id] = actor_id
             self._sync_contracts[job_id] = contract
@@ -452,7 +219,7 @@ class ApiHarnessJobService:
             if resumed_from_job_id:
                 copy_sync_checkpoints(db, resumed_from_job_id, job_id)
         log_event(action="alleva.treatment_plan_sync.job.created", entity_type="api_harness_job", entity_reference=job_id, actor_id=str(actor_id), actor_role=actor_role)
-        self._start_worker(job_id)
+        threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
     def create_roster_pull_job(
@@ -462,15 +229,6 @@ class ApiHarnessJobService:
         contract: ApprovedAllevaContract,
     ) -> ApiHarnessJob:
         job_id = f"roster-{uuid4().hex[:12]}"
-        with self._lock:
-            self._workers.ensure_accepting()
-            if any(
-                existing.job_type == "active_patient_roster_pull"
-                and existing.status in {"queued", "running", "writing"}
-                for existing in self._jobs.values()
-            ):
-                raise ValueError("An active patient-roster pull is already running.")
-            self._workers.admit_job(job_id)
         output_dir = settings.api_harness_runs_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
         created = _now()
@@ -483,11 +241,17 @@ class ApiHarnessJobService:
             raw_sensitive_mode_used=False, cancel_requested=False, last_heartbeat_at=created,
         )
         with self._lock:
+            if any(
+                existing.job_type == "active_patient_roster_pull"
+                and existing.status in {"queued", "running", "writing"}
+                for existing in self._jobs.values()
+            ):
+                raise ValueError("An active patient-roster pull is already running.")
             self._jobs[job_id] = job
             self._roster_actor_ids[job_id] = actor_id
             self._roster_contracts[job_id] = contract
         save_job(job)
-        self._start_worker(job_id)
+        threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
     def resume_treatment_plan_sync_job(
@@ -497,7 +261,6 @@ class ApiHarnessJobService:
         actor_role: str,
         contract: ApprovedAllevaContract,
     ) -> ApiHarnessJob:
-        self._workers.ensure_accepting()
         with SessionLocal() as db:
             original = db.execute(
                 select(ApiHarnessJobRecord).where(ApiHarnessJobRecord.job_id == job_id)
@@ -525,7 +288,6 @@ class ApiHarnessJobService:
         return self._public_job(job)
 
     def cancel_job(self, job_id: str) -> ApiHarnessJob:
-        self._workers.cancel_job(job_id)
         with self._lock:
             job = self._jobs.get(job_id)
             if job is not None:
@@ -550,54 +312,6 @@ class ApiHarnessJobService:
             case _:
                 log_event(action="api_harness.job.cancel_requested", entity_type="api_harness_job", entity_reference=job_id)
         return self.get_job(job_id)
-
-    def request_shutdown(self) -> tuple[str, ...]:
-        job_ids = self._workers.request_shutdown()
-        for job_id in job_ids:
-            try:
-                self.cancel_job(job_id)
-            except KeyError:
-                continue
-        return job_ids
-
-    def drain(self, timeout_seconds: float = 15.0) -> DrainResult:
-        requested_job_ids = set(self.request_shutdown())
-        result = self._workers.drain(timeout_seconds)
-        survivor_ids = set(result.survivors)
-        timestamp = _now()
-        for job_id in requested_job_ids | survivor_ids:
-            with self._lock:
-                job = self._jobs.get(job_id)
-            if job is None:
-                continue
-            if job_id in survivor_ids:
-                self._set(
-                    job_id,
-                    status="stale_or_interrupted",
-                    failed_at=timestamp,
-                    current_endpoint="desktop_shutdown_timeout",
-                    cancel_requested=True,
-                )
-            elif job.status in {"queued", "running", "writing"}:
-                self._set(
-                    job_id,
-                    status="cancelled",
-                    cancelled_at=timestamp,
-                    progress_percent=100,
-                    cancel_requested=True,
-                )
-        return result
-
-    def reset_for_test_or_new_process(self) -> None:
-        self._workers.reset_for_test_or_new_process()
-        with self._lock:
-            self._jobs.clear()
-            self._connections.clear()
-            self._sync_actor_ids.clear()
-            self._sync_contracts.clear()
-            self._sync_resume_sources.clear()
-            self._roster_actor_ids.clear()
-            self._roster_contracts.clear()
 
     def artifacts(self, job_id: str) -> tuple[ApiHarnessArtifact, ...]:
         output_dir = self._output_dir(job_id)
@@ -649,19 +363,6 @@ class ApiHarnessJobService:
             message="Preview is bounded to 25 records and 50 fields; full output is local artifact files.",
         )
 
-    def _start_worker(self, job_id: str) -> None:
-        if self._workers.is_interrupted(job_id):
-            self._set(
-                job_id,
-                status="stale_or_interrupted",
-                failed_at=_now(),
-                current_endpoint="desktop_shutdown_timeout",
-                cancel_requested=True,
-            )
-        elif self._workers.is_cancelled(job_id):
-            self._set(job_id, cancel_requested=True)
-        self._workers.start_worker(job_id, lambda: self._run_job(job_id))
-
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             sync_actor_id = self._sync_actor_ids.pop(job_id, None)
@@ -693,7 +394,7 @@ class ApiHarnessJobService:
         )
         connection = self._connection(job_id)
         try:
-            result = fetch_paged_records(job_id=job_id, connection=connection, output_dir=output_dir, is_cancelled=lambda: self._workers.is_cancelled(job_id), update=lambda **changes: self._set(job_id, status="writing", last_heartbeat_at=_now(), **changes))
+            result = fetch_paged_records(job_id=job_id, connection=connection, output_dir=output_dir, is_cancelled=lambda: self.get_job(job_id).cancel_requested, update=lambda **changes: self._set(job_id, status="writing", last_heartbeat_at=_now(), **changes))
         except Exception as exc:
             failure = DiagnosticFailure(
                 failure_stage="worker",
@@ -706,13 +407,6 @@ class ApiHarnessJobService:
             self._audit_diagnostic_job(
                 job_id,
                 DiagnosticAuditEvent("api_harness.job.failed", "failure", failure.audit_details()),
-            )
-            return
-        if self._workers.is_cancelled(job_id):
-            self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
-            self._audit_diagnostic_job(
-                job_id,
-                DiagnosticAuditEvent("api_harness.job.cancelled", "cancelled", {}),
             )
             return
         match result:
@@ -768,11 +462,10 @@ class ApiHarnessJobService:
                     profile,
                     actor,
                     contract,
-                    is_cancelled=lambda: self._workers.is_cancelled(job_id),
+                    is_cancelled=lambda: self.get_job(job_id).cancel_requested,
                     on_page=lambda endpoint_key, page_number, cursor_hash, response_hash, records: self._record_checkpoint(job_id, endpoint_key, page_number, cursor_hash, response_hash, records),
                     sync_job_id=job_id,
                     resumed_from_job_id=resume_source_job_id,
-                    detail_executor_factory=lambda worker_count: self._workers.detail_executor(job_id, worker_count),
                 )
             except AllevaSyncCancelled:
                 record_audit_event(db, action="alleva.treatment_plan_sync.cancelled", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="cancelled")
@@ -807,10 +500,6 @@ class ApiHarnessJobService:
                 )
                 record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__, "error_origin": error_origin})
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
-                return
-            if self._workers.is_cancelled(job_id):
-                record_audit_event(db, action="alleva.treatment_plan_sync.cancelled", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="cancelled")
-                self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
                 return
             audit_details: dict[str, JsonValue] = {
                 "imported_patient_count": result.imported_patient_count,
@@ -858,7 +547,7 @@ class ApiHarnessJobService:
                     contract,
                     job_id,
                     _now(),
-                    is_cancelled=lambda: self._workers.is_cancelled(job_id),
+                    is_cancelled=lambda: self.get_job(job_id).cancel_requested,
                     on_page=lambda page, cursor, records: self._set(
                         job_id,
                         status="writing",
@@ -885,14 +574,6 @@ class ApiHarnessJobService:
                     outcome_status="failure", details={"error_class": type(exc).__name__},
                 )
                 return
-            if self._workers.is_cancelled(job_id):
-                self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
-                record_audit_event(
-                    db, action="alleva.patient_roster_pull.cancelled", actor=actor,
-                    target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
-                    outcome_status="cancelled",
-                )
-                return
             record_audit_event(
                 db, action=f"alleva.patient_roster_pull.{result.status}", actor=actor,
                 target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
@@ -916,8 +597,6 @@ class ApiHarnessJobService:
     def _set(self, job_id: str, **changes: JsonValue) -> None:
         with self._lock:
             job = self._jobs[job_id]
-            if self._workers.is_interrupted(job_id) and changes.get("status") != "stale_or_interrupted":
-                return
             updated = replace(job, updated_at=_now(), **changes)
             self._jobs[job_id] = updated
         save_job(updated)
@@ -928,8 +607,6 @@ class ApiHarnessJobService:
                 update_sync_ledger(db, updated.job_id, updated.status, terminal, counters)
 
     def _record_checkpoint(self, job_id: str, endpoint_key: str, page_number: int, cursor_hash: str, response_hash: str, records: tuple[dict[str, object], ...]) -> None:
-        if self._workers.is_cancelled(job_id):
-            raise AllevaSyncCancelled(DESKTOP_SHUTDOWN_IN_PROGRESS)
         with SessionLocal() as db:
             record_sync_checkpoint(db, job_id, endpoint_key, page_number, cursor_hash, response_hash, records, _now())
         current = self.get_job(job_id)
