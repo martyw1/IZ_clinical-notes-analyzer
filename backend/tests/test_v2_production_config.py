@@ -30,15 +30,6 @@ def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(m
     )
 
 
-def test_local_stack_source_smoke_enables_application_lifespan() -> None:
-    # Given: the Windows source-stack smoke launches the compatibility ASGI entrypoint.
-    smoke_script = Path(__file__).resolve().parents[2] / "scripts" / "test-local-app-stack.ps1"
-
-    # When: its Uvicorn invocation is inspected.
-    # Then: lifespan handling is required instead of relying on Uvicorn auto-detection.
-    assert "--lifespan on" in smoke_script.read_text(encoding="utf-8")
-
-
 def test_windows_release_installer_initializes_packaged_runtime_configuration() -> None:
     build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
     preflight_script = Path(__file__).resolve().parents[2] / "scripts" / "preflight-windows.ps1"

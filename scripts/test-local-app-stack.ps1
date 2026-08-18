@@ -145,7 +145,7 @@ EMR_API_ENABLED=false
     $env:IZ_CNA_ENV_FILE = $EnvFile
 
     $appDir = Join-Path $RootDir 'backend'
-    $uvicornArgs = "-m uvicorn app.main:app --app-dir `"$appDir`" --host 127.0.0.1 --port $Port --lifespan on"
+    $uvicornArgs = "-m uvicorn app.main:app --app-dir `"$appDir`" --host 127.0.0.1 --port $Port"
     Write-Step "Starting test server on $BaseUrl ."
     $server = Start-Process -FilePath $python -ArgumentList $uvicornArgs -WorkingDirectory $RootDir -PassThru -WindowStyle Hidden
     try {

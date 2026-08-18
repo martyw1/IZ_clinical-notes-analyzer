@@ -144,22 +144,20 @@ def test_receipt_rejects_wrong_architecture_and_api_digest() -> None:
         dispatcher.verify_artifact_digest("sha256:" + "a" * 64, bytes.fromhex("00"))
 
 
-def test_all_task1_modes_are_closed_and_forward_files_fail(tmp_path: Path) -> None:
-    # Given: the exact Task-1 mode inventory and files implemented through Task 3.
+def test_all_task1_modes_are_closed_and_forward_files_fail() -> None:
+    # Given: the exact Task-1 mode inventory and current repository files.
     writer = _load_module(WRITER, "task1_native_modes")
 
     # When: each hardcoded mode resolves its exact pytest modules.
     commands = {mode: writer.command_for_mode(mode) for mode in writer.TASK1_MODES}
 
-    # Then: implemented modes resolve without arbitrary shell text.
+    # Then: arbitrary shell text is absent and only contract is currently runnable.
     assert tuple(writer.TASK1_MODES) == ("contract", "bootstrap", "factory", "control", "jobs", "release-safety")
     assert all(command[:3] == (sys.executable, "-m", "pytest") for command in commands.values())
-    for mode in ("contract", "bootstrap", "factory", "jobs", "release-safety"):
-        writer.require_mode_files(REPOSITORY_ROOT, mode)
-
-    # Then: a forward mode still fails closed when its mapped files are absent.
-    with pytest.raises(writer.NativeBootstrapReceiptError, match="not available"):
-        writer.require_mode_files(tmp_path, "control")
+    writer.require_mode_files(REPOSITORY_ROOT, "contract")
+    for mode in ("bootstrap", "factory", "control", "jobs", "release-safety"):
+        with pytest.raises(writer.NativeBootstrapReceiptError, match="not available"):
+            writer.require_mode_files(REPOSITORY_ROOT, mode)
 
 
 def test_dirty_worktree_is_rejected_before_publication() -> None:
