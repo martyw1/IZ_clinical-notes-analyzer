@@ -3,10 +3,39 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 
-def _fresh_client(tmp_path: Path, monkeypatch) -> TestClient:
+class _LifespanTestClient(TestClient):
+    lifespan_open = False
+
+    def close(self) -> None:
+        if self.lifespan_open:
+            self.lifespan_open = False
+            self.__exit__(None, None, None)
+        super().close()
+
+
+def _retain_client_lifespan(
+    client: _LifespanTestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> TestClient:
+    client.__enter__()
+    client.lifespan_open = True
+    previous_undo = monkeypatch.undo
+
+    def close_client_and_undo() -> None:
+        try:
+            client.close()
+        finally:
+            previous_undo()
+
+    monkeypatch.undo = close_client_and_undo
+    return client
+
+
+def _fresh_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(tmp_path / "app-data"))
     monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "StrongLocalPass1")
     monkeypatch.setenv("IZ_CNA_SECRET_KEY", "test-secret-key-for-v2-manual-correction")
@@ -16,7 +45,7 @@ def _fresh_client(tmp_path: Path, monkeypatch) -> TestClient:
             sys.modules.pop(module_name)
     from app.main import create_app
 
-    return TestClient(create_app())
+    return _retain_client_lifespan(_LifespanTestClient(create_app()), monkeypatch)
 
 
 def _auth_headers(client: TestClient) -> dict[str, str]:

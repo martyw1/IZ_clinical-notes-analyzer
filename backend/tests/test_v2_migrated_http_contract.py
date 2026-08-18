@@ -6,10 +6,15 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
-from test_v2_manual_patient_correction import _auth_headers, _fresh_client
+from test_v2_manual_patient_correction import (
+    _LifespanTestClient,
+    _auth_headers,
+    _fresh_client,
+    _retain_client_lifespan,
+)
 from v2_migration_fixtures import (
     SYNTHETIC_SECRET,
     create_legacy_database,
@@ -114,7 +119,12 @@ def test_snapshot_codec_accepts_legacy_record_envelope_and_rejects_malformed_tok
         codec.decode_plan(b"IZCNA1:not-a-valid-token")
 
 
-def _migrated_client(tmp_path: Path, monkeypatch, *, use_legacy_schema: bool = False) -> tuple[TestClient, bytes]:
+def _migrated_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    use_legacy_schema: bool = False,
+) -> tuple[TestClient, bytes]:
     app_data = tmp_path / "app-data"
     app_data.mkdir()
     monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(app_data))
@@ -151,4 +161,5 @@ def _migrated_client(tmp_path: Path, monkeypatch, *, use_legacy_schema: bool = F
     original_database_bytes = database_path.read_bytes()
     from app.main import create_app
 
-    return TestClient(create_app(), raise_server_exceptions=False), original_database_bytes
+    client = _LifespanTestClient(create_app(), raise_server_exceptions=False)
+    return _retain_client_lifespan(client, monkeypatch), original_database_bytes
