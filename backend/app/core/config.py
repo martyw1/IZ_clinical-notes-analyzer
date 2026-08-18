@@ -9,6 +9,17 @@ from typing import Final
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
 APP_VERSION: Final = "2.0.0-beta.2"
 BUILD_CHANNEL: Final = "beta-local-desktop-v2"
+MACOS_APPLICATION_SUPPORT: Final = Path("Library") / "Application Support"
+
+
+def resolve_macos_local_app_data_dir(
+    home: Path | None = None,
+    override: str | Path | None = None,
+) -> Path:
+    configured = override if override is not None else os.environ.get("IZ_CNA_LOCAL_APP_DATA_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return (home if home is not None else Path.home()) / MACOS_APPLICATION_SUPPORT / APP_NAME
 
 
 def resolve_repository_root(module_path: Path, bundled_data_root: Path | None) -> Path:
