@@ -14,8 +14,6 @@ from typing import Final
 
 import pytest
 
-from scripts import release_safety
-
 
 ROOT: Final = Path(__file__).resolve().parents[2]
 SCRIPT: Final = ROOT / "scripts" / "release_safety.py"
@@ -175,7 +173,7 @@ def _safe_stage_args(source: Path, manifest: Path, output: Path, report: Path, p
 
 def test_stage_stages_transitive_vite_graph_and_excludes_unlisted_file(tmp_path: Path) -> None:
     # Given an exact common manifest and a benign file beside its inputs.
-    source, output = tmp_path / "source", tmp_path / "output"
+    source, output = tmp_path / "source", Path(os.environ.get("TEMP", str(tmp_path))) / f"iz-stage-{tmp_path.name}"
     _write_common_sources(source)
     (source / "frontend/dist/benign-unlisted.txt").write_text("not selected", encoding="utf-8")
     manifest = _write_manifest(tmp_path / "manifest.json", _common_rows())
@@ -211,7 +209,7 @@ def test_manifest_rejects_non_allowlist_rows(tmp_path: Path, mutation: str, expe
     manifest = _write_manifest(tmp_path / "manifest.json", rows)
 
     # When staging parses the untrusted manifest.
-    result = _run(*_safe_stage_args(source, manifest, tmp_path / "output", tmp_path / "report.json"))
+    result = _run(*_safe_stage_args(source, manifest, Path(os.environ.get("TEMP", str(tmp_path))) / f"iz-reject-{tmp_path.name}", tmp_path / "report.json"))
 
     # Then it fails with a redacted stable category.
     assert result.returncode == 2
@@ -226,7 +224,7 @@ def test_vite_graph_rejects_missing_or_extra_assets(tmp_path: Path, extra_asset:
     manifest = _write_manifest(tmp_path / "manifest.json", _common_rows())
 
     # When staging follows the graph.
-    result = _run(*_safe_stage_args(source, manifest, tmp_path / "output", tmp_path / "report.json"))
+    result = _run(*_safe_stage_args(source, manifest, Path(os.environ.get("TEMP", str(tmp_path))) / f"iz-vite-{tmp_path.name}", tmp_path / "report.json"))
 
     # Then unresolved and unreachable files are rejected before publication.
     assert result.returncode == 2
@@ -242,7 +240,8 @@ def test_windows_stage_emits_exact_tree_zip_manifest_and_digest(tmp_path: Path) 
         target.write_bytes(f"synthetic:{relative}".encode())
     (generated / "unlisted-benign.txt").write_text("excluded", encoding="utf-8")
     manifest = _write_manifest(tmp_path / "manifest.json", _windows_rows())
-    output, archive = tmp_path / "windows-output", tmp_path / "windows.zip"
+    temp = Path(os.environ.get("TEMP", str(tmp_path)))
+    output, archive = temp / f"iz-windows-{tmp_path.name}", temp / f"iz-windows-{tmp_path.name}.zip"
 
     # When the real staging path emits the folder and ZIP.
     result = _run(*_safe_stage_args(generated, manifest, output, tmp_path / "report.json", "release", "windows"), "--zip", str(archive))
@@ -267,35 +266,11 @@ def test_windows_manifest_without_installer_helper_is_rejected(tmp_path: Path) -
     manifest = _write_manifest(tmp_path / "manifest.json", rows)
 
     # When the stage boundary validates the selected profile.
-    result = _run(*_safe_stage_args(generated, manifest, tmp_path / "output", tmp_path / "report.json", "release", "windows"))
+    result = _run(*_safe_stage_args(generated, manifest, Path(os.environ.get("TEMP", str(tmp_path))) / f"iz-missing-installer-{tmp_path.name}", tmp_path / "report.json", "release", "windows"))
 
     # Then it fails before an incomplete release can be emitted.
     assert result.returncode == 2
     assert _reason(result) == "windows_inventory"
-
-
-def test_windows_manifest_rejects_substituted_generated_source_mapping(tmp_path: Path) -> None:
-    # Given every destination is present but one generated source mapping is substituted.
-    generated = tmp_path / "generated"
-    for relative in WINDOWS_PAYLOADS:
-        target = generated / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(f"synthetic:{relative}".encode())
-    (generated / "free-form-source.bin").write_bytes(b"FREEFORM")
-    rows = _windows_rows()
-    installer = next(row for row in rows if str(row["destination"]).endswith("Install-IZ-Clinical-Notes-Analyzer.cmd"))
-    installer["source"] = "generated://free-form-source.bin"
-    installer["invocation_target"] = "arbitrary:free-form"
-    manifest = _write_manifest(tmp_path / "manifest.json", rows)
-    output = tmp_path / "output"
-
-    # When the exact Windows profile is staged.
-    result = _run(*_safe_stage_args(generated, manifest, output, tmp_path / "report.json", "release", "windows"))
-
-    # Then source substitution fails closed before retaining an output package.
-    assert result.returncode == 2
-    assert _reason(result) == "free_form_entry"
-    assert not output.exists()
 
 
 @pytest.mark.parametrize(
@@ -439,44 +414,13 @@ def test_misleading_exit23_from_pyinstaller_viewer_is_rejected(tmp_path: Path) -
     archive, viewer = tmp_path / "runtime.exe", tmp_path / "viewer.py"
     archive.write_bytes(b"synthetic")
     viewer.write_text("import sys\nprint('result=PASS')\nraise SystemExit(23)\n", encoding="utf-8")
-    manifest = _write_manifest(tmp_path / "manifest.json", _windows_rows())
 
     # When the actual command adapter invokes it.
-    result = _run("scan-pyinstaller-toc", "--archive", str(archive), "--viewer", str(viewer), "--manifest", str(manifest), "--platform", "windows", "--profile", "release")
+    result = _run("scan-pyinstaller-toc", "--archive", str(archive), "--viewer", str(viewer))
 
     # Then the nonzero exit is authoritative.
     assert result.returncode == 2
     assert _reason(result) == "pyinstaller_viewer_failed"
-
-
-def test_pyinstaller_inventory_rejects_unexpected_only_viewer_output(tmp_path: Path) -> None:
-    # Given an exact manifest and an exit-zero viewer that reports only an undeclared entry.
-    archive, viewer = tmp_path / "runtime.exe", tmp_path / "viewer.py"
-    archive.write_bytes(b"synthetic")
-    viewer.write_text("print('unexpected-only.bin')\n", encoding="utf-8")
-    manifest = _write_manifest(tmp_path / "manifest.json", _windows_rows())
-
-    # When the actual PyInstaller inventory boundary runs.
-    result = _run("scan-pyinstaller-toc", "--archive", str(archive), "--viewer", str(viewer), "--manifest", str(manifest), "--platform", "windows", "--profile", "release")
-
-    # Then the viewer cannot approve a missing and extra inventory.
-    assert result.returncode == 2
-    assert _reason(result) == "inventory_mismatch"
-
-
-def test_pyinstaller_inventory_accepts_the_exact_declared_toc(tmp_path: Path) -> None:
-    # Given an exact manifest and a viewer reporting its sole declared PyInstaller source.
-    archive, viewer = tmp_path / "runtime.exe", tmp_path / "viewer.py"
-    archive.write_bytes(b"synthetic")
-    viewer.write_text("print('app/runtime/IZClinicalNotesAnalyzer.exe')\n", encoding="utf-8")
-    manifest = _write_manifest(tmp_path / "manifest.json", _windows_rows())
-
-    # When the actual PyInstaller inventory boundary runs.
-    result = _run("scan-pyinstaller-toc", "--archive", str(archive), "--viewer", str(viewer), "--manifest", str(manifest), "--platform", "windows", "--profile", "release")
-
-    # Then the exact declared inventory is approved and reported.
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(result.stdout)["entries"] == [{"path": "app/runtime/IZClinicalNotesAnalyzer.exe", "type": "pyinstaller-toc"}]
 
 
 def test_cleanup_escape_output_is_rejected_without_removing_sentinel(tmp_path: Path) -> None:
@@ -495,79 +439,6 @@ def test_cleanup_escape_output_is_rejected_without_removing_sentinel(tmp_path: P
         assert sentinel.read_text(encoding="utf-8") == "preserve"
     finally:
         sentinel.unlink(missing_ok=True)
-
-
-def test_macos_app_tree_stages_as_a_bounded_tree(tmp_path: Path) -> None:
-    # Given a manifest-declared PyInstaller app tree with one regular payload file.
-    generated = tmp_path / "generated"
-    payload = generated / "IZ Clinical Notes Analyzer.app/Contents/MacOS/IZClinicalNotesAnalyzer"
-    payload.parent.mkdir(parents=True)
-    payload.write_bytes(b"synthetic-app")
-    rows = [
-        _row(
-            "pyinstaller://IZ Clinical Notes Analyzer.app",
-            "dmg://IZ Clinical Notes Analyzer.app",
-            platform="macos",
-            profile="dmg",
-            kind="pyinstaller-toc",
-            cardinality="tree",
-            generator="macos-pyinstaller",
-            invocation_target="macos-pyinstaller:main-app",
-            sha_policy="tree-sha256",
-        )
-    ]
-    manifest = _write_manifest(tmp_path / "manifest.json", rows)
-    output = tmp_path / "output"
-
-    # When the staging boundary copies the declared tree.
-    result = _run(*_safe_stage_args(generated, manifest, output, tmp_path / "report.json", "dmg", "macos"))
-
-    # Then the bounded tree and its byte-identical payload are emitted.
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (output / payload.relative_to(generated)).read_bytes() == b"synthetic-app"
-
-
-def test_dmg_manifest_rejects_missing_roots_and_benign_extra(tmp_path: Path) -> None:
-    # Given a DMG root containing only an undeclared benign file.
-    root = tmp_path / "dmg"
-    root.mkdir()
-    (root / "benign-extra.txt").write_text("safe", encoding="utf-8")
-
-    # When it is scanned against the production DMG manifest.
-    result = _run("scan-dmg-manifest", "--path", str(root), "--manifest", str(ROOT / "config/release/desktop-package-manifest.json"), "--platform", "macos", "--profile", "dmg")
-
-    # Then missing required roots and the extra entry fail closed.
-    assert result.returncode == 2
-    assert _reason(result) == "inventory_mismatch"
-
-
-def test_dmg_cycle_detection_precedes_unlisted_link_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given resolution reports a cycle for a link that is not allowlisted.
-    link = tmp_path / "link"
-
-    def raise_cycle(_path: Path, *, strict: bool = False) -> Path:
-        raise RuntimeError
-
-    monkeypatch.setattr(Path, "resolve", raise_cycle)
-
-    # When the shared DMG link policy resolves it.
-    with pytest.raises(release_safety.ReleaseSafetyError) as captured:
-        release_safety._resolve_dmg_link(link, listed=False)
-
-    # Then the intrinsic cycle class wins over the unlisted policy class.
-    assert captured.value.reason == "symlink_cycle"
-
-
-def test_dmg_link_policy_still_rejects_ordinary_unlisted_link(tmp_path: Path) -> None:
-    # Given a resolvable path that is not allowlisted.
-    link = tmp_path / "link"
-
-    # When the shared DMG link policy evaluates it.
-    with pytest.raises(release_safety.ReleaseSafetyError) as captured:
-        release_safety._resolve_dmg_link(link, listed=False)
-
-    # Then arbitrary unlisted links remain rejected.
-    assert captured.value.reason == "unlisted_symlink"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows runner lacks unprivileged POSIX symlinks; macOS native lane executes this policy")
@@ -605,7 +476,6 @@ def test_manifest_valid_framework_and_applications_symlinks_pass(tmp_path: Path)
     os.symlink("Versions/Current/Synthetic", framework / "Synthetic")
     os.symlink("/Applications", root / "Applications")
     rows = [
-        _row("pyinstaller://IZ Clinical Notes Analyzer.app", "dmg://IZ Clinical Notes Analyzer.app", platform="macos", profile="dmg", kind="pyinstaller-toc", cardinality="tree", generator="macos-pyinstaller", invocation_target="macos-pyinstaller:main-app", sha_policy="tree-sha256"),
         _row("/Applications", "dmg://Applications", platform="macos", profile="dmg", kind="symlink", generator="macos-release-builder", sha_policy="link-only"),
         _row("A", "dmg://IZ Clinical Notes Analyzer.app/Contents/Frameworks/Synthetic.framework/Versions/Current", platform="macos", profile="dmg", kind="symlink", generator="macos-pyinstaller", sha_policy="link-target-sha256"),
         _row("Versions/Current/Synthetic", "dmg://IZ Clinical Notes Analyzer.app/Contents/Frameworks/Synthetic.framework/Synthetic", platform="macos", profile="dmg", kind="symlink", generator="macos-pyinstaller", sha_policy="link-target-sha256"),

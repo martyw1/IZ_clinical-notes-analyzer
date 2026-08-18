@@ -217,20 +217,6 @@ def _selected(manifest: Manifest, platform: str, profile: str) -> tuple[Entry, .
         _fail("common_inventory")
     if platform == "windows" and profile == "release" and destinations != WINDOWS_REQUIRED:
         _fail("windows_inventory")
-    if platform == "windows" and profile == "release":
-        for entry in rows:
-            relative = entry.destination.removeprefix("windows://IZ Clinical Notes Analyzer/")
-            if relative == "release-manifest.json":
-                expected = ("generated://metadata/release-manifest.json", "generated", "release-manifest", "scripts/release_safety.py:release-manifest")
-            elif relative == "release-manifest.sha256":
-                expected = ("generated://metadata/release-manifest.sha256", "generated", "release-manifest-digest", "scripts/release_safety.py:release-manifest-digest")
-            elif relative == "app/runtime/IZClinicalNotesAnalyzer.exe":
-                expected = (f"pyinstaller://{relative}", "pyinstaller-toc", "windows-pyinstaller", f"windows-pyinstaller:{relative}")
-            else:
-                expected = (f"generated://{relative}", "generated", "windows-release-builder", f"windows-release-builder:{relative}")
-            actual = (entry.source, entry.kind, entry.generator, entry.invocation_target)
-            if actual != expected or entry.cardinality != "one" or entry.introduced_by_task != 6 or entry.sha_policy != "sha256":
-                _fail("free_form_entry")
     return rows
 
 
@@ -244,20 +230,6 @@ def _regular_source(root: Path, relative: str) -> Path:
         raise ReleaseSafetyError("missing_source") from exc
     if stat.S_ISLNK(status.st_mode) or getattr(status, "st_reparse_tag", 0) & 0x20000000 or not stat.S_ISREG(status.st_mode) or root_resolved not in source.resolve(strict=True).parents:
         _fail("unsafe_source_type")
-    return source
-
-
-def _regular_tree_source(root: Path, relative: str) -> Path:
-    safe = _safe_relative(relative)
-    root_resolved = root.resolve(strict=True)
-    source = root_resolved.joinpath(*PurePosixPath(safe).parts)
-    try:
-        status = source.lstat()
-    except OSError as exc:
-        raise ReleaseSafetyError("missing_source") from exc
-    if stat.S_ISLNK(status.st_mode) or getattr(status, "st_reparse_tag", 0) & 0x20000000 or not stat.S_ISDIR(status.st_mode) or root_resolved not in source.resolve(strict=True).parents:
-        _fail("unsafe_source_type")
-    _inventory_tree(source, allow_symlinks=True)
     return source
 
 
@@ -396,17 +368,10 @@ def _stage(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, str
                 continue
             if entry.generator in {"release-manifest", "release-manifest-digest"}:
                 continue
-            source_root = args.source_root if entry.kind == "static" else args.generated_root
-            source_relative = entry.source if entry.kind == "static" else entry.source.split("://", 1)[-1]
-            if entry.cardinality == "tree":
-                source = _regular_tree_source(source_root, source_relative)
-                source_inventory = _inventory_tree(source, allow_symlinks=True)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(source, destination, symlinks=True)
-                if source_inventory != _inventory_tree(destination, allow_symlinks=True):
-                    _fail("copy_hash_mismatch")
-                continue
-            source = _regular_source(source_root, source_relative)
+            if entry.kind == "static":
+                source = _regular_source(args.source_root, entry.source)
+            else:
+                source = _regular_source(args.generated_root, entry.source.split("://", 1)[-1])
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
             if _hash(source) != _hash(destination):
@@ -427,8 +392,7 @@ def _stage(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, str
             manifest_path.write_bytes(manifest_bytes)
             digest_path.write_bytes(f"{hashlib.sha256(manifest_bytes).hexdigest()}  release-manifest.json\n".encode())
         inventory = _inventory_tree(output, allow_symlinks=args.platform == "macos")
-        tree_roots = {_destination_relative(entry.destination) for entry in rows if entry.cardinality == "tree"}
-        expected = {_destination_relative(entry.destination) for entry in rows if entry.generator != "vite-asset-graph" and entry.cardinality != "tree"}
+        expected = {_destination_relative(entry.destination) for entry in rows if entry.generator != "vite-asset-graph"}
         actual = {str(entry["path"]) for entry in inventory}
         graph = (
             {
@@ -438,9 +402,7 @@ def _stage(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, str
             if any(entry.generator == "vite-asset-graph" for entry in rows)
             else set()
         )
-        missing = (expected | graph) - actual
-        unexpected = {path for path in actual - expected - graph if not any(path.startswith(f"{tree}/") for tree in tree_roots)}
-        if missing or unexpected or any(not (output / tree).is_dir() for tree in tree_roots):
+        if actual != expected | graph:
             _fail("inventory_mismatch")
         if args.zip is not None:
             archive = args.zip.resolve(strict=False)
@@ -532,10 +494,6 @@ def _verify_git(args: argparse.Namespace) -> dict[str, str | int | list[dict[str
 
 
 def _scan_pyi(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, str | int]]]:
-    rows = _selected(_load_manifest(args.manifest), args.platform, args.profile)
-    expected = {entry.source.removeprefix("pyinstaller://") for entry in rows if entry.kind == "pyinstaller-toc"}
-    if not expected:
-        _fail("pyinstaller_inventory")
     viewer = args.viewer
     command = (sys.executable, str(viewer), "-l", "-b", str(args.archive)) if viewer.suffix.lower() == ".py" else (str(viewer), "-l", "-b", str(args.archive))
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
@@ -543,43 +501,17 @@ def _scan_pyi(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, 
         _fail("pyinstaller_viewer_failed")
     names = [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
     _check_aliases(names)
-    for name in names:
-        category = _forbidden_category(_safe_relative(name))
-        if category is not None:
-            _fail(category)
-    if set(names) != expected:
-        _fail("inventory_mismatch")
     entries = [{"path": name, "type": "pyinstaller-toc"} for name in names]
     if args.collect is not None:
-        collect_entries = _inventory_tree(args.collect)
-        expected_collect = {_destination_relative(entry.destination) for entry in rows if entry.kind not in {"pyinstaller-toc", "symlink"}}
-        if {str(entry["path"]) for entry in collect_entries} != expected_collect:
-            _fail("inventory_mismatch")
-        entries.extend(collect_entries)
+        entries.extend(_inventory_tree(args.collect))
     return _success("scan-pyinstaller-toc", entries, args.report)
-
-
-def _resolve_dmg_link(link: Path, *, listed: bool) -> Path:
-    try:
-        resolved = link.resolve(strict=True)
-    except RuntimeError as exc:
-        raise ReleaseSafetyError("symlink_cycle") from exc
-    except OSError as exc:
-        if not listed:
-            raise ReleaseSafetyError("unlisted_symlink") from exc
-        raise ReleaseSafetyError("symlink_escape") from exc
-    if not listed:
-        _fail("unlisted_symlink")
-    return resolved
 
 
 def _scan_dmg(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, str | int]]]:
     root = args.path.resolve(strict=True)
-    rows: tuple[Entry, ...] = ()
     allowed: dict[str, Entry] = {}
     if args.manifest is not None:
-        rows = _selected(_load_manifest(args.manifest), args.platform, args.profile)
-        allowed = {_destination_relative(entry.destination): entry for entry in rows if entry.kind == "symlink"}
+        allowed = {_destination_relative(entry.destination): entry for entry in _selected(_load_manifest(args.manifest), args.platform, args.profile) if entry.kind == "symlink"}
     entries = _inventory_tree(root, allow_symlinks=True)
     for row in entries:
         if row["type"] != "symlink":
@@ -593,23 +525,19 @@ def _scan_dmg(args: argparse.Namespace) -> dict[str, str | int | list[dict[str, 
             continue
         if os.path.isabs(target):
             _fail("absolute_symlink")
+        if relative not in allowed:
+            _fail("unlisted_symlink")
         link = root / relative
-        resolved = _resolve_dmg_link(link, listed=relative in allowed)
+        try:
+            resolved = link.resolve(strict=True)
+        except RuntimeError as exc:
+            raise ReleaseSafetyError("symlink_cycle") from exc
+        except OSError as exc:
+            raise ReleaseSafetyError("symlink_escape") from exc
         app = next((root / PurePosixPath(*PurePosixPath(relative).parts[: index + 1]) for index, part in enumerate(PurePosixPath(relative).parts) if part.endswith(".app")), None)
         if app is None or (resolved != app and app not in resolved.parents):
             _fail("symlink_escape")
         row["target_sha256"] = _hash(resolved) if resolved.is_file() else hashlib.sha256("\n".join(sorted(path.relative_to(resolved).as_posix() for path in resolved.rglob("*"))).encode()).hexdigest()
-    if rows:
-        expected_roots = {PurePosixPath(_destination_relative(entry.destination)).parts[0] for entry in rows}
-        if {item.name for item in root.iterdir()} != expected_roots:
-            _fail("inventory_mismatch")
-        for entry in rows:
-            destination = root / _destination_relative(entry.destination)
-            tree_is_valid = entry.cardinality == "tree" and destination.is_dir() and not destination.is_symlink()
-            link_is_valid = entry.kind == "symlink" and destination.is_symlink()
-            file_is_valid = entry.cardinality != "tree" and entry.kind != "symlink" and destination.is_file() and not destination.is_symlink()
-            if not (tree_is_valid or link_is_valid or file_is_valid):
-                _fail("inventory_mismatch")
     return _success("scan-dmg-manifest", entries, args.report)
 
 
@@ -635,9 +563,6 @@ def _parser() -> argparse.ArgumentParser:
     pyi = commands.add_parser("scan-pyinstaller-toc")
     pyi.add_argument("--archive", type=Path, required=True)
     pyi.add_argument("--viewer", type=Path, required=True)
-    pyi.add_argument("--manifest", type=Path, required=True)
-    pyi.add_argument("--platform", required=True)
-    pyi.add_argument("--profile", required=True)
     pyi.add_argument("--collect", type=Path)
     report(pyi)
     verify = commands.add_parser("verify-git-source")
