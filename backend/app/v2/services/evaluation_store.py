@@ -219,6 +219,12 @@ def _evaluation_run(
 
 
 def _criterion_rows(db: Session, run_id: int, target: PlanEvaluationTarget, bundle: EvaluationBundle) -> None:
+    existing_count = int(db.execute(
+        text("SELECT COUNT(*) FROM criterion_results WHERE evaluation_run_id=:run_id"),
+        {"run_id": run_id},
+    ).scalar_one())
+    if existing_count == len(bundle.criteria):
+        return
     for criterion in bundle.criteria:
         result_hash = hashlib.sha256(
             f"{target.evidence_sha256}:{criterion.criterion_id}:{criterion.status}:{criterion.normalized_path}:{criterion.safe_evidence}".encode("utf-8")

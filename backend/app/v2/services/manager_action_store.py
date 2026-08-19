@@ -143,15 +143,19 @@ def save_returned_correction_work_item(
 ) -> None:
     rows = db.execute(
         text(
-            """SELECT DISTINCT plan.id,counselor.id FROM treatment_plan_versions plan
-            JOIN patients patient ON patient.id=plan.patient_id
+            """SELECT DISTINCT plan.id,counselor.id FROM patients patient
+            JOIN treatment_plan_versions plan ON plan.id=(
+                SELECT candidate.id FROM treatment_plan_versions candidate
+                WHERE candidate.patient_id=patient.id
+                ORDER BY candidate.version_ordinal DESC,candidate.id DESC LIMIT 1
+            )
             JOIN users counselor ON counselor.role='counselor'
             LEFT JOIN patient_assignments assignment
                 ON assignment.patient_id=patient.id AND assignment.counselor_user_id=counselor.id
                 AND assignment.is_active=1
             WHERE patient.canonical_client_id=:patient_id
                 AND ((:username<>'' AND counselor.username=:username) OR (:username='' AND assignment.patient_id IS NOT NULL))
-            ORDER BY plan.version_ordinal DESC,plan.id DESC LIMIT 2"""
+            ORDER BY counselor.id LIMIT 2"""
         ),
         {"username": counselor_username, "patient_id": patient_id},
     ).all()

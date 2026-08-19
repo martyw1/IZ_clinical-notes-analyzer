@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 import yaml
@@ -65,8 +66,22 @@ def load_rule_package(
     checklist_path: Path | None = None,
     rules_path: Path | None = None,
 ) -> DeterministicRulePackage:
+    if checklist_path is None and rules_path is None:
+        return _default_rule_package()
     checklist_source = checklist_path or REPO_ROOT / "config" / "checklists" / "treatment-plan-v1.json"
     rules_source = rules_path or REPO_ROOT / "config" / "rules" / "alleva_treatment_plan_completeness_rules.yaml"
+    return _load_rule_package(checklist_source, rules_source)
+
+
+@cache
+def _default_rule_package() -> DeterministicRulePackage:
+    return _load_rule_package(
+        REPO_ROOT / "config" / "checklists" / "treatment-plan-v1.json",
+        REPO_ROOT / "config" / "rules" / "alleva_treatment_plan_completeness_rules.yaml",
+    )
+
+
+def _load_rule_package(checklist_source: Path, rules_source: Path) -> DeterministicRulePackage:
     try:
         checklist = ChecklistDocument.model_validate(json.loads(checklist_source.read_text(encoding="utf-8-sig")))
     except (OSError, json.JSONDecodeError, ValidationError) as exc:

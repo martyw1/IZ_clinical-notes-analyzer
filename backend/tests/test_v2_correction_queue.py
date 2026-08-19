@@ -127,6 +127,45 @@ def test_return_for_correction_creates_a_counselor_queue_item_and_submission_res
     assert any(review["action"] == "correction_submitted" for review in detail["manager_reviews"])
 
 
+def test_return_for_correction_infers_one_counselor_across_multiple_plan_versions(tmp_path, monkeypatch) -> None:
+    # Given: one patient with two plan versions and exactly one assigned counselor.
+    from test_v2_evaluation_persistence import _aggregate
+
+    client = _fresh_client(tmp_path, monkeypatch)
+    admin_headers = _auth_headers(client)
+    for plan_id in ("plan-older", "plan-newer"):
+        payload = _aggregate("952").model_dump(mode="json")
+        payload["content_snapshot"]["plan_id"] = plan_id
+        imported = client.post(
+            "/api/v2/manual-uploads/treatment-plan-aggregate",
+            headers=admin_headers,
+            json=payload,
+        )
+        assert imported.status_code == 201
+    counselor_headers = _counselor_headers(client, admin_headers)
+    assigned = client.put("/api/patient-assignments/952/counselor", headers=admin_headers)
+    assert assigned.status_code == 200
+
+    # When: the Treatment Plan Detail UI omits an explicit counselor and requests correction.
+    returned = client.post(
+        "/api/v2/treatment-plans/952/manager-actions",
+        headers=admin_headers,
+        json={
+            "criterion_id": "confirm_current_loc",
+            "action": "return_for_correction",
+            "comment": "Confirm the current LOC source.",
+            "override_reason": "",
+            "assigned_counselor_username": "",
+        },
+    )
+
+    # Then: plan-version count does not masquerade as multiple counselor assignments.
+    assert returned.status_code == 200
+    queue = client.get("/api/v2/corrections", headers=counselor_headers)
+    assert queue.status_code == 200
+    assert [item["patient_id"] for item in queue.json()["items"]] == ["952"]
+
+
 def test_correction_queue_and_submission_are_bound_to_exact_counselor_work_items(tmp_path, monkeypatch) -> None:
     # Given: one patient has two immutable correction items assigned to different counselors.
     client = _fresh_client(tmp_path, monkeypatch)

@@ -70,6 +70,44 @@ describe('Treatment Plan Detail selection', () => {
     expect(currentLoc).toHaveAttribute('aria-pressed', 'false')
     expect(admissionDate).toHaveAttribute('aria-pressed', 'true')
   })
+
+  it('keeps Return for correction neutral until clicked and submits the selected criterion', async () => {
+    const fetchMock = vi.fn(async () => response(detailPayload()))
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <TreatmentPlanDetailPage
+        token='token'
+        user={{ ...viewer, role: 'admin' }}
+        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        onNavigate={vi.fn()}
+      />,
+    )
+
+    const returnButton = await screen.findByRole('button', { name: 'Return for correction' })
+    expect(returnButton).toHaveClass('secondary-button')
+    expect(returnButton).not.toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(returnButton)
+    expect(screen.getByRole('status')).toHaveTextContent('Add a comment before returning a criterion.')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Manager comment' }), {
+      target: { value: 'Please correct the current LOC evidence.' },
+    })
+    fireEvent.click(returnButton)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v2/treatment-plans/MRN-812/manager-actions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          criterion_id: 'confirm_current_loc',
+          action: 'return_for_correction',
+          comment: 'Please correct the current LOC evidence.',
+          override_reason: '',
+        }),
+      }),
+    ))
+    expect(await screen.findByRole('status')).toHaveTextContent('Criterion returned for correction with manager comment.')
+  })
 })
 
 function detailPayload() {
