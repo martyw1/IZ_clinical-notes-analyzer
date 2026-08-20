@@ -201,3 +201,30 @@ Use borders-only with subtle tonal shifts. Avoid glass, large shadows, decorativ
 - Cards are for repeated items, source cards, modals, or framed tools only.
 - Page sections are full-width work areas, not floating decorative cards.
 - The detail timeline is the richest graphic element; charts remain small and functional.
+
+## 8. Offline Operator Guide
+
+The Version 2.0 Beta illustrated operator guide is a print-friendly extension of the workbench design system. It uses the existing light surfaces, Segoe UI stack, green primary action, thin borders, 4px spacing rhythm, and screenshot-led evidence. It is intentionally static and light-only because it must print predictably and work offline.
+
+### Guide tokens
+
+| Role | Token | Value |
+|------|-------|-------|
+| Guide display title | `--guide-title` | `3rem` |
+| Guide subtitle | `--guide-subtitle` | `1.25rem` |
+| Guide body | `--guide-body` | `1rem` |
+| Guide page radius | `--guide-radius-page` | `16px` |
+| Guide component radius | `--guide-radius-component` | `12px` |
+| Guide warning background | `--guide-warning-bg` | `#FFF8DF` |
+| Guide warning border | `--guide-warning-border` | `#D39A16` |
+| Guide stop background | `--guide-stop-bg` | `#FFF0EE` |
+| Guide stop border | `--guide-stop-border` | `#9F1D2D` |
+
+### Illustrated guide component
+
+- **Structure**: cover, linked contents, one full-width section per task, numbered actions, screenshot with functional caption, troubleshooting table, security closeout.
+- **Spacing**: all margin, padding, and gap values follow the 4px base unit.
+- **Surfaces**: borders and subtle tonal shifts only; no decorative gradient, glass, or drop shadow.
+- **Shapes**: 16px page radius, 12px component/image radius, pills only for compact version metadata.
+- **Accessibility**: semantic landmarks, descriptive alt text, visible link underlines, 16px body text, print rules, no motion, and no color-only instruction.
+- **Responsive behavior**: two-column contents/cards collapse to one column below 680px; images remain proportional and tables retain readable cell padding.

@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Plain-language setup, install, administrator, daily treatment-plan audit, and troubleshooting guide for IZ Clinical Notes Analyzer Version 2.0 Beta.">
+  <title>Marleigh's Setup, Install, and User Guide - IZ Clinical Notes Analyzer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg-app: #F7FAF8;
+      --bg-surface: #FFFFFF;
+      --bg-subtle: #EEF6F1;
+      --bg-raised: #FBFDFC;
+      --border-soft: #DDE7E1;
+      --border-strong: #AFC0B8;
+      --text-main: #18201D;
+      --text-muted: #5F6F68;
+      --action-primary: #18543B;
+      --action-primary-hover: #0F432D;
+      --guide-title: 3rem;
+      --guide-subtitle: 1.25rem;
+      --guide-body: 1rem;
+      --guide-radius-page: 16px;
+      --guide-radius-component: 12px;
+      --guide-warning-bg: #FFF8DF;
+      --guide-warning-border: #D39A16;
+      --guide-stop-bg: #FFF0EE;
+      --guide-stop-border: #9F1D2D;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text-main);
+      background: var(--bg-app);
+      font-family: "Segoe UI", "Aptos", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: var(--guide-body);
+      line-height: 1.58;
+    }
+
+    a { color: var(--action-primary-hover); }
+    a:hover { text-decoration-thickness: 2px; }
+
+    .page {
+      width: min(1040px, calc(100% - 32px));
+      margin: 32px auto 64px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--guide-radius-page);
+      overflow: hidden;
+    }
+
+    .cover {
+      padding: 64px clamp(32px, 7vw, 64px);
+      color: white;
+      background: var(--action-primary);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { line-height: 1.18; }
+    h1 { max-width: 780px; margin: 0 0 16px; font-size: clamp(2rem, 6vw, var(--guide-title)); }
+    h2 { margin-top: 0; color: var(--action-primary-hover); font-size: 1.5rem; }
+    h3 { margin-bottom: 8px; font-size: 1.05rem; }
+
+    .cover .subtitle { max-width: 750px; margin: 0 0 24px; font-size: var(--guide-subtitle); }
+    .version-pill {
+      display: inline-block;
+      padding: 8px 16px;
+      border: 1px solid rgba(255,255,255,.5);
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    nav, section { padding: 32px clamp(24px, 6vw, 64px); }
+    nav { border-bottom: 1px solid var(--border-soft); background: var(--bg-raised); }
+    nav ul { columns: 2; margin: 12px 0 0; padding-left: 24px; }
+    nav li { break-inside: avoid; margin: 8px 0; }
+    section + section { border-top: 1px solid var(--border-soft); }
+
+    .callout {
+      margin: 24px 0;
+      padding: 16px 20px;
+      border: 1px solid var(--border-strong);
+      border-left: 4px solid var(--action-primary);
+      border-radius: var(--guide-radius-component);
+      background: var(--bg-subtle);
+    }
+
+    .callout.warning {
+      border-color: var(--guide-warning-border);
+      border-left-color: var(--guide-warning-border);
+      background: var(--guide-warning-bg);
+    }
+
+    .callout.stop {
+      border-color: var(--guide-stop-border);
+      border-left-color: var(--guide-stop-border);
+      background: var(--guide-stop-bg);
+    }
+
+    .checklist, .steps { padding-left: 0; list-style: none; counter-reset: guide-step; }
+    .checklist li, .steps li {
+      position: relative;
+      margin: 16px 0;
+      padding-left: 48px;
+    }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--action-primary);
+      font-weight: 800;
+    }
+    .steps li { counter-increment: guide-step; }
+    .steps li::before {
+      content: counter(guide-step);
+      position: absolute;
+      left: 0;
+      top: -2px;
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--action-primary);
+      font-weight: 800;
+    }
+
+    figure { margin: 32px 0; }
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--guide-radius-component);
+    }
+    figcaption { margin-top: 8px; color: var(--text-muted); font-size: 0.84rem; }
+    .screenshot-actions { margin: 8px 0 0; font-size: 0.9rem; }
+    .screenshot-actions a { font-weight: 700; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .card { padding: 16px; border: 1px solid var(--border-soft); border-radius: var(--guide-radius-component); background: var(--bg-raised); }
+    .card h3 { margin-top: 0; color: var(--action-primary-hover); }
+
+    table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 0.96rem; }
+    th, td { padding: 12px 16px; border: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
+    th { color: white; background: var(--action-primary-hover); }
+    tbody tr:nth-child(even) { background: var(--bg-raised); }
+
+    code, .filename {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--bg-subtle);
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    .quick-card {
+      padding: 20px;
+      border: 2px solid var(--action-primary);
+      border-radius: var(--guide-radius-component);
+      background: var(--bg-raised);
+    }
+
+    .footer {
+      padding: 30px clamp(24px, 6vw, 66px);
+      color: #e8f4ee;
+      background: var(--action-primary-hover);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 680px) {
+      body { font-size: var(--guide-body); }
+      .page { width: 100%; margin: 0; border: 0; border-radius: 0; }
+      nav ul { columns: 1; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      tbody tr {
+        margin: 0 0 12px;
+        overflow: hidden;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--guide-radius-component);
+        background: white;
+      }
+      tbody td { padding: 12px; border: 0; }
+      tbody td + td { border-top: 1px solid var(--border-soft); }
+      tbody td::before {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      tbody td:first-child { color: var(--action-primary-hover); background: var(--bg-subtle); font-weight: 700; }
+      tbody td:first-child::before { content: "What you see"; }
+      tbody td:nth-child(2)::before { content: "What to do"; }
+    }
+
+    @media print {
+      body { background: white; font-size: 11pt; }
+      .page { width: 100%; margin: 0; border: 0; box-shadow: none; }
+      .cover { min-height: 8in; padding-top: 1.25in; break-after: page; print-color-adjust: exact; }
+      nav { break-after: page; }
+      section { padding: 28px 42px; }
+      figure, .callout, .card, table { break-inside: avoid; }
+      figure img { max-height: 8in; object-fit: contain; }
+      .screenshot-actions { display: none; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+<main class="page">
+  <header class="cover">
+    <p class="eyebrow">R3 Recovery Services • Clinical Manager Guide</p>
+    <h1>IZ Clinical Notes Analyzer</h1>
+    <p class="subtitle">A plain-language setup, install, and daily-use guide for Marleigh and the administrator account.</p>
+    <span class="version-pill">Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2</span>
+  </header>
+
+  <nav aria-label="Guide contents">
+    <h2>What is in this guide</h2>
+    <ul>
+      <li><a href="#before">Before you begin</a></li>
+      <li><a href="#install">Install the app</a></li>
+      <li><a href="#start">Start and sign in</a></li>
+      <li><a href="#alleva">Set up Alleva</a></li>
+      <li><a href="#daily">Daily treatment-plan workflow</a></li>
+      <li><a href="#manual">Manual upload</a></li>
+      <li><a href="#users">Manage users</a></li>
+      <li><a href="#support">Troubleshooting</a></li>
+      <li><a href="#safety">Security and backup</a></li>
+    </ul>
+  </nav>
+
+  <section id="before">
+    <h2>Before you begin</h2>
+    <p>This app runs only on the Windows laptop where it is installed. It opens in a web-browser window, but the app and its data remain on the laptop unless an authorized Alleva pull is run.</p>
+
+    <div class="callout warning">
+      <strong>This is a beta release.</strong> Use it as an audit and review aid. If the app says <em>Missing Data</em>, <em>Needs Review</em>, <em>Conflicting Evidence</em>, or <em>Unable to Evaluate</em>, do not guess or treat the plan as compliant. Confirm the source record in Alleva and follow R3 policy.
+    </div>
+
+    <h3>Have these items ready</h3>
+    <ul class="checklist">
+      <li>The prepared release zip named <span class="filename">IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip</span>.</li>
+      <li>The one-time <strong>admin</strong> password supplied through an R3-approved secure method. The app does not email this password.</li>
+      <li>For Alleva setup: the approved client ID and client secret from R3/Alleva. Do not place either value in a screenshot, email, or chat.</li>
+      <li>A Windows 10 or 11 laptop signed in under the Windows account that will use the app.</li>
+    </ul>
+
+    <div class="callout stop">
+      <strong>Stop and contact R3 support</strong> if the release zip or one-time admin password did not come from an authorized R3 source. Do not download a replacement from an unknown link.
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install the app</h2>
+    <ol class="steps">
+      <li><strong>Save the release zip locally.</strong> Put it in Downloads or another normal folder on the laptop.</li>
+      <li><strong>Unzip it.</strong> Right-click the zip, choose <em>Extract All</em>, and then choose <em>Extract</em>. Do not try to install while viewing files inside the zip.</li>
+      <li><strong>Open the unzipped folder.</strong> Double-click <span class="filename">Install-IZ-Clinical-Notes-Analyzer.cmd</span>.</li>
+      <li><strong>Wait for completion.</strong> A black setup window will show progress. Normal installation does not require administrator access. Do not close the window while setup is working.</li>
+      <li><strong>Look for success.</strong> The window should say <em>Install completed</em>. Then use the new <em>IZ Clinical Notes Analyzer</em> Desktop or Start Menu shortcut.</li>
+    </ol>
+
+    <div class="callout">
+      Installing a newer prepared release preserves the existing local app data and creates a verified pre-upgrade backup when data already exists. Do not use <em>Complete Uninstall</em> for an update.
+    </div>
+  </section>
+
+  <section id="start">
+    <h2>Start and sign in</h2>
+    <ol class="steps">
+      <li>Double-click the <strong>IZ Clinical Notes Analyzer</strong> Desktop shortcut, or open it from the Start Menu.</li>
+      <li>Leave the startup window open. The browser should open automatically after the local app is ready.</li>
+      <li>Sign in with username <strong>admin</strong> and your password.</li>
+      <li>On the first sign-in, create a new password. Use a long, unique password and store it only in the R3-approved password system.</li>
+    </ol>
+
+    <figure>
+      <img src="02.%20Start%20Up%20Screen.png" width="1152" height="648" alt="Black startup window showing Starting IZ Clinical Notes Analyzer">
+      <p class="screenshot-actions"><a href="02.%20Start%20Up%20Screen.png" target="_blank" rel="noopener">Open the startup screenshot at full size</a></p>
+      <figcaption>The startup window. Leave it open while the app starts.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="03.%20Login%20Screen.png" width="1280" height="720" alt="IZ Clinical Notes Analyzer administrator login screen">
+      <p class="screenshot-actions"><a href="03.%20Login%20Screen.png" target="_blank" rel="noopener">Open the sign-in screenshot at full size</a></p>
+      <figcaption>The sign-in screen. The username is <strong>admin</strong>.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="04.%20First%20Sign%20In%20Password%20Change.png" width="1280" height="720" alt="First sign-in password update screen">
+      <p class="screenshot-actions"><a href="04.%20First%20Sign%20In%20Password%20Change.png" target="_blank" rel="noopener">Open the password-change screenshot at full size</a></p>
+      <figcaption>The first sign-in requires a new password. Do not reuse an Alleva, Microsoft, or personal password.</figcaption>
+    </figure>
+
+    <div class="callout warning">
+      Five failed sign-in attempts temporarily lock the account for 15 minutes. Pause after one or two failures and verify the password instead of repeatedly guessing.
+    </div>
+  </section>
+
+  <section id="alleva">
+    <h2>Set up the approved Alleva connection</h2>
+    <p>Do this only when R3 has authorized the laptop and supplied the Alleva client ID and client secret. The app begins with live pull controls blocked on purpose.</p>
+
+    <ol class="steps">
+      <li>Open <strong>Settings</strong>.</li>
+      <li>Confirm the organization and facility timezone. Do not mark the LOC-change window as validated until R3/Marleigh has confirmed the exact rule.</li>
+      <li>In <strong>Alleva readiness profile</strong>, leave the standard Alleva URLs unchanged unless authorized support gives you different values.</li>
+      <li>Paste the approved <strong>Client ID</strong> and <strong>Client secret</strong>. The secret becomes write-only after saving: the screen will show only that it is configured.</li>
+      <li>Check <strong>Enable API testing</strong> and save. Use <strong>Test saved OAuth connectivity</strong>.</li>
+      <li>Only after the approved read-only import gate is confirmed, check <strong>Enable treatment-plan sync</strong> and <strong>Authorize live read-only treatment-plan import for this tenant</strong>, then save again.</li>
+      <li>Confirm the requirement list is cleared before starting a treatment-plan pull.</li>
+    </ol>
+
+    <figure>
+      <img src="06.%20Settings%20and%20Alleva%20Readiness.png" width="1265" height="2168" alt="Settings screen with Alleva readiness fields and disabled treatment-plan sync">
+      <p class="screenshot-actions"><a href="06.%20Settings%20and%20Alleva%20Readiness.png" target="_blank" rel="noopener">Open the Settings screenshot at full size</a></p>
+      <figcaption>A safe, unconfigured demonstration. Real credentials must never appear in guide screenshots.</figcaption>
+    </figure>
+
+    <div class="callout stop">
+      Never send the client ID, client secret, local app password, token, or a screenshot containing those values to support. If a secret may have been exposed, stop using it and report the exposure through the approved R3 security channel.
+    </div>
+  </section>
+
+  <section id="daily">
+    <h2>Daily treatment-plan audit</h2>
+
+    <div class="quick-card">
+      <strong>Daily sequence:</strong> Status Dashboard → Treatment Plans Roster → Pull full treatment plans → Patient Roster or Treatment Plan Detail → review evidence and checklist → document the manager action → sign out.
+    </div>
+
+    <h3>1. Check source readiness</h3>
+    <p>Open <strong>Status Dashboard</strong>. Review the three source-readiness cards and the risk counts. Yellow warnings require attention but do not necessarily mean the app is broken.</p>
+
+    <figure>
+      <img src="05.%20Status%20Dashboard.png" width="1265" height="1099" alt="Status Dashboard showing manual upload, API, and Alleva readiness cards">
+      <p class="screenshot-actions"><a href="05.%20Status%20Dashboard.png" target="_blank" rel="noopener">Open the Status Dashboard screenshot at full size</a></p>
+      <figcaption>The dashboard clearly distinguishes missing configuration, unavailable records, and the unvalidated LOC-change rule.</figcaption>
+    </figure>
+
+    <h3>2. Pull treatment plans from Alleva</h3>
+    <ol class="steps">
+      <li>Open <strong>Treatment Plans Roster</strong>.</li>
+      <li>If the pull button is disabled, read the requirement list and return to <strong>Settings</strong>. Do not bypass a blocker.</li>
+      <li>Choose <strong>Pull full treatment plans</strong>. Leave the browser open while the job is working.</li>
+      <li>When the pull finishes, choose <strong>Refresh roster</strong> if the new rows do not appear automatically.</li>
+      <li>Search by MRN, patient name when authorized/displayed, or treatment-plan ID.</li>
+    </ol>
+
+    <figure>
+      <img src="07.%20Treatment%20Plans%20Roster.png" width="1265" height="945" alt="Treatment Plans Roster with import requirements and roster search">
+      <p class="screenshot-actions"><a href="07.%20Treatment%20Plans%20Roster.png" target="_blank" rel="noopener">Open the Treatment Plans Roster screenshot at full size</a></p>
+      <figcaption>The safe demonstration is intentionally blocked because no live credentials were entered. A configured laptop enables the pull only after every approval requirement is satisfied.</figcaption>
+    </figure>
+
+    <h3>3. Review the patient and exact plan</h3>
+    <ul>
+      <li>Use <strong>Patient Roster</strong> to locate the MRN, then select the correct treatment plan.</li>
+      <li>Use <strong>Treatment Plan Detail</strong> to review the plan lineage, evidence coverage, dates, level of care, and 42-step checklist.</li>
+      <li>Read the source-evidence location before making a manager decision. The app's deterministic rules support the review; they do not replace clinical judgment or source verification.</li>
+      <li>Use <strong>Return</strong>, <strong>Approve</strong>, comments, or an override only when the record supports the action. Enter the required reason; never use a vague reason such as “fixed.”</li>
+    </ul>
+
+    <div class="cards">
+      <article class="card"><h3>Missing Data</h3><p>A required date, LOC, signature, or source field is absent. Get the missing source evidence.</p></article>
+      <article class="card"><h3>Needs Review</h3><p>Evidence exists but requires a manager decision. Review the highlighted reason and source.</p></article>
+      <article class="card"><h3>Conflicting Evidence</h3><p>Two sources disagree. Do not choose one silently; reconcile the source records.</p></article>
+      <article class="card"><h3>Unable to Evaluate</h3><p>The app cannot make a safe determination. Handle it as unresolved, not compliant.</p></article>
+    </div>
+
+    <h3>4. Use Help and forensic logs</h3>
+    <p><strong>Help</strong> repeats the basic workflow. <strong>Forensic Logs</strong> lets an administrator confirm that actions were recorded without patient names, clinical narrative, or vendor secrets.</p>
+
+    <figure>
+      <img src="09.%20Help%20Screen.png" width="1280" height="720" alt="Help screen listing the Version 2.0 Beta workflow">
+      <p class="screenshot-actions"><a href="09.%20Help%20Screen.png" target="_blank" rel="noopener">Open the Help screenshot at full size</a></p>
+      <figcaption>The in-app Help screen is a quick refresher while working.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="10.%20Forensic%20Logs.png" width="1265" height="1046" alt="Forensic Logs screen showing redacted audit events">
+      <p class="screenshot-actions"><a href="10.%20Forensic%20Logs.png" target="_blank" rel="noopener">Open the Forensic Logs screenshot at full size</a></p>
+      <figcaption>Forensic logs show minimum-necessary actions and outcomes. Patient names, clinical narrative, and vendor secrets are excluded.</figcaption>
+    </figure>
+  </section>
+
+  <section id="manual">
+    <h2>Manual upload</h2>
+    <p>Use <strong>Manual Upload</strong> when an approved treatment-plan file must be reviewed without an Alleva pull. Prefer text-extractable PDF, DOCX, XLSX, CSV/TSV, RTF, Markdown, or text sources.</p>
+    <ol class="steps">
+      <li>Open <strong>Manual Upload</strong>.</li>
+      <li>Choose the approved treatment-plan file or binder files.</li>
+      <li>If the file omits the MRN, enter the correct MRN. If it conflicts with detected evidence, check the correction confirmation only after verifying the patient.</li>
+      <li>Choose <strong>Upload and securely process binder</strong>.</li>
+      <li>Review every warning. Image-only or legacy formats may be stored securely without being parsed.</li>
+    </ol>
+
+    <figure>
+      <img src="08.%20Manual%20Upload.png" width="1265" height="1263" alt="Manual Upload page for normalized aggregate or treatment-plan binder files">
+      <p class="screenshot-actions"><a href="08.%20Manual%20Upload.png" target="_blank" rel="noopener">Open the Manual Upload screenshot at full size</a></p>
+      <figcaption>Manual files are stored encrypted. Original filenames are cleared from the page after submission and are not persisted.</figcaption>
+    </figure>
+  </section>
+
+  <section id="users">
+    <h2>Manage users</h2>
+    <p>Use <strong>Users</strong> to create counselor, office-manager, or viewer accounts and assign facilities/patients. Give each person a separate account. Do not share the admin password.</p>
+    <ol class="steps">
+      <li>Enter the new user's username and full name.</li>
+      <li>Choose the least-privileged role that matches the person's job.</li>
+      <li>Create a one-time temporary password and send it only through an R3-approved secure method.</li>
+      <li>Assign the correct facility and patient access.</li>
+      <li>Confirm the user changes appear in Forensic Logs without the password value.</li>
+    </ol>
+
+    <figure>
+      <img src="11.%20Users.png" width="1265" height="1334" alt="Administrator Users screen with role and facility assignment controls">
+      <p class="screenshot-actions"><a href="11.%20Users.png" target="_blank" rel="noopener">Open the Users screenshot at full size</a></p>
+      <figcaption>The bootstrap <strong>admin</strong> account cannot be reset from this table. Use the authorized local recovery process through R3 support if Marleigh is locked out.</figcaption>
+    </figure>
+  </section>
+
+  <section id="support">
+    <h2>Troubleshooting</h2>
+    <table aria-label="Troubleshooting problems and actions">
+      <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>The browser did not open.</td><td>Wait one minute. Then open a browser and enter <code>http://localhost:8000</code>. If it still fails, use <strong>Stop IZ Clinical Notes Analyzer</strong>, then launch the app again.</td></tr>
+        <tr><td>The startup window shows a failure or stays on one message.</td><td>Do not close it immediately. Take a screenshot that contains no credential or patient information. Run <strong>IZ Clinical Notes Analyzer Diagnostics</strong> and contact R3 support.</td></tr>
+        <tr><td>The page says it cannot connect.</td><td>Use the Start Menu <strong>Stop IZ Clinical Notes Analyzer</strong> shortcut, wait for it to finish, then start the app again. Do not restart the whole laptop unless that fails.</td></tr>
+        <tr><td>Wrong password or locked account.</td><td>After five failures, wait 15 minutes. If the admin password is still unavailable, contact authorized R3 support for local admin recovery. Do not edit hidden configuration files yourself.</td></tr>
+        <tr><td>Alleva pull button is disabled.</td><td>Open <strong>Settings</strong> and follow the visible requirement list: saved client ID, saved client secret, API testing enabled, sync enabled, and tenant read-only authorization enabled.</td></tr>
+        <tr><td>OAuth test fails.</td><td>Confirm the client ID/secret came from R3/Alleva, verify the laptop has internet access, and try once more. Do not paste the error together with credentials into email or chat.</td></tr>
+        <tr><td>Alleva is limiting requests.</td><td>Wait several minutes before retrying. Repeated retries can extend the problem.</td></tr>
+        <tr><td>The pull finishes but the roster is empty.</td><td>Choose <strong>Refresh roster</strong>. Confirm the pull completed rather than failed/cancelled. Check the Patient Roster. If still empty, capture the non-PHI status message and contact support.</td></tr>
+        <tr><td>A plan says Missing Data, Needs Review, Conflicting Evidence, or Unable to Evaluate.</td><td>Open the plan detail, read the reason and source location, and reconcile the evidence in Alleva. Do not mark compliant just to clear the queue.</td></tr>
+        <tr><td>The display says <code>no-name-found_...</code>.</td><td>This is expected when patient-name import/display is off. Use the MRN and treatment-plan ID. Do not enable names unless R3 has approved it.</td></tr>
+        <tr><td>The LOC-change warning remains visible.</td><td>Leave the setting unvalidated until R3/Marleigh confirms the exact update window. The current 7-day value is a configurable preset, not a confirmed rule.</td></tr>
+        <tr><td>You need to send support information.</td><td>Send the app version, time of the problem, exact non-PHI message, and the redacted diagnostics package through the approved R3 support channel. Do not send the backup zip by ordinary email.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="safety">
+    <h2>Security, backup, and closing the app</h2>
+
+    <h3>At the end of a work session</h3>
+    <ol class="steps">
+      <li>Choose <strong>Sign out</strong>.</li>
+      <li>Close the browser tab.</li>
+      <li>If the app should be fully stopped, use the Start Menu <strong>Stop IZ Clinical Notes Analyzer</strong> shortcut.</li>
+      <li>Lock Windows whenever stepping away from the laptop.</li>
+    </ol>
+
+    <h3>Back up before updates or major changes</h3>
+    <p>Use the Desktop or Start Menu shortcut <strong>IZ Clinical Notes Analyzer Backup</strong>. The backup contains local clinical data and access material. Store it only in the R3-approved encrypted and access-controlled location.</p>
+
+    <div class="callout stop">
+      <strong>Never share:</strong> the app password, Alleva client ID/secret, API token, local <span class="filename">.env</span> file, database, raw logs, patient screenshots, clinical files, or backup zip through ordinary email, chat, GitHub, or a support ticket.
+    </div>
+
+    <div class="callout warning">
+      <strong>Uninstall choices:</strong> normal <em>Uninstall</em> removes app files but preserves local data. <em>Complete Uninstall</em> removes the app and all local data for the Windows user. Use Complete Uninstall only when R3 intentionally wants the laptop cleared and after an approved backup.
+    </div>
+
+    <h3>Print or save this guide</h3>
+    <p>Open this HTML file in Microsoft Edge or Chrome, press <strong>Ctrl+P</strong>, and choose a printer or <strong>Save as PDF</strong>. The guide works offline; all screenshots are stored beside it.</p>
+  </section>
+
+  <footer class="footer">
+    <strong>Guide version:</strong> 2026-08-20 for IZ Clinical Notes Analyzer 2.0.0-beta.2.<br>
+    Screenshots were captured from a disposable local profile using synthetic/no patient data and no live Alleva credentials. Historical validation reports may retain the version they originally tested.
+  </footer>
+</main>
+</body>
+</html>
