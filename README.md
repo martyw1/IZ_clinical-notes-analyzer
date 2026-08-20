@@ -8,6 +8,8 @@ IZ Clinical Notes Analyzer is a local-first clinical chart-review and Treatment 
 
 The normal R3 Windows user path does not require Windows administrator access, Docker, PostgreSQL, cloud hosting, Git, Node.js, command-line work, or a database administrator when a prepared release folder with built frontend assets is used.
 
+Marleigh's illustrated, non-technical setup/install/daily-use/troubleshooting guide is [Marleigh-Setup-Install-and-User-Guide.html](<docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2/Marleigh-Setup-Install-and-User-Guide.html>). It is the primary clinical-manager handoff for Version 2.0 Beta and includes synthetic, non-PHI screenshots from the real local startup and V2 UI.
+
 ## Current Version 2.0 Beta State
 
 Version 2.0 Beta is the current local Windows desktop beta. It includes:
@@ -142,6 +144,7 @@ Diagram boundaries:
 
 ## Primary Docs
 
+- `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html`
 - `docs\release-notes.md`
 - `docs\beta-client-test-run-guide.md`
 - `docs\Windows-User-Guide-Version-1.md`
@@ -313,15 +316,15 @@ Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API outp
 
 Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials.
 
-Beta `1.4.6-beta.1` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
+Version `2.0.0-beta.2` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
 
 ## Treatment Plan Tracking Rules
 
-The `Treatment plans` tab provides the Treatment Plan Timeliness Tracker work queue. Beta `1.4.6-beta.1` keeps the visible updated-evidence-queue banner, defaults admins and office managers to this work queue when no explicit view is requested, and uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The tab includes a normal queue `Refresh` action and an admin-only `Pull / refresh treatment plans` button that runs the gated Alleva REST treatment-plan sync from the tab itself. The tab shows active clients, current level of care, counselor/primary clinician, admission date, last valid treatment-plan review/update date, local current date used by the date clock, next due date, days until due, status, rule used, source evidence summary, evidence completeness, detail records, manual overrides, recent audit history, selected-client 42-step checklist evaluation, manager status/comment notes per criterion, and counselor action export.
+The Version 2.0 Beta `Treatment Plans Roster`, `Patient Roster`, and `Treatment Plan Detail` screens provide the Treatment Plan Timeliness Tracker work queue and evidence review. Version `2.0.0-beta.2` uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The operational roster includes an admin pull action backed by the gated Alleva REST treatment-plan sync, search and refresh controls, exact-plan selection, MRN-centered patient navigation, checklist evidence, manager actions, immutable plan lineage, and manager-authorized status export.
 
 The current implementation reference is `docs\patient-treatment-plan-handling.md`. It maps the manual-upload path, gated Alleva REST sync, patient-level aggregate, local treatment-plan tables, deterministic timeliness evaluator, 42-step selected-client checklist output, content-fact privacy boundary, and exact backend/frontend code locations.
 
-For the first client beta run, use `docs\beta-client-test-run-guide.md` as the non-technical day-of-test checklist for install, launch checks, lookup status behavior, treatment-plan review expectations, diagnostics, backup, and maintenance.
+For the first client beta run, use the illustrated Marleigh guide under `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2` as the primary non-technical install, launch, treatment-plan audit, troubleshooting, diagnostics, backup, and maintenance handoff. Use `docs\beta-client-test-run-guide.md` as the shorter day-of-test checklist.
 
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
@@ -416,7 +419,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 The current app version is:
 
 ```text
-1.4.6-beta.1
+2.0.0-beta.2
 ```
 
 Checklist content version is separate and remains:

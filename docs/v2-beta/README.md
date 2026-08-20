@@ -8,6 +8,7 @@ V2 keeps the canonical 42-step checklist, deterministic timeliness rules, patien
 
 Key validation records:
 
+- `../guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2/Marleigh-Setup-Install-and-User-Guide.html` is the illustrated non-technical setup, install, administrator, daily audit, and troubleshooting handoff for Marleigh.
 - `validation-report.md` records the final real PowerShell, browser, Computer Use, and installer-build evidence.
 - `task-coverage-audit.md` maps the PDF task list to covered, partial, blocked, and deferred work.
 - `release-readiness-2026-07-11.md` records beta.2 metadata, synthetic-only final validation instructions, and the remaining external production gates.

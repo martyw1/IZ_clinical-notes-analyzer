@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## 2026-08-20 Marleigh Version 2.0 Beta illustrated guide and documentation alignment
+
+- Added an offline, print-friendly HTML setup/install/daily-use/troubleshooting guide under `docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2` for the non-technical clinical-manager administrator workflow.
+- Captured the real Windows startup plus V2 login, first-password change, Status Dashboard, Alleva Settings, Treatment Plans Roster, Manual Upload, Help, Forensic Logs, and Users screens from a disposable isolated local profile with synthetic/no patient data and no live Alleva credentials.
+- Kept the Alleva pull authorization gate and the unvalidated configurable LOC-change window explicit; the guide tells operators not to infer compliance from missing, conflicting, review-needed, or unable-to-evaluate evidence.
+- Aligned README, changelog, current documentation state, beta client checklist, runbook, admin recovery, installer guide, V2 handoff, and release notes to `2.0.0-beta.2` without changing version metadata or rewriting historical validation reports.
+
 ## 2026-08-16 near-final Windows beta repository snapshot
 
 - Preserved the validated near-final Windows beta source on `main` with the annotated rollback tag `windows-near-final-beta-2026-08-16`; this repository snapshot does not change app version `2.0.0-beta.2`, build `2026.07.11.1`, or channel `beta-local-desktop-v2`.

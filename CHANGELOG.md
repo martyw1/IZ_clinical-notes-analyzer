@@ -3,8 +3,9 @@
 ## Unreleased
 
 ### Changed
-- Promoted current app metadata to beta `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
-- Simplified the app shell so the primary navigation focuses on `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with support/admin pages as smaller shortcuts.
+- Aligned current documentation to Version 2.0 Beta `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` channel.
+- Added an offline, illustrated setup/install/daily-use/troubleshooting guide for Marleigh under `docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2`, using synthetic, non-PHI screenshots from the real Windows startup and V2 local UI.
+- Aligned the V2 administrator navigation with `Status Dashboard`, patient and treatment-plan work areas, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`, while retaining role-gated page and action access.
 - Bounded global and Alleva treatment-plan lookup status/results so long messages scroll inside the status/result areas instead of pushing lower page content below the viewport.
 - Added non-technical no-admin Windows install, backup, diagnostics, data-preserving uninstall, and complete-uninstall documentation.
 - Added `docs/beta-client-test-run-guide.md` as the non-technical first beta client test-run guide and made the Windows release builder require it in the package.
@@ -15,6 +16,7 @@
 - Kept Treatment Plan Checklist content version separate at `1.2.0`.
 
 ### Verified
+- Ran the active V2 desktop app against a disposable isolated local-data directory, completed first-sign-in and administrator navigation, and visually reviewed the login, password-change, dashboard, Settings, Treatment Plans Roster, Manual Upload, Help, Forensic Logs, and Users screenshots without live credentials or patient data.
 - Added focused regression coverage that source-document due-date disagreement without a validated LOC-change explanation remains a `Needs Review` treatment-plan outcome with `TP-DUE-DATE-CONFLICT`.
 - Pending target-laptop packaged install, backup, and uninstall validation with synthetic data.
 

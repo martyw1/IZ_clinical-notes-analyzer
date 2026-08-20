@@ -1,8 +1,8 @@
 # Operations Runbook
 
-Date: 2026-07-06
+Date: 2026-08-20
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` Windows desktop runtime.
 
 ## V2 beta.2 release boundary
 
@@ -39,16 +39,16 @@ For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.
 
 ## Treatment Plan Timeliness operations
 
-- Admins and office managers normally land on the Treatment Plans work queue when no explicit view is requested.
-- The primary navigation should show the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`; less-frequent support/admin pages should appear as smaller shortcuts.
+- Admins begin on `Status Dashboard` and use `Treatment Plans Roster` for the operational Alleva pull and exact-plan queue.
+- The V2 administrator navigation should expose `Status Dashboard`, `Patient Roster`, `Patient Record Detail`, `Treatment Plan Detail`, `Treatment Plans Roster`, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`; role restrictions still govern individual pages and actions.
 - Use `docs\patient-treatment-plan-handling.md` as the implementation map for treatment-plan storage, sync, aggregate, deterministic evaluation, selected-client checklist results, and UI code locations.
-- The queue uses deterministic rules and current Beta 1.4.6-beta.1 text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
-- The selected-client detail view compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date.
+- The queue uses deterministic Version 2.0 Beta rules and text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
+- `Treatment Plan Detail` compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date for the selected exact plan.
 - If source-document next-due evidence disagrees with the date-clock due date and there is no validated LOC-change anchor, the expected result is a review/error state such as `Needs Review`, not silent compliance.
-- The selected-client detail also shows current treatment-plan content counts/facts, data-quality warnings, source confidence, current-plan selection, LOC history, treatment-plan evidence, rule results, 42-step checklist rows, manager notes, and manual overrides.
+- `Treatment Plan Detail` also shows current treatment-plan content counts/facts, data-quality warnings, source confidence, immutable plan lineage, LOC history, treatment-plan evidence, rule results, 42-step checklist rows, and manager actions.
 - Alleva/API lookup status and result details should remain inside bounded scroll areas so lookup progress does not expand the page and hide lower controls.
-- Managers can save status/comments on each selected-client 42-step checklist criterion and export a counselor action CSV for that client.
-- Review Queue remains the generated/manual uploaded-binder chart-review workbench. Treatment Plans remains the active due-date/timeliness work queue.
+- Managers can use the selected plan's 42-step checklist and authorized status/export actions without treating missing or conflicting evidence as compliant.
+- `Manual Upload` remains the fallback for synthetic or R3-approved files when the gated Alleva pull is not ready or authorized.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Counselors do not have Treatment Plans queue access because that table does not have explicit counselor ownership; they continue to use role-scoped review, upload, and account workflows.
 - The LOC-change treatment-plan update window is still unvalidated and must stay configurable and visibly marked as unresolved.
@@ -99,6 +99,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.2` / build `2026.07.11.
 
 ## Windows desktop runtime
 
+- Use the illustrated Marleigh guide at `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html` for the non-technical clinical-manager installation, Alleva readiness, daily audit, and troubleshooting workflow.
 - The ordinary Windows path runs one local FastAPI desktop service at `http://localhost:8000`.
 - The default database is SQLite under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
 - Uploads, logs, API reports, and `.env` also live under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.

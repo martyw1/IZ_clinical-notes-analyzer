@@ -111,6 +111,8 @@ test, or unsafe file, then double-click `Build-IZ-Windows-Installer.cmd` again.
 
 ## End User
 
+Use `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html` as the primary illustrated, non-technical clinical-manager guide for installation, first sign-in, Alleva readiness, daily treatment-plan review, backup, and troubleshooting.
+
 ### Install
 
 1. Unzip the release zip.

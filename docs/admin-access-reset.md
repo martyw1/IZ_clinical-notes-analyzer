@@ -1,8 +1,8 @@
 # Admin Access Reset Guide
 
-Date: 2026-06-30
+Date: 2026-08-20
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` Windows desktop runtime.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Use this path when at least one working admin account can sign in.
 7. Communicate any one-time credential only through an R3-approved secure channel.
 8. Confirm the action appears in `Forensic logs` without exposing the credential value.
 
-Beta 1.4.6-beta.1 role scope reminder:
+Version 2.0 Beta role-scope reminder:
 
 - Admins can manage admin, manager, and counselor accounts.
 - Office managers can manage counselor accounts only.
@@ -87,4 +87,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
+Expected beta version: `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`.

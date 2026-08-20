@@ -1,14 +1,14 @@
 # Current Documentation State
 
-Date: 2026-07-06
+Date: 2026-08-20
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` on the `beta-local-desktop` channel.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` channel.
 
 ## Purpose
 
 This file is the current documentation alignment tracker. It summarizes what the active docs should say after the July 2026 patient-centered Alleva treatment-plan clarification and the current Swagger/OpenAPI mapping export review.
 
-Historical validation reports, PRD notes, and earlier implementation analyses may keep the version/date they originally validated. Do not reinterpret historical reports as current production state unless they explicitly say they apply to `1.4.6-beta.1`.
+Historical validation reports, PRD notes, and earlier implementation analyses may keep the version/date they originally validated. Do not reinterpret historical reports as current beta state unless they explicitly say they apply to `2.0.0-beta.2`.
 
 ## Current Product State
 
@@ -21,10 +21,10 @@ Historical validation reports, PRD notes, and earlier implementation analyses ma
 ## Current Treatment-Plan State
 
 - `config\checklists\treatment-plan-v1.json` remains the canonical 42-step checklist source.
-- Checklist content version remains `1.2.0`; app version remains separate at `1.4.6-beta.1`.
-- The Treatment Plans tab is the admin/office-manager Treatment Plan Timeliness work queue.
-- The primary navigation is intentionally limited to the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`; less-frequent support/admin pages are smaller shortcuts.
-- The selected-client detail includes the `42-Step Checklist Evaluation`, source evidence, date-clock results, current-plan content summary, manager criterion status/comments, manual overrides, audit context, and CSV/JSON export paths.
+- Checklist content version remains `1.2.0`; app version remains separate at `2.0.0-beta.2`.
+- `Treatment Plans Roster` is the admin/office-manager operational pull and exact-plan work queue. `Patient Roster`, `Patient Record Detail`, and `Treatment Plan Detail` provide the MRN-centered review path.
+- The V2 administrator navigation exposes `Status Dashboard`, patient and treatment-plan work areas, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`; role restrictions still control which pages and actions each account can use.
+- The selected-plan detail includes deterministic timeliness status, source evidence, date-clock results, current-plan content facts, the 42-step checklist, manager actions, immutable plan lineage, audit context, and authorized export paths.
 - Alleva/API treatment-plan lookup status and lookup results should stay inside bounded scroll areas so long progress/diagnostic text does not push lower content below the viewport.
 - Source-document due-date disagreement without a validated LOC-change explanation remains a review/error outcome such as `Needs Review`, not silent compliance.
 - Patient ID is the only accepted patient identifier for current upload/import/display/export/log workflows. Patient names, addresses, contact details, original filenames, attachment URLs, and author/custodian labels must not be local display labels or matching keys.
@@ -88,6 +88,7 @@ Until those items are resolved, the app may use the API harness and dry-run aggr
 
 Use these as the active documentation set:
 
+- `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html`
 - `README.md`
 - `CHANGELOG.md`
 - `docs\release-notes.md`

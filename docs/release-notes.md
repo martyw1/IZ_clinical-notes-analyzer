@@ -16,6 +16,7 @@ Version metadata name: `Version 2.0 Beta release-readiness update`
 
 Summary:
 
+- Post-build 2026-08-20 documentation update: adds an offline illustrated setup/install/daily-use/troubleshooting guide for Marleigh with synthetic, non-PHI screenshots from the real Windows startup and V2 local UI; aligns README, current documentation state, beta checklist, runbook, admin recovery, installer, and V2 handoff references without changing the app version or release gates.
 - Post-build 2026-07-13 update: adds the shared operational pull to Treatment Plans, automatic queue refresh from either pull surface, immutable same-ID update history with exact updated-ID audit details, a patient-name-free Patient Roster tab, and a manager-authorized treatment-plan/status CSV export.
 - Post-build 2026-07-13 update: removes the manual Alleva mapping-approval form and applies the published Alleva v1 mapping automatically at pull time while retaining an encrypted mapping payload plus plaintext version/checksum provenance metadata.
 - Post-build validation used only a disposable synthetic local profile and local mock Alleva service; the live-import and LOC-change external gates remain unchanged.

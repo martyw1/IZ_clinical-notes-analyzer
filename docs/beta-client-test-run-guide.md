@@ -1,16 +1,18 @@
 # Beta Client Test Run Guide
 
-Date: 2026-07-06
+Date: 2026-08-20
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1` local Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` Windows desktop runtime.
 
 This guide is for a first near-production beta test run with non-technical users. It assumes R3 provides a prepared release folder or zip. Ordinary users should not need Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work.
 
+Marleigh's primary non-technical handoff is the illustrated `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html`. Use this file as the shorter test-session checklist.
+
 ## What The Tester Should Receive
 
-- A folder or zip named `IZ-Clinical-Notes-Analyzer-v1.4.6-beta.1`.
+- A folder or zip named `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`.
 - The R3-approved first sign-in instructions through a secure channel.
-- This guide and `docs\Windows-User-Guide-Version-1.md`.
+- This checklist and the illustrated Marleigh guide.
 - Only synthetic or approved beta-test data. Do not use real PHI until R3 has approved the beta data-handling plan.
 
 ## Install
@@ -27,18 +29,18 @@ The app installs for the current Windows user under `%LOCALAPPDATA%\Programs\IZ 
 
 After sign-in, confirm these items before doing test work:
 
-1. The footer says `Beta v1.4.6-beta.1`.
-2. The main navigation shows the primary work areas: `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`.
-3. The smaller shortcut buttons show support/admin pages such as `Checklist`, `Help`, `Profile`, `User management`, `Workflow profiles`, `Forensic logs`, and `App settings` when your role allows them.
+1. The footer says `Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2`.
+2. The administrator navigation shows `Status Dashboard`, `Patient Roster`, `Patient Record Detail`, `Treatment Plan Detail`, `Treatment Plans Roster`, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`.
+3. The top-right runtime badge says `Active runtime: V2 | admin`.
 4. `Status Dashboard` opens without a browser error.
-5. `Treatment plans` opens and shows the local date used by the date clock.
+5. `Treatment Plans Roster` opens and either shows imported rows or the exact Settings requirements that keep live import blocked.
 
 ## Daily Beta Workflow
 
 1. Open `Status Dashboard` to confirm the app is running and the footer shows the current beta version.
-2. Use `Manual upload` only for synthetic or approved test files.
-3. Use `Treatment plans` for the timeliness work queue and selected-client detail.
-4. Use `Review queue` for generated/manual binder review work.
+2. Use `Treatment Plans Roster` for the gated operational pull and exact-plan list.
+3. Use `Patient Roster` and `Treatment Plan Detail` for MRN-centered review, evidence, and checklist decisions.
+4. Use `Manual Upload` only for synthetic or approved test files.
 5. Use `Help` for role permissions, setup notes, and support guidance.
 6. Run `Backup IZ Clinical Notes Analyzer` before and after a meaningful test session.
 
