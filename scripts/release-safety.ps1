@@ -1,7 +1,8 @@
 function Get-ForbiddenReleaseCategory {
     param(
         [Parameter(Mandatory)]
-        [string]$RelativePath
+        [string]$RelativePath,
+        [switch]$Distribution
     )
 
     $relative = ($RelativePath -replace '/', '\').Trim('\')
@@ -39,6 +40,7 @@ function Get-ForbiddenReleaseCategory {
     if ($fileName -like '*.izcnabackup') { return 'backup' }
     if ($fileName -like '*.log') { return 'log' }
     if ($fileName -like '*.tmp' -or $fileName -like '*.bak' -or $fileName -like '*.pyc') { return 'cache' }
+    if ($Distribution -and $fileName -like 'smoke-test-*.md') { return 'local_smoke_report' }
 
     return $null
 }
@@ -48,10 +50,11 @@ function Assert-SafeRelativePath {
         [Parameter(Mandatory)]
         [string]$RelativePath,
         [Parameter(Mandatory)]
-        [string]$Source
+        [string]$Source,
+        [switch]$Distribution
     )
 
-    $category = Get-ForbiddenReleaseCategory -RelativePath $RelativePath
+    $category = Get-ForbiddenReleaseCategory -RelativePath $RelativePath -Distribution:$Distribution
     if ($category) {
         throw "$Source contains forbidden category '$category'."
     }
@@ -62,12 +65,13 @@ function Assert-NoForbiddenPaths {
         [AllowEmptyCollection()]
         [string[]]$RelativePaths = @(),
         [Parameter(Mandatory)]
-        [string]$Source
+        [string]$Source,
+        [switch]$Distribution
     )
 
     $categoryCounts = @{}
     foreach ($relativePath in $RelativePaths) {
-        $category = Get-ForbiddenReleaseCategory -RelativePath $relativePath
+        $category = Get-ForbiddenReleaseCategory -RelativePath $relativePath -Distribution:$Distribution
         if ($category) {
             $categoryCounts[$category] = 1 + [int]$categoryCounts[$category]
         }
@@ -146,7 +150,7 @@ function Assert-NoForbiddenReleaseItems {
         }
         $fullName.Substring($packagePrefix.Length)
     })
-    Assert-NoForbiddenPaths -RelativePaths $relativePaths -Source 'Release package'
+    Assert-NoForbiddenPaths -RelativePaths $relativePaths -Source 'Release package' -Distribution
 }
 
 function Assert-ZipHasNoForbiddenItems {
@@ -159,7 +163,7 @@ function Assert-ZipHasNoForbiddenItems {
     $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
     try {
         $relativePaths = @($zip.Entries | ForEach-Object { $_.FullName })
-        Assert-NoForbiddenPaths -RelativePaths $relativePaths -Source 'Release zip'
+        Assert-NoForbiddenPaths -RelativePaths $relativePaths -Source 'Release zip' -Distribution
     } finally {
         $zip.Dispose()
     }

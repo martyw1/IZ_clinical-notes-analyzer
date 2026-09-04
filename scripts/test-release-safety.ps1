@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string]$EvidenceDir = '')
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -21,6 +21,17 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $buildScriptPath = Join-Path $repositoryRoot 'scripts\build-windows-installer.ps1'
 $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
 . (Join-Path $repositoryRoot 'scripts\release-safety.ps1')
+
+$qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+if (-not (Test-Path -LiteralPath $qaParent)) { New-Item -ItemType Directory -Path $qaParent | Out-Null }
+if (-not $EvidenceDir) { $EvidenceDir = Join-Path $qaParent ('prs-' + [guid]::NewGuid().ToString('N').Substring(0, 12)) }
+$ownerRoot = [IO.Path]::GetFullPath($EvidenceDir)
+Assert-True -Condition ((Split-Path $ownerRoot -Parent) -ceq $qaParent -and (Split-Path $ownerRoot -Leaf) -cmatch '^prs-[a-f0-9]{12}$') -Label 'short_owned_evidence_root'
+Assert-True -Condition (-not (Test-Path -LiteralPath $ownerRoot)) -Label 'fresh_evidence_root'
+Assert-True -Condition (-not ((Get-Item -LiteralPath $qaParent).Attributes -band [IO.FileAttributes]::ReparsePoint)) -Label 'physical_evidence_parent'
+New-Item -ItemType Directory -Path $ownerRoot | Out-Null
+@{ owner = 'task-10-private-report-packaging-v1'; root = $ownerRoot } | ConvertTo-Json |
+    Set-Content -LiteralPath (Join-Path $ownerRoot 'owner.json') -Encoding UTF8
 
 # Given the pre-hardening Windows release scanner,
 # when its source contract is characterized,
@@ -100,7 +111,7 @@ Assert-True -Condition (-not $privacyMessage.Contains($phiCanary)) -Label 'phi_n
 # Given a synthetic release folder and zip,
 # when a report canary is introduced,
 # then both real package surfaces reject it without exposing its path.
-$tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$tempBase = $ownerRoot
 $tempRoot = Join-Path $tempBase "iz-cna-release-safety-$([System.Guid]::NewGuid().ToString('N'))"
 $zipPath = "$tempRoot.zip"
 New-Item -ItemType Directory -Path (Join-Path $tempRoot 'app') -Force | Out-Null
@@ -141,4 +152,105 @@ Write-Output 'misleading_success_canary=PASS'
 Write-Output 'privacy_canary=PASS'
 Write-Output 'directory_surface_canary=PASS'
 Write-Output 'zip_surface_canary=PASS'
+
+# Given private-name canaries beside public readiness docs, when actual release boundaries run,
+# then only distribution excludes the canaries; source/index allowance and public bytes survive.
+$privatePaths = @('docs/validation/smoke-test-SYNTHETIC_PRIVATE-lower.md',
+    'DOCS\VALIDATION\SMOKE-TEST-SYNTHETIC_PRIVATE-UPPER.MD', 'nested/smoke-test-SYNTHETIC_PRIVATE-other.md', 'smoke-test-.md')
+$publicPaths = @('docs/validation/office-manager-production-fixes-2026-09-03.md',
+    'docs/validation/validation-report-2026-06-16-production-readiness.md',
+    'docs/patient-treatment-plan-handling.md', 'docs/beta-client-test-run-guide.md',
+    ('docs/guides/synthetic-' + [char]0x00e9 + '-' + [char]0x4e2d + '.png'), 'docs/validation/smoke-test-public.md.txt')
+$sourceRoot = Join-Path $ownerRoot 'source'
+$copyRoot = Join-Path $ownerRoot 'copy'
+foreach ($relative in @($privatePaths + $publicPaths)) {
+    $fixturePath = Join-Path $sourceRoot $relative
+    New-Item -ItemType Directory -Path (Split-Path $fixturePath -Parent) -Force | Out-Null
+    Set-Content -LiteralPath $fixturePath -Value ('SYNTHETIC-ONLY: ' + $relative) -Encoding UTF8
+}
+$privateZip = Join-Path $ownerRoot 'private-canaries.zip'
+$archive = [IO.Compression.ZipFile]::Open($privateZip, [IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($relative in @($privatePaths + $publicPaths)) {
+        $writer = New-Object IO.StreamWriter($archive.CreateEntry($relative).Open())
+        try { $writer.Write('SYNTHETIC-ONLY') } finally { $writer.Dispose() }
+    }
+} finally { $archive.Dispose() }
+function Test-PrivateReportRejection([scriptblock]$Action) {
+    $message = ''
+    try { & $Action | Out-Null } catch { $message = $_.Exception.Message }
+    return [ordered]@{ rejected = $message.Contains('local_smoke_report'); name_suppressed = (-not $message.Contains('SYNTHETIC_PRIVATE')) }
+}
+$commonDirectory = (Get-Command Assert-NoForbiddenReleaseItems).ScriptBlock
+$commonZip = (Get-Command Assert-ZipHasNoForbiddenItems).ScriptBlock
+$observations = [ordered]@{
+    common_directory = (Test-PrivateReportRejection { & $commonDirectory -TargetPackageDir $sourceRoot })
+    common_zip = (Test-PrivateReportRejection { & $commonZip -ZipPath $privateZip })
+}
+$sourceAllowed = @($privatePaths | Where-Object { $null -ne (Get-ForbiddenReleaseCategory -RelativePath $_) }).Count -eq 0
+Assert-NoForbiddenPaths -RelativePaths $privatePaths -Source 'Synthetic repository index'
+Assert-NoForbiddenRepositoryIndexItems -RepositoryRoot $repositoryRoot -AllowDirty
+
+# Import only known function definitions from the real builder, never its entrypoint.
+$parseTokens = $null; $parseErrors = $null
+$builderAst = [Management.Automation.Language.Parser]::ParseInput($buildScript, [ref]$parseTokens, [ref]$parseErrors)
+Assert-True -Condition ($parseErrors.Count -eq 0) -Label 'builder_ast_valid'
+foreach ($functionName in @('Get-NormalizedPath', 'Get-RelativePathInside', 'Write-Ok', 'Copy-RepoContent', 'Copy-SafeDataTree',
+    'Assert-RelativePathAllowed', 'Assert-NoForbiddenReleaseItems', 'Assert-ZipHasNoForbiddenItems')) {
+    $definitions = @($builderAst.FindAll({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $functionName
+    }, $true))
+    Assert-True -Condition ($definitions.Count -eq 1) -Label 'unique_builder_function'
+    . ([ScriptBlock]::Create($definitions[0].Extent.Text))
+}
+$observations.builder_directory = Test-PrivateReportRejection { Assert-NoForbiddenReleaseItems -TargetPackageDir $sourceRoot }
+$observations.builder_zip = Test-PrivateReportRejection { Assert-ZipHasNoForbiddenItems -ZipPath $privateZip }
+$variantChecks = @($privatePaths | ForEach-Object {
+    $relative = $_
+    Test-PrivateReportRejection { Assert-RelativePathAllowed -RelativePath $relative -Source 'Synthetic release' }
+})
+Assert-True -Condition ($copyRoot.StartsWith($ownerRoot + '\', [StringComparison]::OrdinalIgnoreCase) -and -not (Test-Path -LiteralPath $copyRoot)) -Label 'fresh_owned_copy_destination'
+$RootDir = $sourceRoot
+Copy-RepoContent -Destination $copyRoot
+$copyExitCode = $LASTEXITCODE
+$copiedPrivateCount = @($privatePaths | Where-Object { Test-Path -LiteralPath (Join-Path $copyRoot $_) }).Count
+$dataCopyRoot = Join-Path $ownerRoot 'data-copy'
+Assert-True -Condition ($dataCopyRoot.StartsWith($ownerRoot + '\', [StringComparison]::OrdinalIgnoreCase) -and -not (Test-Path -LiteralPath $dataCopyRoot)) -Label 'fresh_owned_data_copy_destination'
+Copy-SafeDataTree -Source $sourceRoot -Destination $dataCopyRoot
+$dataCopiedPrivateCount = @($privatePaths | Where-Object { Test-Path -LiteralPath (Join-Path $dataCopyRoot $_) }).Count
+$publicHashes = @($publicPaths | ForEach-Object {
+    $copiedPath = Join-Path $copyRoot $_
+    $dataCopiedPath = Join-Path $dataCopyRoot $_
+    [ordered]@{ path = $_; source_sha256 = (Get-FileHash -LiteralPath (Join-Path $sourceRoot $_) -Algorithm SHA256).Hash.ToLowerInvariant()
+        copied_sha256 = $(if (Test-Path -LiteralPath $copiedPath) { (Get-FileHash -LiteralPath $copiedPath -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null })
+        data_copied_sha256 = $(if (Test-Path -LiteralPath $dataCopiedPath) { (Get-FileHash -LiteralPath $dataCopiedPath -Algorithm SHA256).Hash.ToLowerInvariant() } else { $null }) }
+})
+$publicZip = Join-Path $ownerRoot 'copied-public.zip'
+[IO.Compression.ZipFile]::CreateFromDirectory($copyRoot, $publicZip)
+$publicScansAllowed = $true
+foreach ($scan in @({ & $commonDirectory -TargetPackageDir $copyRoot }, { & $commonZip -ZipPath $publicZip },
+    { Assert-NoForbiddenReleaseItems -TargetPackageDir $copyRoot }, { Assert-ZipHasNoForbiddenItems -ZipPath $publicZip })) {
+    try { & $scan | Out-Null } catch { $publicScansAllowed = $false }
+}
+$checks = [ordered]@{
+    source_index_allowed = $sourceAllowed; private_copy_absent = ($copiedPrivateCount -eq 0)
+    public_bytes_preserved = (@($publicHashes | Where-Object { $_.source_sha256 -cne $_.copied_sha256 }).Count -eq 0)
+    public_copy_scans_allowed = $publicScansAllowed
+    runtime_data_private_copy_absent = ($dataCopiedPrivateCount -eq 0)
+    runtime_data_public_bytes_preserved = (@($publicHashes | Where-Object { $_.source_sha256 -cne $_.data_copied_sha256 }).Count -eq 0)
+    common_and_builder_scans_reject = (@($observations.Values | Where-Object { -not $_.rejected }).Count -eq 0)
+    case_and_separator_variants_reject = (@($variantChecks | Where-Object { -not $_.rejected }).Count -eq 0)
+    category_only_messages = (@($observations.Values + $variantChecks | Where-Object { -not $_.name_suppressed }).Count -eq 0)
+    original_fixture_cleanup = (-not (Test-Path -LiteralPath $tempRoot) -and -not (Test-Path -LiteralPath $zipPath))
+}
+$allPassed = @($checks.Values | Where-Object { -not $_ }).Count -eq 0
+[ordered]@{ status = $(if ($allPassed) { 'passed' } else { 'failed' }); checks = $checks; observations = $observations
+    variant_checks = $variantChecks; public_hashes = $publicHashes; private_source_count = $privatePaths.Count
+    private_copied_count = $copiedPrivateCount; runtime_data_private_copied_count = $dataCopiedPrivateCount
+    robocopy_exit = $copyExitCode; owned_evidence_retained = $true
+    powershell = $PSVersionTable.PSVersion.ToString(); powershell_executable = (Get-Process -Id $PID).Path } |
+    ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $ownerRoot 'private-report-result.json') -Encoding UTF8
+Assert-True -Condition $allPassed -Label 'private_report_distribution_boundary'
+Write-Output 'private_report_distribution_boundary=PASS'
+Write-Output ('evidence=' + $ownerRoot)
 Write-Output 'result=PASS'

@@ -171,7 +171,8 @@ function Copy-RepoContent {
         '*.tmp',
         '*.bak',
         '*.pyc',
-        '.debug-journal.md'
+        '.debug-journal.md',
+        'smoke-test-*.md'
     )
     robocopy $RootDir $Destination /MIR /XD $excludeDirs /XF $excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
@@ -185,7 +186,7 @@ function Copy-SafeDataTree {
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     foreach ($file in Get-ChildItem -LiteralPath $Source -Recurse -File) {
         $relativePath = Get-RelativePathInside -Path $file.FullName -Parent $Source
-        if (Get-ForbiddenReleaseCategory -RelativePath $relativePath) { continue }
+        if (Get-ForbiddenReleaseCategory -RelativePath $relativePath -Distribution) { continue }
         $destinationPath = Join-Path $Destination $relativePath
         New-Item -ItemType Directory -Path (Split-Path $destinationPath -Parent) -Force | Out-Null
         Copy-Item -LiteralPath $file.FullName -Destination $destinationPath -Force
@@ -399,7 +400,7 @@ function Assert-RelativePathAllowed {
         [string]$RelativePath,
         [string]$Source
     )
-    Assert-SafeRelativePath -RelativePath $RelativePath -Source $Source
+    Assert-SafeRelativePath -RelativePath $RelativePath -Source $Source -Distribution
 }
 
 function Assert-NoForbiddenReleaseItems {
