@@ -211,7 +211,9 @@ export function SettingsPage({ token }: SettingsPageProps) {
           />
           LOC-change window validated
         </label>
-        <button type='button' onClick={handleSaveSettings}>Save settings</button>
+        <div className='button-row settings-actions'>
+          <button type='button' onClick={handleSaveSettings}>Save settings</button>
+        </div>
       </section>
 
       <section className='panel settings-form'>
@@ -291,29 +293,33 @@ export function SettingsPage({ token }: SettingsPageProps) {
           <div><dt>Treatment-plan sync</dt><dd>{syncReady ? 'ready to run' : 'not ready'}</dd></div>
         </dl>
         <p className='muted'>The published Alleva v1 patient and treatment-plan mapping is applied automatically at pull time. The request ceiling is an application throttle and can be lowered to match Alleva tenant guidance. The internal version and checksum are retained for audit provenance.</p>
-        <button type='button' onClick={handleSaveApiConfiguration} disabled={isSavingApiConfiguration}>
-          {isSavingApiConfiguration ? 'Saving API configuration...' : 'Save API configuration'}
-        </button>
-        <button type='button' className='secondary-button' onClick={handlePullDefinition} disabled={isPullingDefinition}>
-          {isPullingDefinition ? 'Pulling OpenAPI definition...' : 'Pull OpenAPI definition'}
-        </button>
-        <button type='button' className='secondary-button' onClick={handleTestConnectivity} disabled={isTestingConnectivity}>
-          {isTestingConnectivity ? 'Testing OAuth connectivity...' : 'Test saved OAuth connectivity'}
-        </button>
-        <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run read-only treatment-plan sync' : 'A client ID, saved encrypted secret, API and sync enablement, and explicit tenant import authorization are required before sync can run.'}>
-          {isRunningSync ? 'Running treatment-plan sync...' : 'Run treatment-plan sync'}
-        </button>
+        <div className='button-row settings-actions'>
+          <button type='button' onClick={handleSaveApiConfiguration} disabled={isSavingApiConfiguration}>
+            {isSavingApiConfiguration ? 'Saving API configuration...' : 'Save API configuration'}
+          </button>
+          <button type='button' className='secondary-button' onClick={handlePullDefinition} disabled={isPullingDefinition}>
+            {isPullingDefinition ? 'Pulling OpenAPI definition...' : 'Pull OpenAPI definition'}
+          </button>
+          <button type='button' className='secondary-button' onClick={handleTestConnectivity} disabled={isTestingConnectivity}>
+            {isTestingConnectivity ? 'Testing OAuth connectivity...' : 'Test saved OAuth connectivity'}
+          </button>
+          <button type='button' className='secondary-button' onClick={handleRunSync} disabled={!syncReady || isRunningSync || syncActive} title={syncReady ? 'Run read-only treatment-plan sync' : 'A client ID, saved encrypted secret, API and sync enablement, and explicit tenant import authorization are required before sync can run.'}>
+            {isRunningSync ? 'Running treatment-plan sync...' : 'Run treatment-plan sync'}
+          </button>
+        </div>
         {syncBlockers.length > 0 && <ul className='preflight-blockers' aria-label='Treatment-plan sync requirements'>{syncBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>}
-        {syncJob && !isTerminalSyncStatus(syncJob.status) && (
-          <button type='button' className='secondary-button' onClick={handleCancelSync}>
-            Cancel treatment-plan sync
-          </button>
-        )}
-        {syncJob && ['failed', 'cancelled', 'stale_or_interrupted'].includes(syncJob.status) && (
-          <button type='button' className='secondary-button' onClick={handleResumeSync} disabled={isRunningSync}>
-            Resume treatment-plan sync safely
-          </button>
-        )}
+        {(syncJob && !isTerminalSyncStatus(syncJob.status)) || (syncJob && ['failed', 'cancelled', 'stale_or_interrupted'].includes(syncJob.status)) ? <div className='button-row settings-actions'>
+          {syncJob && !isTerminalSyncStatus(syncJob.status) && (
+            <button type='button' className='secondary-button' onClick={handleCancelSync}>
+              Cancel treatment-plan sync
+            </button>
+          )}
+          {syncJob && ['failed', 'cancelled', 'stale_or_interrupted'].includes(syncJob.status) && (
+            <button type='button' className='secondary-button' onClick={handleResumeSync} disabled={isRunningSync}>
+              Resume treatment-plan sync safely
+            </button>
+          )}
+        </div> : null}
         {definitionSummary && <p role='status'>{definitionSummary}</p>}
         {connectivityStatus && <p role='status'>{connectivityStatus}</p>}
         {apiSaveError && <p role='alert' className='error-banner'>{apiSaveError}</p>}

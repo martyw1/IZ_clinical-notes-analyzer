@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ManagerActionPayload } from '../api/types'
 import { EvidencePanel } from './EvidencePanel'
 import { DataQualityWarningsPanel } from './DataQualityWarningsPanel'
 import { RawFieldExplorer } from './RawFieldExplorer'
 import { StatusBadge } from './StatusBadge'
 import { SourceFileArchiveControls } from './SourceFileArchiveControls'
-import { formatDateTime24Hour } from './treatmentPlanFormatting'
+import { formatDateTime24Hour, formatUtcEventDateTime } from './treatmentPlanFormatting'
 import type { CriterionResult, ManagerReview, TreatmentPlanAggregate } from '../types/treatmentPlan'
 
 type TreatmentPlanDetailViewerProps = {
@@ -52,17 +52,39 @@ export function TreatmentPlanDetailViewer({
   const [overrideReason, setOverrideReason] = useState('')
   const [actionMessage, setActionMessage] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const previousQuery = useRef(query)
+  const previousSelectedCriterionId = useRef(selectedCriterionId)
   const filteredCriteria = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return plan.criteria
-    return plan.criteria.filter((criterion) => criterion.title.toLowerCase().includes(normalized))
+    return plan.criteria.filter((criterion) => [
+      criterion.title,
+      criterion.finding,
+      criterion.safePreview,
+      criterion.sourcePath,
+    ].some((value) => value.toLowerCase().includes(normalized)))
   }, [plan.criteria, query])
-  const selectedCriterion = plan.criteria.find((criterion) => criterion.criterionId === selectedCriterionId) ?? plan.criteria[0] ?? null
+  const selectedCriterion = filteredCriteria.find((criterion) => criterion.criterionId === selectedCriterionId) ?? filteredCriteria[0] ?? null
 
   useEffect(() => {
     setSelectedCriterionId(plan.criteria[0]?.criterionId ?? null)
     setActionMessage('')
   }, [plan.treatmentPlanId])
+
+  useEffect(() => {
+    const nextSelection = filteredCriteria.some((criterion) => criterion.criterionId === selectedCriterionId)
+      ? selectedCriterionId
+      : filteredCriteria[0]?.criterionId ?? null
+    if (nextSelection !== selectedCriterionId) setSelectedCriterionId(nextSelection)
+  }, [filteredCriteria, selectedCriterionId])
+
+  useEffect(() => {
+    const queryChanged = previousQuery.current !== query
+    const selectionChanged = previousSelectedCriterionId.current !== selectedCriterionId
+    if (queryChanged || selectionChanged) setActionMessage('')
+    previousQuery.current = query
+    previousSelectedCriterionId.current = selectedCriterionId
+  }, [query, selectedCriterionId])
 
   const saveReturn = async () => {
     if (!selectedCriterion) return
@@ -163,9 +185,9 @@ export function TreatmentPlanDetailViewer({
         <p className='eyebrow'>Merged source content</p>
         <h2>Clinical overview</h2>
         <dl className='clinical-overview-grid'>
-          <div><dt>Reason for admission</dt><dd>{plan.reasonForAdmission}</dd></div>
-          <div><dt>Initial client needs</dt><dd>{plan.initialClientNeeds}</dd></div>
-          <div><dt>Family education needs</dt><dd>{plan.familyEducationNeeds}</dd></div>
+          <div><dt>Reason for admission</dt><dd>{displayOverviewValue(plan.reasonForAdmission, 'No reason-for-admission text returned.')}</dd></div>
+          <div><dt>Initial client needs</dt><dd>{displayOverviewValue(plan.initialClientNeeds, 'No initial-needs text returned.')}</dd></div>
+          <div><dt>Family education needs</dt><dd>{displayOverviewValue(plan.familyEducationNeeds, 'No family-education text returned.')}</dd></div>
         </dl>
         {plan.problems.map((problem) => (
           <article className='clinical-problem' key={`${problem.problemNumber}:${problem.description}`}>
@@ -213,10 +235,12 @@ export function TreatmentPlanDetailViewer({
             <h3>Signatures</h3>
             {plan.signatures.length > 0 ? <ul className='review-timeline'>{plan.signatures.map((signature) => (
               <li key={`${signature.signatureType}:${signature.signatureDatetime}`}>
-                <strong>{signature.signatureType}</strong>
-                <span>{signature.signerRoleOrType}</span>
-                <time dateTime={signature.signatureDatetime}>{displayDate(signature.signatureDatetime)}</time>
-                <small>{signature.signatureDataOmittedReason}</small>
+                <dl className='review-metadata signature-metadata'>
+                  <div><dt>Signature type</dt><dd>{displayMetadataValue(signature.signatureType)}</dd></div>
+                  <div><dt>Signer role or type</dt><dd>{displayMetadataValue(signature.signerRoleOrType)}</dd></div>
+                  <div><dt>Signature date</dt><dd><time dateTime={signature.signatureDatetime}>{displayDate(signature.signatureDatetime)}</time></dd></div>
+                  <div><dt>Explanation</dt><dd>{displayMetadataValue(signature.signatureDataOmittedReason)}</dd></div>
+                </dl>
               </li>
             ))}</ul> : <p className='muted'>No signature metadata was returned.</p>}
           </div>
@@ -224,10 +248,12 @@ export function TreatmentPlanDetailViewer({
             <h3>Treatment reviews</h3>
             {plan.treatmentReviews.length > 0 ? <ul className='review-timeline'>{plan.treatmentReviews.map((review) => (
               <li key={`${review.reviewId}:${review.reviewDate}:${review.signatureDate}`}>
-                <strong>{review.status}</strong>
-                <span>Review {review.reviewId || 'ID unavailable'}</span>
-                <time dateTime={review.reviewDate}>{displayDate(review.reviewDate)}</time>
-                {review.signatureDate && <small>Signed {displayDate(review.signatureDate)}</small>}
+                <dl className='review-metadata'>
+                  <div><dt>Review status</dt><dd>{displayMetadataValue(review.status)}</dd></div>
+                  <div><dt>Review ID</dt><dd>{review.reviewId ? `Review ${review.reviewId}` : 'Not supplied'}</dd></div>
+                  <div><dt>Review date</dt><dd><time dateTime={review.reviewDate}>{displayDate(review.reviewDate)}</time></dd></div>
+                  <div><dt>Signature date</dt><dd>{review.signatureDate ? <time dateTime={review.signatureDate}>{displayDate(review.signatureDate)}</time> : 'Not supplied'}</dd></div>
+                </dl>
               </li>
             ))}</ul> : <p className='muted'>No treatment-review records were returned for this plan.</p>}
           </div>
@@ -242,7 +268,7 @@ export function TreatmentPlanDetailViewer({
           </div>
           <span>{plan.criteria.length} criteria</span>
         </div>
-        <div className='criterion-list'>
+        <div className='criterion-list' aria-label='Checklist criteria'>
           {filteredCriteria.map((criterion) => (
             <button
               key={criterion.criterionId}
@@ -256,7 +282,8 @@ export function TreatmentPlanDetailViewer({
             </button>
           ))}
         </div>
-        {selectedCriterion ? <EvidencePanel criterion={selectedCriterion} /> : <p className='muted'>No checklist criteria returned for this plan.</p>}
+        {filteredCriteria.length === 0 && <p className='muted' role='status'>{query.trim() ? `No checklist evidence matches “${query.trim()}”.` : 'No checklist criteria returned for this plan.'}</p>}
+        {selectedCriterion && <EvidencePanel criterion={selectedCriterion} />}
         {canManage ? <div className='manager-actions'>
           <label>
             Manager comment
@@ -272,7 +299,7 @@ export function TreatmentPlanDetailViewer({
             <button type='button' className='secondary-button' onClick={saveReturn} disabled={isSaving || !selectedCriterion}>Return for correction</button>
             <button type='button' className='secondary-button' onClick={saveOverride} disabled={isSaving || !selectedCriterion}>Save override</button>
           </div>
-          {!selectedCriterion && <p className='muted'>Manager actions remain disabled until a checklist criterion is returned and selected.</p>}
+          {!selectedCriterion && <p className='muted'>Manager actions are disabled until a matching checklist criterion is selected.</p>}
           {actionMessage && <p role='status'>{actionMessage}</p>}
         </div> : <p className='muted'>Manager review actions are available to manager and admin roles.</p>}
       </section>
@@ -291,7 +318,7 @@ export function TreatmentPlanDetailViewer({
               <li key={managerReviewKey(review, index)}>
                 <strong>{review.managerStatus}</strong> on <code>{review.criterionId}</code>
                 {review.actorUsername && <> by {review.actorUsername}</>}
-                {review.createdAt && <> at {review.createdAt}</>}
+                {review.createdAt && <> at {formatUtcEventDateTime(review.createdAt)}</>}
                 {review.comment && <span> Comment: {review.comment}</span>}
                 {review.overrideReason && <span> Override reason: {review.overrideReason}</span>}
               </li>
@@ -305,14 +332,17 @@ export function TreatmentPlanDetailViewer({
       <section className='panel'>
         {canManage && <div className='button-row'><button type='button' className='secondary-button' onClick={() => void onExportChecklistEvidence()}>Export minimum-necessary checklist evidence</button></div>}
         <h2>Evidence Coverage Map</h2>
+        <p className='muted evidence-coverage-note'>Source support is reported separately from checklist result statuses. A criterion may have observed evidence and still be Missing Data, Conflicting Evidence, or Unable to Evaluate. These displayed subtotals can overlap and do not partition the 42 criteria; unknown and Not Applicable outcomes remain distinct.</p>
         <div className='summary-grid evidence-coverage-summary'>
-          <span className='evidence-coverage-metric'><span>Criteria total:</span> <span>{plan.evidenceCoverageSummary.criteriaTotal}</span></span>
-          <span className='evidence-coverage-metric'><span>With evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaWithEvidence}</span></span>
-          <span className='evidence-coverage-metric'><span>Missing evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaMissingEvidence}</span></span>
-          <span className='evidence-coverage-metric'><span>Conflicting evidence:</span> <span>{plan.evidenceCoverageSummary.criteriaConflicting}</span></span>
-          <span className='evidence-coverage-metric'><span>Runtime-only fields:</span> <span>{plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span></span>
+          <span className='evidence-coverage-metric'><span>Checklist criteria total</span> <span>{plan.evidenceCoverageSummary.criteriaTotal}</span></span>
+          <span className='evidence-coverage-metric'><span>Source support: observed evidence</span> <span>{plan.evidenceCoverageSummary.criteriaWithEvidence}</span></span>
+          <span className='evidence-coverage-metric'><span>Source support: missing evidence</span> <span>{plan.evidenceCoverageSummary.criteriaMissingEvidence}</span></span>
+          <span className='evidence-coverage-metric'><span>Result status: Conflicting Evidence</span> <span>{plan.evidenceCoverageSummary.criteriaConflicting}</span></span>
+          <span className='evidence-coverage-metric'><span>Result status: Unable to Evaluate</span> <span>{countCriteriaByStatus(plan.criteria, 'Unable to Evaluate')}</span></span>
+          <span className='evidence-coverage-metric'><span>Result status: Not Applicable</span> <span>{countCriteriaByStatus(plan.criteria, 'Not Applicable')}</span></span>
+          <span className='evidence-coverage-metric'><span>Runtime-only fields</span> <span>{plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span></span>
         </div>
-        <p>Used, missing, unmapped, and unused content are separated so managers can see what the checklist did and did not evaluate.</p>
+        <p className='muted'>Runtime-only fields are source values outside the checklist. Their count is not a checklist result and is not added to the 42-criterion total.</p>
       </section>
 
       <DataQualityWarningsPanel warnings={plan.dataQualityWarnings} />
@@ -327,4 +357,17 @@ export function TreatmentPlanDetailViewer({
       <RawFieldExplorer plan={plan} />
     </div>
   )
+}
+
+function displayOverviewValue(value: string, fallback: string): string {
+  const normalized = value.trim()
+  return !normalized || normalized === fallback || normalized === 'Unknown' ? 'Not supplied' : value
+}
+
+function displayMetadataValue(value: string): string {
+  return value.trim() || 'Not supplied'
+}
+
+function countCriteriaByStatus(criteria: readonly CriterionResult[], status: CriterionResult['status']): number {
+  return criteria.filter((criterion) => criterion.status === status).length
 }

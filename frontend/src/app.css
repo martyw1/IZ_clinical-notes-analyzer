@@ -578,6 +578,11 @@ dd,
 
 .detail-grid {
   grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.detail-grid > * {
+  min-width: 0;
 }
 
 .content-panel details,
@@ -586,6 +591,59 @@ dd,
   border-top: 1px solid var(--border-soft);
   margin-top: 0.75rem;
   padding-top: 0.75rem;
+}
+
+.evidence-panel {
+  min-width: 0;
+}
+
+.evidence-finding {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+}
+
+.evidence-finding span,
+.evidence-panel dd {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.review-history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.review-timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-timeline > li {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+}
+
+.review-metadata {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.review-metadata > div {
+  min-width: 0;
+}
+
+.review-metadata dd {
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
 }
 
 .criterion-list {
@@ -995,6 +1053,22 @@ dd,
 .binder-warning-list {
   display: grid;
   gap: var(--space-2);
+}
+
+.settings-form {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.settings-actions {
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.table-panel .users-table {
+  min-width: 0;
 }
 
 .settings-form form {

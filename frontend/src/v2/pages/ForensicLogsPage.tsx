@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { listAuditLogs, verifyAuditLogs } from '../api/auditClient'
 import { ApiRequestError } from '../api/json'
+import { formatUtcEventDateTime } from '../components/treatmentPlanFormatting'
 import type { AuditLogItem } from '../api/types'
 
 type ForensicLogsPageProps = {
@@ -86,7 +87,7 @@ export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
               <td data-label='Entity'>{log.targetEntityType}: {log.targetEntityId}</td>
               <td data-label='Outcome'>{log.outcomeStatus}</td>
               <td data-label='Details'><code>{log.detailsSummary || 'No additional details'}</code></td>
-              <td data-label='Timestamp'>{log.timestampUtc}</td>
+              <td data-label='Timestamp'><time dateTime={log.timestampUtc}>{formatUtcEventDateTime(log.timestampUtc)}</time></td>
             </tr>
           ))}
         </tbody>

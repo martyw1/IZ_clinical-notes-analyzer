@@ -77,6 +77,8 @@ export function PatientRecordDetailPage({
   if (error) return <section className='panel error-banner' role='alert'>{error}</section>
   if (!detail) return <section className='panel muted'>Loading patient record...</section>
 
+  const hasPatientSnapshot = Object.keys(detail.patientRecord).length > 0
+
   return (
     <div className='detail-grid patient-record-document'>
       <section className='panel detail-identity-panel'>
@@ -147,7 +149,13 @@ export function PatientRecordDetailPage({
         </section>
       ))}
       {sections.length === 0 && (
-        <section className='panel muted'>No patient fields match the current search.</section>
+        <section className='panel muted' role='status'>
+          {!hasPatientSnapshot
+            ? 'No patient snapshot is available for this record.'
+            : query.trim()
+              ? 'No patient fields match the current search.'
+              : 'No patient fields are available in this snapshot.'}
+        </section>
       )}
     </div>
   )

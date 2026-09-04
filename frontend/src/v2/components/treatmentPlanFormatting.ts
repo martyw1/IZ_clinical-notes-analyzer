@@ -12,3 +12,10 @@ export function formatDateTime24Hour(value: string): string {
 function twoDigits(value: number): string {
   return value.toString().padStart(2, '0')
 }
+
+export function formatUtcEventDateTime(value: string): string {
+  const naiveUtcEvent = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/.test(value)
+  const normalized = naiveUtcEvent ? `${value.replace(' ', 'T')}Z` : value
+  if (Number.isNaN(new Date(normalized).getTime())) return value || 'Unknown'
+  return formatDateTime24Hour(normalized)
+}

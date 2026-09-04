@@ -62,6 +62,39 @@ describe('Patient Record Detail selection', () => {
     expect(screen.getByRole('button', { name: 'Open Patient Roster' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open Treatment Plans Roster' })).toBeInTheDocument()
   })
+
+  it('distinguishes an absent patient snapshot from a search with no matching fields', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ ...patientDetailPayload(), patient_record: {} }))
+      .mockResolvedValueOnce(response(patientDetailPayload()))
+    vi.stubGlobal('fetch', fetchMock)
+    const selection = { mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' as const }
+
+    const emptySnapshot = render(
+      <PatientRecordDetailPage
+        token='token'
+        selection={selection}
+        onNavigate={vi.fn()}
+        onSelectTreatmentPlan={vi.fn()}
+      />,
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent('No patient snapshot is available for this record.')
+    expect(screen.queryByText('No patient fields match the current search.')).not.toBeInTheDocument()
+    emptySnapshot.unmount()
+
+    render(
+      <PatientRecordDetailPage
+        token='token'
+        selection={selection}
+        onNavigate={vi.fn()}
+        onSelectTreatmentPlan={vi.fn()}
+      />,
+    )
+    const search = await screen.findByRole('textbox', { name: 'Search patient information' })
+    fireEvent.change(search, { target: { value: 'no-such-patient-field' } })
+    expect(screen.getByRole('status')).toHaveTextContent('No patient fields match the current search.')
+    expect(screen.queryByText('No patient snapshot is available for this record.')).not.toBeInTheDocument()
+  })
 })
 
 function patientDetailPayload() {

@@ -82,7 +82,7 @@ export function UsersPage({ token }: UsersPageProps) {
   }
 
   return (
-    <section className='panel'>
+    <section className='panel table-panel users-page'>
       <p className='eyebrow'>Users</p>
       <h2>Role-based access</h2>
       <form onSubmit={create} className='settings-form'>
@@ -90,30 +90,36 @@ export function UsersPage({ token }: UsersPageProps) {
         <label>Full name<input name='fullName' /></label>
         <label>Role<select name='role' defaultValue='counselor'><option value='counselor'>Counselor</option><option value='office_manager'>Office manager</option><option value='viewer'>Viewer</option></select></label>
         <label>Temporary password<input name='password' type='password' autoComplete='new-password' /></label>
-        <button type='submit'>Create user</button>
+        <div className='button-row settings-actions'>
+          <button type='submit'>Create user</button>
+        </div>
       </form>
       <form onSubmit={assignFacility} className='settings-form'>
         <h3>Facility assignment</h3>
         <label>Facility assignment user<select name='facilityUserId'>{users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}</select></label>
         <label>Facility<select name='facilityId'>{facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.displayName}</option>)}</select></label>
-        <button type='submit'>Assign facility</button>
+        <div className='button-row settings-actions'>
+          <button type='submit'>Assign facility</button>
+        </div>
       </form>
       <form onSubmit={assignPatientToCounselor} className='settings-form'>
         <h3>Patient assignment</h3>
         <label>MRN assignment<input name='patientId' /></label>
         <label>Counselor assignment<select name='counselorUsername'>{users.filter((user) => user.role === 'counselor').map((user) => <option key={user.id} value={user.username}>{user.username}</option>)}</select></label>
-        <button type='submit'>Assign patient</button>
+        <div className='button-row settings-actions'>
+          <button type='submit'>Assign patient</button>
+        </div>
       </form>
-      <table>
+      <table className='users-table'>
         <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Password reset</th><th>Action</th></tr></thead>
         <tbody>
           {users.map((user) => (
             <tr key={user.id}>
-              <td>{user.fullName}</td>
-              <td>{user.role}</td>
-              <td>{user.authState}</td>
-              <td>{user.mustResetPassword ? 'required' : 'not required'}</td>
-              <td><button type='button' className='secondary-button' onClick={() => void resetPassword(user)} disabled={user.username === 'admin'}>Reset password</button></td>
+              <td data-label='User'>{user.fullName}</td>
+              <td data-label='Role'>{user.role}</td>
+              <td data-label='Status'>{user.authState}</td>
+              <td data-label='Password reset'>{user.mustResetPassword ? 'required' : 'not required'}</td>
+              <td data-label='Action'><button type='button' className='secondary-button' onClick={() => void resetPassword(user)} disabled={user.username === 'admin'}>Reset password</button></td>
             </tr>
           ))}
         </tbody>
