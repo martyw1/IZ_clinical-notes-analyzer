@@ -36,13 +36,24 @@ function installedBrowser(channel) {
     .filter(Boolean).map(root => path.join(root, relative)).find(candidate => existsSync(candidate)) ?? ''
 }
 
+export const failureArtifactPrivacyPolicy = Object.freeze({
+  guard: 'public-test-errors-auto-fixture-v1',
+  coveredLifecycle: ['test-body', 'beforeEach', 'afterEach', 'dependent-test-fixtures'],
+  excludedLifecycle: ['beforeAll', 'afterAll', 'worker', 'pre-fixture', 'post-guard', 'explicit-artifacts'],
+  pageSnapshotsDisabled: true,
+  artifactScanPerformed: false,
+  universalCredentialPersistenceClaim: false,
+})
+
 export function childEnvironment(run) {
   const env = { ...process.env }
   for (const key of Object.keys(env)) {
-    if (/^(IZ_CNA_|IZ_OM_)/i.test(key) || ['SECRET_KEY', 'DATA_ENCRYPTION_KEY', 'LOCAL_SQLITE_DB_PATH', 'BOOTSTRAP_ADMIN_USERNAME', 'BOOTSTRAP_ADMIN_PASSWORD'].includes(key)) delete env[key]
+    if (/^(IZ_CNA_|IZ_OM_|PLAYWRIGHT_|PW_|PWDEBUG(?:_|$)|DEBUG(?:_|$)|NODE_(?:OPTIONS|DEBUG|DEBUG_NATIVE|V8_COVERAGE|INSPECT_RESUME_ON_START|REDIRECT_WARNINGS)$|CHROME_LOG_FILE$|EDGE_LOG_FILE$)/i.test(key)
+      || ['SECRET_KEY', 'DATA_ENCRYPTION_KEY', 'LOCAL_SQLITE_DB_PATH', 'BOOTSTRAP_ADMIN_USERNAME', 'BOOTSTRAP_ADMIN_PASSWORD'].includes(key)) delete env[key]
   }
   return {
-    ...env, PYTHONPATH: path.join(repoRoot, 'backend'), PYTHONUNBUFFERED: '1', ENVIRONMENT: 'local-client',
+    ...env, PLAYWRIGHT_NO_COPY_PROMPT: '1',
+    PYTHONPATH: path.join(repoRoot, 'backend'), PYTHONUNBUFFERED: '1', ENVIRONMENT: 'local-client',
     IZ_CNA_LOCAL_APP_DATA_DIR: run.target.dataDir, IZ_CNA_LOCAL_SQLITE_DB_PATH: 'clinical-notes-analyzer-v2.sqlite3',
     IZ_CNA_SECRET_KEY: randomBytes(32).toString('hex'), IZ_CNA_DATA_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
     IZ_CNA_BOOTSTRAP_ADMIN_USERNAME: 'smoke_admin', IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD: run.password,
@@ -90,7 +101,9 @@ async function runSmoke() {
     runtimeMode: values['runtime-mode'], baseUrl: run.baseUrl, dataDir: target.dataDir,
     browserExecutable: target.browserExecutable, preparedExecutable: target.preparedExecutable,
     frontendIndexSha256: existsSync(frontendIndex) ? createHash('sha256').update(readFileSync(frontendIndex)).digest('hex') : null,
-    startedAt: new Date().toISOString(), status: 'running', processes: [], safety: { traces: false, credentialsPersisted: false, syntheticOnly: true } }
+    startedAt: new Date().toISOString(), status: 'running', processes: [],
+    safety: { traces: false, syntheticOnly: true, intentionalRawCredentialEvidenceWrites: false,
+      failureArtifacts: failureArtifactPrivacyPolicy } }
   mkdirSync(evidence, { recursive: true })
   mkdirSync(ownedRoot, { recursive: true })
   mkdirSync(target.dataDir)

@@ -44,6 +44,22 @@ test('selected behavior works @happy', async ({ page }) => {
 
 `credentials(role)` is also exported for controlled reauthentication scenarios. Its random password exists only in process memory; never log, attach, or write it. Do not persist request bodies/headers, tokens, cookies, storage state, raw server exceptions, traces, or video. `capture` masks all inputs and checks for known secrets in visible text. `writeEvidence` rejects known generated secrets. Record boolean/count/immutable-ID assertions, not whole responses. The reporter intentionally omits exception bodies; use safe assertion receipts to locate failures. Browser page/console events are recorded as counts only. Unhandled page errors fail the scenario. The default browser context blocks non-runner origins. Specs may intercept specific localhost failure paths for adverse-transition tests, but must identify simulated failures as such.
 
+## Failure-artifact privacy boundary
+
+`failurePrivacy.mjs` exports a privacy-only `test` and `expect`, with no office-manager runtime/contract requirement. The smoke fixtures extend that `test`. Its public `failurePrivacy` automatic fixture synchronously replaces public error detail fields during teardown while retaining the errors, their count and failed/timed-out status. Credential-using custom test fixtures must depend on `failurePrivacy`; the guard itself must not depend on page/context/request fixtures. Its separate five-second teardown budget also applies after ordinary test timeout.
+
+The runner removes inherited Playwright/debug/inspector/capture environment overrides and sets `PLAYWRIGHT_NO_COPY_PROMPT=1` to prevent the separately cached page snapshot. Trace/video/automatic screenshots are off and the reporter omits raw error details. Error sanitation alone cannot remove a page snapshot captured earlier. The snapshot environment switch is installed Playwright behavior, pinned by regression rather than a promised stable public API.
+
+This is **not** a universal credential-persistence guarantee: beforeAll/afterAll, worker/pre-fixture/post-guard failures and independently written attachments are excluded. Do not put credentials in those lifecycle paths. Original-spec adapters must import the privacy-only test and use an explicitly safe capture configuration; CLI trace-off alone cannot install the guard or disable default screenshots. No private fixture override or status weakening is used. Receipts distinguish the intended harness write policy from a per-run artifact scan, which is not performed by an ordinary smoke run.
+
+Standalone verification uses only noncredential sentinels, retains deliberate failure files, confirms nonzero exit/error counts, and records unsupported all-hook cases separately:
+
+```powershell
+node --test frontend/e2e/office-manager/support/failurePrivacy.test.mjs
+```
+
+It includes installed headless Edge/Chrome about:blank probes, no clinical runtime. Each invocation retains a fresh `failure-privacy-<uuid>` evidence child and removes only its marker-owned temporary directory after all owned processes stop. Do not treat a clean final scan or later deletion as proof that earlier raw writes never happened.
+
 ## Fixture contract
 
 `fixtureContract()` reads a per-run sanitized contract. Seeding finishes before discovery, so it is safe at module scope.

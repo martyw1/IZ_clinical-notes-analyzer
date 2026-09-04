@@ -1,4 +1,5 @@
-import { test as base, expect, chromium, request } from '@playwright/test'
+import { chromium, request } from '@playwright/test'
+import { test as base, expect } from './failurePrivacy.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { HarnessError } from './guards.mjs'
@@ -78,7 +79,7 @@ export const test = base.extend({
       writeEvidence(`browser-${process.pid}.json`, record)
     }
   }, { scope: 'worker' }],
-  page: async ({ page, context }, use, testInfo) => {
+  page: async ({ page, context, failurePrivacy }, use, testInfo) => {
     let pageErrorCount = 0
     let consoleErrorCount = 0
     let blockedExternalRequests = 0

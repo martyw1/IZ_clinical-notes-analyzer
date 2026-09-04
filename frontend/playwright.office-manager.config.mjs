@@ -16,6 +16,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   workers: 1,
   retries: 0,
+  quiet: true,
   fullyParallel: false,
   forbidOnly: true,
   outputDir: process.env.IZ_OM_OUTPUT_DIR,
