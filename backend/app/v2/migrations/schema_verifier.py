@@ -103,6 +103,8 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
             "source_last_updated", "snapshot_schema_version", "snapshot_encrypted", "content_sha256", "captured_at",
             "supersedes_snapshot_id", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256",
         }
+    if expected_version >= 11:
+        required_columns["manager_action_plan_links"] = {"action_id", "plan_version_id"}
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",
@@ -143,11 +145,14 @@ def reconciliation_counts_database(path: Path) -> tuple[ReconciliationCount, ...
 def record_reconciliation(connection: sqlite3.Connection, migration_version: int) -> None:
     category = "legacy_manager_actions"
     source_count = int(connection.execute("SELECT COUNT(*) FROM treatment_plan_manager_actions").fetchone()[0])
-    dispositions = int(connection.execute("SELECT COUNT(*) FROM manager_dispositions").fetchone()[0])
-    needs_review = int(connection.execute(
-        "SELECT COUNT(*) FROM reconciliation_outcomes WHERE source_kind='legacy_manager_action'"
-    ).fetchone()[0])
-    target_count = dispositions + needs_review
+    if migration_version >= 11:
+        target_count = int(connection.execute("SELECT COUNT(*) FROM manager_action_plan_links").fetchone()[0])
+    else:
+        dispositions = int(connection.execute("SELECT COUNT(*) FROM manager_dispositions").fetchone()[0])
+        needs_review = int(connection.execute(
+            "SELECT COUNT(*) FROM reconciliation_outcomes WHERE source_kind='legacy_manager_action'"
+        ).fetchone()[0])
+        target_count = dispositions + needs_review
     connection.execute(
         "INSERT OR REPLACE INTO migration_reconciliation("
         "migration_version,category,source_count,target_count,source_sha256,target_sha256,verified_at"

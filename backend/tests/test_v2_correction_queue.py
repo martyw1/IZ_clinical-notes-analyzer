@@ -24,6 +24,10 @@ def _counselor_headers(
         },
     )
     assert created.status_code == 200
+    facility_id = client.get("/api/facilities", headers=admin_headers).json()[0]["id"]
+    assert client.put(
+        f"/api/users/{created.json()['id']}/facilities/{facility_id}", headers=admin_headers,
+    ).status_code == 200
     login = client.post("/api/auth/login", json={"username": username, "password": temporary_password})
     assert login.status_code == 200
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
@@ -145,12 +149,14 @@ def test_return_for_correction_infers_one_counselor_across_multiple_plan_version
     counselor_headers = _counselor_headers(client, admin_headers)
     assigned = client.put("/api/patient-assignments/952/counselor", headers=admin_headers)
     assert assigned.status_code == 200
+    selected = client.get("/api/v2/treatment-plans", headers=admin_headers).json()["items"][0]
 
     # When: the Treatment Plan Detail UI omits an explicit counselor and requests correction.
     returned = client.post(
         "/api/v2/treatment-plans/952/manager-actions",
         headers=admin_headers,
         json={
+            "plan_version_id": selected["plan_version_id"],
             "criterion_id": "confirm_current_loc",
             "action": "return_for_correction",
             "comment": "Confirm the current LOC source.",
@@ -187,7 +193,7 @@ def test_correction_queue_and_submission_are_bound_to_exact_counselor_work_items
     )
     for criterion_id, username in (
         ("confirm_current_loc", "counselor-a"),
-        ("document_interventions", "counselor-b"),
+        ("confirm_loc_rule_mapping", "counselor-b"),
     ):
         returned = client.post(
             "/api/v2/treatment-plans/951/manager-actions",
@@ -210,7 +216,7 @@ def test_correction_queue_and_submission_are_bound_to_exact_counselor_work_items
     assert queue_a.status_code == 200
     assert queue_b.status_code == 200
     assert [item["criterion_id"] for item in queue_a.json()["items"]] == ["confirm_current_loc"]
-    assert [item["criterion_id"] for item in queue_b.json()["items"]] == ["document_interventions"]
+    assert [item["criterion_id"] for item in queue_b.json()["items"]] == ["confirm_loc_rule_mapping"]
     item_a = queue_a.json()["items"][0]
     item_b = queue_b.json()["items"][0]
     assert item_a["plan_version_id"] == item_b["plan_version_id"]

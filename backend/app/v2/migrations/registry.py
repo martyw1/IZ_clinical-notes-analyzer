@@ -7,6 +7,7 @@ from app.v2.migrations.schema_clinical import CLINICAL_STATEMENTS
 from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS, CORE_STATEMENTS, USER_EXTENSIONS
 from app.v2.migrations.schema_evaluation_ledger import EVALUATION_LEDGER_STATEMENTS
 from app.v2.migrations.schema_hardening import HARDENING_STATEMENTS
+from app.v2.migrations.schema_manager_action_links import MANAGER_ACTION_PLAN_LINK_STATEMENTS
 from app.v2.migrations.schema_patient_identity import PATIENT_IDENTITY_STATEMENTS
 from app.v2.migrations.schema_patient_snapshots import (
     PATIENT_SNAPSHOT_STATEMENTS,
@@ -61,6 +62,7 @@ MIGRATIONS = (
     _migration(8, "separate_alleva_mrn_from_source_patient_id", PATIENT_IDENTITY_STATEMENTS),
     _migration(9, "persist_encrypted_patient_source_snapshots", PATIENT_SOURCE_SNAPSHOT_STATEMENTS),
     _migration(10, "upgrade_encrypted_patient_snapshots_to_append_only_versions", PATIENT_SNAPSHOT_STATEMENTS),
+    _migration(11, "bind_legacy_manager_actions_to_immutable_plan_versions", MANAGER_ACTION_PLAN_LINK_STATEMENTS),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

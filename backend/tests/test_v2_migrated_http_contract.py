@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
+from v2_test_runtime import configured_client, reset_app_modules
 from v2_migration_fixtures import (
     SYNTHETIC_SECRET,
     create_legacy_database,
@@ -52,19 +52,24 @@ def test_startup_migration_serves_multi_version_plan_and_review_records(tmp_path
 
     # When: the migrated patient is read through the real authenticated HTTP routes.
     listed = client.get("/api/v2/treatment-plans", headers=headers)
-    detail = client.get("/api/v2/treatment-plans/synthetic-client-200", headers=headers)
+    ambiguous = client.get("/api/v2/treatment-plans/synthetic-client-200", headers=headers)
+    details = [client.get("/api/v2/treatment-plans/synthetic-client-200", headers=headers,
+                          params={"plan_version_id": item["plan_version_id"], "patient_record_id": item["patient_record_id"]})
+               for item in listed.json()["items"]]
 
     # Then: list and detail assemble every version without exposing patient names.
     assert listed.status_code == 200
-    assert detail.status_code == 200
+    assert ambiguous.status_code == 409
+    assert all(detail.status_code == 200 for detail in details)
     assert listed.json()["items"][0]["patient_id"] == "synthetic-client-200"
-    payload = detail.json()
-    assert [plan["id"] for plan in payload["treatment_plans"]] == ["synthetic-plan-1", "synthetic-plan-2"]
-    assert [review["id"] for review in payload["treatment_reviews"]] == ["synthetic-review-1", "synthetic-review-2"]
+    payloads = [detail.json() for detail in details]
+    assert {plan["id"] for payload in payloads for plan in payload["treatment_plans"]} == {"synthetic-plan-1", "synthetic-plan-2"}
+    assert all(len(payload["treatment_plans"]) == 1 for payload in payloads)
     assert PRIVACY_CANARY not in json.dumps(listed.json(), sort_keys=True)
-    assert PRIVACY_CANARY not in json.dumps(payload, sort_keys=True)
+    assert PRIVACY_CANARY not in json.dumps(payloads, sort_keys=True)
     with closing(sqlite3.connect(tmp_path / "app-data" / "clinical-notes-analyzer-v2.sqlite3")) as connection:
         assert connection.execute("SELECT DISTINCT trigger_kind FROM evaluation_runs").fetchall() == [("migration",)]
+        assert connection.execute("SELECT COUNT(*) FROM treatment_review_versions").fetchone() == (2,)
 
 
 def test_startup_migrates_legacy_user_and_settings_columns_before_orm_bootstrap(tmp_path, monkeypatch) -> None:
@@ -121,9 +126,7 @@ def _migrated_client(tmp_path: Path, monkeypatch, *, use_legacy_schema: bool = F
     monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "StrongLocalPass1")
     monkeypatch.setenv("IZ_CNA_SECRET_KEY", "synthetic-http-secret")
     monkeypatch.setenv("IZ_CNA_DATA_ENCRYPTION_KEY", SYNTHETIC_SECRET)
-    for module_name in tuple(sys.modules):
-        if module_name == "app" or module_name.startswith("app."):
-            sys.modules.pop(module_name)
+    reset_app_modules()
     database_path = create_legacy_database(app_data)
     if use_legacy_schema:
         downgrade_to_pre_v2_schema(database_path)
@@ -149,6 +152,4 @@ def _migrated_client(tmp_path: Path, monkeypatch, *, use_legacy_schema: bool = F
         )
         connection.commit()
     original_database_bytes = database_path.read_bytes()
-    from app.main import create_app
-
-    return TestClient(create_app(), raise_server_exceptions=False), original_database_bytes
+    return configured_client(raise_server_exceptions=False), original_database_bytes

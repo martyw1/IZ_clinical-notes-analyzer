@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +23,7 @@ EXPECTED_COLUMNS = {
     "evaluation_runs": ("id", "plan_version_id", "checklist_version", "rules_version", "evaluation_date", "facility_timezone", "evidence_sha256", "trigger_kind", "run_sequence", "created_at", "sync_job_id", "approval_record_id", "contract_version", "contract_sha256"),
     "criterion_results": ("id", "evaluation_run_id", "criterion_id", "result_status", "normalized_path", "source_record_type", "source_record_version_id", "evaluated_value_safe", "explanation", "evidence_sha256"),
     "manager_dispositions": ("id", "plan_version_id", "criterion_id", "status", "comment", "actor_user_id", "created_at", "supersedes_disposition_id"),
+    "manager_action_plan_links": ("action_id", "plan_version_id"),
     "correction_work_items": ("id", "plan_version_id", "criterion_id", "disposition_id", "assigned_counselor_user_id", "status", "opened_at", "closed_at", "idempotency_key"),
     "correction_submissions": ("id", "work_item_id", "counselor_user_id", "submission_encrypted", "evidence_sha256", "created_at", "idempotency_key"),
     "alleva_contract_approvals": ("id", "contract_version", "encrypted_contract_json", "contract_sha256", "approver_user_id", "approved_at", "effective_at", "expires_at", "revoked_at"),
@@ -44,6 +46,7 @@ EXPECTED_FOREIGN_KEYS = {
     "evaluation_runs": {("plan_version_id", "treatment_plan_versions"), ("sync_job_id", "sync_jobs"), ("approval_record_id", "alleva_contract_approvals")},
     "criterion_results": {("evaluation_run_id", "evaluation_runs")},
     "manager_dispositions": {("plan_version_id", "treatment_plan_versions"), ("actor_user_id", "users"), ("supersedes_disposition_id", "manager_dispositions")},
+    "manager_action_plan_links": {("action_id", "treatment_plan_manager_actions"), ("plan_version_id", "treatment_plan_versions")},
     "correction_work_items": {("plan_version_id", "treatment_plan_versions"), ("disposition_id", "manager_dispositions"), ("assigned_counselor_user_id", "users")},
     "correction_submissions": {("work_item_id", "correction_work_items"), ("counselor_user_id", "users")},
     "alleva_contract_approvals": {("approver_user_id", "users")},
@@ -91,7 +94,7 @@ def test_schema_ledger_has_exact_columns_and_foreign_keys(tmp_path) -> None:
             table_info = connection.execute(f'PRAGMA table_info("{table}")').fetchall()
             actual = tuple(row[1] for row in table_info)
             assert actual == expected
-            expected_pk = ("version",) if table == "schema_migrations" else (
+            expected_pk = ("action_id",) if table == "manager_action_plan_links" else ("version",) if table == "schema_migrations" else (
                 ("user_id", "facility_id") if table == "user_facilities" else (
                     ("patient_id", "counselor_user_id", "assigned_at") if table == "patient_assignments" else ("id",)
                 )
@@ -110,6 +113,40 @@ def test_schema_ledger_has_exact_columns_and_foreign_keys(tmp_path) -> None:
             assert expected <= actual
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+@pytest.mark.parametrize("statement", (
+    "UPDATE manager_action_plan_links SET plan_version_id=1 WHERE action_id=1",
+    "DELETE FROM manager_action_plan_links WHERE action_id=1",
+    "INSERT OR REPLACE INTO manager_action_plan_links(action_id,plan_version_id) VALUES(1,1)",
+))
+def test_manager_action_links_reject_committed_reassignment(tmp_path: Path, statement: str) -> None:
+    # Given: a committed unassigned legacy link.
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    # When/Then: update, delete and replacement cannot reattribute historical actions.
+    with sqlite3.connect(database_path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute(statement)
+
+
+@pytest.mark.parametrize("statement", (
+    "INSERT INTO manager_action_plan_links(action_id,plan_version_id) VALUES(99999,1)",
+    "INSERT INTO manager_action_plan_links(action_id,plan_version_id) VALUES(2,99999)",
+))
+def test_manager_action_links_enforce_both_foreign_keys(tmp_path: Path, statement: str) -> None:
+    # Given: a migrated database and a new synthetic legacy action.
+    database_path = create_legacy_database(tmp_path)
+    run_migrations(MigrationRequest(database_path, tmp_path, SYNTHETIC_SECRET, "test-build"))
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            "INSERT INTO treatment_plan_manager_actions SELECT 2,patient_id,criterion_id,action,comment,"
+            "override_reason,actor_user_id,actor_username,actor_role,created_at FROM treatment_plan_manager_actions WHERE id=1"
+        )
+        # When/Then: neither a missing legacy action nor a missing version may be linked.
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            connection.execute(statement)
 
 
 def test_version_rows_are_immutable_and_uniqueness_is_enforced(tmp_path) -> None:

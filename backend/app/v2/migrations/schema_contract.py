@@ -17,6 +17,8 @@ BASELINE_STATEMENTS = (
     "alleva_treatment_plan_sync_approved INTEGER,alleva_treatment_plan_endpoint_mapping_validated INTEGER)",
     "CREATE TABLE api_harness_jobs(id INTEGER PRIMARY KEY,raw_sensitive_mode_used INTEGER,cancel_requested INTEGER)",
     "CREATE TABLE workflow_profiles(id INTEGER PRIMARY KEY,is_active INTEGER)",
+    "CREATE TABLE treatment_plan_manager_actions(id INTEGER PRIMARY KEY,patient_id TEXT,criterion_id TEXT,"
+    "action TEXT,comment TEXT,actor_user_id TEXT,created_at TEXT)",
 )
 OBJECT_PATTERN = re.compile(r"^\s*CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX|TRIGGER)\s+([A-Za-z_][A-Za-z0-9_]*)", re.I)
 LITERAL_PATTERN = re.compile(r"('(?:''|[^'])*')")

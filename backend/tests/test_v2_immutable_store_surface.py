@@ -28,7 +28,12 @@ def test_manual_upload_surface_appends_plan_versions_without_legacy_mutation(tmp
         headers=headers,
     )
     assert duplicate.status_code == 201
-    detail = client.get("/api/v2/treatment-plans/730", headers=headers)
+    ambiguous = client.get("/api/v2/treatment-plans/730", headers=headers)
+    assert ambiguous.status_code == 409
+    selected = client.get("/api/v2/treatment-plans", headers=headers).json()["items"][0]
+    detail = client.get("/api/v2/treatment-plans/730", headers=headers, params={
+        key: selected[key] for key in ("plan_version_id", "patient_record_id", "source_mode")
+    })
     client.close()
 
     # Then: both immutable versions and source documents exist while legacy mutable tables remain empty.
@@ -40,3 +45,4 @@ def test_manual_upload_surface_appends_plan_versions_without_legacy_mutation(tmp
         assert connection.execute("SELECT COUNT(*) FROM uploaded_documents").fetchone() == (0,)
     assert detail.status_code == 200
     assert detail.json()["patient_id"] == "730"
+    assert detail.json()["plan_version_id"] == selected["plan_version_id"]

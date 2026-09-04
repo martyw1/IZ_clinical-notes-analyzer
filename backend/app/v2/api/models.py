@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from app.v2.domain.schemas import SourceMode, TreatmentPlanAggregate
 
 
 class V2Model(BaseModel):
@@ -104,6 +105,8 @@ class DashboardOut(V2Model):
 
 
 class TreatmentPlanListItemOut(V2Model):
+    plan_version_id: int
+    patient_record_id: int
     patient_id: str
     patient_display_label: str
     treatment_plan_id: str
@@ -121,6 +124,12 @@ class TreatmentPlanListItemOut(V2Model):
 class TreatmentPlanListOut(V2Model):
     items: tuple[TreatmentPlanListItemOut, ...]
     status_order: tuple[str, ...]
+
+
+class TreatmentPlanDetailOut(TreatmentPlanAggregate):
+    plan_version_id: int
+    patient_record_id: int
+    unassigned_manager_reviews: tuple[dict[str, JsonValue], ...] = ()
 
 
 class PatientRosterTreatmentPlanOut(V2Model):
@@ -296,6 +305,10 @@ class AllevaTreatmentPlanSyncOut(V2Model):
 
 
 class ManagerActionInput(V2Model):
+    plan_version_id: int | None = Field(default=None, ge=1)
+    patient_record_id: int | None = Field(default=None, ge=1)
+    source_mode: SourceMode | None = None
+    treatment_plan_id: str | None = None
     criterion_id: str
     action: Literal["approve", "return_for_correction", "override", "comment"]
     comment: str = ""
@@ -304,6 +317,10 @@ class ManagerActionInput(V2Model):
 
 
 class CorrectionSubmissionInput(V2Model):
+    plan_version_id: int | None = Field(default=None, ge=1)
+    patient_record_id: int | None = Field(default=None, ge=1)
+    source_mode: SourceMode | None = None
+    treatment_plan_id: str | None = None
     work_item_id: int
     criterion_id: str
     comment: str = Field(min_length=1)
@@ -312,6 +329,9 @@ class CorrectionSubmissionInput(V2Model):
 class CorrectionQueueItemOut(V2Model):
     work_item_id: int
     plan_version_id: int
+    patient_record_id: int
+    source_mode: str
+    treatment_plan_id: str
     patient_id: str
     patient_display_label: str
     criterion_id: str

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import assert_never
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -39,6 +40,27 @@ class RecordAggregateSource:
     latest: PlanVersionRow
     plans: tuple[dict[str, JsonValue], ...]
     reviews: tuple[dict[str, JsonValue], ...]
+
+
+def assemble_treatment_plan_version(
+    db: Session, plan_version_id: int, encryption_secret: str,
+) -> TreatmentPlanAggregate | None:
+    row = db.execute(text(
+        "SELECT p.canonical_client_id,v.source_system,v.source_record_id,v.version_ordinal,"
+        "v.admission_date,v.source_next_review_due,v.normalized_snapshot_encrypted "
+        "FROM treatment_plan_versions v JOIN patients p ON p.id=v.patient_id WHERE v.id=:id"
+    ), {"id": plan_version_id}).first()
+    if row is None:
+        return None
+    snapshot = ClinicalSnapshotCodec(encryption_secret).decode_plan(row[6])
+    match snapshot:
+        case AggregateSnapshot(aggregate=aggregate):
+            return project_patient_identity(aggregate, str(row[0]))
+        case PlanRecordSnapshot(record=record):
+            version = PlanVersionRow(str(row[1]), str(row[2]), int(row[3]), str(row[4] or "Unknown"), str(row[5] or "Unknown"), row[6])
+            return record_aggregate(RecordAggregateSource(str(row[0]), version, (record,), ()))
+        case unreachable:
+            assert_never(unreachable)
 
 
 def assemble_treatment_plan_aggregate(

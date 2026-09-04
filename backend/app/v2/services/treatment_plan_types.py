@@ -8,6 +8,15 @@ from app.v2.domain.schemas import TreatmentPlanAggregate
 
 
 @dataclass(frozen=True, slots=True)
+class PlanVersionIdentity:
+    plan_version_id: int
+    patient_record_id: int
+    patient_id: str
+    source_mode: str
+    treatment_plan_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class TreatmentPlanQueueItem:
     patient_id: str
     patient_display_label: str
@@ -21,6 +30,8 @@ class TreatmentPlanQueueItem:
     source_mode: str
     content_completeness_summary: dict[str, int]
     warnings: tuple[str, ...]
+    plan_version_id: int = 0
+    patient_record_id: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +49,8 @@ class StoredTreatmentPlan:
     missing_criteria_count: int
     content_summary_json: str
     warnings_json: str
+    plan_version_id: int = 0
+    patient_record_id: int = 0
 
 
 class TreatmentPlanSaveDisposition(StrEnum):
@@ -57,6 +70,7 @@ def stored_plan(
     *,
     last_updated: str = "",
     plan_date: str = "",
+    identity: PlanVersionIdentity | None = None,
 ) -> StoredTreatmentPlan:
     summary = {
         key: value
@@ -77,6 +91,8 @@ def stored_plan(
         missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,
         content_summary_json=json.dumps(summary, sort_keys=True),
         warnings_json=json.dumps(list(aggregate.data_quality_warnings), sort_keys=True),
+        plan_version_id=identity.plan_version_id if identity is not None else 0,
+        patient_record_id=identity.patient_record_id if identity is not None else 0,
     )
 
 

@@ -231,7 +231,8 @@ def _apply_pending(connection: sqlite3.Connection, request: ApplyRequest) -> Non
                     "UPDATE app_settings SET alleva_treatment_plan_sync_limit=5000 "
                     "WHERE alleva_treatment_plan_sync_limit<5000"
                 )
-            backfill_legacy_tables(connection, request.encryption_secret, request.local_app_data_dir)
+            if migration.version <= 10:
+                backfill_legacy_tables(connection, request.encryption_secret, request.local_app_data_dir)
             connection.execute(
                 "INSERT INTO schema_migrations(version,name,checksum_sha256,applied_at,app_build) VALUES(?,?,?,?,?)",
                 (migration.version, migration.name, migration.checksum_sha256, "2026-07-10T00:00:00+00:00", request.app_build),

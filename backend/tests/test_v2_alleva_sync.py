@@ -742,10 +742,17 @@ def test_repeated_sync_updates_same_plan_id_and_leaves_identical_replay_unchange
         assert third["status"] == "completed"
 
     # Then: two immutable versions exist, the changed version is current, and the replay adds no duplicate.
-    detail = client.get("/api/v2/treatment-plans/912", headers=headers)
-    assert detail.status_code == 200
-    assert detail.json()["content_snapshot"]["problems"][0]["problem_description"] == "Synthetic revised clinical problem."
+    ambiguous = client.get("/api/v2/treatment-plans/912", headers=headers)
+    assert ambiguous.status_code == 409
     queue = client.get("/api/v2/treatment-plans", headers=headers).json()["items"]
+    assert len(queue) == 1
+    selected = queue[0]
+    detail = client.get("/api/v2/treatment-plans/912", headers=headers, params={
+        key: selected[key] for key in ("plan_version_id", "patient_record_id", "source_mode")
+    })
+    assert detail.status_code == 200
+    assert detail.json()["plan_version_id"] == selected["plan_version_id"]
+    assert detail.json()["content_snapshot"]["problems"][0]["problem_description"] == "Synthetic revised clinical problem."
     assert queue[0]["treatment_plan_id"] == "plan-912"
     with sqlite3.connect(database_path) as database:
         versions = database.execute(

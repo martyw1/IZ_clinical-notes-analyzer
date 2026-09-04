@@ -167,6 +167,8 @@ def test_treatment_plan_list_export_is_manager_only_safe_and_audited(tmp_path, m
     rows = list(csv.DictReader(io.StringIO(exported.text)))
     assert list(rows[0]) == [
         "patient_id",
+        "plan_version_id",
+        "patient_record_id",
         "treatment_plan_id",
         "status",
         "current_level_of_care",
@@ -177,6 +179,8 @@ def test_treatment_plan_list_export_is_manager_only_safe_and_audited(tmp_path, m
         "returned_criteria_count",
     ]
     assert rows[0]["patient_id"] == "'=SYNTHETIC-842"
+    assert int(rows[0]["plan_version_id"]) == imported.json()["plan_version_id"] > 0
+    assert int(rows[0]["patient_record_id"]) == imported.json()["patient_record_id"] > 0
     assert rows[0]["treatment_plan_id"]
     assert rows[0]["status"]
     assert PRIVACY_CANARY not in exported.text

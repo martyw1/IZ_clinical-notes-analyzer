@@ -7,6 +7,7 @@ from typing import Literal, assert_never
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.core.config import settings
@@ -20,6 +21,7 @@ from app.v2.services.migrated_treatment_plan import (
     RecordAggregateSource,
     project_patient_identity,
     record_aggregate,
+    assemble_treatment_plan_version,
 )
 from app.v2.services.alleva_contracts import SyncImportProvenance
 
@@ -71,62 +73,45 @@ def latest_plan_target(
     treatment_plan_id: str | None = None,
     source_system: str | None = None,
 ) -> PlanEvaluationTarget | None:
-    row = db.execute(
+    rows = db.execute(
         text(
             "SELECT v.id,v.evidence_sha256 FROM treatment_plan_versions v "
             "JOIN patients p ON p.id=v.patient_id WHERE p.canonical_client_id=:patient_id "
             "AND (:treatment_plan_id IS NULL OR v.source_record_id=:treatment_plan_id) "
-            "AND (:source_system IS NULL OR v.source_system=:source_system) "
-            "ORDER BY v.version_ordinal DESC,v.id DESC LIMIT 1"
+            "AND (:source_system IS NULL OR v.source_system=:source_system)"
         ),
         {
             "patient_id": patient_id,
             "treatment_plan_id": treatment_plan_id,
             "source_system": source_system,
         },
-    ).first()
-    return PlanEvaluationTarget(int(row[0]), str(row[1])) if row else None
+    ).all()
+    if len(rows) > 1:
+        raise HTTPException(status_code=409, detail="Select a specific treatment-plan version.")
+    return PlanEvaluationTarget(int(rows[0][0]), str(rows[0][1])) if rows else None
 
 
-def latest_evaluated_aggregate(
-    db: Session,
-    aggregate: TreatmentPlanAggregate,
-    trigger: EvaluationTrigger = "date_rollover",
-) -> TreatmentPlanAggregate:
-    target = latest_plan_target(
-        db,
-        aggregate.patient_id,
-        aggregate.content_snapshot.plan_id,
-        aggregate.source_mode,
-    )
-    if target is None:
-        return aggregate
-    evaluated = persist_plan_evaluation(db, aggregate, target, trigger)
-    db.commit()
-    return evaluated
+def evaluated_plan_version(
+    db: Session, plan_version_id: int, trigger: EvaluationTrigger = "date_rollover",
+) -> TreatmentPlanAggregate | None:
+    aggregate = assemble_treatment_plan_version(db, plan_version_id, settings.effective_data_encryption_secret)
+    if aggregate is None:
+        return None
+    evidence_sha256 = str(db.execute(text(
+        "SELECT evidence_sha256 FROM treatment_plan_versions WHERE id=:id"
+    ), {"id": plan_version_id}).scalar_one())
+    return persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), trigger)
 
 
-def refresh_patient_version(
-    db: Session,
-    aggregate: TreatmentPlanAggregate,
-    trigger: EvaluationTrigger,
-    commit: bool = True,
+def refresh_plan_version(
+    db: Session, plan_version_id: int, trigger: EvaluationTrigger, *, commit: bool = True,
 ) -> EvaluationRefreshResult:
-    target = latest_plan_target(db, aggregate.patient_id, source_system=aggregate.source_mode)
-    if target is None:
+    evaluated = evaluated_plan_version(db, plan_version_id, trigger)
+    if evaluated is None:
         return EvaluationRefreshResult(0, "", "", "", "")
-    evaluated = persist_plan_evaluation(db, aggregate, target, trigger)
     if commit:
         db.commit()
-    else:
-        db.flush()
-    return EvaluationRefreshResult(
-        versions_evaluated=1,
-        evaluation_date=evaluated.evaluation_date,
-        facility_timezone=evaluated.facility_timezone,
-        checklist_version=evaluated.checklist_version,
-        rules_version=evaluated.rules_version,
-    )
+    return EvaluationRefreshResult(1, evaluated.evaluation_date, evaluated.facility_timezone, evaluated.checklist_version, evaluated.rules_version)
 
 
 def reevaluate_all_plan_versions(db: Session, trigger: EvaluationTrigger) -> EvaluationRefreshResult:

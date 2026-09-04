@@ -90,6 +90,7 @@ def test_shipped_snapshot_v9_upgrades_without_losing_encrypted_rows(tmp_path) ->
         )
         connection.execute("DELETE FROM schema_migrations WHERE version>9")
         connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>9")
+        connection.execute('DROP TABLE "manager_action_plan_links"')
         connection.execute(
             "UPDATE schema_migrations SET name=?,checksum_sha256=? WHERE version=9",
             (
@@ -130,7 +131,7 @@ def test_shipped_snapshot_v9_upgrades_without_losing_encrypted_rows(tmp_path) ->
     assert old_table is None
     assert report.source_schema == 9
     assert report.target_schema == LATEST_SCHEMA_VERSION
-    assert report.applied_versions == (10,)
+    assert report.applied_versions == tuple(range(10, LATEST_SCHEMA_VERSION + 1))
     assert report.backup_path is not None
 
 
@@ -198,6 +199,7 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
     with closing(sqlite3.connect(database_path)) as connection:
         connection.execute("DELETE FROM schema_migrations WHERE version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
         connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
+        connection.execute('DROP TABLE "manager_action_plan_links"')
         connection.execute('DROP TABLE "patient_snapshot_versions"')
         for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
             connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')

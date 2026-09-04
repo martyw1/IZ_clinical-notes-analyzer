@@ -7,7 +7,8 @@ from sqlalchemy import text
 
 from app.v2.api.deps import AdminUser, CurrentUser, DbSession
 from app.v2.api.models import AssignmentOut, FacilityOut
-from app.v2.authorization import Role, facility_ids_for_user, require_role
+from app.v2.authorization import Role, facility_ids_for_user, require_role, require_patient_row_read
+from app.v2.domain.schemas import SourceMode
 from app.v2.models import User
 from app.v2.services.audit_store import record_audit_event
 
@@ -79,18 +80,27 @@ def assign_patient(
     counselor_username: str,
     actor: AdminUser,
     db: DbSession,
+    patient_record_id: int | None = None,
+    source_mode: SourceMode | None = None,
 ) -> AssignmentOut:
     counselor = db.execute(
-        text("SELECT id,role FROM users WHERE username=:username"), {"username": counselor_username}
+        text("SELECT id,role,is_active FROM users WHERE username=:username"), {"username": counselor_username}
     ).first()
-    patient = db.execute(
-        text("SELECT id FROM patients WHERE canonical_client_id=:patient_id ORDER BY id LIMIT 1"),
-        {"patient_id": patient_id},
-    ).first()
-    if counselor is None or patient is None:
+    patients = db.execute(
+        text("SELECT id FROM patients WHERE canonical_client_id=:patient_id "
+             "AND (:record IS NULL OR id=:record) AND (:source IS NULL OR source_system=:source)"),
+        {"patient_id": patient_id, "record": patient_record_id, "source": source_mode},
+    ).all()
+    if counselor is None or not patients:
         raise HTTPException(status_code=404, detail="Counselor or patient not found")
-    if str(counselor[1]) != Role.COUNSELOR.value:
+    if len(patients) != 1:
+        raise HTTPException(status_code=409, detail="Select a specific patient record.")
+    patient = patients[0]
+    scope = require_patient_row_read(db, actor, int(patient[0]))
+    if str(counselor[1]) != Role.COUNSELOR.value or not counselor[2]:
         raise HTTPException(status_code=400, detail="Patient assignments require a counselor")
+    if scope.facility_id not in facility_ids_for_user(db, int(counselor[0])):
+        raise HTTPException(status_code=409, detail="Assign the counselor to the patient's facility first.")
     now = datetime.now(timezone.utc).isoformat()
     db.execute(
         text(
