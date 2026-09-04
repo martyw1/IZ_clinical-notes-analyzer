@@ -953,7 +953,13 @@ try {
     $zipPath = Join-Path $ReleaseRoot "$PackageName.zip"
     Assert-PathInside -Path $zipPath -Parent $ReleaseRoot -Label 'Release zip path'
     if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-    Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $zipPath
+    # PS5 Compress-Archive cannot read long release paths; keep every original name via extended paths.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.AppContext]::SetSwitch('Switch.System.IO.Compression.ZipFile.UseBackslash', $false)
+    [System.IO.Compression.ZipFile]::CreateFromDirectory(
+        ('\\?\' + ($PackageDir -replace '^\\\\', 'UNC\')),
+        ('\\?\' + ($zipPath -replace '^\\\\', 'UNC\'))
+    )
     Assert-ZipHasNoForbiddenItems -ZipPath $zipPath
 
     @"
