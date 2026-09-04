@@ -11,7 +11,7 @@ def apply_evaluation(aggregate: TreatmentPlanAggregate, bundle: EvaluationBundle
     criteria = tuple(_api_criterion(item, source_endpoint) for item in bundle.criteria)
     coverage = aggregate.evidence_coverage_summary.model_copy(update={
         "criteria_total": len(criteria),
-        "criteria_with_evidence": sum(item.result_status not in {"Missing Data", "Unable to Evaluate"} for item in criteria),
+        "criteria_with_evidence": sum(bool(item.observed_sources) for item in bundle.criteria),
         "criteria_missing_evidence": sum(item.result_status == "Missing Data" for item in criteria),
         "criteria_conflicting": sum(item.result_status == "Conflicting Evidence" for item in criteria),
     })
@@ -33,15 +33,17 @@ def apply_evaluation(aggregate: TreatmentPlanAggregate, bundle: EvaluationBundle
 
 
 def _api_criterion(item: CriterionEvaluation, source_endpoint: str) -> TreatmentPlanCriterionResult:
-    evidence = ContentEvidenceRef(
-        ref_id=item.criterion_id, label=item.criterion_title, source_json_path=item.normalized_path,
-        source_endpoint=source_endpoint, safe_preview=item.safe_evidence[:160], redaction_status="safe_evidence_only",
-    )
+    evidence = tuple(ContentEvidenceRef(
+        ref_id=f"{item.criterion_id}:{index}", label=item.criterion_title, source_json_path=source.source_path,
+        source_endpoint=source_endpoint,
+        safe_preview="Observed source input. Its presence does not establish validity, completeness, or compliance.",
+        redaction_status="safe_evidence_only",
+    ) for index, source in enumerate(item.observed_sources))
     safe_statuses = {"Present", "Compliant", "Current/Compliant", "Not Applicable"}
     return TreatmentPlanCriterionResult(
         criterion_id=item.criterion_id, criterion_title=item.criterion_title, result_status=item.status,
         severity="info" if item.status in safe_statuses else "high", finding_message=item.explanation,
-        content_considered=(item.normalized_path,), evidence_refs=(evidence,),
+        content_considered=(item.normalized_path,), evidence_refs=evidence,
         missing_content_refs=(item.normalized_path,) if item.status == "Missing Data" else (),
         conflict_refs=(item.normalized_path,) if item.status == "Conflicting Evidence" else (),
         source_json_paths=(item.normalized_path,), source_endpoint=source_endpoint,

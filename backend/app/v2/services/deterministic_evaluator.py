@@ -6,6 +6,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
+from app.v2.services.criterion_source_support import ObservedSource, criterion_source_support
 from app.v2.services.evaluation_evidence import EvaluationEvidence, collect_evidence, known
 from app.v2.services.rule_package import ChecklistStep, DeterministicRulePackage
 
@@ -23,6 +24,7 @@ class CriterionEvaluation:
     normalized_path: str
     safe_evidence: str
     explanation: str
+    observed_sources: tuple[ObservedSource, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +151,7 @@ def _criterion(step: ChecklistStep, context: EvaluationContext, overall: ReviewS
         "produce_final_checklist_result": replace(default, status=overall, normalized_path="evaluation.overall_status",
                                                   safe_evidence=overall, explanation="Final deterministic result preserves evidence uncertainty."),
     }
-    return decisions.get(step.key, default)
+    return replace(decisions.get(step.key, default), observed_sources=criterion_source_support(step.key, context.aggregate))
 
 
 def _presence(step: ChecklistStep, path: str, value: str | date | tuple[dict[str, JsonValue], ...]) -> CriterionEvaluation:

@@ -9,15 +9,15 @@ type DashboardPageProps = {
 }
 
 const metricLabels: Record<string, string> = {
-  active_patient_ids: 'Active MRNs',
-  overdue_plans: 'Overdue',
-  urgent_plans: 'Urgent',
-  due_soon_plans: 'Due soon',
-  needs_review: 'Needs review',
-  missing_data: 'Missing data',
-  returned: 'Returned',
-  conflicting: 'Conflicting',
-  unable: 'Unable',
+  active_patient_ids: 'Patient records with plans',
+  overdue_plans: 'Overdue plans',
+  urgent_plans: 'Urgent plans',
+  due_soon_plans: 'Due soon plans',
+  needs_review: 'Plans needing review',
+  missing_data: 'Missing Data criteria',
+  returned: 'Open correction items',
+  conflicting: 'Plans with conflicting evidence',
+  unable: 'Plans unable to evaluate',
 }
 
 function messageForError(error: unknown): string {
@@ -86,6 +86,8 @@ export function DashboardPage({ token }: DashboardPageProps) {
       </section>
       <section className='panel'>
         <h2>Risk metrics</h2>
+        <p className='muted'>Authorized patient records with plans, not active-client lifecycle counts. Plan statuses and Missing Data criteria use the latest version of each source plan for each patient record.</p>
+        <p className='muted'>Open correction items include authorized, linked items on historical versions. These patient, plan, criterion, and correction-item counts are not a partition and should not be added together.</p>
         <div className='metric-grid'>
           {Object.entries(dashboard.metrics).map(([key, value]) => (
             <div key={key} className='metric-tile'>
