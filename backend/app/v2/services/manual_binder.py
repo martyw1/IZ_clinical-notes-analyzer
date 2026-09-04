@@ -13,12 +13,15 @@ from app.v2.services.manual_file_parser import fields_from_manual_text
 from app.v2.services.manual_file_types import (
     ManualFileParseError,
     ManualFilePatientIdCorrectionRequired,
+    ManualTextFields,
+    OPTIONAL_MANUAL_METADATA_FIELDS,
     ParsedManualFields,
+    unique_manual_metadata_values,
 )
 
 STRICT_SCALAR_FIELDS: Final = frozenset(
     {"current_level_of_care", "admission_date", "date_clock_due_date", "signature_datetime"}
-)
+) | OPTIONAL_MANUAL_METADATA_FIELDS
 CONTENT_TYPE_BY_FORMAT: Final[Mapping[str, str]] = {
     "csv": "text/csv",
     "doc": "application/msword",
@@ -76,13 +79,14 @@ class ManualBinderResult:
     parsed_file_count: int
     opaque_file_count: int
     warnings: tuple[str, ...]
+    patient_full_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class _Contribution:
     sha256: str
     raw_text: str
-    fields: Mapping[str, str]
+    fields: ManualTextFields
     source: ManualBinderSource
     is_opaque: bool
     warning: str
@@ -98,6 +102,11 @@ def aggregate_from_manual_binder(request: ManualBinderRequest) -> ManualBinderRe
         request.confirm_patient_id_correction,
     )
     merged, conflicting_fields = _merge_fields(field_values)
+    conflicting_fields = tuple(sorted(set(conflicting_fields).union(
+        field for contribution in contributions for field in contribution.fields.conflicting_fields
+    )))
+    for field in set(conflicting_fields) & OPTIONAL_MANUAL_METADATA_FIELDS:
+        merged[field] = ""
     merged["patient_id"] = patient_id
     parsed_count = sum(not item.is_opaque for item in contributions)
     opaque_count = len(contributions) - parsed_count
@@ -120,6 +129,9 @@ def aggregate_from_manual_binder(request: ManualBinderRequest) -> ManualBinderRe
         intervention_description=merged.get("intervention_description", ""),
         signature_datetime=merged.get("signature_datetime", ""),
         raw_text=_merged_raw_text(contributions),
+        patient_full_name=merged.get("patient_full_name", ""),
+        service_date=merged.get("service_date", ""),
+        original_plan_reference=merged.get("original_plan_reference", ""),
         conflicting_fields=conflicting_fields,
         data_quality_warnings=warnings,
         parsed_source_count=parsed_count,
@@ -134,6 +146,7 @@ def aggregate_from_manual_binder(request: ManualBinderRequest) -> ManualBinderRe
         parsed_file_count=parsed_count,
         opaque_file_count=opaque_count,
         warnings=warnings,
+        patient_full_name=parsed.patient_full_name,
     )
 
 
@@ -158,7 +171,7 @@ def _contribution(item: ManualBinderFile) -> _Contribution:
     extracted = extract_manual_file(item.raw_bytes, item.filename)
     sha256 = hashlib.sha256(item.raw_bytes).hexdigest()
     fields = (
-        {}
+        ManualTextFields({})
         if extracted.is_opaque
         else fields_from_manual_text(extracted.raw_text, Path(item.filename).suffix.lower())
     )
@@ -182,10 +195,13 @@ def _field_values(contributions: tuple[_Contribution, ...]) -> dict[str, tuple[s
     collected: dict[str, list[str]] = {}
     for contribution in contributions:
         for key, raw_value in contribution.fields.items():
-            value = re.sub(r"\s+", " ", raw_value).strip()
+            value = raw_value.strip() if key in OPTIONAL_MANUAL_METADATA_FIELDS else re.sub(r"\s+", " ", raw_value).strip()
             if value:
                 collected.setdefault(key, []).append(value)
-    return {key: _unique_values(values) for key, values in collected.items()}
+    return {
+        key: unique_manual_metadata_values(key, values) if key in OPTIONAL_MANUAL_METADATA_FIELDS else _unique_values(values)
+        for key, values in collected.items()
+    }
 
 
 def _unique_values(values: list[str]) -> tuple[str, ...]:
@@ -222,7 +238,7 @@ def _merge_fields(field_values: Mapping[str, tuple[str, ...]]) -> tuple[dict[str
             continue
         values = field_values[key]
         if key in STRICT_SCALAR_FIELDS and len(values) > 1:
-            merged[key] = "Unknown"
+            merged[key] = "" if key in OPTIONAL_MANUAL_METADATA_FIELDS else "Unknown"
             conflicts.append(key)
         else:
             merged[key] = "\n\n".join(values)
@@ -242,6 +258,8 @@ def _warnings(
     warnings = {item.warning for item in contributions if item.warning}
     if conflicting_fields:
         warnings.add("Conflicting scalar evidence was preserved for manager review; no file-order value was selected.")
+        warnings.update(f"Conflicting manual metadata field: {field}." for field in conflicting_fields
+                        if field in OPTIONAL_MANUAL_METADATA_FIELDS)
     if correction_applied:
         warnings.add("MRN correction was explicitly confirmed for this binder.")
     return tuple(sorted(warnings))

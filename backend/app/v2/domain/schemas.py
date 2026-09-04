@@ -113,6 +113,8 @@ class TreatmentPlanContentSnapshot(V2Model):
     problems: tuple[TreatmentPlanProblem, ...]
     signatures: tuple[TreatmentPlanSignatureMetadata, ...]
     observed_fields: tuple[TreatmentPlanObservedField, ...]
+    service_date: str = ""
+    original_plan_reference: str = ""
 
 
 class TreatmentPlanCriterionResult(V2Model):

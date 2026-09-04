@@ -24,6 +24,7 @@ class PatientSourceSnapshotInput:
     source_system: str
     source_last_updated: str
     record: dict[str, object]
+    patient_record_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,9 +49,10 @@ def persist_patient_source_snapshots(
         patient_row = db.execute(
             text(
                 "SELECT id,source_patient_id FROM patients "
-                "WHERE canonical_client_id=:mrn AND source_system=:source_system ORDER BY id LIMIT 1"
+                "WHERE canonical_client_id=:mrn AND source_system=:source_system "
+                "AND (:patient_record_id IS NULL OR id=:patient_record_id) ORDER BY id LIMIT 1"
             ),
-            {"mrn": snapshot.mrn, "source_system": snapshot.source_system},
+            {"mrn": snapshot.mrn, "source_system": snapshot.source_system, "patient_record_id": snapshot.patient_record_id},
         ).first()
         if patient_row is None:
             continue
@@ -140,10 +142,31 @@ def latest_patient_source_snapshot(
     )
 
 
+def patient_source_snapshot_for_record(
+    db: Session,
+    patient_record_id: int,
+    source_system: str,
+) -> PatientSourceSnapshot | None:
+    """Decrypt only the exact source row after the caller has authorized that patient record."""
+    row = db.execute(
+        text(
+            "SELECT s.id,s.version_ordinal,p.canonical_client_id,s.source_system,s.snapshot_encrypted,"
+            "s.content_sha256,s.source_last_updated FROM patient_snapshot_versions s "
+            "JOIN patients p ON p.id=s.patient_id "
+            "WHERE p.id=:patient_record_id AND p.source_system=:source_system AND s.source_system=:source_system "
+            "AND (p.source_patient_id IS NULL OR p.source_patient_id='' OR p.source_patient_id=s.source_record_id) "
+            "ORDER BY s.version_ordinal DESC,s.id DESC LIMIT 1"
+        ),
+        {"patient_record_id": patient_record_id, "source_system": source_system},
+    ).first()
+    return _snapshot_from_row(row) if row is not None else None
+
+
 def patient_full_name(record: Mapping[str, object]) -> str:
     preferred = _first_text(
         record,
         (
+            "patient_full_name", "patient_name",
             "name.clientFullName", "name.ClientFullName", "name.client_full_name",
             "clientFullName", "ClientFullName", "client_full_name",
             "name.fullName", "fullName", "name.clientName", "clientName",

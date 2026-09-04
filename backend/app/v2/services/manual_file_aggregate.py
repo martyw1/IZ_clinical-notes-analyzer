@@ -128,6 +128,8 @@ def _content_snapshot(parsed: ParsedManualFields) -> TreatmentPlanContentSnapsho
         problems=(problem,),
         signatures=(_signature(parsed),),
         observed_fields=_observed_fields(parsed),
+        service_date=parsed.service_date,
+        original_plan_reference=parsed.original_plan_reference,
     )
 
 

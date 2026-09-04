@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import re
+from collections.abc import Iterable
 from io import StringIO
 from pathlib import Path
 from typing import Final, Mapping
@@ -12,13 +13,21 @@ from app.v2.services.manual_file_types import (
     ManualFileAggregateSource,
     ManualFileParseError,
     ManualFilePatientIdCorrectionRequired,
+    ManualTextFields,
+    OPTIONAL_MANUAL_METADATA_FIELDS,
     ParsedManualFields,
+    unique_manual_metadata_values,
 )
 
 MAX_UPLOAD_BYTES: Final = 512 * 1024
 FIELD_ALIASES: Final[Mapping[str, str]] = {
     "patient_id": "patient_id",
     "mrn": "patient_id",
+    "patient_name": "patient_full_name",
+    "patient_full_name": "patient_full_name",
+    "service_date": "service_date",
+    "servicedate": "service_date",
+    "original_plan_reference": "original_plan_reference",
     "current_level_of_care": "current_level_of_care",
     "loc": "current_level_of_care",
     "admission_date": "admission_date",
@@ -68,10 +77,11 @@ def aggregate_from_manual_file(
         source_format=extracted.source_format,
         parsed_fields_count=_non_empty_field_count(fields),
         patient_id_correction_applied=parsed.patient_id_correction_applied,
+        patient_full_name=parsed.patient_full_name,
     )
 
 
-def fields_from_manual_text(text: str, suffix: str) -> Mapping[str, str]:
+def fields_from_manual_text(text: str, suffix: str) -> ManualTextFields:
     match suffix:  # noqa: MATCH_OK - Parser suffixes are open strings with an explicit reject boundary.
         case ".txt" | ".md" | ".pdf" | ".xlsx" | ".docx" | ".rtf":
             return _key_value_lines(text)
@@ -83,24 +93,37 @@ def fields_from_manual_text(text: str, suffix: str) -> Mapping[str, str]:
             raise ManualFileParseError("The selected source does not contain deterministically extractable treatment-plan text.")
 
 
-def _key_value_lines(text: str) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in text.splitlines():
-        if ":" not in line:
-            continue
-        raw_key, raw_value = line.split(":", 1)
-        key = _canonical_key(raw_key)
-        if key:
-            fields[key] = raw_value.strip()
-    return fields
+def _key_value_lines(text: str) -> ManualTextFields:
+    pairs = (line.split(":", 1) for line in text.splitlines() if ":" in line)
+    return _labeled_fields((key, value) for key, value in pairs)
 
 
-def _delimited_row(text: str, delimiter: str) -> dict[str, str]:
+def _delimited_row(text: str, delimiter: str) -> ManualTextFields:
     reader = csv.DictReader(StringIO(text), delimiter=delimiter)
     first_row = next(reader, None)
     if first_row is None:
         raise ManualFileParseError("Manual treatment-plan table must include one header row and one data row.")
-    return {_canonical_key(key): value.strip() for key, value in first_row.items() if key and value}
+    return _labeled_fields((key, value) for key, value in first_row.items() if key and value)
+
+
+def _labeled_fields(pairs: Iterable[tuple[str, str]]) -> ManualTextFields:
+    fields: dict[str, str] = {}
+    metadata: dict[str, list[str]] = {}
+    conflicts: set[str] = set()
+    for raw_key, raw_value in pairs:
+        key = _canonical_key(raw_key)
+        value = raw_value.strip()
+        if not key:
+            continue
+        if key in OPTIONAL_MANUAL_METADATA_FIELDS:
+            metadata.setdefault(key, []).append(value)
+        fields[key] = value
+    for field, values in metadata.items():
+        unique = unique_manual_metadata_values(field, values)
+        if len(unique) > 1:
+            conflicts.add(field)
+        fields[field] = unique[0] if len(unique) == 1 else ""
+    return ManualTextFields(fields, tuple(sorted(conflicts)))
 
 
 def _canonical_key(raw_key: str) -> str:
@@ -109,7 +132,7 @@ def _canonical_key(raw_key: str) -> str:
 
 
 def _parsed_fields(
-    fields: Mapping[str, str],
+    fields: ManualTextFields,
     fallback_patient_id: str,
     raw_text: str,
     confirm_patient_id_correction: bool,
@@ -145,6 +168,11 @@ def _parsed_fields(
         intervention_description=fields.get("intervention_description", ""),
         signature_datetime=fields.get("signature_datetime", ""),
         raw_text=raw_text,
+        patient_full_name=fields.get("patient_full_name", ""),
+        service_date=fields.get("service_date", ""),
+        original_plan_reference=fields.get("original_plan_reference", ""),
+        conflicting_fields=fields.conflicting_fields,
+        data_quality_warnings=tuple(f"Conflicting manual metadata field: {field}." for field in fields.conflicting_fields),
     )
 
 
