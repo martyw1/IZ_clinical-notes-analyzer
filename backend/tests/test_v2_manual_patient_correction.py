@@ -1,22 +1,7 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from fastapi.testclient import TestClient
-
-
-def _fresh_client(tmp_path: Path, monkeypatch) -> TestClient:
-    monkeypatch.setenv("IZ_CNA_LOCAL_APP_DATA_DIR", str(tmp_path / "app-data"))
-    monkeypatch.setenv("IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "StrongLocalPass1")
-    monkeypatch.setenv("IZ_CNA_SECRET_KEY", "test-secret-key-for-v2-manual-correction")
-    monkeypatch.setenv("IZ_CNA_DATA_ENCRYPTION_KEY", "test-data-encryption-key-for-v2-manual-correction")
-    for module_name in tuple(sys.modules):
-        if module_name == "app" or module_name.startswith("app."):
-            sys.modules.pop(module_name)
-    from app.main import create_app
-
-    return TestClient(create_app())
+from v2_test_runtime import fresh_client as _fresh_client
 
 
 def _auth_headers(client: TestClient) -> dict[str, str]:

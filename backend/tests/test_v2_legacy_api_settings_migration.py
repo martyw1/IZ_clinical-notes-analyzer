@@ -9,6 +9,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
+from v2_test_runtime import configured_client, prepare_app
 
 DATA_KEY = "test-data-encryption-key-for-v2-manual-correction"
 SYNTHETIC_CLIENT_ID = "synthetic-legacy-client-id"
@@ -249,15 +250,17 @@ def test_every_untrusted_legacy_approval_edge_forces_all_sync_gates_false(
 def test_pending_approval_reconciles_once_corrected_contract_is_available(tmp_path: Path, monkeypatch) -> None:
     # Given: credentials were migrated while the built-in mapping compatibility check was pending.
     _create_legacy_settings(tmp_path)
-    client = _fresh_client(tmp_path, monkeypatch)
+    prepare_app(tmp_path, monkeypatch)
+    import app.v2.services.legacy_settings_migration as migration
+
+    monkeypatch.setattr(migration, "_builtin_contract_is_compatible", lambda _profile: False)
+    client = configured_client()
     _auth_headers(client)
     with sqlite3.connect(_v2_database_path(tmp_path)) as connection:
         state = connection.execute(
             "SELECT legacy_api_settings_migration_state FROM app_settings"
         ).fetchone()[0]
-    if state == "completed":
-        pytest.skip("The corrected built-in contract is already active")
-    import app.v2.services.legacy_settings_migration as migration
+    assert state == "credentials_migrated_approval_pending"
     from app.core.config import settings
     from app.v2.db import SessionLocal
 

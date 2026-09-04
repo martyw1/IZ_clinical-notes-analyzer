@@ -31,6 +31,7 @@ def _complete_contract() -> dict[str, object]:
 
 
 def test_operational_sync_automatically_records_encrypted_builtin_mapping(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
     from app.v2.services.alleva_sync import AllevaSyncResult
     import app.v2.services.jobs as jobs
 
@@ -39,7 +40,6 @@ def test_operational_sync_automatically_records_encrypted_builtin_mapping(tmp_pa
         "run_treatment_plan_sync",
         lambda *_args, **_kwargs: AllevaSyncResult(0, 0, 0, 0, 0, ()),
     )
-    client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     saved = client.patch(
         "/api/api-configuration",
