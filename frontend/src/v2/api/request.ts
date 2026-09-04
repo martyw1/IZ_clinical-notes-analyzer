@@ -1,10 +1,23 @@
-import { ApiRequestError, readRecordPayload, readString } from './json'
+import { ApiRequestError, readRecordPayload, safeApiErrorMessage } from './json'
 
 type RequestOptions = {
   readonly token?: string
   readonly method?: 'DELETE' | 'GET' | 'POST' | 'PUT' | 'PATCH'
   readonly body?: Record<string, unknown>
   readonly formBody?: FormData
+}
+
+type RequestSession = { readonly token: string; readonly onExpired: () => void }
+let activeSession: RequestSession | null = null
+
+export function beginRequestSession(token: string, onExpired: () => void): () => boolean {
+  const session = { token, onExpired }
+  activeSession = session
+  return () => activeSession === session
+}
+
+export function endRequestSession(): void {
+  activeSession = null
 }
 
 function headersFor(options: RequestOptions): Headers {
@@ -16,12 +29,22 @@ function headersFor(options: RequestOptions): Headers {
 }
 
 export async function request(path: string, options: RequestOptions = {}): Promise<Response> {
-  const response = await fetch(path, {
-    method: options.method ?? 'GET',
-    headers: headersFor(options),
-    body: options.formBody ?? (options.body ? JSON.stringify(options.body) : undefined),
-  })
+  const session = options.token && activeSession?.token === options.token ? activeSession : null
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: options.method ?? 'GET',
+      headers: headersFor(options),
+      body: options.formBody ?? (options.body ? JSON.stringify(options.body) : undefined),
+    })
+  } catch {
+    throw new ApiRequestError(0, 'Unable to reach the local service. Check that the app is running and try again.')
+  }
   if (response.ok) return response
+  if (response.status === 401 && session && activeSession === session) {
+    endRequestSession()
+    session.onExpired()
+  }
   let payload
   try {
     payload = await readRecordPayload(response)
@@ -32,5 +55,5 @@ export async function request(path: string, options: RequestOptions = {}): Promi
       'The local service returned an unexpected error. Restart the app and try again.',
     )
   }
-  throw new ApiRequestError(response.status, readString(payload, 'detail', 'The local API request failed.'))
+  throw new ApiRequestError(response.status, safeApiErrorMessage(response.status, payload))
 }

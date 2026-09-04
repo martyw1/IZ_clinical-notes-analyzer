@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ManualUploadPage } from './ManualUploadPage'
 
 describe('Manual Upload binder workflow', () => {
+  beforeEach(() => vi.stubGlobal('DataTransfer', class {
+    readonly files: File[] = []
+    readonly items = { add: (file: File) => { this.files.push(file) } }
+  }))
   afterEach(() => vi.unstubAllGlobals())
 
   it('uploads the selected binder files, shows warnings, and links to Patient Roster', async () => {

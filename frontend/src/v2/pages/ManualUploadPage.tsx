@@ -1,44 +1,20 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { importTreatmentPlanAggregate, importTreatmentPlanFile } from '../api/client'
 import { ApiRequestError, isRecord } from '../api/json'
+import { messageForUploadError, readFileText } from './manualUploadFile'
 
 type ManualUploadPageProps = {
   readonly token: string
   readonly onNavigate: (view: string) => void
 }
 
-class FileReadError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'FileReadError'
-  }
+export function ManualUploadPage(props: ManualUploadPageProps) {
+  return <ManualUploadForm key={props.token} {...props} />
 }
 
-function messageForError(error: unknown): string {
-  if (error instanceof ApiRequestError) return error.message
-  if (error instanceof FileReadError) return error.message
-  if (error instanceof SyntaxError) return 'The selected file is not valid JSON.'
-  if (error instanceof Error) return error.message
-  return 'Unable to import the selected treatment-plan aggregate.'
-}
-
-function readFileText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new FileReadError('Unable to read the selected file.'))
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result)
-        return
-      }
-      reject(new FileReadError('The selected file did not contain readable text.'))
-    }
-    reader.readAsText(file)
-  })
-}
-
-export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
+function ManualUploadForm({ token, onNavigate }: ManualUploadPageProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [jsonInputVersion, setJsonInputVersion] = useState(0)
   const [binderFiles, setBinderFiles] = useState<readonly File[]>([])
   const [binderInputVersion, setBinderInputVersion] = useState(0)
   const [rawPatientId, setRawPatientId] = useState('')
@@ -53,33 +29,51 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
   const [binderWarnings, setBinderWarnings] = useState<readonly string[]>([])
   const [binderCounts, setBinderCounts] = useState({ parsed: 0, opaque: 0 })
   const [binderImported, setBinderImported] = useState(false)
+  const binderInput = useRef<HTMLInputElement>(null)
+  const jsonOperation = useRef<object | null>(null)
+  const binderOperation = useRef<object | null>(null)
+
+  useEffect(() => () => {
+    jsonOperation.current = null
+    binderOperation.current = null
+  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (jsonOperation.current) return
     setJsonMessage('')
     setJsonError('')
     if (!selectedFile) {
       setJsonError('Choose a normalized V2 aggregate JSON file before importing.')
       return
     }
+    const operation = {}
+    jsonOperation.current = operation
     setIsImporting(true)
     try {
       const payload: unknown = JSON.parse(await readFileText(selectedFile))
+      if (jsonOperation.current !== operation) return
       if (!isRecord(payload)) {
         setJsonError('The selected JSON file must contain one treatment-plan aggregate object.')
         return
       }
       const result = await importTreatmentPlanAggregate(token, payload)
+      if (jsonOperation.current !== operation) return
       setJsonMessage(`Imported ${result.patientDisplayLabel} from ${result.sourceMode}.`)
+      clearJsonSelection()
     } catch (importError) {
-      setJsonError(messageForError(importError))
+      if (jsonOperation.current === operation) setJsonError(messageForUploadError(importError))
     } finally {
-      setIsImporting(false)
+      if (jsonOperation.current === operation) {
+        jsonOperation.current = null
+        setIsImporting(false)
+      }
     }
   }
 
   async function handleRawFileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (binderOperation.current) return
     setBinderMessage('')
     setBinderError('')
     setBinderWarnings([])
@@ -88,9 +82,12 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
       setBinderError('Choose one or more treatment-plan binder files before importing.')
       return
     }
+    const operation = {}
+    binderOperation.current = operation
     setIsParsing(true)
     try {
       const result = await importTreatmentPlanFile(token, binderFiles, rawPatientId, confirmPatientIdCorrection)
+      if (binderOperation.current !== operation) return
       const warningSummary = result.status === 'imported_with_warnings' ? ' Imported with warnings.' : ''
       const correctionSummary = result.patientIdCorrectionApplied ? ' Confirmed MRN correction applied.' : ''
       setBinderMessage(`Secure processing complete. Imported ${result.patientDisplayLabel} from ${result.fileCount} source ${result.fileCount === 1 ? 'file' : 'files'}.${warningSummary}${correctionSummary}`)
@@ -103,11 +100,22 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
       setConfirmPatientIdCorrection(false)
       setCorrectionRequired(false)
     } catch (importError) {
-      setBinderError(messageForError(importError))
-      setCorrectionRequired(importError instanceof ApiRequestError && importError.status === 409)
+      if (binderOperation.current === operation) {
+        setBinderError(messageForUploadError(importError))
+        setCorrectionRequired(importError instanceof ApiRequestError && importError.status === 409)
+      }
     } finally {
-      setIsParsing(false)
+      if (binderOperation.current === operation) {
+        binderOperation.current = null
+        setIsParsing(false)
+      }
     }
+  }
+
+  function clearJsonSelection() {
+    setSelectedFile(null)
+    setJsonInputVersion((current) => current + 1)
+    setJsonError('')
   }
 
   function selectBinderFiles(files: FileList | null) {
@@ -120,7 +128,11 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
   }
 
   function removeBinderFile(index: number) {
-    setBinderFiles((current) => current.filter((_file, candidateIndex) => candidateIndex !== index))
+    const remaining = binderFiles.filter((_file, candidateIndex) => candidateIndex !== index)
+    const selection = new DataTransfer()
+    remaining.forEach((file) => selection.items.add(file))
+    if (binderInput.current) binderInput.current.files = selection.files
+    setBinderFiles(remaining)
     setBinderError('')
   }
 
@@ -141,11 +153,14 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
           <label>
             Normalized V2 aggregate JSON
             <input
+              key={jsonInputVersion}
               type='file'
               accept='.json,application/json'
-              onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)}
+              onChange={(event) => { setSelectedFile(event.currentTarget.files?.[0] ?? null); setJsonError(''); setJsonMessage('') }}
+              disabled={isImporting}
             />
           </label>
+          {selectedFile && <button type='button' className='secondary-button' onClick={clearJsonSelection} disabled={isImporting}>Clear JSON selection</button>}
           {jsonError && <p role='alert' className='error-banner'>{jsonError}</p>}
           {jsonMessage && <p role='status'>{jsonMessage}</p>}
           <button type='submit' disabled={isImporting}>
@@ -156,6 +171,7 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
           <label>
             Treatment-plan binder files
             <input
+              ref={binderInput}
               key={binderInputVersion}
               type='file'
               multiple
@@ -182,6 +198,7 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
               value={rawPatientId}
               onChange={(event) => setRawPatientId(event.currentTarget.value)}
               placeholder='Required when the file omits MRN'
+              disabled={isParsing}
             />
           </label>
           <label className='checkbox-row'>
@@ -215,7 +232,7 @@ export function ManualUploadPage({ token, onNavigate }: ManualUploadPageProps) {
         <h2>Manual evidence import</h2>
         <div className='source-card-grid'>
           <article className='source-card'><h3>Parsed deterministically</h3><p>Text, Markdown, CSV, TSV, text-extractable PDF, XLSX, DOCX, and RTF sources are merged into one treatment-plan result. Conflicting evidence is reported instead of guessed.</p></article>
-          <article className='source-card'><h3>Stored safely</h3><p>Every selected source is encrypted under a generated identifier. Original filenames are cleared from the page after submission and are not persisted.</p></article>
+          <article className='source-card'><h3>Stored safely</h3><p>Every selected source is encrypted under a generated identifier. Original filenames are cleared from the page after a successful import and are not persisted.</p></article>
           <article className='source-card'><h3>Opaque sources</h3><p>Legacy DOC, ZIP, PNG, and JPEG files can be archived encrypted, but are counted as stored without parsing and produce explicit warnings.</p></article>
         </div>
       </section>

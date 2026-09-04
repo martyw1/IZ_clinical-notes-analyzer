@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiRequestError } from './api/json'
 import { getCurrentUser, getNavigation, login } from './api/client'
+import { beginRequestSession, endRequestSession } from './api/request'
 import type { PatientSelection, TreatmentPlanSelection, UserProfile } from './api/types'
 import { AppShell } from './components/AppShell'
 import { ApiHarnessPage } from './pages/ApiHarnessPage'
@@ -23,12 +24,19 @@ type Session = {
   readonly token: string
   readonly user: UserProfile
   readonly navigationItems: readonly string[]
+  readonly isCurrent: () => boolean
 }
 
 function messageForError(error: unknown): string {
   if (error instanceof ApiRequestError) return error.message
-  if (error instanceof Error) return error.message
   return 'The local V2 API did not respond as expected.'
+}
+
+async function readSession(token: string, isCurrent: () => boolean): Promise<Session | null> {
+  const user = await getCurrentUser(token)
+  if (!isCurrent()) return null
+  const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(token)
+  return isCurrent() ? { token, user, navigationItems: navigation.items, isCurrent } : null
 }
 
 function pageFor(
@@ -78,65 +86,84 @@ export function AppV2() {
   const [selectedPatient, setSelectedPatient] = useState<PatientSelection | null>(null)
   const [authError, setAuthError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
+  const authAttempt = useRef(0)
+  const signInPending = useRef(false)
 
   useEffect(() => {
     const storedToken = sessionStorage.getItem(tokenStorageKey)
-    if (!storedToken) return
-
-    let cancelled = false
-    async function restoreSession(token: string) {
-      try {
-        const user = await getCurrentUser(token)
-        const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(token)
-        if (!cancelled) setSession({ token, user, navigationItems: navigation.items })
-      } catch (error) {
-        sessionStorage.removeItem(tokenStorageKey)
-        if (!cancelled) setAuthError(messageForError(error))
-      }
+    if (storedToken) {
+      const isCurrent = beginRequestSession(storedToken, handleSessionExpired)
+      void readSession(storedToken, isCurrent).then((restored) => {
+        if (restored) setSession(restored)
+      }).catch((error: unknown) => {
+        if (isCurrent()) setAuthError(messageForError(error))
+      })
     }
-    void restoreSession(storedToken)
     return () => {
-      cancelled = true
+      authAttempt.current += 1
+      endRequestSession()
     }
   }, [])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (signInPending.current) return
+    const form = new FormData(event.currentTarget)
+    const username = String(form.get('username') ?? '').trim()
+    const password = String(form.get('password') ?? '')
+    if (!username || !password.trim()) {
+      setAuthError('Enter your username and password before signing in.')
+      return
+    }
+    const attempt = ++authAttempt.current
+    signInPending.current = true
+    endRequestSession()
     setAuthError('')
     setIsSigningIn(true)
-    const form = new FormData(event.currentTarget)
-    const username = String(form.get('username') ?? '')
-    const password = String(form.get('password') ?? '')
     try {
       const loginResult = await login(username, password)
-      const user = await getCurrentUser(loginResult.accessToken)
-      const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(loginResult.accessToken)
+      if (attempt !== authAttempt.current) return
+      const restored = await readSession(loginResult.accessToken, beginRequestSession(loginResult.accessToken, handleSessionExpired))
+      if (!restored) return
       sessionStorage.setItem(tokenStorageKey, loginResult.accessToken)
-      setActiveView(navigation.items[0] ?? 'Status Dashboard')
+      setActiveView(restored.navigationItems[0] ?? 'Status Dashboard')
       setSelectedTreatmentPlan(null)
       setSelectedPatient(null)
-      setSession({ token: loginResult.accessToken, user, navigationItems: navigation.items })
+      setSession(restored)
     } catch (error) {
-      sessionStorage.removeItem(tokenStorageKey)
-      setAuthError(messageForError(error))
+      if (attempt === authAttempt.current) setAuthError(messageForError(error))
     } finally {
-      setIsSigningIn(false)
+      if (attempt === authAttempt.current) {
+        signInPending.current = false
+        setIsSigningIn(false)
+      }
     }
   }
 
   function handleSignOut() {
+    authAttempt.current += 1
+    signInPending.current = false
+    endRequestSession()
     sessionStorage.removeItem(tokenStorageKey)
     setSession(null)
+    setIsSigningIn(false)
     setActiveView('Status Dashboard')
     setSelectedTreatmentPlan(null)
     setSelectedPatient(null)
   }
 
+  function handleSessionExpired() {
+    handleSignOut()
+    setAuthError('Your session has expired. Sign in again to continue.')
+  }
+
   async function refreshSessionUser(token: string) {
-    if (!session) return
-    const [user, navigation] = await Promise.all([getCurrentUser(token), getNavigation(token)])
+    if (!session?.isCurrent()) return
+    const isCurrent = beginRequestSession(token, handleSessionExpired)
     sessionStorage.setItem(tokenStorageKey, token)
-    setSession({ token, user, navigationItems: navigation.items })
+    setSession({ ...session, token, isCurrent })
+    const restored = await readSession(token, isCurrent)
+    if (restored) setSession(restored)
   }
 
   if (!session) {
