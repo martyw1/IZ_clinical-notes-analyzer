@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readPlanIdentity } from '../api/identity'
 import type { UserProfile } from '../api/types'
@@ -66,10 +66,17 @@ describe('Treatment Plan Detail selection', () => {
     expect(currentLoc).toHaveAttribute('aria-pressed', 'true')
     expect(admissionDate).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(admissionDate)
+    await act(async () => { fireEvent.click(admissionDate) })
 
     expect(currentLoc).toHaveAttribute('aria-pressed', 'false')
     expect(admissionDate).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { name: 'Confirm admission date' })).toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(currentLoc) })
+
+    expect(currentLoc).toHaveAttribute('aria-pressed', 'true')
+    expect(admissionDate).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: 'Confirm current LOC' })).toBeInTheDocument()
   })
 
   it('keeps Return for correction neutral until clicked and submits the selected criterion', async () => {
