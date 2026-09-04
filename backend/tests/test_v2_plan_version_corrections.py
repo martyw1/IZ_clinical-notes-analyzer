@@ -37,28 +37,27 @@ class CorrectionScenario:
 @pytest.fixture
 def scenario(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CorrectionScenario]:
     client = _fresh_client(tmp_path, monkeypatch)
-    with client:
-        admin = _auth_headers(client)
-        imported = client.post(
-            "/api/v2/manual-uploads/treatment-plan-aggregate", headers=admin,
-            json=_aggregate("C-T3-001").model_dump(mode="json"),
-        )
-        assert imported.status_code == 201
-        counselor = _counselor_headers(client, admin)
-        returned = client.post(
-            "/api/v2/treatment-plans/C-T3-001/manager-actions", headers=admin,
-            json={"criterion_id": "confirm_current_loc", "action": "return_for_correction",
-                  "comment": "Synthetic correction needed.", "assigned_counselor_username": "counselor"},
-        )
-        assert returned.status_code == 200, returned.text
-        from app.core.config import settings
+    admin = _auth_headers(client)
+    imported = client.post(
+        "/api/v2/manual-uploads/treatment-plan-aggregate", headers=admin,
+        json=_aggregate("C-T3-001").model_dump(mode="json"),
+    )
+    assert imported.status_code == 201
+    counselor = _counselor_headers(client, admin)
+    returned = client.post(
+        "/api/v2/treatment-plans/C-T3-001/manager-actions", headers=admin,
+        json={"criterion_id": "confirm_current_loc", "action": "return_for_correction",
+              "comment": "Synthetic correction needed.", "assigned_counselor_username": "counselor"},
+    )
+    assert returned.status_code == 200, returned.text
+    from app.core.config import settings
 
-        with sqlite3.connect(settings.sqlite_db_path) as connection:
-            work_item, version, patient = connection.execute(
-                "SELECT c.id,c.plan_version_id,v.patient_id FROM correction_work_items c "
-                "JOIN treatment_plan_versions v ON v.id=c.plan_version_id"
-            ).fetchone()
-        yield CorrectionScenario(client, admin, counselor, settings.sqlite_db_path, work_item, version, patient)
+    with sqlite3.connect(settings.sqlite_db_path) as connection:
+        work_item, version, patient = connection.execute(
+            "SELECT c.id,c.plan_version_id,v.patient_id FROM correction_work_items c "
+            "JOIN treatment_plan_versions v ON v.id=c.plan_version_id"
+        ).fetchone()
+    yield CorrectionScenario(client, admin, counselor, settings.sqlite_db_path, work_item, version, patient)
 
 
 def _import_newer_plan(scenario: CorrectionScenario) -> int:

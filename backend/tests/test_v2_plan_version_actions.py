@@ -27,8 +27,8 @@ class SyntheticAuditFailure(RuntimeError):
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    with _fresh_client(tmp_path, monkeypatch) as client:
-        yield IdentityRuntime(client, _auth_headers(client))
+    client = _fresh_client(tmp_path, monkeypatch)
+    yield IdentityRuntime(client, _auth_headers(client))
 
 
 def _import(runtime, plan_id="plan-a", marker="older", source="manual_upload"):

@@ -2,13 +2,55 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from inspect import unwrap
 from pathlib import Path
+from types import TracebackType
 
 import pytest
+from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import event
 
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
+from test_v2_manual_name_privacy import metadata_database
+from test_v2_plan_version_actions import runtime
+from test_v2_plan_version_corrections import scenario
+from v2_test_runtime import runtime_scope
+
+
+@pytest.mark.parametrize("fixture_body", [
+    pytest.param(unwrap(runtime), id="plan_actions"),
+    pytest.param(unwrap(metadata_database), id="manual_metadata"),
+    pytest.param(unwrap(scenario), id="plan_corrections"),
+])
+def test_real_fixture_enters_and_exits_client_lifespan_once(
+    tmp_path: Path, monkeypatch: MonkeyPatch,
+    fixture_body: Callable[[Path, MonkeyPatch], Iterator[object]],
+    record_testsuite_property: Callable[[str, str], None],
+) -> None:
+    events: list[str] = []
+    original_enter, original_exit = TestClient.__enter__, TestClient.__exit__
+
+    def enter(client: TestClient) -> TestClient:
+        events.append("enter")
+        return original_enter(client)
+
+    def exit_client(
+        client: TestClient, exception_type: type[BaseException] | None,
+        exception: BaseException | None, traceback: TracebackType | None,
+    ) -> None:
+        events.append("exit")
+        original_exit(client, exception_type, exception, traceback)
+
+    monkeypatch.setattr(TestClient, "__enter__", enter)
+    monkeypatch.setattr(TestClient, "__exit__", exit_client)
+    with runtime_scope(), contextmanager(fixture_body)(tmp_path, monkeypatch):
+        pass
+
+    record_testsuite_property(f"lifecycle.{fixture_body.__name__}", ",".join(events))
+    assert events == ["enter", "exit"]
 
 
 def test_bootstrap_changes_only_its_owned_process_environment(tmp_path: Path) -> None:

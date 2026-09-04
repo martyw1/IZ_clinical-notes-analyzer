@@ -19,27 +19,27 @@ CAPTURED_AT: Final = "2026-09-03T12:00:00+00:00"
 
 @pytest.fixture
 def metadata_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[Session, Path]]:
-    with fresh_client(tmp_path, monkeypatch):
-        from app.core.config import settings
-        from app.v2.db import SessionLocal
+    fresh_client(tmp_path, monkeypatch)
+    from app.core.config import settings
+    from app.v2.db import SessionLocal
 
-        with SessionLocal() as db:
-            facility_id = db.execute(text("SELECT id FROM facilities WHERE facility_key='r3-default'")).scalar_one()
+    with SessionLocal() as db:
+        facility_id = db.execute(text("SELECT id FROM facilities WHERE facility_key='r3-default'")).scalar_one()
+        db.execute(text(
+            "INSERT INTO facilities(id,facility_key,display_name,timezone,is_active,created_at,updated_at) "
+            "VALUES(902,'metadata-test-902','Synthetic facility','UTC',1,:now,:now)"
+        ), {"now": CAPTURED_AT})
+        for row_id, source, source_id, facility in (
+            (501, "manual_upload", "SOURCE-A", facility_id),
+            (502, "manual_upload", "SOURCE-B", 902),
+            (503, "alleva_rest_api", "SOURCE-A", facility_id),
+        ):
             db.execute(text(
-                "INSERT INTO facilities(id,facility_key,display_name,timezone,is_active,created_at,updated_at) "
-                "VALUES(902,'metadata-test-902','Synthetic facility','UTC',1,:now,:now)"
-            ), {"now": CAPTURED_AT})
-            for row_id, source, source_id, facility in (
-                (501, "manual_upload", "SOURCE-A", facility_id),
-                (502, "manual_upload", "SOURCE-B", 902),
-                (503, "alleva_rest_api", "SOURCE-A", facility_id),
-            ):
-                db.execute(text(
-                    "INSERT INTO patients(id,facility_id,canonical_client_id,source_system,source_patient_id,"
-                    "lifecycle_state,first_seen_at,last_seen_at) VALUES(:id,:facility,:mrn,:source,:source_id,'active',:now,:now)"
-                ), {"id": row_id, "facility": facility, "mrn": MRN, "source": source, "source_id": source_id, "now": CAPTURED_AT})
-            db.commit()
-            yield db, settings.local_app_data_dir
+                "INSERT INTO patients(id,facility_id,canonical_client_id,source_system,source_patient_id,"
+                "lifecycle_state,first_seen_at,last_seen_at) VALUES(:id,:facility,:mrn,:source,:source_id,'active',:now,:now)"
+            ), {"id": row_id, "facility": facility, "mrn": MRN, "source": source, "source_id": source_id, "now": CAPTURED_AT})
+        db.commit()
+        yield db, settings.local_app_data_dir
 
 
 def test_manual_name_is_encrypted_and_exact_row_roundtrip_is_private(metadata_database, caplog: pytest.LogCaptureFixture) -> None:
