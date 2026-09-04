@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
 import { SourceFileArchivePanel } from './SourceFileArchivePanel'
 import type { SourceDocument } from '../types/treatmentPlan'
+import { planIdentityKey } from '../types/identity'
+import type { PlanIdentity } from '../types/identity'
+import { useRequestGeneration } from '../hooks/useRequestGeneration'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
 
 type SourceFileArchiveControlsProps = {
-  readonly patientId: string
+  readonly identity: PlanIdentity
+  readonly isSessionCurrent?: SessionGuard
   readonly sourceDocuments: readonly SourceDocument[]
   readonly onDownloadSourceDocument: (sourceFileId: string) => Promise<void>
   readonly onDeleteSourceDocument: (sourceFileId: string) => Promise<void>
@@ -15,46 +20,34 @@ function messageForError(error: unknown): string {
 }
 
 export function SourceFileArchiveControls({
-  patientId,
+  identity,
+  isSessionCurrent,
   sourceDocuments,
   onDownloadSourceDocument,
-  onDeleteSourceDocument,
 }: SourceFileArchiveControlsProps) {
   const [archiveMessage, setArchiveMessage] = useState('')
   const [downloadingSourceFileId, setDownloadingSourceFileId] = useState('')
-  const [deletingSourceFileId, setDeletingSourceFileId] = useState('')
+  const identityKey = planIdentityKey(identity)
+  const capture = useRequestGeneration(identityKey, isSessionCurrent)
 
   useEffect(() => {
     setArchiveMessage('')
     setDownloadingSourceFileId('')
-    setDeletingSourceFileId('')
-  }, [patientId])
+  }, [identityKey])
 
   async function downloadSourceDocument(document: SourceDocument) {
+    if (downloadingSourceFileId) return
+    const isCurrent = capture()
+    if (!isCurrent()) return
     setDownloadingSourceFileId(document.sourceFileId)
     setArchiveMessage('')
     try {
       await onDownloadSourceDocument(document.sourceFileId)
-      setArchiveMessage('Source file download started.')
+      if (isCurrent()) setArchiveMessage('Source file download started.')
     } catch (error) {
-      setArchiveMessage(messageForError(error))
+      if (isCurrent()) setArchiveMessage(messageForError(error))
     } finally {
-      setDownloadingSourceFileId('')
-    }
-  }
-
-  async function deleteSourceDocument(document: SourceDocument) {
-    const confirmed = window.confirm('Delete archived source file? The treatment-plan aggregate remains, but the original uploaded source bytes will be removed.')
-    if (!confirmed) return
-    setDeletingSourceFileId(document.sourceFileId)
-    setArchiveMessage('')
-    try {
-      await onDeleteSourceDocument(document.sourceFileId)
-      setArchiveMessage('Archived source file deleted.')
-    } catch (error) {
-      setArchiveMessage(messageForError(error))
-    } finally {
-      setDeletingSourceFileId('')
+      if (isCurrent()) setDownloadingSourceFileId('')
     }
   }
 
@@ -63,9 +56,7 @@ export function SourceFileArchiveControls({
       sourceDocuments={sourceDocuments}
       archiveMessage={archiveMessage}
       downloadingSourceFileId={downloadingSourceFileId}
-      deletingSourceFileId={deletingSourceFileId}
       onDownloadSourceDocument={(document) => void downloadSourceDocument(document)}
-      onDeleteSourceDocument={(document) => void deleteSourceDocument(document)}
     />
   )
 }

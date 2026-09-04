@@ -5,9 +5,16 @@ import { ApiRequestError } from '../api/json'
 import type { ApiConfiguration, PatientRosterData, PatientSelection, TreatmentPlanSelection, UserProfile } from '../api/types'
 import { PatientRosterPullCard } from '../components/PatientRosterPullCard'
 import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
+import { SourceFilterControl } from '../components/SourceFilterControl'
+import { patientIdentityKey, sourceLabel } from '../types/identity'
+import type { SourceFilter } from '../types/identity'
+import { useRequestGeneration } from '../hooks/useRequestGeneration'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
+import { savedPlanLabel } from '../components/savedPlanLabel'
 
 type PatientRosterPageProps = {
   readonly token: string
+  readonly isSessionCurrent?: SessionGuard
   readonly user: UserProfile
   readonly onNavigate: (view: string) => void
   readonly onSelectPatient: (selection: PatientSelection) => void
@@ -20,31 +27,36 @@ function messageForError(error: unknown): string {
   return 'Unable to load the patient roster.'
 }
 
-export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, onSelectTreatmentPlan }: PatientRosterPageProps) {
+export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, onSelectTreatmentPlan, isSessionCurrent }: PatientRosterPageProps) {
   const [roster, setRoster] = useState<PatientRosterData | null>(null)
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [refreshNumber, setRefreshNumber] = useState(0)
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const sourceMode = sourceFilter === 'all' ? undefined : sourceFilter
+  const capture = useRequestGeneration(`${token}:${sourceFilter}:${refreshNumber}`, isSessionCurrent)
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return (roster?.items ?? []).filter((item) => (
-      !normalizedQuery
+      (!sourceMode || item.sourceMode === sourceMode)
+      && (!normalizedQuery
       || item.mrn.toLowerCase().includes(normalizedQuery)
       || item.fullName.toLowerCase().includes(normalizedQuery)
-      || item.treatmentPlans.some((plan) => plan.treatmentPlanId.toLowerCase().includes(normalizedQuery))
+      || item.treatmentPlans.some((plan) => [plan.treatmentPlanId, plan.originalPlanReference, plan.serviceDate].some((value) => value.toLowerCase().includes(normalizedQuery))))
     ))
-  }, [query, roster?.items])
+  }, [query, roster?.items, sourceMode])
 
   useEffect(() => {
-    let cancelled = false
-    void getPatientRoster(token).then((result) => {
-      if (!cancelled) setRoster(result)
+    const isCurrent = capture()
+    setRoster(null)
+    setError('')
+    void getPatientRoster(token, sourceMode).then((result) => {
+      if (isCurrent()) setRoster(result)
     }).catch((loadError: unknown) => {
-      if (!cancelled) setError(messageForError(loadError))
+      if (isCurrent()) setError(messageForError(loadError))
     })
-    return () => { cancelled = true }
-  }, [refreshNumber, token])
+  }, [refreshNumber, token, sourceMode, capture, isSessionCurrent])
 
   useEffect(() => {
     if (user.role !== 'admin') return
@@ -75,26 +87,27 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
           <div>
             <p className='eyebrow'>Patient Roster</p>
             <h2>Patient roster</h2>
-            <p className='muted'>MRN is the primary patient identifier. Open any patient record or select any available treatment plan.</p>
+            <p className='muted'>MRNs may occur in more than one source or facility. Open the exact patient record or saved treatment-plan version.</p>
           </div>
           <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh roster</button>
         </div>
         <label>
-          Search MRN, patient name, or treatment plan ID
+          Search MRN, patient name, plan ID, reference, or service date
           <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='MRN, patient name, or treatment plan ID' />
         </label>
+        <SourceFilterControl value={sourceFilter} onChange={setSourceFilter} />
         <table>
           <thead><tr role='row'><th id='patient-roster-mrn' role='columnheader'>MRN</th><th id='patient-roster-plans' role='columnheader'>Treatment Plans</th><th id='patient-roster-lifecycle' role='columnheader'>Lifecycle</th><th id='patient-roster-loc' role='columnheader'>LOC</th><th id='patient-roster-source' role='columnheader'>Source</th><th id='patient-roster-last-seen' role='columnheader'>Last seen</th></tr></thead>
           <tbody>
             {visibleItems.map((item) => (
-              <tr key={`${item.mrn}:${item.sourceMode}`} role='row'>
+              <tr key={patientIdentityKey(item)} data-patient-record-id={item.patientRecordId} data-source-mode={item.sourceMode} role='row'>
                 <td role='cell' data-label='MRN' headers='patient-roster-mrn'>
                   <span className='patient-identity'>
                     <button
                       type='button'
                       className='link-button patient-record-link'
                       aria-label={`Open patient record for ${item.fullName || 'Name unavailable'}, MRN ${item.mrn}`}
-                      onClick={() => onSelectPatient({ mrn: item.mrn, patientKey: item.mrn, sourceMode: item.sourceMode })}
+                      onClick={() => onSelectPatient({ mrn: item.mrn, patientKey: item.mrn, patientRecordId: item.patientRecordId, sourceMode: item.sourceMode })}
                     >
                       {item.mrn}
                     </button>
@@ -107,31 +120,33 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
                     defaultValue=''
                     disabled={item.treatmentPlans.length === 0}
                     onChange={(event) => {
-                      const plan = item.treatmentPlans.find((candidate) => candidate.treatmentPlanId === event.currentTarget.value)
+                      const plan = item.treatmentPlans.find((candidate) => String(candidate.planVersionId) === event.currentTarget.value)
                       if (!plan) return
                       onSelectTreatmentPlan({
                         mrn: item.mrn,
                         patientKey: item.mrn,
+                        patientRecordId: plan.patientRecordId,
+                        planVersionId: plan.planVersionId,
                         treatmentPlanId: plan.treatmentPlanId,
-                        sourceMode: item.sourceMode,
+                        sourceMode: plan.sourceMode,
                       })
                     }}
                   >
                     <option value=''>{item.treatmentPlans.length ? 'Select a treatment plan' : 'No treatment plans'}</option>
                     {item.treatmentPlans.map((plan) => (
-                      <option key={plan.treatmentPlanId} value={plan.treatmentPlanId}>
-                        {`(#${plan.treatmentPlanId}) ${formatDateTime24Hour(plan.lastUpdated)}`}
+                      <option key={plan.planVersionId} value={plan.planVersionId}>
+                        {savedPlanLabel(plan)}
                       </option>
                     ))}
                   </select>
                 </td>
                 <td role='cell' data-label='Lifecycle' headers='patient-roster-lifecycle'>{item.lifecycleState}</td>
                 <td role='cell' data-label='LOC' headers='patient-roster-loc'>{item.currentLevelOfCare}</td>
-                <td role='cell' data-label='Source' headers='patient-roster-source'>{item.sourceMode}</td>
+                <td role='cell' data-label='Source' headers='patient-roster-source'>{sourceLabel(item.sourceMode)} · record {item.patientRecordId}</td>
                 <td role='cell' data-label='Last seen' headers='patient-roster-last-seen'><time dateTime={item.lastSeenAt}>{formatDateTime24Hour(item.lastSeenAt)}</time></td>
               </tr>
             ))}
-            {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current search.</td></tr>}
+            {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current source and search filters.</td></tr>}
           </tbody>
         </table>
       </section>

@@ -2,12 +2,8 @@ import { expect, test } from 'vitest'
 import type { JsonRecord } from './json'
 import { mapTreatmentPlanAggregate, mapTreatmentPlanList } from './treatmentPlanMapper'
 
-test('maps a missing source mode to unavailable instead of synthetic fixture data', () => {
-  const payload: JsonRecord = {}
-
-  const aggregate = mapTreatmentPlanAggregate(payload)
-
-  expect(aggregate.sourceMode).toBe('unavailable')
+test('rejects a response without exact identity instead of fabricating a selection', () => {
+  expect(() => mapTreatmentPlanAggregate({})).toThrow('invalid patient-record identity')
 })
 
 test('preserves every backend queue status without collapsing distinct status segments', () => {
@@ -23,6 +19,7 @@ test('preserves every backend queue status without collapsing distinct status se
 
 test('preserves selected-plan lineage and clinical review history for document composition', () => {
   const aggregate = mapTreatmentPlanAggregate({
+    patient_record_id: 31, plan_version_id: 91, source_mode: 'alleva_rest_api', treatment_plan_id: 'plan-1',
     source_last_updated: '2026-02-04T17:30:00Z',
     treatment_plans: [
       { plan_id: 'plan-1', plan_date: '2026-01-03T09:00:00Z', last_modified: '2026-02-04T17:30:00Z' },

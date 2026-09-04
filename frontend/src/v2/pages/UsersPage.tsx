@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import { assignPatient, assignUserFacility, createUser, listFacilities, listUsers, resetUserPassword } from '../api/client'
+import { assignUserFacility, createUser, listFacilities, listUsers, resetUserPassword } from '../api/client'
 import { ApiRequestError } from '../api/json'
 import type { Facility, UserProfile } from '../api/types'
+import { PatientAssignmentForm } from '../components/PatientAssignmentForm'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
 
 type UsersPageProps = {
   readonly token: string
+  readonly isSessionCurrent?: SessionGuard
 }
 
 function messageForError(error: unknown): string {
@@ -13,7 +16,7 @@ function messageForError(error: unknown): string {
   return 'Unable to load users.'
 }
 
-export function UsersPage({ token }: UsersPageProps) {
+export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
   const [users, setUsers] = useState<readonly UserProfile[]>([])
   const [facilities, setFacilities] = useState<readonly Facility[]>([])
   const [error, setError] = useState('')
@@ -74,13 +77,6 @@ export function UsersPage({ token }: UsersPageProps) {
     setMessage('Facility assigned.')
   }
 
-  async function assignPatientToCounselor(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    await assignPatient(token, String(form.get('patientId') ?? ''), String(form.get('counselorUsername') ?? ''))
-    setMessage('Patient assigned to counselor.')
-  }
-
   return (
     <section className='panel table-panel users-page'>
       <p className='eyebrow'>Users</p>
@@ -102,14 +98,7 @@ export function UsersPage({ token }: UsersPageProps) {
           <button type='submit'>Assign facility</button>
         </div>
       </form>
-      <form onSubmit={assignPatientToCounselor} className='settings-form'>
-        <h3>Patient assignment</h3>
-        <label>MRN assignment<input name='patientId' /></label>
-        <label>Counselor assignment<select name='counselorUsername'>{users.filter((user) => user.role === 'counselor').map((user) => <option key={user.id} value={user.username}>{user.username}</option>)}</select></label>
-        <div className='button-row settings-actions'>
-          <button type='submit'>Assign patient</button>
-        </div>
-      </form>
+      <PatientAssignmentForm token={token} users={users} isSessionCurrent={isSessionCurrent} />
       <table className='users-table'>
         <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Password reset</th><th>Action</th></tr></thead>
         <tbody>

@@ -1,11 +1,13 @@
 import { readNumber, readRecordList, readRecordPayload, readString } from './json'
 import { request } from './request'
 import type { CorrectionQueueItem, CorrectionSubmissionPayload } from './types'
+import { planSelectionBody, readPlanIdentity } from './identity'
 
 export async function getCorrectionQueue(token: string): Promise<readonly CorrectionQueueItem[]> {
   const payload = await readRecordPayload(await request('/api/v2/corrections', { token }))
   return readRecordList(payload, 'items').map((item) => ({
-    workItemId: readNumber(item, 'work_item_id'), planVersionId: readNumber(item, 'plan_version_id'),
+    ...readPlanIdentity(item),
+    workItemId: readNumber(item, 'work_item_id'),
     patientId: readString(item, 'patient_id'), patientDisplayLabel: readString(item, 'patient_display_label'),
     criterionId: readString(item, 'criterion_id'), criterionTitle: readString(item, 'criterion_title'),
     returnComment: readString(item, 'return_comment'), returnedByUsername: readString(item, 'returned_by_username'),
@@ -14,7 +16,7 @@ export async function getCorrectionQueue(token: string): Promise<readonly Correc
 }
 
 export async function submitCorrection(token: string, patientId: string, payload: CorrectionSubmissionPayload): Promise<void> {
-  await request(`/api/v2/treatment-plans/${patientId}/correction-submissions`, {
-    token, method: 'POST', body: { work_item_id: payload.workItemId, criterion_id: payload.criterionId, comment: payload.comment },
+  await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}/correction-submissions`, {
+    token, method: 'POST', body: { ...planSelectionBody(payload), work_item_id: payload.workItemId, criterion_id: payload.criterionId, comment: payload.comment },
   })
 }

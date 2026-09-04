@@ -4,9 +4,14 @@ import { ApiRequestError } from '../api/json'
 import { composePatientRecordSections } from '../api/patientRecordMapper'
 import type { PatientRecordDetail, PatientSelection, TreatmentPlanSelection } from '../api/types'
 import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
+import { patientIdentityKey, sourceLabel } from '../types/identity'
+import { savedPlanLabel } from '../components/savedPlanLabel'
+import { useRequestGeneration } from '../hooks/useRequestGeneration'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
 
 type PatientRecordDetailPageProps = {
   readonly token: string
+  readonly isSessionCurrent?: SessionGuard
   readonly selection: PatientSelection | null
   readonly onNavigate: (view: string) => void
   readonly onSelectTreatmentPlan: (selection: TreatmentPlanSelection) => void
@@ -23,10 +28,13 @@ export function PatientRecordDetailPage({
   selection,
   onNavigate,
   onSelectTreatmentPlan,
+  isSessionCurrent,
 }: PatientRecordDetailPageProps) {
   const [detail, setDetail] = useState<PatientRecordDetail | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
+  const selectionKey = selection ? patientIdentityKey(selection) : ''
+  const capture = useRequestGeneration(`${token}:${selectionKey}`, isSessionCurrent)
   const sections = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     return composePatientRecordSections(detail?.patientRecord ?? {})
@@ -48,18 +56,18 @@ export function PatientRecordDetailPage({
       setError('')
       return
     }
-    let cancelled = false
+    const isCurrent = capture()
     setDetail(null)
+    setQuery('')
     setError('')
-    void getPatientRecordDetail(token, selection.patientKey, selection.sourceMode)
+    void getPatientRecordDetail(token, selection)
       .then((record) => {
-        if (!cancelled) setDetail(record)
+        if (isCurrent()) setDetail(record)
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(messageForError(loadError))
+        if (isCurrent()) setError(messageForError(loadError))
       })
-    return () => { cancelled = true }
-  }, [selection, token])
+  }, [selectionKey, token, capture, isSessionCurrent])
 
   if (!selection) {
     return (
@@ -75,7 +83,7 @@ export function PatientRecordDetailPage({
     )
   }
   if (error) return <section className='panel error-banner' role='alert'>{error}</section>
-  if (!detail) return <section className='panel muted'>Loading patient record...</section>
+  if (!detail || patientIdentityKey(detail) !== selectionKey) return <section className='panel muted'>Loading patient record...</section>
 
   const hasPatientSnapshot = Object.keys(detail.patientRecord).length > 0
 
@@ -88,7 +96,8 @@ export function PatientRecordDetailPage({
         <dl className='plan-fact-grid'>
           <div><dt>Level of care</dt><dd>{detail.currentLevelOfCare}</dd></div>
           <div><dt>Lifecycle</dt><dd>{detail.lifecycleState}</dd></div>
-          <div><dt>Source</dt><dd>{detail.sourceMode}</dd></div>
+          <div><dt>Source</dt><dd>{sourceLabel(detail.sourceMode)}</dd></div>
+          <div><dt>Patient record</dt><dd>{detail.patientRecordId}</dd></div>
           <div><dt>Source last updated</dt><dd>{formatDateTime24Hour(detail.sourceLastUpdated)}</dd></div>
           <div><dt>First synchronized</dt><dd>{formatDateTime24Hour(detail.firstSeenAt)}</dd></div>
           <div><dt>Last synchronized</dt><dd>{formatDateTime24Hour(detail.lastSeenAt)}</dd></div>
@@ -108,20 +117,22 @@ export function PatientRecordDetailPage({
           defaultValue=''
           disabled={detail.treatmentPlans.length === 0}
           onChange={(event) => {
-            const plan = detail.treatmentPlans.find((candidate) => candidate.treatmentPlanId === event.currentTarget.value)
+            const plan = detail.treatmentPlans.find((candidate) => String(candidate.planVersionId) === event.currentTarget.value)
             if (!plan) return
             onSelectTreatmentPlan({
               mrn: detail.mrn,
               patientKey: selection.patientKey,
+              patientRecordId: plan.patientRecordId,
+              planVersionId: plan.planVersionId,
               treatmentPlanId: plan.treatmentPlanId,
-              sourceMode: detail.sourceMode,
+              sourceMode: plan.sourceMode,
             })
           }}
         >
           <option value=''>{detail.treatmentPlans.length ? 'Select a treatment plan' : 'No treatment plans'}</option>
           {detail.treatmentPlans.map((plan) => (
-            <option key={plan.treatmentPlanId} value={plan.treatmentPlanId}>
-              {`(#${plan.treatmentPlanId}) ${formatDateTime24Hour(plan.lastUpdated)}`}
+            <option key={plan.planVersionId} value={plan.planVersionId}>
+              {savedPlanLabel(plan)}
             </option>
           ))}
         </select>

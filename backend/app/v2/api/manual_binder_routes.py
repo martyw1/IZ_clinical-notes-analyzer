@@ -5,10 +5,9 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.v2.api.deps import DbSession, ManagerUser
-from app.v2.authorization import patient_scope, require_patient_manager
+from app.v2.authorization import require_manual_patient_manager
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.manual_binder import (
     DEFAULT_BINDER_LIMITS,
@@ -25,6 +24,9 @@ from app.v2.services.manual_source_batch import (
     stage_manual_sources,
 )
 from app.v2.services.treatment_plan_store import save_treatment_plan_aggregate
+from app.v2.services.treatment_plan_types import PlanVersionIdentity
+from app.v2.services.manual_patient_snapshot import ManualPatientNameInput, persist_manual_patient_name
+from app.v2.models import utc_now
 
 router = APIRouter()
 
@@ -34,6 +36,9 @@ class ManualBinderImportOut(BaseModel):
 
     status: Literal["imported", "imported_with_warnings"]
     patient_id: str
+    patient_record_id: int
+    plan_version_id: int
+    treatment_plan_id: str
     patient_display_label: str
     source_mode: Literal["manual_upload"]
     criteria_total: int
@@ -60,6 +65,7 @@ class ManualBinderUploadInput:
 class ManualBinderAuditInput:
     parsed: ManualBinderResult
     source_ids: tuple[str, ...]
+    identity: PlanVersionIdentity
 
 
 def manual_binder_upload_input(
@@ -97,17 +103,18 @@ def import_treatment_plan_binder(
         raise HTTPException(status_code=409, detail=exc.detail) from exc
     except ManualFileParseError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    if patient_scope(db, parsed.aggregate.patient_id) is not None:
-        require_patient_manager(db, user, parsed.aggregate.patient_id)
+    require_manual_patient_manager(db, user, parsed.aggregate.patient_id)
     staged = stage_manual_sources(parsed.sources)
+    completed = False
     try:
         row = save_treatment_plan_aggregate(db, parsed.aggregate, user, commit=False)
+        identity = PlanVersionIdentity(row.plan_version_id, row.patient_record_id, row.patient_id, row.source_mode, row.plan_id)
+        persist_manual_patient_name(db, ManualPatientNameInput(row.patient_record_id, row.patient_id, parsed.patient_full_name), utc_now().isoformat())
         stored_sources = persist_staged_manual_sources(
             db,
             ManualSourcePersistenceRequest(
-                patient_id=row.patient_id,
-                plan_id=row.plan_id,
-                created_by_user_id=user.id,
+                identity=identity,
+                actor=user,
                 sources=staged,
             ),
         )
@@ -117,17 +124,22 @@ def import_treatment_plan_binder(
             ManualBinderAuditInput(
                 parsed=parsed,
                 source_ids=tuple(source.document_id for source in stored_sources),
+                identity=identity,
             ),
         )
         db.commit()
-    except (OSError, SQLAlchemyError):
-        db.rollback()
-        cleanup_staged_manual_sources(staged)
-        raise
+        completed = True
+    finally:
+        if not completed:
+            db.rollback()
+            cleanup_staged_manual_sources(staged)
     source_ids = tuple(source.document_id for source in stored_sources)
     return ManualBinderImportOut(
         status="imported_with_warnings" if parsed.warnings else "imported",
         patient_id=row.patient_id,
+        patient_record_id=row.patient_record_id,
+        plan_version_id=row.plan_version_id,
+        treatment_plan_id=row.plan_id,
         patient_display_label=row.patient_display_label,
         source_mode="manual_upload",
         criteria_total=len(parsed.aggregate.criteria_results),
@@ -166,10 +178,7 @@ def _read_binder_files(files: tuple[UploadFile, ...]) -> tuple[ManualBinderFile,
 def _record_binder_audit(db: DbSession, user: ManagerUser, payload: ManualBinderAuditInput) -> None:
     parsed = payload.parsed
     source_ids = payload.source_ids
-    scope = patient_scope(db, parsed.aggregate.patient_id)
-    if scope is None:
-        raise HTTPException(status_code=500, detail="Stored patient identity is unavailable")
-    audit_patient_id = str(scope.patient_row_id)
+    audit_patient_id = str(payload.identity.patient_record_id)
     for source_id, source in zip(source_ids, parsed.sources, strict=False):
         record_audit_event(
             db,

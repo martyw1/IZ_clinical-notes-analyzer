@@ -1,3 +1,5 @@
+import type { PlanIdentity } from './identity'
+
 export const statusOrder = [
   'Missing Data',
   'Conflicting Evidence',
@@ -12,7 +14,7 @@ export const statusOrder = [
   'Late',
 ] as const
 
-export type TreatmentPlanStatus = (typeof statusOrder)[number] | 'Approved' | 'Compliant' | 'Not Applicable'
+export type TreatmentPlanStatus = (typeof statusOrder)[number] | 'Approved' | 'Compliant' | 'Not Applicable' | 'Present'
 
 export type CriterionResult = {
   readonly criterionId: string
@@ -78,11 +80,12 @@ export type SourceDocument = {
   readonly downloadUrl: string
 }
 
-export type TreatmentPlanAggregate = {
+export type TreatmentPlanAggregate = PlanIdentity & {
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly patientFullName: string
-  readonly treatmentPlanId: string
+  readonly serviceDate: string
+  readonly originalPlanReference: string
   readonly lastUpdated: string
   readonly currentLevelOfCare: string
   readonly admissionDate: string
@@ -94,7 +97,6 @@ export type TreatmentPlanAggregate = {
   readonly evaluationDate: string
   readonly facilityTimezone: string
   readonly status: TreatmentPlanStatus
-  readonly sourceMode: 'manual_upload' | 'alleva_rest_api' | 'synthetic_fixture' | 'unavailable'
   readonly reasonForAdmission: string
   readonly initialClientNeeds: string
   readonly familyEducationNeeds: string
@@ -103,6 +105,7 @@ export type TreatmentPlanAggregate = {
   readonly dataQualityWarnings: readonly string[]
   readonly criteria: readonly CriterionResult[]
   readonly managerReviews: readonly ManagerReview[]
+  readonly unassignedManagerReviews: readonly ManagerReview[]
   readonly overrides: readonly ManagerReview[]
   readonly planHistory: readonly TreatmentPlanHistoryItem[]
   readonly treatmentReviews: readonly ClinicalTreatmentReview[]

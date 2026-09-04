@@ -32,6 +32,12 @@ class TreatmentPlanQueueItem:
     warnings: tuple[str, ...]
     plan_version_id: int = 0
     patient_record_id: int = 0
+    full_name: str = ""
+    original_plan_reference: str = ""
+    service_date: str = ""
+    version_ordinal: int = 0
+    last_updated: str = ""
+    is_current: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +57,11 @@ class StoredTreatmentPlan:
     warnings_json: str
     plan_version_id: int = 0
     patient_record_id: int = 0
+    full_name: str = ""
+    original_plan_reference: str = ""
+    service_date: str = ""
+    version_ordinal: int = 0
+    is_current: bool = True
 
 
 class TreatmentPlanSaveDisposition(StrEnum):
@@ -93,6 +104,8 @@ def stored_plan(
         warnings_json=json.dumps(list(aggregate.data_quality_warnings), sort_keys=True),
         plan_version_id=identity.plan_version_id if identity is not None else 0,
         patient_record_id=identity.patient_record_id if identity is not None else 0,
+        original_plan_reference=aggregate.content_snapshot.original_plan_reference,
+        service_date=aggregate.content_snapshot.service_date,
     )
 
 

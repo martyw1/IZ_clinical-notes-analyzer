@@ -4,9 +4,7 @@ type SourceFileArchivePanelProps = {
   readonly sourceDocuments: readonly SourceDocument[]
   readonly archiveMessage: string
   readonly downloadingSourceFileId: string
-  readonly deletingSourceFileId: string
   readonly onDownloadSourceDocument: (document: SourceDocument) => void
-  readonly onDeleteSourceDocument: (document: SourceDocument) => void
 }
 
 function sourceDocumentKey(document: SourceDocument): string {
@@ -17,9 +15,7 @@ export function SourceFileArchivePanel({
   sourceDocuments,
   archiveMessage,
   downloadingSourceFileId,
-  deletingSourceFileId,
   onDownloadSourceDocument,
-  onDeleteSourceDocument,
 }: SourceFileArchivePanelProps) {
   return (
     <section className='panel source-archive-panel'>
@@ -30,6 +26,7 @@ export function SourceFileArchivePanel({
         </div>
         <span>{sourceDocuments.length} archived</span>
       </div>
+      <p className='muted'>Source removal is unavailable while the archive retention policy is pending.</p>
       {sourceDocuments.length ? (
         <ul className='artifact-list source-document-list'>
           {sourceDocuments.map((document) => (
@@ -46,18 +43,16 @@ export function SourceFileArchivePanel({
                   className='secondary-button'
                   aria-label='Download archived source file'
                   onClick={() => onDownloadSourceDocument(document)}
-                  disabled={downloadingSourceFileId === document.sourceFileId || deletingSourceFileId === document.sourceFileId}
+                  disabled={Boolean(downloadingSourceFileId)}
                 >
                   Download source file
                 </button>
                 <button
                   type='button'
-                  className='danger-button'
-                  aria-label='Delete archived source file'
-                  onClick={() => onDeleteSourceDocument(document)}
-                  disabled={deletingSourceFileId === document.sourceFileId}
+                  className='secondary-button'
+                  disabled
                 >
-                  Delete source file
+                  Remove source file
                 </button>
               </div>
             </li>

@@ -26,7 +26,7 @@ function submitForm(label: string) {
 }
 
 function success() {
-  return new Response(JSON.stringify({ patient_display_label: 'MRN SYNTHETIC-006', source_mode: 'manual_upload', status: 'imported', file_count: 1, parsed_file_count: 1, warnings: [] }))
+  return new Response(JSON.stringify({ patient_record_id: 6003, plan_version_id: 6004, treatment_plan_id: 'synthetic-state-plan', patient_display_label: 'MRN SYNTHETIC-006', source_mode: 'manual_upload', status: 'imported', file_count: 1, parsed_file_count: 1, warnings: [] }))
 }
 
 describe('native upload selection state', () => {

@@ -11,6 +11,7 @@ from app.v2.migrations.app_settings_migration import verify_app_setting_extensio
 from app.v2.migrations.registry import APP_SETTINGS_MIGRATION_VERSION, MIGRATIONS
 from app.v2.migrations.schema_contract import verify_required_schema
 from app.v2.migrations.schema_core import APP_SETTING_NORMALIZED_EXTENSIONS, APP_SETTING_PROTOCOL_EXTENSIONS
+from app.v2.migrations.source_membership_verifier import record_source_membership_reconciliation, verify_source_memberships
 
 LEGACY_COLUMNS = {
     "users": {"id", "username", "role", "password_hash"},
@@ -105,6 +106,10 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
         }
     if expected_version >= 11:
         required_columns["manager_action_plan_links"] = {"action_id", "plan_version_id"}
+    if expected_version >= 12:
+        required_columns["source_document_plan_memberships"] = {
+            "source_document_id", "plan_version_id", "attached_at", "attached_by_user_id", "detached_at", "detached_by_user_id",
+        }
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",
@@ -116,6 +121,8 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
     verify_required_schema(connection, expected_version)
     if expected_version >= 2:
         _verify_reconciliation(connection)
+    if expected_version >= 12:
+        verify_source_memberships(connection)
 
 
 def count_sha256(category: str, count: int) -> str:
@@ -143,6 +150,8 @@ def reconciliation_counts_database(path: Path) -> tuple[ReconciliationCount, ...
 
 
 def record_reconciliation(connection: sqlite3.Connection, migration_version: int) -> None:
+    if migration_version == 12:
+        record_source_membership_reconciliation(connection)
     category = "legacy_manager_actions"
     source_count = int(connection.execute("SELECT COUNT(*) FROM treatment_plan_manager_actions").fetchone()[0])
     if migration_version >= 11:

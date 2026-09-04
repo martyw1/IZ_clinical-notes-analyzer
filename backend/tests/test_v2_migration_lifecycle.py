@@ -91,6 +91,8 @@ def test_shipped_snapshot_v9_upgrades_without_losing_encrypted_rows(tmp_path) ->
         connection.execute("DELETE FROM schema_migrations WHERE version>9")
         connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>9")
         connection.execute('DROP TABLE "manager_action_plan_links"')
+        connection.execute('DROP TRIGGER "source_document_membership_provenance"')
+        connection.execute('DROP TABLE "source_document_plan_memberships"')
         connection.execute(
             "UPDATE schema_migrations SET name=?,checksum_sha256=? WHERE version=9",
             (
@@ -200,6 +202,8 @@ def test_previous_version_dry_run_and_backup_restore_remain_verifiable(tmp_path)
         connection.execute("DELETE FROM schema_migrations WHERE version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
         connection.execute("DELETE FROM migration_reconciliation WHERE migration_version>=?", (APP_SETTINGS_MIGRATION_VERSION,))
         connection.execute('DROP TABLE "manager_action_plan_links"')
+        connection.execute('DROP TRIGGER "source_document_membership_provenance"')
+        connection.execute('DROP TABLE "source_document_plan_memberships"')
         connection.execute('DROP TABLE "patient_snapshot_versions"')
         for name, _definition in APP_SETTING_NORMALIZED_EXTENSIONS:
             connection.execute(f'ALTER TABLE app_settings DROP COLUMN "{name}"')

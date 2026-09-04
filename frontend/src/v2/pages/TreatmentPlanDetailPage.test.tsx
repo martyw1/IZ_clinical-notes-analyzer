@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readPlanIdentity } from '../api/identity'
 import type { UserProfile } from '../api/types'
 import { TreatmentPlanDetailPage } from './TreatmentPlanDetailPage'
 
@@ -26,7 +27,7 @@ describe('Treatment Plan Detail selection', () => {
       <TreatmentPlanDetailPage
         token='token'
         user={viewer}
-        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        selection={{ ...readPlanIdentity(detailPayload()), mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
       />,
     )
@@ -36,7 +37,7 @@ describe('Treatment Plan Detail selection', () => {
     expect(screen.getByText('MRN MRN-812')).toBeInTheDocument()
     expect(screen.getByText(/Structured clinical rationale from every mapped treatment-plan piece/i)).toBeInTheDocument()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v2/treatment-plans/MRN-812/plan-813?source_mode=alleva_rest_api',
+      '/api/v2/treatment-plans/MRN-812/plan-813?patient_record_id=31&source_mode=alleva_rest_api&plan_version_id=813&treatment_plan_id=plan-813',
       expect.objectContaining({ headers: expect.any(Headers) }),
     ))
   })
@@ -55,7 +56,7 @@ describe('Treatment Plan Detail selection', () => {
       <TreatmentPlanDetailPage
         token='token'
         user={viewer}
-        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        selection={{ ...readPlanIdentity(detailPayload()), mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
       />,
     )
@@ -78,7 +79,7 @@ describe('Treatment Plan Detail selection', () => {
       <TreatmentPlanDetailPage
         token='token'
         user={{ ...viewer, role: 'admin' }}
-        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
+        selection={{ ...readPlanIdentity(detailPayload()), mrn: 'MRN-812', patientKey: 'MRN-812', treatmentPlanId: 'plan-813', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
       />,
     )
@@ -99,6 +100,10 @@ describe('Treatment Plan Detail selection', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
+          patient_record_id: 31,
+          plan_version_id: 813,
+          source_mode: 'alleva_rest_api',
+          treatment_plan_id: 'plan-813',
           criterion_id: 'confirm_current_loc',
           action: 'return_for_correction',
           comment: 'Please correct the current LOC evidence.',
@@ -112,6 +117,9 @@ describe('Treatment Plan Detail selection', () => {
 
 function detailPayload() {
   return {
+    patient_record_id: 31,
+    plan_version_id: 813,
+    treatment_plan_id: 'plan-813',
     patient_id: 'MRN-812',
     patient_display_label: 'MRN MRN-812',
     patient_full_name: 'Alex Example',

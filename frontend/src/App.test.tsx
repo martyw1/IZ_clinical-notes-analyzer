@@ -13,11 +13,15 @@ async function signIn(password = 'StrongLocalPass1') {
 async function openTreatmentPlan(planId = 'plan-812') {
   fireEvent.click(screen.getByRole('button', { name: 'Patient Roster' }))
   const selector = await screen.findByRole('combobox', { name: 'Treatment plans for MRN 812' })
-  fireEvent.change(selector, { target: { value: planId } })
+  fireEvent.change(selector, { target: { value: planId === 'plan-813' ? '19' : '18' } })
 }
 
 beforeEach(() => {
   sessionStorage.clear()
+  vi.stubGlobal('DataTransfer', class {
+    readonly files: File[] = []
+    readonly items = { add: (file: File) => this.files.push(file) }
+  })
 })
 
 afterEach(() => {
@@ -108,7 +112,7 @@ describe('V2 active app shell', () => {
     setupFetch()
     await signIn()
 
-    expect(await screen.findByText('Active MRNs')).toBeInTheDocument()
+    expect(await screen.findByText('Patient records with plans')).toBeInTheDocument()
     expect(screen.getByText('Refreshed 2026-07-11 12:00 UTC')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/LOC-change update window is unvalidated/i)).toBeInTheDocument()
@@ -155,7 +159,7 @@ describe('V2 active app shell', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/v2/treatment-plans/812/source-documents/source-file-812/download',
+        '/api/v2/treatment-plans/812/source-documents/source-file-812/download?patient_record_id=12&source_mode=alleva_rest_api&plan_version_id=18&treatment_plan_id=plan-812',
         expect.objectContaining({ headers: expect.any(Headers) }),
       )
     })
@@ -165,25 +169,23 @@ describe('V2 active app shell', () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:source-download')
   })
 
-  it('deletes archived source files through an authenticated backend request and refreshes detail', async () => {
+  it('keeps archived source removal unavailable without confirmation or a backend write while retention is pending', async () => {
     const confirmDelete = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const fetchMock = setupFetch()
     await signIn()
 
     await openTreatmentPlan()
     expect(await screen.findByText('1 archived')).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: /delete archived source file/i }))
+    const removal = screen.getByRole('button', { name: 'Remove source file' })
+    expect(removal).toBeDisabled()
+    expect(removal).toHaveClass('secondary-button')
+    expect(screen.getByText('Source removal is unavailable while the archive retention policy is pending.')).toBeVisible()
+    fireEvent.click(removal)
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/v2/treatment-plans/812/source-documents/source-file-812',
-        expect.objectContaining({ method: 'DELETE', headers: expect.any(Headers) }),
-      )
-    })
-    expect(confirmDelete).toHaveBeenCalledWith(expect.stringContaining('Delete archived source file'))
-    await waitFor(() => expect(screen.getByText('0 archived')).toBeInTheDocument())
-    expect(await screen.findByRole('status')).toHaveTextContent('Archived source file deleted.')
-    expect(screen.getByText(/No archived source files are linked/i)).toBeInTheDocument()
+    expect(confirmDelete).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(0)
+    expect(screen.getByText('1 archived')).toBeInTheDocument()
+    expect(screen.queryByText('Archived source file deleted.')).not.toBeInTheDocument()
   })
 
   it('loads admin settings, API configuration, users, and audit logs from protected endpoints', async () => {
@@ -219,10 +221,10 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText('Facility'), { target: { value: '10' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign facility' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Facility assigned.')
-    fireEvent.change(screen.getByLabelText('MRN assignment'), { target: { value: '812' } })
+    fireEvent.change(screen.getByLabelText('Patient record assignment'), { target: { value: '12:alleva_rest_api' } })
     fireEvent.change(screen.getByLabelText('Counselor assignment'), { target: { value: 'counselor' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Patient assigned to counselor.')
+    expect(await screen.findByText('Patient assigned to counselor.')).toHaveAttribute('role', 'status')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
@@ -354,13 +356,13 @@ describe('V2 active app shell', () => {
     expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
     expect(screen.getByText('812')).toBeInTheDocument()
     expect(screen.getByText('Alex Example')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '(#plan-812) 2026-07-12 10:00 UTC' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'plan-812 · Alleva · record 12 · version 1 (#18) · 2026-07-12 10:00 UTC' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
     fireEvent.click(screen.getByRole('button', { name: 'Open patient record for Alex Example, MRN 812' }))
     expect(await screen.findByRole('heading', { name: 'Alex Example' })).toBeInTheDocument()
     expect(screen.getByText('alex.synthetic@example.invalid')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patients/812?source_mode=alleva_rest_api', expect.objectContaining({ headers: expect.any(Headers) }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/v2/patients/812?patient_record_id=12&source_mode=alleva_rest_api', expect.objectContaining({ headers: expect.any(Headers) }))
   })
 
   it('pulls every patient from the patient roster and refreshes the roster list', async () => {
@@ -389,7 +391,7 @@ describe('V2 active app shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Treatment Plan ID plan-813' })).toBeInTheDocument()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v2/treatment-plans/812/plan-813?source_mode=alleva_rest_api',
+      '/api/v2/treatment-plans/812/plan-813?patient_record_id=12&source_mode=alleva_rest_api&plan_version_id=19&treatment_plan_id=plan-813',
       expect.objectContaining({ headers: expect.any(Headers) }),
     ))
   })
@@ -459,7 +461,7 @@ describe('V2 active app shell', () => {
     fireEvent.change(screen.getByLabelText(/treatment-plan binder files/i), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: /upload and securely process binder/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/differs from the MRN detected/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent('MRN correction confirmation is required because the binder MRN differs from the override.')
     fireEvent.click(screen.getByLabelText(/confirm this MRN correction/i))
     fireEvent.click(screen.getByRole('button', { name: /retry with confirmed MRN/i }))
 

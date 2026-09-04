@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import type { ManagerActionPayload } from '../api/types'
 import { mapTreatmentPlanAggregate } from '../api/treatmentPlanMapper'
@@ -6,6 +6,7 @@ import { TreatmentPlanDetailViewer } from './TreatmentPlanDetailViewer'
 
 test('renders one readable selected-plan document with timeline, full clinical hierarchy, and review history', () => {
   const plan = mapTreatmentPlanAggregate({
+    patient_record_id: 31, plan_version_id: 91, treatment_plan_id: 'plan-complete',
     patient_id: 'MRN-SYNTHETIC-1',
     patient_display_label: 'MRN MRN-SYNTHETIC-1',
     source_mode: 'alleva_rest_api',
@@ -194,7 +195,9 @@ test('separates signature metadata and renders absent overview values as Not sup
   expect(screen.getByText('Explanation').tagName).toBe('DT')
   expect(screen.getByText('2026-08-01 12:34 UTC')).toBeInTheDocument()
   expect(screen.getByText('Signature bytes are not returned in the browser payload.')).toBeInTheDocument()
-  expect(screen.getAllByText('Not supplied')).toHaveLength(3)
+  const overview = screen.getByRole('heading', { name: 'Clinical overview' }).closest('section')
+  if (!overview) throw new Error('Clinical overview missing')
+  expect(within(overview).getAllByText('Not supplied')).toHaveLength(3)
 })
 
 test('explains coverage overlap and keeps Unable/Not Applicable statuses distinct', () => {
@@ -216,7 +219,7 @@ test('explains coverage overlap and keeps Unable/Not Applicable statuses distinc
   expect(screen.getByText('Result status: Unable to Evaluate')).toBeInTheDocument()
   expect(screen.getByText('Result status: Not Applicable')).toBeInTheDocument()
   expect(screen.getByText('Source support: observed evidence')).toBeInTheDocument()
-  expect(screen.getByText('Source support: missing evidence')).toBeInTheDocument()
+  expect(screen.getByText('Result status: Missing Data')).toBeInTheDocument()
 })
 
 function renderViewer(
@@ -253,7 +256,8 @@ function presentationPlan(overrides: Record<string, unknown> = {}) {
   return mapTreatmentPlanAggregate({
     patient_id: 'MRN-PRESENTATION',
     patient_display_label: 'MRN MRN-PRESENTATION',
-    source_mode: 'synthetic_fixture',
+    patient_record_id: 31, plan_version_id: 91, treatment_plan_id: 'plan-presentation',
+    source_mode: 'manual_upload',
     current_level_of_care: 'PHP',
     admission_date: 'Unknown',
     overall_status: 'Needs Review',

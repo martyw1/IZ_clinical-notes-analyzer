@@ -1,12 +1,14 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './office-manager/support/failurePrivacy.mjs'
 
 const treatmentPlanRosterItems = [
   {
+    patient_record_id: 12, plan_version_id: 912, source_mode: 'alleva_rest_api', version_ordinal: 1,
     treatment_plan_id: 'plan-912', mrn: '912', patient_key: '912', linked_to_mrn: true,
     full_name: 'Synthetic Patient', last_updated: '2026-07-12T12:00:00Z',
     previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
   },
   {
+    patient_record_id: 12, plan_version_id: 913, source_mode: 'alleva_rest_api', version_ordinal: 1,
     treatment_plan_id: 'plan-913', mrn: '912', patient_key: '912', linked_to_mrn: true,
     full_name: 'Synthetic Patient', last_updated: '2026-07-13T18:45:00Z',
     previous_treatment_plan_id: 'plan-912', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01',
@@ -15,6 +17,7 @@ const treatmentPlanRosterItems = [
 
 function planDetail(planId) {
   return {
+    patient_record_id: 12, plan_version_id: planId === 'plan-913' ? 913 : 912, treatment_plan_id: planId,
     patient_id: '912', patient_display_label: 'MRN 912', source_mode: 'alleva_rest_api',
     current_level_of_care: 'PHP', admission_date: '2026-06-01', date_clock_due_date: '2026-08-01',
     overall_status: planId === 'plan-913' ? 'Unable to Evaluate' : 'Needs Review',
@@ -54,6 +57,7 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
     if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster', 'API Testing Harness', 'Settings'], active_runtime: 'v2' })
+    if (path === '/api/v2/treatment-plans') return respond({ items: [] })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/settings') return respond({ organization_name: 'R3 Recovery Services', facility_timezone: 'America/New_York', treatment_plan_master_due_days: 30, treatment_plan_php_review_interval_days: 30, treatment_plan_iop_op_review_interval_days: 90, treatment_plan_loc_change_window_days: 7, treatment_plan_loc_change_window_validated: false })
     if (path === '/api/api-configuration') return respond({ vendor_name: 'Synthetic Alleva', api_base_url: 'http://synthetic.invalid', openapi_url: 'http://synthetic.invalid/openapi.json', token_url: 'http://synthetic.invalid/token', client_id_configured: true, api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: 'plans.read', api_version: '1.0', treatment_plan_start_date: '2020-01-01T00:00:00Z', pagination_limit: 100, sync_limit: 100, requests_per_minute: 600, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true, active_contract_version: null })
@@ -83,7 +87,7 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
       detailRequests.push(path)
       return respond(planDetail(path.endsWith('plan-913') ? 'plan-913' : 'plan-912'))
     }
-    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ mrn: '912', full_name: 'Synthetic Patient', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plans: [{ treatment_plan_id: 'plan-913', last_updated: '2026-07-13T18:45:00Z' }, { treatment_plan_id: 'plan-912', last_updated: '2026-07-12T12:00:00Z' }], first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
+    if (path === '/api/v2/patient-roster') return respond({ items: rosterSynced ? [{ patient_record_id: 12, mrn: '912', full_name: 'Synthetic Patient', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'PHP', treatment_plans: [{ patient_record_id: 12, plan_version_id: 913, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-913', last_updated: '2026-07-13T18:45:00Z' }, { patient_record_id: 12, plan_version_id: 912, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-912', last_updated: '2026-07-12T12:00:00Z' }], first_seen_at: '2026-07-13T10:00:00Z', last_seen_at: '2026-07-13T10:05:00Z', reconciled_at: '2026-07-13T10:05:00Z' }] : [] })
     return respond({ detail: `Unexpected ${method} ${path}` }, 404)
   })
 
@@ -116,11 +120,11 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
   await page.getByRole('button', { name: 'Pull patient roster' }).click()
   await expect(page.getByRole('status')).toContainText('Completed successfully. 1 record updated.')
   await expect(page.getByRole('heading', { name: 'Patient roster', exact: true })).toBeVisible()
-  await expect(page.getByRole('option', { name: '(#plan-913) 2026-07-13 18:45 UTC' })).toBeAttached()
-  await expect(page.getByRole('option', { name: '(#plan-912) 2026-07-12 12:00 UTC' })).toBeAttached()
+  await expect(page.getByRole('option', { name: 'plan-913 · Alleva · record 12 · version 1 (#913) · 2026-07-13 18:45 UTC' })).toBeAttached()
+  await expect(page.getByRole('option', { name: 'plan-912 · Alleva · record 12 · version 1 (#912) · 2026-07-12 12:00 UTC' })).toBeAttached()
   await expect(page.getByText('Synthetic Patient')).toBeVisible()
   await captureViewports(page, testInfo, 'patient-roster-after-pull')
-  await page.getByRole('combobox', { name: 'Treatment plans for MRN 912' }).selectOption('plan-912')
+  await page.getByRole('combobox', { name: 'Treatment plans for MRN 912' }).selectOption('912')
   await expect(page.getByRole('heading', { name: 'Treatment Plan ID plan-912' })).toBeVisible()
   expect(detailRequests).toContain('/api/v2/treatment-plans/912/plan-912')
 })
@@ -128,13 +132,13 @@ test('full treatment-plan pull populates both operational tabs and keeps multipl
 test('same MRN and plan IDs remain selectable by source identity', async ({ page }, testInfo) => {
   const sharedItems = [
     {
-      mrn: '843', source_mode: 'manual_upload', lifecycle_state: 'active', current_level_of_care: 'IOP',
-      treatment_plans: [{ treatment_plan_id: 'plan-shared', last_updated: '2026-07-13T09:00:00Z' }],
+      patient_record_id: 12, mrn: '843', source_mode: 'manual_upload', lifecycle_state: 'active', current_level_of_care: 'IOP',
+      treatment_plans: [{ patient_record_id: 12, plan_version_id: 912, source_mode: 'manual_upload', version_ordinal: 1, treatment_plan_id: 'plan-shared', last_updated: '2026-07-13T09:00:00Z' }],
       first_seen_at: '2026-07-13T08:00:00Z', last_seen_at: '2026-07-13T09:00:00Z', reconciled_at: '',
     },
     {
-      mrn: '843', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'RTC',
-      treatment_plans: [{ treatment_plan_id: 'plan-shared', last_updated: '2026-07-14T10:00:00Z' }],
+      patient_record_id: 13, mrn: '843', source_mode: 'alleva_rest_api', lifecycle_state: 'active', current_level_of_care: 'RTC',
+      treatment_plans: [{ patient_record_id: 13, plan_version_id: 913, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-shared', last_updated: '2026-07-14T10:00:00Z' }],
       first_seen_at: '2026-07-14T08:00:00Z', last_seen_at: '2026-07-14T10:00:00Z', reconciled_at: '',
     },
   ]
@@ -148,6 +152,7 @@ test('same MRN and plan IDs remain selectable by source identity', async ({ page
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
     if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster'], active_runtime: 'v2' })
+    if (path === '/api/v2/treatment-plans') return respond({ items: [] })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/api-configuration') return respond({ vendor_name: 'Synthetic Alleva', api_base_url: 'http://synthetic.invalid', openapi_url: 'http://synthetic.invalid/openapi.json', token_url: 'http://synthetic.invalid/token', client_id_configured: true, api_key_configured: true, client_secret_configured: true, token_auth_style: 'body', scopes: 'plans.read', api_version: '1.0', treatment_plan_start_date: '2020-01-01T00:00:00Z', pagination_limit: 100, sync_limit: 100, requests_per_minute: 600, timeout_seconds: 10, api_enabled: true, treatment_plan_sync_enabled: true, treatment_plan_sync_approved: true })
     if (path === '/api/v2/patient-roster') return respond({ items: sharedItems })
@@ -155,6 +160,7 @@ test('same MRN and plan IDs remain selectable by source identity', async ({ page
       detailRequests.push(route.request().url())
       const isAlleva = sourceMode === 'alleva_rest_api'
       return respond({
+        patient_record_id: isAlleva ? 13 : 12, plan_version_id: isAlleva ? 913 : 912, treatment_plan_id: 'plan-shared',
         patient_id: '843', patient_display_label: 'MRN 843', source_mode: sourceMode,
         current_level_of_care: isAlleva ? 'RTC' : 'IOP', admission_date: '2026-06-01',
         date_clock_due_date: isAlleva ? '2026-08-01' : '2026-07-01',
@@ -178,13 +184,13 @@ test('same MRN and plan IDs remain selectable by source identity', async ({ page
   await page.getByRole('button', { name: 'Patient Roster', exact: true }).click()
   const sharedSelectors = page.getByRole('combobox', { name: 'Treatment plans for MRN 843' })
   await expect(sharedSelectors).toHaveCount(2)
-  await sharedSelectors.nth(0).selectOption('plan-shared')
+  await sharedSelectors.nth(0).selectOption('912')
   await expect(page.getByText('Manual source detail.')).toBeVisible()
   await page.getByRole('button', { name: 'Patient Roster', exact: true }).click()
-  await page.getByRole('combobox', { name: 'Treatment plans for MRN 843' }).nth(1).selectOption('plan-shared')
+  await page.getByRole('combobox', { name: 'Treatment plans for MRN 843' }).nth(1).selectOption('913')
   await expect(page.getByText('Alleva source detail.')).toBeVisible()
-  expect(detailRequests.some((url) => url.endsWith('source_mode=manual_upload'))).toBe(true)
-  expect(detailRequests.some((url) => url.endsWith('source_mode=alleva_rest_api'))).toBe(true)
+  expect(detailRequests.some((url) => new URL(url).searchParams.get('source_mode') === 'manual_upload' && new URL(url).searchParams.get('plan_version_id') === '912' && new URL(url).searchParams.get('patient_record_id') === '12')).toBe(true)
+  expect(detailRequests.some((url) => new URL(url).searchParams.get('source_mode') === 'alleva_rest_api' && new URL(url).searchParams.get('plan_version_id') === '913' && new URL(url).searchParams.get('patient_record_id') === '13')).toBe(true)
   await captureViewports(page, testInfo, 'treatment-plans-source-collision')
 })
 
@@ -196,9 +202,11 @@ test('multi-file Manual Upload processes a binder and opens Patient Roster witho
     if (path === '/api/auth/login' && method === 'POST') return respond({ access_token: 'synthetic-ui-token', token_type: 'bearer', must_reset_password: false })
     if (path === '/api/users/me') return respond({ id: 1, username: 'e2eadmin', full_name: 'E2E Administrator', role: 'admin', is_active: true, is_locked: false, must_reset_password: false })
     if (path === '/api/v2/navigation') return respond({ items: ['Status Dashboard', 'Patient Roster', 'Manual Upload', 'Treatment Plan Detail', 'Treatment Plans Roster'], active_runtime: 'v2' })
+    if (path === '/api/v2/treatment-plans') return respond({ items: [] })
     if (path === '/api/v2/dashboard') return respond({ source_cards: [], metrics: {}, blockers: [] })
     if (path === '/api/v2/manual-uploads/treatment-plan-file' && method === 'POST') {
       return respond({
+        patient_record_id: 12, plan_version_id: 914, treatment_plan_id: 'manual-synthetic-demo',
         status: 'imported_with_warnings', patient_id: 'synthetic-demo', patient_display_label: 'MRN synthetic-demo',
         source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: true,
         source_file_id: 'source-1', source_file_ids: ['source-1', 'source-2'], patient_id_correction_applied: false,

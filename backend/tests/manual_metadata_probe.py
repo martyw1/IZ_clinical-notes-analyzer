@@ -99,7 +99,8 @@ def _run_probe(root: Path, probe_case: ProbeCase) -> ProbeReceipt:
             result = aggregate_from_manual_binder(ManualBinderRequest((ManualBinderFile(raw, "synthetic.txt"),), "", False))
             saved = save_treatment_plan_aggregate(db, result.aggregate, actor, source_patient_id="SOURCE-A")
             archived = archive_manual_source_file(db, ManualSourceFileArchiveInput(
-                raw, MRN, saved.plan_id, "text", "text/plain", str(actor.id)
+                raw, MRN, saved.plan_id, "text", "text/plain", str(actor.id),
+                plan_version_id=saved.plan_version_id, patient_record_id=saved.patient_record_id,
             ))
             identity_rows = db.execute(text("SELECT id,facility_id,canonical_client_id,source_system,source_patient_id FROM patients ORDER BY id")).all()
             created = persist_manual_patient_name(db, ManualPatientNameInput(scope.patient_row_id, MRN, result.patient_full_name), CAPTURED_AT)

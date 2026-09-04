@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.v2.api.manual_binder_routes import router as manual_binder_router
 from app.v2.api.deps import DbSession, ManagerUser
-from app.v2.authorization import PlanVersionSelector, require_manual_patient_manager, resolve_plan_version
+from app.v2.authorization import PlanVersionSelector, accessible_patient_record_ids, require_manual_patient_manager, resolve_plan_version
 from app.v2.domain.schemas import SourceMode, TreatmentPlanAggregate
 from app.v2.services.treatment_plan_types import PlanVersionIdentity
 from app.v2.services.audit_store import record_audit_event
@@ -17,6 +17,8 @@ from app.v2.services.manual_source_file_store import (
     download_manual_source_file,
 )
 from app.v2.services.treatment_plan_store import save_treatment_plan_aggregate
+from app.v2.services.manual_patient_snapshot import ManualPatientNameInput, persist_manual_patient_name
+from app.v2.models import utc_now
 
 router = APIRouter()
 router.include_router(manual_binder_router)
@@ -29,6 +31,7 @@ class ManualTreatmentPlanImportOut(BaseModel):
     patient_id: str
     plan_version_id: int
     patient_record_id: int
+    treatment_plan_id: str
     patient_display_label: str
     source_mode: Literal["manual_upload"]
     criteria_total: int
@@ -60,6 +63,7 @@ def import_treatment_plan_aggregate(
     if aggregate.source_mode != "manual_upload":
         raise HTTPException(status_code=400, detail="Manual aggregate uploads must use source_mode=manual_upload")
     row = save_treatment_plan_aggregate(db, aggregate, user, commit=False)
+    persist_manual_patient_name(db, ManualPatientNameInput(row.patient_record_id, row.patient_id, aggregate.patient_full_name), utc_now().isoformat())
     record_audit_event(
         db,
         action="manual_upload.treatment_plan_aggregate.imported",
@@ -73,6 +77,7 @@ def import_treatment_plan_aggregate(
         patient_id=row.patient_id,
         plan_version_id=row.plan_version_id,
         patient_record_id=row.patient_record_id,
+        treatment_plan_id=row.plan_id,
         patient_display_label=row.patient_display_label,
         source_mode="manual_upload",
         criteria_total=len(aggregate.criteria_results),
@@ -153,14 +158,21 @@ def download_treatment_plan_source_document(
 def _source_document_identity(
     db: DbSession, user: ManagerUser, source_file_id: str, selector: PlanVersionSelector,
 ) -> PlanVersionIdentity:
-    row = db.execute(text(
-        "SELECT d.patient_id,d.plan_version_id FROM source_documents d JOIN patients p ON p.id=d.patient_id "
-        "WHERE d.document_id=:document AND p.canonical_client_id=:patient AND d.source_kind='manual_treatment_plan_file'"
-    ), {"document": source_file_id, "patient": selector.patient_id}).first()
-    if row is None or row[1] is None:
+    rows = db.execute(text(
+        "SELECT d.patient_id,v.id FROM source_documents d JOIN source_document_plan_memberships m ON m.source_document_id=d.id "
+        "JOIN treatment_plan_versions v ON v.id=m.plan_version_id AND v.patient_id=d.patient_id "
+        "JOIN patients p ON p.id=d.patient_id WHERE d.document_id=:document AND p.canonical_client_id=:patient "
+        "AND d.source_kind='manual_treatment_plan_file' AND v.source_system='manual_upload' "
+        "AND p.source_system='manual_upload' AND m.detached_at IS NULL "
+        "AND (:version IS NULL OR v.id=:version) AND (:record IS NULL OR p.id=:record) "
+        "AND (:source IS NULL OR v.source_system=:source) ORDER BY v.id"
+    ), {"document": source_file_id, "patient": selector.patient_id, "version": selector.plan_version_id,
+        "record": selector.patient_record_id, "source": selector.source_mode}).all()
+    if not rows:
         raise HTTPException(status_code=404, detail="Source file not found")
-    if selector.plan_version_id is not None and selector.plan_version_id != int(row[1]):
-        raise HTTPException(status_code=404, detail="Source file not found")
-    if selector.patient_record_id is not None and selector.patient_record_id != int(row[0]):
-        raise HTTPException(status_code=404, detail="Source file not found")
+    allowed = accessible_patient_record_ids(db, user)
+    eligible = tuple(row for row in rows if int(row[0]) in allowed)
+    if len(eligible) > 1:
+        raise HTTPException(status_code=409, detail="Select a specific treatment-plan version.")
+    row = eligible[0] if eligible else rows[0]
     return resolve_plan_version(db, user, PlanVersionSelector(selector.patient_id, int(row[1]), int(row[0]), selector.source_mode), manager=True)

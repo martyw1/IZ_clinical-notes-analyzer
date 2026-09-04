@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readPatientRecordId } from '../api/identity'
 import type { TreatmentPlanSelection } from '../api/types'
 import { PatientRecordDetailPage } from './PatientRecordDetailPage'
 
@@ -13,7 +14,7 @@ describe('Patient Record Detail selection', () => {
     render(
       <PatientRecordDetailPage
         token='token'
-        selection={{ mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' }}
+        selection={{ patientRecordId: readPatientRecordId({ patient_record_id: 31 }), mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' }}
         onNavigate={vi.fn()}
         onSelectTreatmentPlan={onSelectTreatmentPlan}
       />,
@@ -32,18 +33,20 @@ describe('Patient Record Detail selection', () => {
     const selector = screen.getByRole('combobox', { name: 'Treatment plans for MRN MRN-812' })
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Select a treatment plan',
-      '(#plan-813) 2026-07-09 17:45 UTC',
-      '(#plan-812) 2026-07-01 08:15 UTC',
+      'plan-813 · Alleva · record 31 · version 2 (#813) · 2026-07-09 17:45 UTC',
+      'plan-812 · Alleva · record 31 · version 1 (#812) · 2026-07-01 08:15 UTC',
     ])
-    fireEvent.change(selector, { target: { value: 'plan-812' } })
+    fireEvent.change(selector, { target: { value: '812' } })
     expect(onSelectTreatmentPlan).toHaveBeenCalledWith({
       mrn: 'MRN-812',
       patientKey: 'MRN-812',
+      patientRecordId: 31,
+      planVersionId: 812,
       treatmentPlanId: 'plan-812',
       sourceMode: 'alleva_rest_api',
     })
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v2/patients/MRN-812?source_mode=alleva_rest_api',
+      '/api/v2/patients/MRN-812?patient_record_id=31&source_mode=alleva_rest_api',
       expect.objectContaining({ headers: expect.any(Headers) }),
     ))
   })
@@ -68,7 +71,7 @@ describe('Patient Record Detail selection', () => {
       .mockResolvedValueOnce(response({ ...patientDetailPayload(), patient_record: {} }))
       .mockResolvedValueOnce(response(patientDetailPayload()))
     vi.stubGlobal('fetch', fetchMock)
-    const selection = { mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' as const }
+    const selection = { patientRecordId: readPatientRecordId({ patient_record_id: 31 }), mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' as const }
 
     const emptySnapshot = render(
       <PatientRecordDetailPage
@@ -99,6 +102,7 @@ describe('Patient Record Detail selection', () => {
 
 function patientDetailPayload() {
   return {
+    patient_record_id: 31,
     mrn: 'MRN-812',
     full_name: 'Alex Example',
     source_mode: 'alleva_rest_api',
@@ -109,8 +113,8 @@ function patientDetailPayload() {
     last_seen_at: '2026-07-10T10:00:00Z',
     reconciled_at: '2026-07-10T10:00:00Z',
     treatment_plans: [
-      { treatment_plan_id: 'plan-813', last_updated: '2026-07-09T17:45:00Z' },
-      { treatment_plan_id: 'plan-812', last_updated: '2026-07-01T08:15:00Z' },
+      { patient_record_id: 31, plan_version_id: 813, source_mode: 'alleva_rest_api', version_ordinal: 2, treatment_plan_id: 'plan-813', last_updated: '2026-07-09T17:45:00Z' },
+      { patient_record_id: 31, plan_version_id: 812, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-812', last_updated: '2026-07-01T08:15:00Z' },
     ],
     patient_record: {
       id: 'source-812',

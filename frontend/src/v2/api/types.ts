@@ -1,5 +1,7 @@
 import type { TreatmentPlanStatus } from '../types/treatmentPlan'
 import type { JsonRecord } from './json'
+import type { PatientIdentity, PlanIdentity } from '../types/identity'
+export type { SourceMode, SourceFilter, PatientRecordId, PlanVersionId } from '../types/identity'
 
 export type UserRole = 'admin' | 'office_manager' | 'counselor' | 'viewer'
 export type AuthState = 'bootstrap_required' | 'password_change_required' | 'active' | 'locked_until'
@@ -49,17 +51,21 @@ export type DashboardData = {
   readonly blockers: readonly string[]
 }
 
-export type TreatmentPlanListItem = {
+export type TreatmentPlanListItem = PlanIdentity & {
   readonly patientId: string
   readonly patientDisplayLabel: string
-  readonly treatmentPlanId: string
+  readonly fullName: string
+  readonly originalPlanReference: string
+  readonly serviceDate: string
+  readonly versionOrdinal: number
+  readonly lastUpdated: string
+  readonly isCurrent: boolean
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly nextDueDate: string
   readonly status: TreatmentPlanStatus
   readonly missingCriteriaCount: number
   readonly returnedCriteriaCount: number
-  readonly sourceMode: string
   readonly warnings: readonly string[]
 }
 
@@ -68,15 +74,16 @@ export type TreatmentPlanListData = {
   readonly statusOrder: readonly TreatmentPlanStatus[]
 }
 
-export type PatientRosterTreatmentPlan = {
-  readonly treatmentPlanId: string
+export type PatientRosterTreatmentPlan = PlanIdentity & {
   readonly lastUpdated: string
+  readonly versionOrdinal: number
+  readonly originalPlanReference: string
+  readonly serviceDate: string
 }
 
-export type PatientRosterItem = {
+export type PatientRosterItem = PatientIdentity & {
   readonly mrn: string
   readonly fullName: string
-  readonly sourceMode: string
   readonly lifecycleState: string
   readonly currentLevelOfCare: string
   readonly treatmentPlans: readonly PatientRosterTreatmentPlan[]
@@ -89,13 +96,11 @@ export type PatientRosterData = {
   readonly items: readonly PatientRosterItem[]
 }
 
-export type TreatmentPlanRosterItem = {
-  readonly treatmentPlanId: string
+export type TreatmentPlanRosterItem = PatientRosterTreatmentPlan & {
   readonly mrn: string
   readonly patientKey: string
   readonly linkedToMrn: boolean
   readonly fullName: string
-  readonly lastUpdated: string
   readonly previousTreatmentPlanId: string
   readonly initialTreatmentPlanId: string
   readonly initialTreatmentPlanDate: string
@@ -105,23 +110,16 @@ export type TreatmentPlanRosterData = {
   readonly items: readonly TreatmentPlanRosterItem[]
 }
 
-export type TreatmentPlanSelection = {
+export type TreatmentPlanSelection = PatientSelection & PlanIdentity
+
+export type PatientSelection = PatientIdentity & {
   readonly mrn: string
   readonly patientKey: string
-  readonly treatmentPlanId: string
-  readonly sourceMode: string
 }
 
-export type PatientSelection = {
-  readonly mrn: string
-  readonly patientKey: string
-  readonly sourceMode: string
-}
-
-export type PatientRecordDetail = {
+export type PatientRecordDetail = PatientIdentity & {
   readonly mrn: string
   readonly fullName: string
-  readonly sourceMode: string
   readonly lifecycleState: string
   readonly currentLevelOfCare: string
   readonly sourceLastUpdated: string
@@ -132,7 +130,7 @@ export type PatientRecordDetail = {
   readonly patientRecord: JsonRecord
 }
 
-export type ManualTreatmentPlanImportResult = {
+export type ManualTreatmentPlanImportResult = PlanIdentity & {
   readonly status: 'imported' | 'imported_with_warnings'
   readonly patientId: string
   readonly patientDisplayLabel: string
@@ -225,9 +223,8 @@ export type ManagerActionPayload = {
   readonly overrideReason: string
 }
 
-export type CorrectionQueueItem = {
+export type CorrectionQueueItem = PlanIdentity & {
   readonly workItemId: number
-  readonly planVersionId: number
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly criterionId: string
@@ -237,7 +234,7 @@ export type CorrectionQueueItem = {
   readonly returnedAt: string
 }
 
-export type CorrectionSubmissionPayload = {
+export type CorrectionSubmissionPayload = PlanIdentity & {
   readonly workItemId: number
   readonly criterionId: string
   readonly comment: string

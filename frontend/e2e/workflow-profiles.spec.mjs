@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './office-manager/support/failurePrivacy.mjs'
 
 const bootstrapUsername = process.env.IZ_CNA_E2E_ADMIN_USERNAME ?? 'e2eadmin'
 const bootstrapPassword = process.env.IZ_CNA_E2E_ADMIN_PASSWORD ?? 'E2eActivePass456'
@@ -57,8 +57,9 @@ test('admin enables treatment-plan sync and sees a mocked synced treatment plan'
     if (path === '/api/v2/api-harness/jobs') return respond([])
     if (path === '/api/v2/alleva-sync/run' && method === 'POST') return respond({ job_id: 'sync-browser-912', status: 'queued', progress_percent: 0, records_written: 0, records_failed: 0, warnings_count: 0, artifacts: [] })
     if (path === '/api/v2/alleva-sync/jobs/sync-browser-912') { syncCompleted = true; return respond({ job_id: 'sync-browser-912', status: 'completed', progress_percent: 100, records_written: 1, records_failed: 0, warnings_count: 0, artifacts: [] }) }
-    if (path === '/api/v2/treatment-plan-roster') return respond({ items: syncCompleted ? [{ treatment_plan_id: 'plan-912', mrn: '912', patient_key: '912', linked_to_mrn: true, full_name: 'Synthetic Patient', last_updated: '2026-07-12T12:00:00Z', previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01' }] : [] })
-    if (path === '/api/v2/treatment-plans/912/plan-912') return respond({ patient_id: '912', patient_display_label: 'MRN 912', source_mode: 'alleva_rest_api', current_level_of_care: 'PHP', admission_date: '2026-06-01', date_clock_due_date: '2026-07-01', overall_status: 'Needs Review', content_sections_present: ['problems'], content_sections_missing: [], data_quality_warnings: [], criteria_results: [], manager_reviews: [], overrides: [], source_documents: [], evidence_coverage_summary: { criteria_total: 42, criteria_with_evidence: 1, criteria_missing_evidence: 0, runtime_only_fields: [] }, content_snapshot: { plan_id: 'plan-912', problems: [], signatures: [], observed_fields: [] } })
+    if (path === '/api/v2/treatment-plans') return respond({ items: [] })
+    if (path === '/api/v2/treatment-plan-roster') return respond({ items: syncCompleted ? [{ patient_record_id: 12, plan_version_id: 912, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-912', mrn: '912', patient_key: '912', linked_to_mrn: true, full_name: 'Synthetic Patient', last_updated: '2026-07-12T12:00:00Z', previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-912', initial_treatment_plan_date: '2026-06-01' }] : [] })
+    if (path === '/api/v2/treatment-plans/912/plan-912') return respond({ patient_record_id: 12, plan_version_id: 912, treatment_plan_id: 'plan-912', patient_id: '912', patient_display_label: 'MRN 912', source_mode: 'alleva_rest_api', current_level_of_care: 'PHP', admission_date: '2026-06-01', date_clock_due_date: '2026-07-01', overall_status: 'Needs Review', content_sections_present: ['problems'], content_sections_missing: [], data_quality_warnings: [], criteria_results: [], manager_reviews: [], overrides: [], source_documents: [], evidence_coverage_summary: { criteria_total: 42, criteria_with_evidence: 1, criteria_missing_evidence: 0, runtime_only_fields: [] }, content_snapshot: { plan_id: 'plan-912', problems: [], signatures: [], observed_fields: [] } })
     return respond({ detail: `Unexpected ${method} ${path}` })
   })
 

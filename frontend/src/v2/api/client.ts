@@ -6,17 +6,18 @@ import type {
   DashboardData,
   Facility,
   LoginResult,
-  ManualTreatmentPlanImportResult,
   ManagerActionPayload,
   NavigationResult,
-  PatientRecordDetail,
-  PatientRosterData,
-  TreatmentPlanRosterData,
+  PatientSelection,
+  TreatmentPlanSelection,
   UserProfile,
   UserRole,
 } from './types'
 import { mapTreatmentPlanAggregate, mapTreatmentPlanList } from './treatmentPlanMapper'
 import type { TreatmentPlanListData } from './types'
+import type { PatientRecordId, SourceMode } from '../types/identity'
+import { assertPlanIdentity, patientSelectionQuery, planSelectionBody, planSelectionQuery } from './identity'
+export { getPatientRoster, getPatientRecordDetail, getTreatmentPlanRoster } from './rosterClient'
 
 export async function login(username: string, password: string): Promise<LoginResult> {
   const payload = await readRecordPayload(
@@ -71,140 +72,46 @@ export async function getDashboard(token: string): Promise<DashboardData> {
   }
 }
 
-export async function getTreatmentPlans(token: string): Promise<TreatmentPlanListData> {
-  return mapTreatmentPlanList(await readRecordPayload(await request('/api/v2/treatment-plans', { token })))
+type TreatmentPlanListScope = {
+  readonly sourceMode?: SourceMode
+  readonly patientRecordId?: PatientRecordId
+  readonly treatmentPlanId?: string
+  readonly includeHistory?: boolean
 }
 
-export async function getPatientRoster(token: string): Promise<PatientRosterData> {
-  const payload = await readRecordPayload(await request('/api/v2/patient-roster', { token }))
-  return {
-    items: readRecordList(payload, 'items').map((item) => ({
-      mrn: readString(item, 'mrn'),
-      fullName: readString(item, 'full_name'),
-      sourceMode: readString(item, 'source_mode', 'unknown'),
-      lifecycleState: readString(item, 'lifecycle_state', 'unknown'),
-      currentLevelOfCare: readString(item, 'current_level_of_care', 'Unknown'),
-      treatmentPlans: readRecordList(item, 'treatment_plans').map((plan) => ({
-        treatmentPlanId: readString(plan, 'treatment_plan_id'),
-        lastUpdated: readString(plan, 'last_updated', 'Unknown'),
-      })),
-      firstSeenAt: readString(item, 'first_seen_at', 'Unknown'),
-      lastSeenAt: readString(item, 'last_seen_at', 'Unknown'),
-      reconciledAt: readString(item, 'reconciled_at', 'Not reconciled'),
-    })),
-  }
+export async function getTreatmentPlans(token: string, scope: TreatmentPlanListScope = {}): Promise<TreatmentPlanListData> {
+  const query = new URLSearchParams()
+  if (scope.sourceMode) query.set('source_mode', scope.sourceMode)
+  if (scope.patientRecordId) query.set('patient_record_id', String(scope.patientRecordId))
+  if (scope.treatmentPlanId) query.set('treatment_plan_id', scope.treatmentPlanId)
+  if (scope.includeHistory) query.set('include_history', 'true')
+  const suffix = query.size ? `?${query}` : ''
+  return mapTreatmentPlanList(await readRecordPayload(await request(`/api/v2/treatment-plans${suffix}`, { token })))
 }
+
 
 export async function getTreatmentPlanDetail(
   token: string,
-  patientId: string,
-  treatmentPlanId?: string,
-  sourceMode?: string,
+  selection: TreatmentPlanSelection,
 ): Promise<TreatmentPlanAggregate> {
-  const suffix = treatmentPlanId ? `/${encodeURIComponent(treatmentPlanId)}` : ''
-  const query = sourceMode ? `?source_mode=${encodeURIComponent(sourceMode)}` : ''
-  return mapTreatmentPlanAggregate(await readRecordPayload(
-    await request(`/api/v2/treatment-plans/${encodeURIComponent(patientId)}${suffix}${query}`, { token }),
+  const path = `/api/v2/treatment-plans/${encodeURIComponent(selection.patientKey)}/${encodeURIComponent(selection.treatmentPlanId)}`
+  const plan = mapTreatmentPlanAggregate(await readRecordPayload(
+    await request(`${path}?${planSelectionQuery(selection)}`, { token }),
   ))
+  assertPlanIdentity(plan, selection)
+  return plan
 }
 
-export async function getPatientRecordDetail(
-  token: string,
-  patientId: string,
-  sourceMode?: string,
-): Promise<PatientRecordDetail> {
-  const query = sourceMode ? `?source_mode=${encodeURIComponent(sourceMode)}` : ''
-  const record = await readRecordPayload(
-    await request(`/api/v2/patients/${encodeURIComponent(patientId)}${query}`, { token }),
-  )
-  return {
-    mrn: readString(record, 'mrn'),
-    fullName: readString(record, 'full_name'),
-    sourceMode: readString(record, 'source_mode', 'unknown'),
-    lifecycleState: readString(record, 'lifecycle_state', 'unknown'),
-    currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
-    sourceLastUpdated: readString(record, 'source_last_updated', 'Unknown'),
-    firstSeenAt: readString(record, 'first_seen_at', 'Unknown'),
-    lastSeenAt: readString(record, 'last_seen_at', 'Unknown'),
-    reconciledAt: readString(record, 'reconciled_at', 'Not reconciled'),
-    treatmentPlans: readRecordList(record, 'treatment_plans').map((plan) => ({
-      treatmentPlanId: readString(plan, 'treatment_plan_id'),
-      lastUpdated: readString(plan, 'last_updated', 'Unknown'),
-    })),
-    patientRecord: readRecord(record, 'patient_record'),
-  }
-}
 
-export async function importTreatmentPlanAggregate(token: string, payload: JsonRecord): Promise<ManualTreatmentPlanImportResult> {
-  const result = await readRecordPayload(
-    await request('/api/v2/manual-uploads/treatment-plan-aggregate', {
-      token,
-      method: 'POST',
-      body: payload,
-    }),
-  )
-  return mapManualTreatmentPlanImportResult(result)
-}
+export { importTreatmentPlanAggregate, importTreatmentPlanFile } from './manualImportClient'
 
-export async function importTreatmentPlanFile(
-  token: string,
-  files: readonly File[],
-  patientId: string,
-  confirmPatientIdCorrection: boolean,
-): Promise<ManualTreatmentPlanImportResult> {
-  const formData = new FormData()
-  formData.set('patient_id', patientId)
-  formData.set('confirm_patient_id_correction', String(confirmPatientIdCorrection))
-  for (const file of files) formData.append('file', file)
-  const result = await readRecordPayload(
-    await request('/api/v2/manual-uploads/treatment-plan-file', { token, method: 'POST', formBody: formData }),
-  )
-  return mapManualTreatmentPlanImportResult(result)
-}
 
-function mapManualTreatmentPlanImportResult(record: Record<string, unknown>): ManualTreatmentPlanImportResult {
-  const status = readString(record, 'status') === 'imported_with_warnings' ? 'imported_with_warnings' : 'imported'
-  return {
-    status,
-    patientId: readString(record, 'patient_id'),
-    patientDisplayLabel: readString(record, 'patient_display_label'),
-    sourceMode: 'manual_upload',
-    criteriaTotal: readNumber(record, 'criteria_total'),
-    encryptedAtRest: readBoolean(record, 'encrypted_at_rest'),
-    sourceFileArchived: readBoolean(record, 'source_file_archived'),
-    sourceFileId: readString(record, 'source_file_id'),
-    sourceFileIds: readStringList(record, 'source_file_ids'),
-    patientIdCorrectionApplied: readBoolean(record, 'patient_id_correction_applied'),
-    fileCount: readNumber(record, 'file_count', 1),
-    parsedFileCount: readNumber(record, 'parsed_file_count', 1),
-    opaqueFileCount: readNumber(record, 'opaque_file_count'),
-    overallStatus: readString(record, 'overall_status'),
-    warnings: readStringList(record, 'warnings'),
-  }
-}
-
-export async function getTreatmentPlanRoster(token: string): Promise<TreatmentPlanRosterData> {
-  const payload = await readRecordPayload(await request('/api/v2/treatment-plan-roster', { token }))
-  return {
-    items: readRecordList(payload, 'items').map((item) => ({
-      treatmentPlanId: readString(item, 'treatment_plan_id'),
-      mrn: readString(item, 'mrn'),
-      patientKey: readString(item, 'patient_key'),
-      linkedToMrn: readBoolean(item, 'linked_to_mrn'),
-      fullName: readString(item, 'full_name'),
-      lastUpdated: readString(item, 'last_updated', 'Unknown'),
-      previousTreatmentPlanId: readString(item, 'previous_treatment_plan_id'),
-      initialTreatmentPlanId: readString(item, 'initial_treatment_plan_id'),
-      initialTreatmentPlanDate: readString(item, 'initial_treatment_plan_date', 'Unknown'),
-    })),
-  }
-}
-
-export async function saveManagerAction(token: string, patientId: string, payload: ManagerActionPayload): Promise<void> {
-  await request(`/api/v2/treatment-plans/${patientId}/manager-actions`, {
+export async function saveManagerAction(token: string, selection: TreatmentPlanSelection, payload: ManagerActionPayload): Promise<void> {
+  await request(`/api/v2/treatment-plans/${encodeURIComponent(selection.patientKey)}/manager-actions`, {
     token,
     method: 'POST',
     body: {
+      ...planSelectionBody(selection),
       criterion_id: payload.criterionId,
       action: payload.action,
       comment: payload.comment,
@@ -232,8 +139,8 @@ export async function assignUserFacility(token: string, userId: number, facility
   await request(`/api/users/${userId}/facilities/${facilityId}`, { token, method: 'PUT' })
 }
 
-export async function assignPatient(token: string, patientId: string, counselorUsername: string): Promise<void> {
-  await request(`/api/patient-assignments/${encodeURIComponent(patientId)}/${encodeURIComponent(counselorUsername)}`, { token, method: 'PUT' })
+export async function assignPatient(token: string, selection: PatientSelection, counselorUsername: string): Promise<void> {
+  await request(`/api/patient-assignments/${encodeURIComponent(selection.patientKey)}/${encodeURIComponent(counselorUsername)}?${patientSelectionQuery(selection)}`, { token, method: 'PUT' })
 }
 
 

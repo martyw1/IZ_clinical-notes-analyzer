@@ -14,6 +14,7 @@ from app.v2.migrations.schema_patient_snapshots import (
     PATIENT_SOURCE_SNAPSHOT_STATEMENTS,
 )
 from app.v2.migrations.schema_sync import SYNC_STATEMENTS
+from app.v2.migrations.schema_source_memberships import SOURCE_MEMBERSHIP_STATEMENTS
 from app.v2.migrations.schema_sync_provenance import SYNC_PROVENANCE_STATEMENTS
 from app.v2.migrations.schema_workflow import WORKFLOW_STATEMENTS
 
@@ -63,6 +64,7 @@ MIGRATIONS = (
     _migration(9, "persist_encrypted_patient_source_snapshots", PATIENT_SOURCE_SNAPSHOT_STATEMENTS),
     _migration(10, "upgrade_encrypted_patient_snapshots_to_append_only_versions", PATIENT_SNAPSHOT_STATEMENTS),
     _migration(11, "bind_legacy_manager_actions_to_immutable_plan_versions", MANAGER_ACTION_PLAN_LINK_STATEMENTS),
+    _migration(12, "associate_manual_sources_with_exact_plan_versions", SOURCE_MEMBERSHIP_STATEMENTS),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

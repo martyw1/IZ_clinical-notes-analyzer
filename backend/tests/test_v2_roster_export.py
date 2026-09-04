@@ -175,6 +175,7 @@ def test_treatment_plan_list_export_is_manager_only_safe_and_audited(tmp_path, m
         "admission_date",
         "next_due_date",
         "source_mode",
+        "version_ordinal",
         "missing_criteria_count",
         "returned_criteria_count",
     ]

@@ -1,29 +1,22 @@
 from __future__ import annotations
 
-import csv
-from io import StringIO
 from pathlib import Path
-from typing import Final
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
-from app.core.config import BUILD_CHANNEL, settings
+from app.core.config import BUILD_CHANNEL
 from app.services.version import JsonValue, build_version_payload
-from app.v2.api.deps import AdminUser, CurrentUser, DbSession, ManagerUser
+from app.v2.api.deps import AdminUser, CurrentUser, DbSession
 from app.v2.api.models import (
     ApiHarnessJobStart,
     DashboardOut,
     ManagerActionInput,
-    PatientRecordDetailOut,
     ReadinessCheck,
     ReadinessOut,
-    TreatmentPlanListOut,
-    TreatmentPlanDetailOut,
 )
-from app.v2.domain.schemas import ApiHarnessJob, JobPreview, SourceMode
+from app.v2.domain.schemas import ApiHarnessJob, JobPreview
 from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
@@ -34,19 +27,14 @@ from app.v2.services.manager_action_store import (
     save_manager_action_record,
     save_returned_correction_work_item,
 )
-from app.v2.services.patient_record import patient_record_detail
 from app.v2.services.treatment_plan_store import (
-    TREATMENT_PLAN_STATUS_ORDER,
     list_treatment_plan_imports,
-    list_treatment_plan_queue_items,
     treatment_plan_aggregate_for_version,
 )
 from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
-from app.v2.authorization import accessible_patient_record_ids, require_patient_read, resolve_plan_version, PlanVersionSelector
-from app.v2.services.treatment_plan_types import PlanVersionIdentity
+from app.v2.authorization import accessible_patient_record_ids, resolve_plan_version, PlanVersionSelector
 
 router = APIRouter()
-SPREADSHEET_FORMULA_PREFIXES: Final = ("=", "+", "-", "@")
 
 
 @router.get("/api/health")
@@ -123,118 +111,13 @@ def _app_setting(db: DbSession) -> AppSetting:
     return db.execute(select(AppSetting)).scalar_one()
 
 
-@router.get("/api/v2/treatment-plans", response_model=TreatmentPlanListOut)
-def treatment_plans(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
-    items = list_treatment_plan_queue_items(db, accessible_patient_record_ids(db, user))
-    return {
-        "items": [
-            {
-                "patient_id": item.patient_id,
-                "plan_version_id": item.plan_version_id,
-                "patient_record_id": item.patient_record_id,
-                "patient_display_label": item.patient_display_label,
-                "treatment_plan_id": item.treatment_plan_id,
-                "current_level_of_care": item.current_level_of_care,
-                "admission_date": item.admission_date,
-                "next_due_date": item.next_due_date,
-                "status": item.status,
-                "missing_criteria_count": item.missing_criteria_count,
-                "returned_criteria_count": item.returned_criteria_count,
-                "source_mode": item.source_mode,
-                "content_completeness_summary": item.content_completeness_summary,
-                "warnings": item.warnings,
-            }
-            for item in items
-        ],
-        "status_order": TREATMENT_PLAN_STATUS_ORDER,
-    }
+from app.v2.api.plan_read_routes import router as plan_read_router
+from app.v2.api.plan_export_routes import router as plan_export_router
+
+router.include_router(plan_read_router)
+router.include_router(plan_export_router)
 
 
-@router.get("/api/v2/treatment-plans/{patient_id}")
-def treatment_plan_detail(
-    patient_id: str,
-    user: CurrentUser,
-    db: DbSession,
-    source_mode: SourceMode | None = None,
-    plan_version_id: int | None = None,
-    patient_record_id: int | None = None,
-    treatment_plan_id: str | None = None,
-) -> TreatmentPlanDetailOut:
-    identity = resolve_plan_version(db, user, PlanVersionSelector(patient_id, plan_version_id, patient_record_id, source_mode, treatment_plan_id))
-    return _selected_detail(db, user, identity)
-
-
-@router.get("/api/v2/treatment-plans/{patient_id}/{treatment_plan_id}")
-def treatment_plan_detail_by_id(
-    patient_id: str,
-    treatment_plan_id: str,
-    user: CurrentUser,
-    db: DbSession,
-    source_mode: SourceMode | None = None,
-    plan_version_id: int | None = None,
-    patient_record_id: int | None = None,
-) -> TreatmentPlanDetailOut:
-    identity = resolve_plan_version(db, user, PlanVersionSelector(patient_id, plan_version_id, patient_record_id, source_mode, treatment_plan_id))
-    return _selected_detail(db, user, identity)
-
-
-def _selected_detail(db: Session, user: CurrentUser, identity: PlanVersionIdentity) -> TreatmentPlanDetailOut:
-    from app.v2.services.manager_action_store import unassigned_manager_review_dicts_for_patient
-    aggregate = treatment_plan_aggregate_for_version(db, identity.plan_version_id)
-    if aggregate is None:
-        raise HTTPException(status_code=404, detail="Treatment plan not found")
-    same_mrn_records = frozenset(int(row[0]) for row in db.execute(text("SELECT id FROM patients WHERE canonical_client_id=:mrn"), {"mrn": identity.patient_id}).all())
-    unassigned = unassigned_manager_review_dicts_for_patient(db, identity.patient_id) if same_mrn_records <= accessible_patient_record_ids(db, user) else ()
-    record_audit_event(
-        db,
-        action="treatment_plan.detail.viewed",
-        actor=user,
-        target_entity_type="treatment_plan_version",
-        target_entity_id=str(identity.plan_version_id),
-        details={"patient_row_id": identity.patient_record_id},
-    )
-    return TreatmentPlanDetailOut(**aggregate.model_dump(), plan_version_id=identity.plan_version_id, patient_record_id=identity.patient_record_id, unassigned_manager_reviews=unassigned)
-
-
-@router.get("/api/v2/patients/{patient_id}", response_model=PatientRecordDetailOut)
-def patient_detail(
-    patient_id: str,
-    user: CurrentUser,
-    db: DbSession,
-    source_mode: SourceMode | None = None,
-) -> PatientRecordDetailOut:
-    require_patient_read(db, user, patient_id)
-    detail = patient_record_detail(db, patient_id, source_mode)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Patient record not found")
-    record_audit_event(
-        db,
-        action="patient_record.detail.viewed",
-        actor=user,
-        target_entity_type="patient",
-        target_entity_id=str(detail.patient_row_id),
-        details={
-            "snapshot_id": detail.snapshot_id,
-            "snapshot_version_count": detail.snapshot_version_count,
-            "field_count": detail.field_count,
-        },
-    )
-    return PatientRecordDetailOut(
-        mrn=detail.mrn,
-        full_name=detail.full_name,
-        source_mode=detail.source_mode,
-        lifecycle_state=detail.lifecycle_state,
-        current_level_of_care=detail.current_level_of_care,
-        source_last_updated=detail.source_last_updated,
-        first_seen_at=detail.first_seen_at,
-        last_seen_at=detail.last_seen_at,
-        reconciled_at=detail.reconciled_at,
-        treatment_plans=tuple(
-            {"treatment_plan_id": plan.treatment_plan_id, "last_updated": plan.last_updated}
-            for plan in detail.treatment_plans
-        ),
-        patient_record=detail.patient_record,
-    )
 
 
 @router.post("/api/v2/treatment-plans/{patient_id}/manager-actions")
@@ -352,95 +235,3 @@ def api_harness_job_preview(job_id: str, _: AdminUser) -> JobPreview:
         return job_service.preview(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
-
-
-@router.get("/api/v2/exports/{patient_id}/checklist-evidence.csv")
-def redacted_checklist_export(
-    patient_id: str, user: ManagerUser, db: DbSession,
-    plan_version_id: int | None = None, patient_record_id: int | None = None,
-    source_mode: SourceMode | None = None, treatment_plan_id: str | None = None,
-) -> Response:
-    identity = resolve_plan_version(db, user, PlanVersionSelector(patient_id, plan_version_id, patient_record_id, source_mode, treatment_plan_id), manager=True)
-    aggregate = treatment_plan_aggregate_for_version(db, identity.plan_version_id)
-    if aggregate is None:
-        raise HTTPException(status_code=404, detail="Treatment-plan aggregate not found")
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(("plan_version_id", "patient_record_id", "source_mode", "treatment_plan_id", "criterion", "status", "finding", "source_path", "safe_preview", "manager_action"))
-    for criterion in aggregate.criteria_results:
-        preview = criterion.evidence_refs[0].safe_preview if criterion.evidence_refs else ""
-        path = criterion.source_json_paths[0] if criterion.source_json_paths else ""
-        writer.writerow(tuple(_safe_csv_cell(value) for value in (str(identity.plan_version_id), str(identity.patient_record_id), identity.source_mode, identity.treatment_plan_id, criterion.criterion_id, criterion.result_status, criterion.finding_message, path, preview, "review")))
-    record_audit_event(
-        db,
-        action="export.redacted_checklist_evidence",
-        actor=user,
-        target_entity_type="treatment_plan_version",
-        target_entity_id=str(identity.plan_version_id),
-        details={"patient_row_id": identity.patient_record_id},
-    )
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv",
-        headers={"content-disposition": "attachment; filename=redacted-checklist-evidence.csv"},
-    )
-
-
-@router.get("/api/v2/exports/treatment-plans.csv")
-def treatment_plan_list_export(user: ManagerUser, db: DbSession) -> Response:
-    items = list_treatment_plan_queue_items(db, accessible_patient_record_ids(db, user))
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        (
-            "patient_id",
-            "plan_version_id",
-            "patient_record_id",
-            "treatment_plan_id",
-            "status",
-            "current_level_of_care",
-            "admission_date",
-            "next_due_date",
-            "source_mode",
-            "missing_criteria_count",
-            "returned_criteria_count",
-        )
-    )
-    for item in items:
-        writer.writerow(
-            tuple(
-                _safe_csv_cell(str(value))
-                for value in (
-                    item.patient_id,
-                    item.plan_version_id,
-                    item.patient_record_id,
-                    item.treatment_plan_id,
-                    item.status,
-                    item.current_level_of_care,
-                    item.admission_date,
-                    item.next_due_date,
-                    item.source_mode,
-                    item.missing_criteria_count,
-                    item.returned_criteria_count,
-                )
-            )
-        )
-    record_audit_event(
-        db,
-        action="export.treatment_plan_list",
-        actor=user,
-        target_entity_type="treatment_plan_queue",
-        target_entity_id="current",
-        details={"treatment_plan_count": len(items)},
-    )
-    return Response(
-        content=output.getvalue(),
-        media_type="text/csv",
-        headers={"content-disposition": "attachment; filename=treatment-plans.csv"},
-    )
-
-
-def _safe_csv_cell(value: str) -> str:
-    if value.startswith(SPREADSHEET_FORMULA_PREFIXES):
-        return f"'{value}"
-    return value

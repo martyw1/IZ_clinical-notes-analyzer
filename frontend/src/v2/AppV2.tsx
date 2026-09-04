@@ -43,6 +43,7 @@ function pageFor(
   view: string,
   token: string,
   user: UserProfile,
+  isSessionCurrent: () => boolean,
   onNavigate: (view: string) => void,
   selection: TreatmentPlanSelection | null,
   patientSelection: PatientSelection | null,
@@ -53,21 +54,21 @@ function pageFor(
     case 'Status Dashboard':
       return <DashboardPage token={token} />
     case 'Patient Roster':
-      return <PatientRosterPage token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <PatientRosterPage isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Patient Record Detail':
-      return <PatientRecordDetailPage token={token} selection={patientSelection} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <PatientRecordDetailPage isSessionCurrent={isSessionCurrent} token={token} selection={patientSelection} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Manual Upload':
       return <ManualUploadPage token={token} onNavigate={onNavigate} />
     case 'Treatment Plan Detail':
-      return <TreatmentPlanDetailPage token={token} user={user} selection={selection} onNavigate={onNavigate} />
+      return <TreatmentPlanDetailPage token={token} user={user} selection={selection} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} isSessionCurrent={isSessionCurrent} />
     case 'Treatment Plans Roster':
-      return <TreatmentPlansRosterPage token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <TreatmentPlansRosterPage isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Corrections':
-      return <CorrectionsPage token={token} />
+      return <CorrectionsPage token={token} isSessionCurrent={isSessionCurrent} />
     case 'API Testing Harness':
       return <ApiHarnessPage token={token} onNavigate={onNavigate} />
     case 'Users':
-      return <UsersPage token={token} />
+      return <UsersPage token={token} isSessionCurrent={isSessionCurrent} />
     case 'Forensic Logs':
       return <ForensicLogsPage token={token} />
     case 'Settings':
@@ -195,11 +196,13 @@ export function AppV2() {
   if (session.user.mustResetPassword) return <PasswordResetPage token={session.token} onChanged={refreshSessionUser} />
 
   function handleTreatmentPlanSelection(selection: TreatmentPlanSelection) {
+    if (!session?.isCurrent()) return
     setSelectedTreatmentPlan(selection)
     setActiveView('Treatment Plan Detail')
   }
 
   function handlePatientSelection(selection: PatientSelection) {
+    if (!session?.isCurrent()) return
     setSelectedPatient(selection)
     setActiveView('Patient Record Detail')
   }
@@ -216,6 +219,7 @@ export function AppV2() {
         activeView,
         session.token,
         session.user,
+        session.isCurrent,
         setActiveView,
         selectedTreatmentPlan,
         selectedPatient,

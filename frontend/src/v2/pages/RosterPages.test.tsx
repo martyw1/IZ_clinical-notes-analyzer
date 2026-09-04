@@ -25,14 +25,15 @@ describe('MRN-centered roster pages', () => {
     const onSelectPatient = vi.fn<(selection: PatientSelection) => void>()
     vi.stubGlobal('fetch', vi.fn(async () => response({
       items: [{
+        patient_record_id: 31,
         mrn: 'MRN-812',
         full_name: 'Alex Example',
         source_mode: 'alleva_rest_api',
         lifecycle_state: 'active',
         current_level_of_care: 'PHP',
         treatment_plans: [
-          { treatment_plan_id: 'plan-813', last_updated: '2026-07-09T17:45:00Z' },
-          { treatment_plan_id: 'plan-812', last_updated: '2026-07-01T08:15:00Z' },
+          { patient_record_id: 31, plan_version_id: 813, source_mode: 'alleva_rest_api', version_ordinal: 2, treatment_plan_id: 'plan-813', last_updated: '2026-07-09T17:45:00Z' },
+          { patient_record_id: 31, plan_version_id: 812, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-812', last_updated: '2026-07-01T08:15:00Z' },
         ],
         first_seen_at: '2026-06-01T10:00:00Z',
         last_seen_at: '2026-07-10T10:00:00Z',
@@ -56,21 +57,23 @@ describe('MRN-centered roster pages', () => {
     expect(within(table).getByText('Alex Example')).toBeInTheDocument()
     expect(within(table).getByText('Alex Example').parentElement).toHaveClass('patient-identity')
     fireEvent.click(within(table).getByRole('button', { name: 'Open patient record for Alex Example, MRN MRN-812' }))
-    expect(onSelectPatient).toHaveBeenCalledWith({ mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' })
+    expect(onSelectPatient).toHaveBeenCalledWith({ patientRecordId: 31, mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' })
     expect(within(table).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: 'Treatment Plan ID' })).not.toBeInTheDocument()
     const selector = within(table).getByRole('combobox', { name: 'Treatment plans for MRN MRN-812' })
     expect(within(selector).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Select a treatment plan',
-      '(#plan-813) 2026-07-09 17:45 UTC',
-      '(#plan-812) 2026-07-01 08:15 UTC',
+      'plan-813 · Alleva · record 31 · version 2 (#813) · 2026-07-09 17:45 UTC',
+      'plan-812 · Alleva · record 31 · version 1 (#812) · 2026-07-01 08:15 UTC',
     ])
 
-    fireEvent.change(selector, { target: { value: 'plan-812' } })
+    fireEvent.change(selector, { target: { value: '812' } })
 
     expect(onSelectTreatmentPlan).toHaveBeenCalledWith({
       mrn: 'MRN-812',
       patientKey: 'MRN-812',
+      patientRecordId: 31,
+      planVersionId: 812,
       treatmentPlanId: 'plan-812',
       sourceMode: 'alleva_rest_api',
     })
@@ -81,7 +84,10 @@ describe('MRN-centered roster pages', () => {
     const onSelectPatient = vi.fn<(selection: PatientSelection) => void>()
     vi.stubGlobal('fetch', vi.fn(async () => response({
       items: [{
+        plan_version_id: 813,
+        source_mode: 'alleva_rest_api',
         treatment_plan_id: 'plan-813',
+        patient_record_id: 31,
         mrn: 'MRN-812',
         patient_key: 'MRN-812',
         linked_to_mrn: true,
@@ -108,7 +114,7 @@ describe('MRN-centered roster pages', () => {
     expect(within(table).getByText('Alex Example')).toBeInTheDocument()
     expect(within(table).getByText('Alex Example').parentElement).toHaveClass('patient-identity')
     fireEvent.click(within(table).getByRole('button', { name: 'Open patient record for Alex Example, MRN MRN-812' }))
-    expect(onSelectPatient).toHaveBeenCalledWith({ mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' })
+    expect(onSelectPatient).toHaveBeenCalledWith({ patientRecordId: 31, mrn: 'MRN-812', patientKey: 'MRN-812', sourceMode: 'alleva_rest_api' })
     expect(within(table).getByText('plan-812')).toBeInTheDocument()
     expect(within(table).getByText('(#plan-800) 2026-01-03')).toBeInTheDocument()
     fireEvent.click(within(table).getByRole('button', { name: 'Open treatment plan plan-813 for MRN MRN-812' }))
@@ -116,6 +122,8 @@ describe('MRN-centered roster pages', () => {
     expect(onSelectTreatmentPlan).toHaveBeenCalledWith({
       mrn: 'MRN-812',
       patientKey: 'MRN-812',
+      patientRecordId: 31,
+      planVersionId: 813,
       treatmentPlanId: 'plan-813',
       sourceMode: 'alleva_rest_api',
     })

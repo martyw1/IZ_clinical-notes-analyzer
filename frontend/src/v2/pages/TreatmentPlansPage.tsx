@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
+import { getTreatmentPlans } from '../api/client'
 import { getApiConfiguration } from '../api/settingsClient'
-import { deleteTreatmentPlanSourceDocument, downloadChecklistEvidenceExport, downloadTreatmentPlanListExport, downloadTreatmentPlanSourceDocument } from '../api/downloads'
+import { downloadTreatmentPlanListExport } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
-import type { ApiConfiguration, ManagerActionPayload, TreatmentPlanListData, TreatmentPlanListItem, UserProfile } from '../api/types'
+import type { ApiConfiguration, TreatmentPlanListData, TreatmentPlanListItem, TreatmentPlanSelection, UserProfile } from '../api/types'
 import { ApprovedQueueImportCard } from '../components/ApprovedQueueImportCard'
-import { TreatmentPlanDetailViewer } from '../components/TreatmentPlanDetailViewer'
+import { TreatmentPlanDetailPage } from './TreatmentPlanDetailPage'
+import { SourceFilterControl } from '../components/SourceFilterControl'
+import { planIdentityKey, sourceLabel } from '../types/identity'
+import type { SourceFilter } from '../types/identity'
+import { useRequestGeneration } from '../hooks/useRequestGeneration'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
+import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
 import { StatusBadge } from '../components/StatusBadge'
-import type { TreatmentPlanAggregate, TreatmentPlanStatus } from '../types/treatmentPlan'
+import type { TreatmentPlanStatus } from '../types/treatmentPlan'
 import { statusOrder as defaultStatusOrder } from '../types/treatmentPlan'
 
 type TreatmentPlansPageProps = {
   readonly token: string
+  readonly isSessionCurrent?: SessionGuard
   readonly user: UserProfile
   readonly onNavigate: (view: string) => void
 }
@@ -26,63 +33,50 @@ function countStatus(items: readonly TreatmentPlanListItem[], status: TreatmentP
   return items.filter((item) => item.status === status).length
 }
 
-export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPageProps) {
+export function TreatmentPlansPage({ token, user, onNavigate, isSessionCurrent }: TreatmentPlansPageProps) {
   const [listData, setListData] = useState<TreatmentPlanListData | null>(null)
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | null>(null)
   const [apiConfigError, setApiConfigError] = useState('')
-  const [selectedPlanKey, setSelectedPlanKey] = useState('')
-  const [selectedPlan, setSelectedPlan] = useState<TreatmentPlanAggregate | null>(null)
+  const [selection, setSelection] = useState<TreatmentPlanSelection | null>(null)
   const [error, setError] = useState('')
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<TreatmentPlanStatus | null>(null)
   const [refreshNumber, setRefreshNumber] = useState(0)
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [isExporting, setIsExporting] = useState(false)
+  const sourceMode = sourceFilter === 'all' ? undefined : sourceFilter
+  const capture = useRequestGeneration(`${token}:${sourceFilter}:${refreshNumber}`, isSessionCurrent)
+  const selectedPlanKey = selection ? planIdentityKey(selection) : ''
   const statusOrder = listData?.statusOrder.length ? listData.statusOrder : defaultStatusOrder
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return (listData?.items ?? []).filter((item) => (
-      (!statusFilter || item.status === statusFilter)
+      (!sourceMode || item.sourceMode === sourceMode)
+      && (!statusFilter || item.status === statusFilter)
       && (!normalizedQuery
         || item.patientId.toLowerCase().includes(normalizedQuery)
         || item.treatmentPlanId.toLowerCase().includes(normalizedQuery)
+        || item.fullName.toLowerCase().includes(normalizedQuery)
+        || item.originalPlanReference.toLowerCase().includes(normalizedQuery)
+        || item.serviceDate.toLowerCase().includes(normalizedQuery)
         || item.status.toLowerCase().includes(normalizedQuery))
     ))
-  }, [listData?.items, query, statusFilter])
-  const selectedSummary = useMemo(
-    () => visibleItems.find((item) => planKey(item) === selectedPlanKey) ?? visibleItems[0] ?? null,
-    [selectedPlanKey, visibleItems],
-  )
-
+  }, [listData?.items, query, statusFilter, sourceMode])
   useEffect(() => {
-    if (!selectedSummary) {
-      setSelectedPlan(null)
-      return
-    }
-    const nextKey = planKey(selectedSummary)
-    if (selectedPlanKey !== nextKey) setSelectedPlanKey(nextKey)
-  }, [selectedPlanKey, selectedSummary])
-
-  useEffect(() => {
-    let cancelled = false
+    const isCurrent = capture()
+    setError('')
+    setIsExporting(false)
     async function loadList() {
       try {
-        const payload = await getTreatmentPlans(token)
-        if (cancelled) return
+        const payload = await getTreatmentPlans(token, { sourceMode })
+        if (!isCurrent()) return
         setListData(payload)
-        setSelectedPlanKey((current) => (
-          payload.items.some((item) => planKey(item) === current)
-            ? current
-            : payload.items[0] ? planKey(payload.items[0]) : ''
-        ))
       } catch (loadError) {
-        if (!cancelled) setError(messageForError(loadError))
+        if (isCurrent()) setError(messageForError(loadError))
       }
     }
     void loadList()
-    return () => {
-      cancelled = true
-    }
-  }, [refreshNumber, token])
+  }, [refreshNumber, token, sourceMode, capture, isSessionCurrent])
 
   useEffect(() => {
     if (user.role !== 'admin') return
@@ -95,58 +89,17 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
     return () => { cancelled = true }
   }, [token, user.role])
 
-  useEffect(() => {
-    if (!selectedSummary) return
-    let cancelled = false
-    async function loadDetail(summary: TreatmentPlanListItem) {
-      setIsLoadingDetail(true)
-      try {
-        const payload = await getTreatmentPlanDetail(token, summary.patientId, summary.treatmentPlanId, summary.sourceMode)
-        if (!cancelled) setSelectedPlan(payload)
-      } catch (loadError) {
-        if (!cancelled) setError(messageForError(loadError))
-      } finally {
-        if (!cancelled) setIsLoadingDetail(false)
-      }
-    }
-    void loadDetail(selectedSummary)
-    return () => {
-      cancelled = true
-    }
-  }, [selectedSummary, token])
-
-  async function handleManagerAction(payload: ManagerActionPayload) {
-    if (!selectedPlan) return
-    await saveManagerAction(token, selectedPlan.patientId, payload)
-    const [detail, queue] = await Promise.all([
-      getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId, selectedSummary?.sourceMode),
-      getTreatmentPlans(token),
-    ])
-    setSelectedPlan(detail)
-    setListData(queue)
-  }
-
-  async function handleSourceDocumentDownload(sourceFileId: string) {
-    if (!selectedPlan) return
-    await downloadTreatmentPlanSourceDocument(token, selectedPlan.patientId, sourceFileId)
-  }
-
-  async function handleSourceDocumentDelete(sourceFileId: string) {
-    if (!selectedPlan) return
-    await deleteTreatmentPlanSourceDocument(token, selectedPlan.patientId, sourceFileId)
-    setSelectedPlan(await getTreatmentPlanDetail(token, selectedPlan.patientId, selectedSummary?.treatmentPlanId, selectedSummary?.sourceMode))
-  }
-
-  async function handleChecklistEvidenceExport() {
-    if (!selectedPlan) return
-    await downloadChecklistEvidenceExport(token, selectedPlan.patientId)
-  }
-
   async function handleTreatmentPlanListExport() {
+    if (isExporting) return
+    const isCurrent = capture()
+    if (!isCurrent()) return
+    setIsExporting(true)
     try {
-      await downloadTreatmentPlanListExport(token)
+      await downloadTreatmentPlanListExport(token, { planVersionIds: visibleItems.map((item) => item.planVersionId), sourceMode, isCurrent })
     } catch (downloadError) {
-      setError(messageForError(downloadError))
+      if (isCurrent()) setError(messageForError(downloadError))
+    } finally {
+      if (isCurrent()) setIsExporting(false)
     }
   }
 
@@ -178,12 +131,13 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
           <p className='muted'>Focused V2 review · Signed in as {user.fullName}</p>
         </div>
         <label>
-          Search patient ID or status
+          Search MRN, patient name, plan ID, original reference, or status
           <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='Patient ID or status' />
         </label>
+        <SourceFilterControl value={sourceFilter} onChange={setSourceFilter} />
         <div className='button-row'>
           {(user.role === 'admin' || user.role === 'office_manager') && (
-            <button type='button' className='secondary-button' onClick={() => void handleTreatmentPlanListExport()}>Export treatment plans and statuses</button>
+            <button type='button' className='secondary-button' onClick={() => void handleTreatmentPlanListExport()} disabled={isExporting}>Export treatment plans and statuses</button>
           )}
           <button type='button' onClick={() => setRefreshNumber((current) => current + 1)}>Refresh queue</button>
         </div>
@@ -212,20 +166,20 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
             </thead>
             <tbody>
               {visibleItems.map((item) => (
-                <tr key={planKey(item)}>
-                  <td data-label='Patient ID'>{item.patientId}</td>
+                <tr key={planIdentityKey(item)} data-plan-version-id={item.planVersionId} data-patient-record-id={item.patientRecordId} data-source-mode={item.sourceMode}>
+                  <td data-label='Patient ID'>{item.patientId}<span className='patient-name-secondary'>{item.fullName || 'Name unavailable'}</span></td>
                   <td data-label='Treatment plan ID'>
                     <button
                       type='button'
                       className='link-button'
-                      aria-pressed={selectedPlanKey === planKey(item)}
-                      onClick={() => setSelectedPlanKey(planKey(item))}
+                      aria-pressed={selectedPlanKey === planIdentityKey(item)}
+                      onClick={() => setSelection({ ...item, mrn: item.patientId, patientKey: item.patientId })}
                     >
                       <span>{item.treatmentPlanId}</span>
-                      {selectedPlanKey === planKey(item) && <span className='selected-label'>Selected</span>}
+                      {selectedPlanKey === planIdentityKey(item) && <span className='selected-label'>Selected</span>}
                     </button>
                   </td>
-                  <td data-label='Source'>{item.sourceMode}</td>
+                  <td data-label='Source'>{sourceLabel(item.sourceMode)} · record {item.patientRecordId} · version {item.versionOrdinal} (#{item.planVersionId})<br />Reference: {item.originalPlanReference || 'Not supplied'}<br />Service date: {item.serviceDate ? formatDateTime24Hour(item.serviceDate) : 'Not supplied'}</td>
                   <td data-label='LOC'>{item.currentLevelOfCare}</td>
                   <td data-label='Next due'>{item.nextDueDate}</td>
                   <td data-label='Status'><StatusBadge status={item.status} /></td>
@@ -237,23 +191,8 @@ export function TreatmentPlansPage({ token, user, onNavigate }: TreatmentPlansPa
             </tbody>
           </table>
         </article>
-        {isLoadingDetail && <section className='panel muted'>Loading selected treatment-plan detail...</section>}
-        {!isLoadingDetail && selectedPlan && (
-          <TreatmentPlanDetailViewer
-            plan={selectedPlan}
-            canManage={user.role === 'admin' || user.role === 'office_manager'}
-            onManagerAction={handleManagerAction}
-            onExportChecklistEvidence={handleChecklistEvidenceExport}
-            onDownloadSourceDocument={handleSourceDocumentDownload}
-            onDeleteSourceDocument={handleSourceDocumentDelete}
-          />
-        )}
-        {!isLoadingDetail && !selectedPlan && <section className='panel muted'>No treatment plans returned.</section>}
+        <TreatmentPlanDetailPage token={token} user={user} selection={selection} onNavigate={onNavigate} onSelectTreatmentPlan={setSelection} isSessionCurrent={isSessionCurrent} />
       </section>
     </div>
   )
-}
-
-function planKey(item: TreatmentPlanListItem): string {
-  return `${item.patientId}:${item.sourceMode}:${item.treatmentPlanId}`
 }

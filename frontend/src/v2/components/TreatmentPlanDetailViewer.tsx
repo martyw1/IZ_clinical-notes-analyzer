@@ -5,8 +5,13 @@ import { DataQualityWarningsPanel } from './DataQualityWarningsPanel'
 import { RawFieldExplorer } from './RawFieldExplorer'
 import { StatusBadge } from './StatusBadge'
 import { SourceFileArchiveControls } from './SourceFileArchiveControls'
+import { TreatmentPlanClinicalSections } from './TreatmentPlanClinicalSections'
+import { planIdentityKey, sourceLabel } from '../types/identity'
+import { useRequestGeneration } from '../hooks/useRequestGeneration'
+import type { SessionGuard } from '../hooks/useRequestGeneration'
 import { formatDateTime24Hour, formatUtcEventDateTime } from './treatmentPlanFormatting'
-import type { CriterionResult, ManagerReview, TreatmentPlanAggregate } from '../types/treatmentPlan'
+import { TreatmentPlanReviewPanels } from './TreatmentPlanReviewPanels'
+import type { ManagerReview, TreatmentPlanAggregate } from '../types/treatmentPlan'
 
 type TreatmentPlanDetailViewerProps = {
   readonly plan: TreatmentPlanAggregate
@@ -15,6 +20,7 @@ type TreatmentPlanDetailViewerProps = {
   readonly onExportChecklistEvidence: () => Promise<void>
   readonly onDownloadSourceDocument: (sourceFileId: string) => Promise<void>
   readonly onDeleteSourceDocument: (sourceFileId: string) => Promise<void>
+  readonly isSessionCurrent?: SessionGuard
 }
 
 function messageForError(error: unknown): string {
@@ -30,13 +36,6 @@ function displayDate(value: string): string {
   return value && value !== 'Unknown' ? formatDateTime24Hour(value) : 'Unknown'
 }
 
-function diagnosisParts(value: string): { readonly code: string; readonly description: string } {
-  const [possibleCode, ...description] = value.split(' ')
-  if (/^[A-Z][0-9]/i.test(possibleCode) && description.length) {
-    return { code: possibleCode, description: description.join(' ') }
-  }
-  return { code: '', description: value }
-}
 
 export function TreatmentPlanDetailViewer({
   plan,
@@ -45,6 +44,7 @@ export function TreatmentPlanDetailViewer({
   onExportChecklistEvidence,
   onDownloadSourceDocument,
   onDeleteSourceDocument,
+  isSessionCurrent,
 }: TreatmentPlanDetailViewerProps) {
   const [query, setQuery] = useState('')
   const [selectedCriterionId, setSelectedCriterionId] = useState<string | null>(plan.criteria[0]?.criterionId ?? null)
@@ -54,6 +54,8 @@ export function TreatmentPlanDetailViewer({
   const [isSaving, setIsSaving] = useState(false)
   const previousQuery = useRef(query)
   const previousSelectedCriterionId = useRef(selectedCriterionId)
+  const identityKey = planIdentityKey(plan)
+  const capture = useRequestGeneration(identityKey, isSessionCurrent)
   const filteredCriteria = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return plan.criteria
@@ -69,7 +71,11 @@ export function TreatmentPlanDetailViewer({
   useEffect(() => {
     setSelectedCriterionId(plan.criteria[0]?.criterionId ?? null)
     setActionMessage('')
-  }, [plan.treatmentPlanId])
+    setComment('')
+    setOverrideReason('')
+    setQuery('')
+    setIsSaving(false)
+  }, [identityKey])
 
   useEffect(() => {
     const nextSelection = filteredCriteria.some((criterion) => criterion.criterionId === selectedCriterionId)
@@ -128,14 +134,17 @@ export function TreatmentPlanDetailViewer({
   }
 
   async function saveAction(payload: ManagerActionPayload, successMessage: string) {
+    if (isSaving) return
+    const isCurrent = capture()
+    if (!isCurrent()) return
     setIsSaving(true)
     try {
       await onManagerAction(payload)
-      setActionMessage(successMessage)
+      if (isCurrent()) setActionMessage(successMessage)
     } catch (error) {
-      setActionMessage(messageForError(error))
+      if (isCurrent()) setActionMessage(messageForError(error))
     } finally {
-      setIsSaving(false)
+      if (isCurrent()) setIsSaving(false)
     }
   }
 
@@ -155,7 +164,11 @@ export function TreatmentPlanDetailViewer({
         </div>
         <dl className='plan-fact-grid'>
           <div><dt>Level of care</dt><dd>{plan.currentLevelOfCare}</dd></div>
-          <div><dt>Source</dt><dd>{plan.sourceMode}</dd></div>
+          <div><dt>Source</dt><dd>{sourceLabel(plan.sourceMode)}</dd></div>
+          <div><dt>Patient record</dt><dd>{plan.patientRecordId}</dd></div>
+          <div><dt>Saved version ID</dt><dd>{plan.planVersionId}</dd></div>
+          <div><dt>Original plan reference</dt><dd>{plan.originalPlanReference || 'Not supplied'}</dd></div>
+          <div><dt>Service date</dt><dd>{plan.serviceDate ? formatDateTime24Hour(plan.serviceDate) : 'Not supplied'}</dd></div>
           <div><dt>Last updated</dt><dd>{displayDate(plan.lastUpdated)}</dd></div>
           <div><dt>Evaluation</dt><dd>{displayDate(plan.evaluationDate)} · {plan.facilityTimezone}</dd></div>
         </dl>
@@ -181,84 +194,7 @@ export function TreatmentPlanDetailViewer({
         </dl>
       </section>
 
-      <section className='panel content-panel clinical-document'>
-        <p className='eyebrow'>Merged source content</p>
-        <h2>Clinical overview</h2>
-        <dl className='clinical-overview-grid'>
-          <div><dt>Reason for admission</dt><dd>{displayOverviewValue(plan.reasonForAdmission, 'No reason-for-admission text returned.')}</dd></div>
-          <div><dt>Initial client needs</dt><dd>{displayOverviewValue(plan.initialClientNeeds, 'No initial-needs text returned.')}</dd></div>
-          <div><dt>Family education needs</dt><dd>{displayOverviewValue(plan.familyEducationNeeds, 'No family-education text returned.')}</dd></div>
-        </dl>
-        {plan.problems.map((problem) => (
-          <article className='clinical-problem' key={`${problem.problemNumber}:${problem.description}`}>
-            <header>
-              <p className='eyebrow'>Problem {problem.problemNumber}</p>
-              <h3>{problem.description || 'Description unavailable'}</h3>
-            </header>
-            {problem.diagnoses.length > 0 && <div className='clinical-subsection'>
-              <h4>Diagnoses</h4>
-              <ul className='clinical-list'>{problem.diagnoses.map((diagnosis) => {
-                const parts = diagnosisParts(diagnosis)
-                return <li key={diagnosis}>{parts.code && <code>{parts.code}</code>}<span>{parts.description}</span></li>
-              })}</ul>
-            </div>}
-            {problem.behavioralDefinitions.length > 0 && <div className='clinical-subsection'>
-              <h4>Behavioral definitions</h4>
-              <ul className='clinical-list'>{problem.behavioralDefinitions.map((definition) => <li key={definition}>{definition}</li>)}</ul>
-            </div>}
-            {problem.goals.map((goal) => (
-              <section className='clinical-goal' key={`${goal.goalNumber}:${goal.description}`}>
-                <p className='eyebrow'>Goal {goal.goalNumber}</p>
-                <h4>{goal.description || 'Description unavailable'}</h4>
-                {goal.objectives.map((objective) => (
-                  <div className='clinical-objective' key={`${objective.objectiveNumber}:${objective.description}`}>
-                    <h5>Objective {objective.objectiveNumber}</h5>
-                    <p>{objective.description || 'Description unavailable'}</p>
-                    {objective.interventions.length > 0 && <>
-                      <h6>Interventions</h6>
-                      <ul className='clinical-list'>{objective.interventions.map((intervention) => <li key={intervention}>{intervention}</li>)}</ul>
-                    </>}
-                  </div>
-                ))}
-              </section>
-            ))}
-          </article>
-        ))}
-        {plan.problems.length === 0 && <p className='muted'>No structured problem, goal, objective, or intervention content was returned.</p>}
-      </section>
-
-      <section className='panel review-history-panel'>
-        <p className='eyebrow'>Signatures and source reviews</p>
-        <h2>Clinical review history</h2>
-        <div className='review-history-grid'>
-          <div>
-            <h3>Signatures</h3>
-            {plan.signatures.length > 0 ? <ul className='review-timeline'>{plan.signatures.map((signature) => (
-              <li key={`${signature.signatureType}:${signature.signatureDatetime}`}>
-                <dl className='review-metadata signature-metadata'>
-                  <div><dt>Signature type</dt><dd>{displayMetadataValue(signature.signatureType)}</dd></div>
-                  <div><dt>Signer role or type</dt><dd>{displayMetadataValue(signature.signerRoleOrType)}</dd></div>
-                  <div><dt>Signature date</dt><dd><time dateTime={signature.signatureDatetime}>{displayDate(signature.signatureDatetime)}</time></dd></div>
-                  <div><dt>Explanation</dt><dd>{displayMetadataValue(signature.signatureDataOmittedReason)}</dd></div>
-                </dl>
-              </li>
-            ))}</ul> : <p className='muted'>No signature metadata was returned.</p>}
-          </div>
-          <div>
-            <h3>Treatment reviews</h3>
-            {plan.treatmentReviews.length > 0 ? <ul className='review-timeline'>{plan.treatmentReviews.map((review) => (
-              <li key={`${review.reviewId}:${review.reviewDate}:${review.signatureDate}`}>
-                <dl className='review-metadata'>
-                  <div><dt>Review status</dt><dd>{displayMetadataValue(review.status)}</dd></div>
-                  <div><dt>Review ID</dt><dd>{review.reviewId ? `Review ${review.reviewId}` : 'Not supplied'}</dd></div>
-                  <div><dt>Review date</dt><dd><time dateTime={review.reviewDate}>{displayDate(review.reviewDate)}</time></dd></div>
-                  <div><dt>Signature date</dt><dd>{review.signatureDate ? <time dateTime={review.signatureDate}>{displayDate(review.signatureDate)}</time> : 'Not supplied'}</dd></div>
-                </dl>
-              </li>
-            ))}</ul> : <p className='muted'>No treatment-review records were returned for this plan.</p>}
-          </div>
-        </div>
-      </section>
+      <TreatmentPlanClinicalSections plan={plan} />
 
       <section className='panel checklist-panel'>
         <div className='section-heading'>
@@ -304,70 +240,21 @@ export function TreatmentPlanDetailViewer({
         </div> : <p className='muted'>Manager review actions are available to manager and admin roles.</p>}
       </section>
 
-      <section className='panel'>
-        <div className='section-heading'>
-          <div>
-            <p className='eyebrow'>Manager review history</p>
-            <h2>Persisted manager actions</h2>
-          </div>
-          <span>{plan.managerReviews.length} saved</span>
-        </div>
-        {plan.managerReviews.length ? (
-          <ul className='artifact-list'>
-            {plan.managerReviews.map((review, index) => (
-              <li key={managerReviewKey(review, index)}>
-                <strong>{review.managerStatus}</strong> on <code>{review.criterionId}</code>
-                {review.actorUsername && <> by {review.actorUsername}</>}
-                {review.createdAt && <> at {formatUtcEventDateTime(review.createdAt)}</>}
-                {review.comment && <span> Comment: {review.comment}</span>}
-                {review.overrideReason && <span> Override reason: {review.overrideReason}</span>}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className='muted'>No persisted manager actions yet.</p>
-        )}
-      </section>
-
-      <section className='panel'>
-        {canManage && <div className='button-row'><button type='button' className='secondary-button' onClick={() => void onExportChecklistEvidence()}>Export minimum-necessary checklist evidence</button></div>}
-        <h2>Evidence Coverage Map</h2>
-        <p className='muted evidence-coverage-note'>Source support is reported separately from checklist result statuses. A criterion may have observed evidence and still be Missing Data, Conflicting Evidence, or Unable to Evaluate. These displayed subtotals can overlap and do not partition the 42 criteria; unknown and Not Applicable outcomes remain distinct.</p>
-        <div className='summary-grid evidence-coverage-summary'>
-          <span className='evidence-coverage-metric'><span>Checklist criteria total</span> <span>{plan.evidenceCoverageSummary.criteriaTotal}</span></span>
-          <span className='evidence-coverage-metric'><span>Source support: observed evidence</span> <span>{plan.evidenceCoverageSummary.criteriaWithEvidence}</span></span>
-          <span className='evidence-coverage-metric'><span>Source support: missing evidence</span> <span>{plan.evidenceCoverageSummary.criteriaMissingEvidence}</span></span>
-          <span className='evidence-coverage-metric'><span>Result status: Conflicting Evidence</span> <span>{plan.evidenceCoverageSummary.criteriaConflicting}</span></span>
-          <span className='evidence-coverage-metric'><span>Result status: Unable to Evaluate</span> <span>{countCriteriaByStatus(plan.criteria, 'Unable to Evaluate')}</span></span>
-          <span className='evidence-coverage-metric'><span>Result status: Not Applicable</span> <span>{countCriteriaByStatus(plan.criteria, 'Not Applicable')}</span></span>
-          <span className='evidence-coverage-metric'><span>Runtime-only fields</span> <span>{plan.evidenceCoverageSummary.runtimeOnlyFields.length}</span></span>
-        </div>
-        <p className='muted'>Runtime-only fields are source values outside the checklist. Their count is not a checklist result and is not added to the 42-criterion total.</p>
-      </section>
+      <TreatmentPlanReviewPanels plan={plan} canManage={canManage} onExportChecklistEvidence={onExportChecklistEvidence} />
 
       <DataQualityWarningsPanel warnings={plan.dataQualityWarnings} />
 
       {canManage ? <SourceFileArchiveControls
-        patientId={plan.patientId}
+        identity={plan}
+        isSessionCurrent={isSessionCurrent}
         sourceDocuments={plan.sourceDocuments}
         onDownloadSourceDocument={onDownloadSourceDocument}
         onDeleteSourceDocument={onDeleteSourceDocument}
       /> : <section className='panel'><h2>Source File Archive</h2><p className='muted'>Source-file archive controls are available to manager and admin roles.</p></section>}
 
+      {plan.unassignedManagerReviews.length > 0 && <section className='panel'><h2>Unassigned legacy manager history</h2><p className='muted'>These historical actions have no proven saved-version link and do not affect this selected plan.</p><ul>{plan.unassignedManagerReviews.map((review, index) => <li key={managerReviewKey(review, index)}>{review.managerStatus} · {formatUtcEventDateTime(review.createdAt)}{review.comment && <span> Comment: {review.comment}</span>}</li>)}</ul></section>}
+
       <RawFieldExplorer plan={plan} />
     </div>
   )
-}
-
-function displayOverviewValue(value: string, fallback: string): string {
-  const normalized = value.trim()
-  return !normalized || normalized === fallback || normalized === 'Unknown' ? 'Not supplied' : value
-}
-
-function displayMetadataValue(value: string): string {
-  return value.trim() || 'Not supplied'
-}
-
-function countCriteriaByStatus(criteria: readonly CriterionResult[], status: CriterionResult['status']): number {
-  return criteria.filter((criterion) => criterion.status === status).length
 }

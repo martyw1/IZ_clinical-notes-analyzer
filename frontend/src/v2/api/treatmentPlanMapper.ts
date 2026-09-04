@@ -3,8 +3,9 @@ import { statusOrder } from '../types/treatmentPlan'
 import type { JsonRecord } from './json'
 import { readBoolean, readNumber, readRecord, readRecordList, readString, readStringList } from './json'
 import type { TreatmentPlanListData, TreatmentPlanListItem } from './types'
+import { readPlanIdentity } from './identity'
 
-const extraStatuses = ['Approved', 'Compliant', 'Not Applicable'] as const
+const extraStatuses = ['Approved', 'Compliant', 'Not Applicable', 'Present'] as const
 
 export function toTreatmentPlanStatus(value: string): TreatmentPlanStatus {
   for (const status of statusOrder) {
@@ -16,19 +17,6 @@ export function toTreatmentPlanStatus(value: string): TreatmentPlanStatus {
   return 'Unable to Evaluate'
 }
 
-function toSourceMode(value: string): TreatmentPlanAggregate['sourceMode'] {
-  switch (value) {
-    case 'manual_upload':
-      return 'manual_upload'
-    case 'alleva_rest_api':
-      return 'alleva_rest_api'
-    case 'synthetic_fixture':
-      return 'synthetic_fixture'
-    default:
-      return 'unavailable'
-  }
-}
-
 export function mapTreatmentPlanList(payload: JsonRecord): TreatmentPlanListData {
   return {
     items: readRecordList(payload, 'items').map(mapTreatmentPlanListItem),
@@ -38,16 +26,21 @@ export function mapTreatmentPlanList(payload: JsonRecord): TreatmentPlanListData
 
 function mapTreatmentPlanListItem(record: JsonRecord): TreatmentPlanListItem {
   return {
+    ...readPlanIdentity(record),
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label', 'MRN unavailable'),
-    treatmentPlanId: readString(record, 'treatment_plan_id', 'Unavailable'),
+    fullName: readString(record, 'full_name'),
+    originalPlanReference: readString(record, 'original_plan_reference'),
+    serviceDate: readString(record, 'service_date'),
+    versionOrdinal: readNumber(record, 'version_ordinal'),
+    lastUpdated: readString(record, 'last_updated'),
+    isCurrent: readBoolean(record, 'is_current'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
     nextDueDate: readString(record, 'next_due_date', 'Unknown'),
     status: toTreatmentPlanStatus(readString(record, 'status')),
     missingCriteriaCount: readNumber(record, 'missing_criteria_count'),
     returnedCriteriaCount: readNumber(record, 'returned_criteria_count'),
-    sourceMode: readString(record, 'source_mode', 'unknown'),
     warnings: readStringList(record, 'warnings'),
   }
 }
@@ -60,10 +53,12 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     (item) => `${item.treatmentPlanId}|${item.planDate}|${item.createdDate}|${item.lastModified}`,
   )
   return {
+    ...readPlanIdentity(record),
     patientId: readString(record, 'patient_id'),
     patientDisplayLabel: readString(record, 'patient_display_label', 'MRN unavailable'),
     patientFullName: readString(record, 'patient_full_name'),
-    treatmentPlanId: readString(snapshot, 'plan_id', 'Unavailable'),
+    serviceDate: readString(snapshot, 'service_date'),
+    originalPlanReference: readString(snapshot, 'original_plan_reference'),
     lastUpdated: readString(record, 'source_last_updated', 'Unknown'),
     currentLevelOfCare: readString(record, 'current_level_of_care', 'Unknown'),
     admissionDate: readString(record, 'admission_date', 'Unknown'),
@@ -75,7 +70,6 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     evaluationDate: readString(record, 'evaluation_date', 'Unknown'),
     facilityTimezone: readString(record, 'facility_timezone', 'Unknown'),
     status: toTreatmentPlanStatus(readString(record, 'overall_status')),
-    sourceMode: toSourceMode(readString(record, 'source_mode')),
     reasonForAdmission: readString(snapshot, 'reason_for_admission', 'No reason-for-admission text returned.'),
     initialClientNeeds: readString(snapshot, 'initial_client_needs', 'No initial-needs text returned.'),
     familyEducationNeeds: readString(snapshot, 'family_education_needs', 'No family-education text returned.'),
@@ -87,6 +81,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
       readRecordList(record, 'manager_reviews').map((review) => mapManagerReview(review)),
       managerReviewIdentity,
     ),
+    unassignedManagerReviews: readRecordList(record, 'unassigned_manager_reviews').map((review) => mapManagerReview(review)),
     overrides: uniqueBy(
       readRecordList(record, 'overrides').map((review) => mapManagerReview(review, 'override', 'Override')),
       managerReviewIdentity,

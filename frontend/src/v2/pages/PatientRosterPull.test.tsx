@@ -63,6 +63,7 @@ function configuredProfile() {
 
 function rosterItem() {
   return {
+    patient_record_id: 6812,
     mrn: 'client-812', full_name: 'Synthetic Patient', source_mode: 'alleva_rest_api', lifecycle_state: 'active',
     current_level_of_care: 'PHP', treatment_plans: [], first_seen_at: '2026-07-14T10:00:00Z',
     last_seen_at: '2026-07-14T10:01:00Z', reconciled_at: '2026-07-14T10:01:00Z',

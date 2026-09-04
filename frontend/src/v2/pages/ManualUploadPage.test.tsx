@@ -102,6 +102,7 @@ describe('Manual Upload binder workflow', () => {
 function binderResult() {
   return {
     status: 'imported_with_warnings', patient_id: '944', patient_display_label: 'MRN 944',
+    patient_record_id: 6001, plan_version_id: 6002, treatment_plan_id: 'synthetic-binder-plan',
     source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true,
     source_file_archived: true, source_file_id: 'source-1', source_file_ids: ['source-1', 'source-2'],
     patient_id_correction_applied: true, file_count: 2, parsed_file_count: 1, opaque_file_count: 1,

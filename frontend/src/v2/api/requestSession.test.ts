@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { downloadChecklistEvidenceExport, downloadTreatmentPlanListExport, downloadTreatmentPlanSourceDocument } from './downloads'
+import { readPlanIdentity } from './identity'
 import { beginRequestSession, endRequestSession, request } from './request'
+
+const selection = { ...readPlanIdentity({ patient_record_id: 31, plan_version_id: 91, source_mode: 'manual_upload', treatment_plan_id: 'synthetic' }), mrn: 'synthetic', patientKey: 'synthetic' }
 
 describe('authenticated request generations', () => {
   afterEach(() => { endRequestSession(); vi.unstubAllGlobals() })
@@ -58,9 +61,9 @@ describe('authenticated request generations', () => {
   })
 
   it.each([
-    () => downloadChecklistEvidenceExport('current', 'synthetic'),
-    () => downloadTreatmentPlanListExport('current'),
-    () => downloadTreatmentPlanSourceDocument('current', 'synthetic', 'source'),
+    () => downloadChecklistEvidenceExport('current', selection),
+    () => downloadTreatmentPlanListExport('current', { planVersionIds: [selection.planVersionId] }),
+    () => downloadTreatmentPlanSourceDocument('current', selection, 'source'),
   ])('uses the same expiry boundary when a download returns 401', async (download) => {
     // Given: an authenticated download will be rejected.
     const expired = vi.fn()

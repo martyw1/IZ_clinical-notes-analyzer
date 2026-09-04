@@ -36,6 +36,12 @@ HISTORY_TABLES: Final = (
 )
 
 
+@pytest.fixture(autouse=True)
+def preserve_v11_migration_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runner, "MIGRATIONS", MIGRATIONS[:11])
+    monkeypatch.setattr(runner, "LATEST_SCHEMA_VERSION", 11)
+
+
 def _v10_database(root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     database_path = create_legacy_database(root)
     with monkeypatch.context() as context:
@@ -219,7 +225,8 @@ def test_fresh_app_startup_keeps_link_table_migration_managed(tmp_path: Path, st
     # When: a fresh process starts the real application once or starts it again.
     for _ in range(startup_count):
         process = subprocess.run(
-            [sys.executable, "-c", "from app.main import app; from app.v2.db import engine; engine.dispose()"],
+            [sys.executable, "-c", "from app.v2.migrations import runner; runner.MIGRATIONS=runner.MIGRATIONS[:11]; "
+             "runner.LATEST_SCHEMA_VERSION=11; from app.main import app; from app.v2.db import engine; engine.dispose()"],
             env=environment, capture_output=True, text=True, timeout=60, check=False,
         )
         assert process.returncode == 0, process.stderr

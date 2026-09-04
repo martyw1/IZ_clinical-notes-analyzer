@@ -7,7 +7,7 @@ test.use({ timezoneId: 'America/New_York' })
 
 async function selectedRow(page) {
   await page.getByRole('button', { name: 'Treatment Plans Roster', exact: true }).click()
-  const button = page.getByRole('button', { name: `Open treatment plan ${plan.plan_id} for MRN ${plan.patient_id}`, exact: true })
+  const button = page.locator(`tr[data-plan-version-id="${plan.plan_version_id}"]`).getByRole('button', { name: `Open treatment plan ${plan.plan_id} for MRN ${plan.patient_id}`, exact: true })
   await expect(button).toBeVisible()
   return button.locator('xpath=ancestor::tr')
 }
@@ -171,12 +171,12 @@ for (const state of ['populated', 'absent', 'no-match', 'error']) {
   test(`selected patient presentation: ${state} ${['populated', 'absent'].includes(state) ? '@happy @edge' : '@edge'}`, async ({ page }) => {
     await login(page)
     let intercepted = 0
-    await page.route(url => url.pathname === `/api/v2/patients/${plan.patient_id}` && url.searchParams.get('source_mode') === plan.source_mode, route => {
+    await page.route(url => url.pathname === `/api/v2/patients/${plan.patient_id}` && url.searchParams.get('source_mode') === plan.source_mode && url.searchParams.get('patient_record_id') === String(plan.patient_record_id), route => {
       if (route.request().method() !== 'GET') return route.continue()
       intercepted += 1
       return route.fulfill({ status: state === 'error' ? 503 : 200, contentType: 'application/json', body: JSON.stringify(state === 'error'
         ? { detail: 'Synthetic selected patient unavailable.' }
-        : { mrn: plan.patient_id, full_name: 'Synthetic presentation patient', source_mode: plan.source_mode, lifecycle_state: 'active',
+        : { patient_record_id: plan.patient_record_id, mrn: plan.patient_id, full_name: 'Synthetic presentation patient', source_mode: plan.source_mode, lifecycle_state: 'active',
           current_level_of_care: 'PHP', source_last_updated: '2026-09-01T12:00:00Z', first_seen_at: '2026-08-01T12:00:00Z',
           last_seen_at: '2026-09-01T12:00:00Z', reconciled_at: '2026-09-01T12:00:00Z', treatment_plans: [],
           patient_record: state === 'absent' ? {} : { identity: { full_name: 'Synthetic presentation patient' }, care: { level_of_care: 'PHP' } } }) })
@@ -193,7 +193,7 @@ for (const state of ['populated', 'absent', 'no-match', 'error']) {
     }
     await expect(page.getByText('Loading patient record...', { exact: true })).toHaveCount(0)
     writeEvidence(`task-5-patient-${state}.json`, { mockedPresentation: true, backendIntegrationClaimed: false,
-      mockedMethod: 'GET', mockedPath: `/api/v2/patients/${plan.patient_id}?source_mode=${plan.source_mode}`, intercepted,
+      mockedMethod: 'GET', mockedPath: `/api/v2/patients/${plan.patient_id}?patient_record_id=${plan.patient_record_id}&source_mode=${plan.source_mode}`, intercepted,
       states: await surfaces(page, 'patient-' + state) })
     expect(intercepted).toBeGreaterThan(0)
   })

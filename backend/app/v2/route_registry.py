@@ -90,6 +90,7 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/treatment-plans/{patient_id}/source-documents/{source_file_id}/download"),
             ("GET", "/api/v2/exports/{patient_id}/checklist-evidence.csv"),
             ("GET", "/api/v2/exports/treatment-plans.csv"),
+            ("POST", "/api/v2/exports/treatment-plans.csv"),
         }
     ),
     "correction": frozenset(

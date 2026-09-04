@@ -1,26 +1,22 @@
 from __future__ import annotations
 
-import json
 import hashlib
 from datetime import timezone
 from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
 from app.v2.models import User, utc_now
-from app.v2.services.manual_source_file_store import source_documents_for_patient
 from app.core.config import settings
 from app.v2.services.clinical_snapshot_codec import ClinicalSnapshotCodec
 from app.v2.services.clinical_evidence_store import persist_clinical_evidence
-from app.v2.services.evaluation_store import PlanEvaluationTarget, evaluated_plan_version, persist_plan_evaluation
+from app.v2.services.evaluation_store import PlanEvaluationTarget, persist_plan_evaluation
 from app.v2.services.alleva_contracts import SyncImportProvenance
 from app.v2.services.treatment_plan_types import (
     StoredTreatmentPlan,
     PlanVersionIdentity,
-    TreatmentPlanQueueItem,
     TreatmentPlanSaveDisposition,
     TreatmentPlanSaveResult,
     signature_date,
@@ -40,31 +36,10 @@ TREATMENT_PLAN_STATUS_ORDER: Final = (
 )
 
 
-def list_treatment_plan_imports(db: Session, allowed_patient_record_ids: frozenset[int] | None = None) -> tuple[StoredTreatmentPlan, ...]:
-    rows = db.execute(
-        text(
-            "SELECT p.canonical_client_id,v.source_record_id,v.source_system,v.imported_at,v.id,v.plan_date,p.id FROM patients p "
-            "JOIN treatment_plan_versions v ON v.patient_id=p.id "
-            "WHERE NOT EXISTS (SELECT 1 FROM treatment_plan_versions newer WHERE newer.patient_id=v.patient_id "
-            "AND newer.source_system=v.source_system AND newer.source_record_id=v.source_record_id "
-            "AND newer.version_ordinal>v.version_ordinal) ORDER BY v.imported_at DESC,v.id DESC"
-        )
-    ).all()
-    result = []
-    for row in rows:
-        if allowed_patient_record_ids is not None and int(row[6]) not in allowed_patient_record_ids:
-            continue
-        aggregate = evaluated_plan_version(db, int(row[4]))
-        if aggregate is not None:
-            identity = PlanVersionIdentity(int(row[4]), int(row[6]), str(row[0]), str(row[2]), str(row[1]))
-            result.append(stored_plan(aggregate, identity=identity, last_updated=str(row[3]), plan_date=str(row[5] or "")))
-    return tuple(result)
-
-
-def list_treatment_plan_queue_items(db: Session, allowed_patient_record_ids: frozenset[int] | None = None) -> tuple[TreatmentPlanQueueItem, ...]:
-    from app.v2.services.manager_action_store import open_correction_counts_by_version
-    correction_counts = open_correction_counts_by_version(db)
-    return tuple(_queue_item_from_import(row, correction_counts.get(row.plan_version_id, 0)) for row in list_treatment_plan_imports(db, allowed_patient_record_ids))
+from app.v2.services.treatment_plan_read_model import (
+    list_treatment_plan_imports, list_treatment_plan_queue_items,
+    treatment_plan_aggregate_for_patient, treatment_plan_aggregate_for_version,
+)
 
 
 def save_treatment_plan_aggregate(
@@ -104,7 +79,7 @@ def save_treatment_plan_aggregate_with_disposition(
         if aggregate.patient_display_label == "Not linked to an MRN"
         else f"MRN {aggregate.patient_id}"
     )
-    aggregate = aggregate.model_copy(update={"patient_display_label": patient_display_label})
+    aggregate = aggregate.model_copy(update={"patient_display_label": patient_display_label, "patient_full_name": ""})
     payload_json = aggregate.model_dump_json()
     encrypted_payload = ClinicalSnapshotCodec(settings.effective_data_encryption_secret).encode_aggregate(aggregate)
     content_sha256 = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
@@ -236,80 +211,6 @@ def _source_plan_date(aggregate: TreatmentPlanAggregate) -> str:
     return aggregate.date_clock_anchor
 
 
-def treatment_plan_aggregate_for_patient(
-    db: Session,
-    patient_id: str,
-    treatment_plan_id: str | None = None,
-    *,
-    source_system: str | None = None,
-) -> TreatmentPlanAggregate | None:
-    rows = db.execute(text(
-        "SELECT v.id FROM treatment_plan_versions v JOIN patients p ON p.id=v.patient_id "
-        "WHERE p.canonical_client_id=:mrn AND (:plan IS NULL OR v.source_record_id=:plan) "
-        "AND (:source IS NULL OR v.source_system=:source)"
-    ), {"mrn": patient_id, "plan": treatment_plan_id, "source": source_system}).all()
-    if not rows:
-        return None
-    if len(rows) != 1:
-        raise HTTPException(status_code=409, detail="Select a specific treatment-plan version.")
-    return treatment_plan_aggregate_for_version(db, int(rows[0][0]))
-
-
-def treatment_plan_aggregate_for_version(db: Session, plan_version_id: int) -> TreatmentPlanAggregate | None:
-    from app.v2.services.manager_action_store import manager_override_dicts_for_version, manager_review_dicts_for_version
-    from app.v2.services.patient_snapshot_store import patient_source_snapshot_for_record
-    aggregate = evaluated_plan_version(db, plan_version_id)
-    if aggregate is None:
-        return None
-    patient_record_id = int(db.execute(text("SELECT patient_id FROM treatment_plan_versions WHERE id=:id"), {"id": plan_version_id}).scalar_one())
-    snapshot = patient_source_snapshot_for_record(db, patient_record_id, aggregate.source_mode)
-    if snapshot is not None:
-        aggregate = aggregate.model_copy(update={"patient_full_name": snapshot.full_name})
-    document_ids = frozenset(str(row[0]) for row in db.execute(text(
-        "SELECT document_id FROM source_documents WHERE patient_id=:patient AND plan_version_id=:version"
-    ), {"patient": patient_record_id, "version": plan_version_id}).all())
-    source_documents = tuple(document for document in source_documents_for_patient(db, aggregate.patient_id) if document.source_file_id in document_ids)
-    persisted_reviews = manager_review_dicts_for_version(db, plan_version_id)
-    return aggregate.model_copy(
-        update={
-            "manager_reviews": aggregate.manager_reviews + persisted_reviews,
-            "overrides": aggregate.overrides + manager_override_dicts_for_version(db, plan_version_id),
-            "source_documents": source_documents,
-        }
-    )
-
-
-def _queue_item_from_import(row: StoredTreatmentPlan, returned_criteria_count: int) -> TreatmentPlanQueueItem:
-    return TreatmentPlanQueueItem(
-        patient_id=row.patient_id,
-        patient_display_label=row.patient_display_label,
-        treatment_plan_id=row.plan_id,
-        current_level_of_care=row.current_level_of_care,
-        admission_date=row.admission_date,
-        next_due_date=row.next_due_date,
-        status=row.overall_status,
-        missing_criteria_count=row.missing_criteria_count,
-        returned_criteria_count=returned_criteria_count,
-        source_mode=row.source_mode,
-        content_completeness_summary=_int_map(row.content_summary_json),
-        warnings=_string_tuple(row.warnings_json),
-        plan_version_id=row.plan_version_id,
-        patient_record_id=row.patient_record_id,
-    )
-
-
-def _int_map(raw_json: str) -> dict[str, int]:
-    payload = json.loads(raw_json or "{}")
-    if not isinstance(payload, dict):
-        return {}
-    return {str(key): value for key, value in payload.items() if isinstance(value, int)}
-
-
-def _string_tuple(raw_json: str) -> tuple[str, ...]:
-    payload = json.loads(raw_json or "[]")
-    if not isinstance(payload, list):
-        return ()
-    return tuple(value for value in payload if isinstance(value, str))
 
 
 def _provenance_values(provenance: SyncImportProvenance | None) -> dict[str, int | str | None]:

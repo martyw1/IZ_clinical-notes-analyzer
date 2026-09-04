@@ -121,7 +121,8 @@ def test_unmatched_manager_action_is_reconciled_needs_review_with_balanced_count
     assert outcome == ("needs_review",)
     assert counts == (1, 1)
     assert [(item.category, item.source_count, item.target_count) for item in report.reconciliation] == [
-        ("legacy_manager_actions", 1, 1)
+        ("legacy_manager_actions", 1, 1),
+        ("source_document_original_pairs", 1, 1)
     ]
 
 

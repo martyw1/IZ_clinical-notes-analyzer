@@ -56,7 +56,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
         && init.body.get('confirm_patient_id_correction') === 'true'
       if (state.manualUploadFails) return jsonResponse({ detail: 'The binder could not be processed. Check the file limits and try again.' }, 413)
       if (state.manualUploadConflict && !correctionConfirmed) {
-        return jsonResponse({ detail: 'The MRN override differs from the MRN detected in the binder. Confirm the correction to continue.' }, 409)
+        return jsonResponse({ detail: 'MRN correction confirmation is required because the binder MRN differs from the override.' }, 409)
       }
       return binderImportResponse(correctionConfirmed, state.manualUploadWarnings ?? false)
     }
@@ -135,12 +135,13 @@ function treatmentPlanExportResponse(): Response {
 }
 
 function importResponse(patientId: string, archived: boolean, patientIdCorrectionApplied = false): Response {
-  return jsonResponse({ status: 'imported', patient_id: patientId, patient_display_label: `MRN ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
+  return jsonResponse({ status: 'imported', patient_record_id: 13, plan_version_id: 20, treatment_plan_id: 'manual-plan', patient_id: patientId, patient_display_label: `MRN ${patientId}`, source_mode: 'manual_upload', criteria_total: 42, encrypted_at_rest: true, source_file_archived: archived, source_file_id: archived ? 'source-file-914' : null, patient_id_correction_applied: patientIdCorrectionApplied }, 201)
 }
 
 function binderImportResponse(patientIdCorrectionApplied: boolean, withWarnings: boolean): Response {
   return jsonResponse({
     status: withWarnings ? 'imported_with_warnings' : 'imported',
+    patient_record_id: 13, plan_version_id: 20, treatment_plan_id: 'manual-plan',
     patient_id: '914',
     patient_display_label: 'MRN 914',
     source_mode: 'manual_upload',
@@ -190,6 +191,7 @@ function dashboardPayload() {
 
 function treatmentPlansPayload(multiPlan = false) {
   const baseItem = {
+    patient_record_id: 12, version_ordinal: 1, is_current: true, full_name: 'Alex Example',
     patient_id: '812',
     patient_display_label: 'MRN 812',
     current_level_of_care: 'PHP',
@@ -203,9 +205,9 @@ function treatmentPlansPayload(multiPlan = false) {
   return {
     items: [{
       ...baseItem,
-      treatment_plan_id: 'plan-812',
+      plan_version_id: 18, treatment_plan_id: 'plan-812',
       next_due_date: '2026-07-15',
-    }, ...(multiPlan ? [{ ...baseItem, treatment_plan_id: 'plan-813', next_due_date: '2026-08-15' }] : [])],
+    }, ...(multiPlan ? [{ ...baseItem, plan_version_id: 19, treatment_plan_id: 'plan-813', next_due_date: '2026-08-15' }] : [])],
     status_order: ['Missing Data', 'Needs Review', 'Incomplete', 'Within Window', 'Late', 'Conflicting Evidence', 'Unable to Evaluate'],
   }
 }
@@ -213,14 +215,15 @@ function treatmentPlansPayload(multiPlan = false) {
 function patientRosterPayload(multiPlan = false) {
   return {
     items: [{
+      patient_record_id: 12,
       mrn: '812',
       full_name: 'Alex Example',
       source_mode: 'alleva_rest_api',
       lifecycle_state: 'active',
       current_level_of_care: 'PHP',
       treatment_plans: [
-        ...(multiPlan ? [{ treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
-        { treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
+        ...(multiPlan ? [{ patient_record_id: 12, plan_version_id: 19, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
+        { patient_record_id: 12, plan_version_id: 18, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
       ],
       first_seen_at: '2026-07-08T10:00:00Z',
       last_seen_at: '2026-07-12T10:00:00Z',
@@ -233,10 +236,12 @@ function treatmentPlanRosterPayload(multiPlan = false) {
   return {
     items: [
       ...(multiPlan ? [{
+        patient_record_id: 12, plan_version_id: 19, source_mode: 'alleva_rest_api', version_ordinal: 1,
         treatment_plan_id: 'plan-813', mrn: '812', patient_key: '812', linked_to_mrn: true, full_name: 'Alex Example', last_updated: '2026-07-13T17:45:00Z',
         previous_treatment_plan_id: 'plan-812', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
       }] : []),
       {
+        patient_record_id: 12, plan_version_id: 18, source_mode: 'alleva_rest_api', version_ordinal: 1,
         treatment_plan_id: 'plan-812', mrn: '812', patient_key: '812', linked_to_mrn: true, full_name: 'Alex Example', last_updated: '2026-07-12T10:00:00Z',
         previous_treatment_plan_id: '', initial_treatment_plan_id: 'plan-812', initial_treatment_plan_date: '2026-06-15',
       },
@@ -244,7 +249,7 @@ function treatmentPlanRosterPayload(multiPlan = false) {
   }
 }
 
-function correctionQueueItemPayload() { return { work_item_id: 71, plan_version_id: 18, patient_id: '812', patient_display_label: 'MRN 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
+function correctionQueueItemPayload() { return { work_item_id: 71, patient_record_id: 12, plan_version_id: 18, treatment_plan_id: 'plan-812', source_mode: 'alleva_rest_api', patient_id: '812', patient_display_label: 'MRN 812', criterion_id: 'confirm_current_loc', criterion_title: 'Confirm current LOC', return_comment: 'Confirm the current LOC source.', returned_by_username: 'admin', returned_at: '2026-07-09T09:00:00Z' } }
 
 function workflowProfilePayload(status: 'draft' | 'published') {
   const version = { id: 71, version: 1, status, version_notes: '' }
@@ -261,6 +266,7 @@ function workflowProfilePayload(status: 'draft' | 'published') {
 
 function treatmentPlanDetailPayload(sourceFileDeleted = false, planId = 'plan-812') {
   return {
+    patient_record_id: 12, plan_version_id: planId === 'plan-813' ? 19 : 18, treatment_plan_id: planId,
     patient_id: '812',
     patient_display_label: 'MRN 812',
     patient_full_name: 'Alex Example',
@@ -419,6 +425,7 @@ function syncJobPayload(status: string) {
 
 function patientRecordDetailPayload(multiPlan = false) {
   return {
+    patient_record_id: 12,
     mrn: '812',
     full_name: 'Alex Example',
     source_mode: 'alleva_rest_api',
@@ -429,8 +436,8 @@ function patientRecordDetailPayload(multiPlan = false) {
     last_seen_at: '2026-07-12T10:00:00Z',
     reconciled_at: '2026-07-12T10:01:00Z',
     treatment_plans: [
-      ...(multiPlan ? [{ treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
-      { treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
+      ...(multiPlan ? [{ patient_record_id: 12, plan_version_id: 19, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-813', last_updated: '2026-07-13T17:45:00Z' }] : []),
+      { patient_record_id: 12, plan_version_id: 18, source_mode: 'alleva_rest_api', version_ordinal: 1, treatment_plan_id: 'plan-812', last_updated: '2026-07-12T10:00:00Z' },
     ],
     patient_record: {
       id: 'source-812',
