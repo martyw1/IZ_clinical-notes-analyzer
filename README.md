@@ -1,6 +1,6 @@
 # IZ Clinical Notes Analyzer
 
-Current app version: `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` channel.
+Current app version: `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
 
 Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
 
@@ -24,7 +24,7 @@ Version 2.0 Beta is the current local Windows desktop beta. It includes:
 - V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
 Version 2.0 Beta still does not include startup-triggered Alleva import or a signed MSI/MSIX. Operator-triggered treatment-plan sync remains off by default and requires a client ID, encrypted secret, explicit API/sync enablement, and live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and versioned internally; no separate mapping-approval form is required. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
-`2.0.0-beta.2` is a prerelease release-readiness update, not a production declaration. Before a production release, R3 must complete supervised approved live Alleva validation; rotate the exposed credential and approve downstream/history remediation; and record signing and retention/legal-hold decisions. The final validation procedure uses a clean isolated local-app-data directory and synthetic data only; see `docs/v2-beta/release-readiness-2026-07-11.md`.
+`2.0.0-beta.3` is a prerelease office-manager workflow and release-readiness update, not a production declaration. Before a production release, R3 must complete supervised approved live Alleva validation; rotate the exposed credential and approve downstream/history remediation; and record signing and retention/legal-hold decisions. The current validation status is recorded in `docs/validation/office-manager-production-fixes-2026-09-03.md`; the historical beta.2 procedure remains in `docs/v2-beta/release-readiness-2026-07-11.md`.
 
 ## Interactive Architecture Diagram
 
@@ -81,7 +81,7 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2"]
+        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3"]
         Legacy["Archived V1 runtime<br/>deprecated/v1"]
     end
 
@@ -164,16 +164,16 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For the current Version 2.0 Beta (`2.0.0-beta.2`), it writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For the current Version 2.0 Beta (`2.0.0-beta.3`), it writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip`
 
-The `2.0.0-beta.1` output names recorded in earlier validation reports are historical evidence, not current beta.2 installation instructions.
+The `2.0.0-beta.1` and beta.2 output names recorded in earlier validation reports are historical evidence, not current beta.3 installation instructions.
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`.
+1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
@@ -316,15 +316,23 @@ Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API outp
 
 Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials.
 
-Version `2.0.0-beta.2` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
+Version `2.0.0-beta.3` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
 
 ## Treatment Plan Tracking Rules
 
-The Version 2.0 Beta `Treatment Plans Roster`, `Patient Roster`, and `Treatment Plan Detail` screens provide the Treatment Plan Timeliness Tracker work queue and evidence review. Version `2.0.0-beta.2` uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The operational roster includes an admin pull action backed by the gated Alleva REST treatment-plan sync, search and refresh controls, exact-plan selection, MRN-centered patient navigation, checklist evidence, manager actions, immutable plan lineage, and manager-authorized status export.
+The Version 2.0 Beta `Treatment Plans Roster`, `Patient Roster`, and `Treatment Plan Detail` screens provide the Treatment Plan Timeliness Tracker work queue and evidence review. Version `2.0.0-beta.3` uses distinct text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records. The operational roster includes an admin pull action backed by the gated Alleva REST treatment-plan sync, search and refresh controls, exact-plan selection, MRN-centered patient navigation, checklist evidence, manager actions, immutable plan lineage, and manager-authorized status export. Source-scoped roster/export and plan-bound treatment-review handling remain subject to Task7 validation; Task8 backend metric evidence is independently verified, while browser/package metric evidence remains pending in the current validation record.
 
 The current implementation reference is `docs\patient-treatment-plan-handling.md`. It maps the manual-upload path, gated Alleva REST sync, patient-level aggregate, local treatment-plan tables, deterministic timeliness evaluator, 42-step selected-client checklist output, content-fact privacy boundary, and exact backend/frontend code locations.
 
-For the first client beta run, use the illustrated Marleigh guide under `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2` as the primary non-technical install, launch, treatment-plan audit, troubleshooting, diagnostics, backup, and maintenance handoff. Use `docs\beta-client-test-run-guide.md` as the shorter day-of-test checklist.
+For the first client beta run, use the illustrated Marleigh guide under `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2` as the primary non-technical install, launch, treatment-plan audit, troubleshooting, diagnostics, backup, and maintenance handoff. The guide directory name is historical and intentionally unchanged. Use `docs\beta-client-test-run-guide.md` as the shorter day-of-test checklist.
+
+### Supported explicit manual metadata
+
+Synthetic or approved manual TXT/CSV/TSV/binder inputs may provide `patient_name` or `patient_full_name`, optional plan-local `service_date` or `serviceDate`, optional `original_plan_reference`, and the existing explicit `signature_date` or `signature_datetime` fields. Combined completion/signature prose is intentionally not parsed. Omitted name, reference, or service date remains omitted; omission never erases an existing encrypted name snapshot. Conflicting values produce `Conflicting Evidence` and safe field-name-only warnings instead of a guessed winner. The optional name, service-date, and reference fields do not populate admission date, date-clock anchors, signature dates, patient identity, or source identity. Authorized patient names are encrypted UI display values only; they are never matching keys or CSV, audit, log, or query fields. The parser/storage capability is covered by the Task 4 metadata receipt; route and UI wiring remains subject to the Task 7 handoff.
+
+### Office-manager roster and export boundary
+
+Task 7's target contract remains pending final verification. The Patient Roster and Treatment Plans Roster should use exact `patient_record_id`, source system, source record/plan ID, and immutable `plan_version_id` identity. The default is the latest plan for each exact patient-row/source/external-plan identity; historical selection must be explicit. `All sources`/no source filter and a source-filtered request must return exactly their matching current rows. Name and reference searches are local UI filters only: the request must send every filtered result ID, including off-screen rows, and the POST CSV export must include the complete filtered result set without a pagination feature or viewport truncation. The export keeps immutable machine IDs and safe status/date fields while excluding full names, original references, search text, narrative, credentials, and other sensitive fields. Empty explicit selections produce a header-only export; unauthorized or mismatched IDs fail atomically. UI counts should distinguish patient records, plans, criteria, and correction items. These are expected behaviors for the pending Task 7 receipt, not a beta3 QA pass claim.
 
 The date clock compares the laptop/facility-local current date against either the admission date or the latest valid treatment-plan review/update date. PHP treatment plans use a 30-calendar-day update interval. Other configured treatment levels use a 60-calendar-day update interval. A level-of-care change has a separate manager-editable preset of 7 calendar days, but that LOC-change setting remains visibly marked unvalidated until R3/Marleigh confirms the exact rule.
 
@@ -419,7 +427,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 The current app version is:
 
 ```text
-2.0.0-beta.2
+2.0.0-beta.3
 ```
 
 Checklist content version is separate and remains:

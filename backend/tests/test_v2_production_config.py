@@ -142,6 +142,9 @@ def test_windows_frozen_runtime_uses_sanitized_data_staging() -> None:
     assert "Copy-SafeDataTree" in build_script_contents
     assert '--add-data "$runtimeFrontendDir;app\\static"' in build_script_contents
     assert '--add-data "$runtimeConfigDir;config"' in build_script_contents
+    assert '--add-data "$runtimeVersionFile;."' in build_script_contents
+    assert "Copy-Item -LiteralPath $versionFile -Destination $runtimeVersionFile -Force" in build_script_contents
+    assert "'app\\VERSION.json'" in build_script_contents
 
 
 def test_pytest_local_backup_exclusions_never_hide_tracked_tests() -> None:

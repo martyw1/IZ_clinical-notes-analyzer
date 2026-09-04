@@ -4,9 +4,9 @@ This guide covers the Windows release workflow for IZ Clinical Notes Analyzer.
 The build and install scripts are designed for Windows 10/11 users without
 administrator rights.
 
-## V2 beta.2 release-validation boundary
+## V2 beta.3 release-validation boundary
 
-The active prerelease metadata is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. Before package sign-off, run the validation procedure in `docs/v2-beta/release-readiness-2026-07-11.md` from a clean isolated local-app-data directory with synthetic data only. Never package or validate against a production SQLite database, clinical export, saved API artifact, credential profile, upload, or log. Code-signing and retention/legal-hold controls remain R3 owner decisions; this prerelease is not a production-release claim.
+The active prerelease metadata is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. Before package sign-off, use `docs/validation/office-manager-production-fixes-2026-09-03.md` and run the procedure from a clean isolated local-app-data directory with synthetic data only. Never package or validate against a production SQLite database, clinical export, saved API artifact, credential profile, upload, or log. Code-signing and retention/legal-hold controls remain R3 owner decisions; this prerelease is not a production-release claim. The builder now places `VERSION.json` at the external release-folder `app/` path and in the internal PyInstaller `_MEIPASS` runtime root; Task10 must verify both archive locations and the packaged `/api/version` response.
 
 ## Builder or Developer
 

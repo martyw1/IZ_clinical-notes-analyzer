@@ -25,7 +25,7 @@ router = APIRouter()
 @router.get("/api/api-configuration/sample-openapi.json")
 def sample_openapi() -> SampleOpenApiOut:
     return SampleOpenApiOut(
-        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version="2.0.0-beta.2"),
+        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version="2.0.0-beta.3"),
         paths={"/clients": SampleOpenApiPathItem(get=SampleOpenApiOperation(operation_id="listClients"))},
     )
 

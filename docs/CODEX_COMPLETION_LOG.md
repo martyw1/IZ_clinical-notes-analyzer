@@ -273,3 +273,11 @@
 - Added localhost port 8000 conflict detection before opening the browser or starting Uvicorn.
 - Statically reviewed Windows CMD/PowerShell launcher paths in this Linux container; `pwsh` was not installed, so script execution remains a Windows-box validation item.
 - Ran a Linux full-stack smoke test on port 8765 against `/api/health`, `/api/readiness`, `/api/version`, `/`, login, `/api/users/me`, sample OpenAPI, and API definition pull; all checked endpoints succeeded and the Uvicorn process was terminated afterward.
+
+## 2026-09-04 beta3 metadata and office-manager release documentation
+- Updated the current beta metadata to `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2` / release date `2026-09-03` across `VERSION`, `VERSION.json`, frontend package metadata, backend version consumers, Windows preflight, and the visible AppShell footer.
+- Added the isolated `backend/tests/test_v2_release_version_consistency.py` regression covering metadata/package equality, `/api/version`, sample OpenAPI version, isolated `settings.app_version`/`build_channel`, and static preflight/footer consistency.
+- Updated current operator/release documentation and added `docs/validation/office-manager-production-fixes-2026-09-03.md` with a separate Edge/Chrome U01-U62 retest matrix and explicit Task7/Task8/Task10 pending boundaries.
+- Added the narrow packaging contract that validates and bundles `VERSION.json` at the frozen runtime root; packaged archive and frozen `/api/version` proof remain pending Task10.
+- Preserved the historical beta2 documentation, illustrated guide directory/content, and the original smoke report byte-for-byte. No dependencies, commits, staging, pushes, live credentials, or production data were changed.
+- Task7 source-membership receipt remains pending. Task8 backend metric subgate is independently verified (28/28 focused tests, five raw-source probes, and byte-identical 63-by-42 clinical replay), while browser/package evidence remains pending. The source-document retention choice remains unanswered; no detach or erase behavior is claimed. LOC-change timing, live Alleva validation, credential rotation/history remediation, signing, and retention/legal-hold remain open gates.

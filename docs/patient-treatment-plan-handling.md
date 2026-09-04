@@ -1,12 +1,16 @@
 # Patient Treatment Plan Handling
 
-Date: 2026-07-06
+Date: 2026-09-04
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
+Applies to: IZ Clinical Notes Analyzer Beta Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
 
-## V2 beta.2 note
+## V2 beta.3 note
 
-The active V2 implementation is `2.0.0-beta.2` / build `2026.07.11.1` / channel `beta-local-desktop-v2`. This document remains the historical/shared implementation map; the V2 contract and final synthetic-only validation procedure are in `docs/v2-beta/`. No live Alleva production validation is claimed. Do not use production patient data, exports, databases, credentials, or uploads when performing beta.2 release validation.
+The active V2 implementation is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. This document remains the shared implementation map; current synthetic-only validation status is in `docs/validation/office-manager-production-fixes-2026-09-03.md`, while the beta.2 procedure in `docs/v2-beta/` is historical. No live Alleva production validation is claimed. Do not use production patient data, exports, databases, credentials, or uploads when performing beta.3 release validation.
+
+The office-manager raw-plan review scope is exact-plan and plan-version bound. Standalone legacy patient-wide treatment reviews with no reliable plan/version link are excluded from selected raw-plan reads; embedded reviews that are bound to the selected plan remain preserved. This scope clarification does not change deterministic rules, and recurrence dates previously projected from excluded standalone reviews may differ.
+
+Structural v12 source-document associations use exact saved memberships; the approved migration backfills only valid original `(source_document_id, plan_version_id)` pairs, and new or repeated imports attach the exact saved plan version. Existing ambiguous legacy rows remain missing/unlinked evidence rather than guessed associations. Detach/erase/removal behavior remains subject to the unanswered user retention choice, and this release makes no such claim.
 
 ### 2026-07-13 V2 treatment-plan queue update
 

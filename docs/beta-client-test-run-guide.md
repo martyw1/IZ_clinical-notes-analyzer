@@ -1,8 +1,8 @@
 # Beta Client Test Run Guide
 
-Date: 2026-08-20
+Date: 2026-09-04
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` Windows desktop runtime.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
 
 This guide is for a first near-production beta test run with non-technical users. It assumes R3 provides a prepared release folder or zip. Ordinary users should not need Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work.
 
@@ -10,7 +10,7 @@ Marleigh's primary non-technical handoff is the illustrated `docs\guides\Version
 
 ## What The Tester Should Receive
 
-- A folder or zip named `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2`.
+- A folder or zip named `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`.
 - The R3-approved first sign-in instructions through a secure channel.
 - This checklist and the illustrated Marleigh guide.
 - Only synthetic or approved beta-test data. Do not use real PHI until R3 has approved the beta data-handling plan.
@@ -29,7 +29,7 @@ The app installs for the current Windows user under `%LOCALAPPDATA%\Programs\IZ 
 
 After sign-in, confirm these items before doing test work:
 
-1. The footer says `Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2`.
+1. The footer says `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`.
 2. The administrator navigation shows `Status Dashboard`, `Patient Roster`, `Patient Record Detail`, `Treatment Plan Detail`, `Treatment Plans Roster`, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`.
 3. The top-right runtime badge says `Active runtime: V2 | admin`.
 4. `Status Dashboard` opens without a browser error.
@@ -49,6 +49,11 @@ After sign-in, confirm these items before doing test work:
 For each synthetic or approved test client, compare the screen to the source evidence:
 
 - Patient ID and source ID mapping are correct.
+- Select and review the exact patient/source/plan/version identity; do not merge same-looking IDs across source systems.
+- For a synthetic manual metadata check, use only the supported explicit fields: `patient_name`/`patient_full_name`, optional `service_date`/`serviceDate`, optional `original_plan_reference`, and explicit `signature_date`/`signature_datetime`. Do not rely on combined signature prose. Omitted values stay omitted, conflicts stay `Conflicting Evidence`, and service/reference values do not supply admission, signature, or identity fields. See the Task 4 metadata receipt for the verified parser/storage contract.
+- For roster/export checks, the pending Task 7 target is exact `patient_record_id` + source + external plan ID + immutable `plan_version_id` selection. `All sources` and source-filtered views should return their exact matching current rows; name/reference search remains local UI state, while export sends every filtered result ID, including off-screen matches, and returns the complete filtered set (no pagination feature) with safe immutable IDs. Full names, original references, search text, narrative, credentials, URLs, and logs/audit details stay out of CSV. Record the actual result as pass or failure after Task 7's receipt is available; do not assume this behavior from the guide.
+- Treat roster/export source membership as a Task7 validation item. Task8 backend metric evidence is independently verified, but browser/build metric evidence still requires the current Task10 run; record a failure rather than assuming completion.
+- Review only plan-bound treatment-review evidence. Standalone patient-wide legacy reviews without a reliable plan/version link are outside exact raw-plan reads; embedded plan-bound reviews remain visible.
 - Admission date and current level of care are present or clearly marked missing.
 - The latest valid treatment-plan review/update date is correct.
 - Source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective due date are shown separately when available.

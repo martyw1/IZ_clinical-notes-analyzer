@@ -361,18 +361,23 @@ function Build-DesktopRuntime {
     $runtimeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-runtime-$([System.Guid]::NewGuid().ToString('N'))"
     $runtimeFrontendDir = Join-Path $runtimeBuildRoot 'data\frontend-dist'
     $runtimeConfigDir = Join-Path $runtimeBuildRoot 'data\config'
+    $runtimeVersionFile = Join-Path $runtimeBuildRoot 'data\VERSION.json'
     $entryPoint = Join-Path $RootDir 'backend\app\desktop_runtime.py'
     if (-not (Test-Path -LiteralPath $entryPoint)) { throw "Desktop runtime entry point is missing: $entryPoint" }
+    $versionFile = Join-Path $RootDir 'VERSION.json'
+    if (-not (Test-Path -LiteralPath $versionFile)) { throw "Version metadata is missing: $versionFile" }
     New-Item -ItemType Directory -Path $runtimeDir, $runtimeBuildRoot -Force | Out-Null
     try {
         Copy-SafeDataTree -Source (Join-Path $RootDir 'frontend\dist') -Destination $runtimeFrontendDir
         Copy-SafeDataTree -Source (Join-Path $RootDir 'config') -Destination $runtimeConfigDir
+        Copy-Item -LiteralPath $versionFile -Destination $runtimeVersionFile -Force
         Write-Build 'Bundling the self-contained Windows desktop runtime...'
         Invoke-CheckedCommand -Command {
             & $VenvPython -m PyInstaller --noconfirm --clean --onefile --noconsole --name IZClinicalNotesAnalyzer `
                 --paths (Join-Path $RootDir 'backend') `
                 --add-data "$runtimeFrontendDir;app\static" `
                 --add-data "$runtimeConfigDir;config" `
+                --add-data "$runtimeVersionFile;." `
                 --collect-submodules app `
                 --hidden-import app.desktop_main `
                 --collect-all passlib `
@@ -414,6 +419,7 @@ function Assert-ReleaseRequiredItems {
         'app\frontend',
         'app\frontend\dist',
         'app\frontend\dist\index.html',
+        'app\VERSION.json',
         'app\runtime\IZClinicalNotesAnalyzer.exe',
         'app\docs\patient-treatment-plan-handling.md',
         'app\docs\beta-client-test-run-guide.md',

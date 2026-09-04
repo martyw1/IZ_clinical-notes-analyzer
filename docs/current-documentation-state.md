@@ -1,14 +1,14 @@
 # Current Documentation State
 
-Date: 2026-08-20
+Date: 2026-09-04
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.2` / build `2026.07.11.1` on the `beta-local-desktop-v2` channel.
+Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
 
 ## Purpose
 
 This file is the current documentation alignment tracker. It summarizes what the active docs should say after the July 2026 patient-centered Alleva treatment-plan clarification and the current Swagger/OpenAPI mapping export review.
 
-Historical validation reports, PRD notes, and earlier implementation analyses may keep the version/date they originally validated. Do not reinterpret historical reports as current beta state unless they explicitly say they apply to `2.0.0-beta.2`.
+Historical validation reports, PRD notes, and earlier implementation analyses may keep the version/date they originally validated. Do not reinterpret historical reports as current beta state unless they explicitly say they apply to `2.0.0-beta.3`.
 
 ## Current Product State
 
@@ -21,15 +21,22 @@ Historical validation reports, PRD notes, and earlier implementation analyses ma
 ## Current Treatment-Plan State
 
 - `config\checklists\treatment-plan-v1.json` remains the canonical 42-step checklist source.
-- Checklist content version remains `1.2.0`; app version remains separate at `2.0.0-beta.2`.
+- Checklist content version remains `1.2.0`; app version remains separate at `2.0.0-beta.3`.
 - `Treatment Plans Roster` is the admin/office-manager operational pull and exact-plan work queue. `Patient Roster`, `Patient Record Detail`, and `Treatment Plan Detail` provide the MRN-centered review path.
 - The V2 administrator navigation exposes `Status Dashboard`, patient and treatment-plan work areas, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`; role restrictions still control which pages and actions each account can use.
 - The selected-plan detail includes deterministic timeliness status, source evidence, date-clock results, current-plan content facts, the 42-step checklist, manager actions, immutable plan lineage, audit context, and authorized export paths.
+- Office-manager roster and export views are source-scoped and must preserve exact patient, source, plan, and immutable plan-version identity; the Task7 source-membership receipt remains pending. Task8's backend metrics subgate is independently verified (28/28 focused tests, five raw-source probes, and byte-identical 63-by-42 clinical replay), while its browser/build evidence remains pending.
+- Exact raw-plan reads exclude standalone historical patient-wide treatment reviews when no reliable plan/version link exists. Embedded reviews that are bound to the selected plan remain preserved; deterministic rules are unchanged, and older projected recurrence dates may differ for excluded legacy reviews.
+- Structural v12 source-document associations use exact saved memberships; approved migration backfills only valid original `(source_document_id, plan_version_id)` pairs, and new or repeated imports attach the exact saved plan version. Existing ambiguous legacy rows remain missing/unlinked evidence rather than guessed associations. Detach/erase/removal behavior remains subject to the unanswered retention choice; no such behavior is claimed in this beta3 documentation state.
 - Alleva/API treatment-plan lookup status and lookup results should stay inside bounded scroll areas so long progress/diagnostic text does not push lower content below the viewport.
 - Source-document due-date disagreement without a validated LOC-change explanation remains a review/error outcome such as `Needs Review`, not silent compliance.
-- Patient ID is the only accepted patient identifier for current upload/import/display/export/log workflows. Patient names, addresses, contact details, original filenames, attachment URLs, and author/custodian labels must not be local display labels or matching keys.
+- MRN/patient ID remains the identity key; exact UI selection uses the authorized `patient_record_id` together with source system, source record ID, plan ID, and immutable plan-version identity. Names are never identity or matching keys and are not emitted in CSV, query parameters, audit details, or logs. Authorized encrypted patient-name display is limited to permitted UI rows; original filenames, addresses, contact details, attachment URLs, and author/custodian labels remain excluded from CSV/audit/log/query surfaces.
 - Alleva patient-name import/display remains opt-in and off by default. Name-only matching remains disabled by default and validation-only.
 - The LOC-change treatment-plan update window remains unresolved. The app keeps the manager-editable 7-calendar-day preset, but docs and UI must continue marking the rule as unvalidated until R3/Marleigh confirms the exact rule.
+
+## Current beta3 validation boundary
+
+The beta3 metadata and current operator documentation are aligned to build `2026.09.03.1`. This alignment is not a packaged-runtime or full-smoke completion claim. Task10 must validate the freshly built isolated Windows package, `/api/version`, the visible footer, and the complete Edge/Chrome office-manager workflow matrix before any production, clinical-production, GA, or full-smoke claim.
 
 ## Current Alleva API State
 

@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "2.0.0-beta.2",
-  "build": "2026.07.11.1",
+  "version": "2.0.0-beta.3",
+  "build": "2026.09.03.1",
   "release_channel": "beta-local-desktop-v2",
-  "release_date": "2026-07-11",
+  "release_date": "2026-09-03",
   "git_branch": "main",
   "stability": "beta",
   "is_prerelease": true,
-  "version_name": "Version 2.0 Beta release-readiness update",
-  "description": "V2 local-desktop beta release-readiness update with evidence-linked deterministic workflows, bounded Alleva contract validation, and visible external release gates. This prerelease is not a production release and does not claim approved live Alleva validation."
+  "version_name": "Version 2.0 Beta 3 office-manager workflow update",
+  "description": "V2 local-desktop beta update with exact treatment-plan identity, encrypted manual metadata, safer session and upload handling, source-scoped review surfaces, and evidence-linked deterministic workflows. This prerelease is not a production release and does not claim approved live Alleva validation."
 }
