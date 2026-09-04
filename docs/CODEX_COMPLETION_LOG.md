@@ -1,5 +1,15 @@
 # Codex completion log - 2026-05-14
 
+## 2026-09-04 beta3 office-manager fixes and final candidate
+
+- Backed up pre-change main `438c72644363` with verified encrypted Git history, sanitized source archive and preserved private smoke log. The restore check matched that commit; DPAPI recovery requires the same Windows account.
+- Integrated exact source/patient/plan/version selection, encrypted manual metadata, review/correction/source memberships, evidence presentation, session/upload state, truthful metrics, release-document exclusions and Windows archive fixes on main.
+- Final application commit `f65b3b7` fixes pull-completion feedback lost during refresh. Two controlled regression cases reproduce the old failure; current frontend is 173/173 with typecheck/build exit 0. Unchanged backend inputs retain two complete 492-case passes.
+- Rebuilt the final prepared executable once with explicit `-SkipTests`, reusing the unchanged backend/current frontend receipts. Folder/ZIP scans and embedded assets/version passed. This is not described as another no-skip build.
+- Original seven E2E tests passed independently in installed Edge and Chrome. Native Windows picker/import, exact-plan review and saved comments worked in both; Chrome additionally verified CSV/source downloads, Help, refreshed metrics and sign-out.
+- See [final smoke results](validation/office-manager-final-smoke-2026-09-04.md) for the bounded scripted matrix, actual runner failures, four user-stopped cells, cleanup, native coverage limits and external release gates. Tests did not use live vendor credentials or real patient data.
+- This closeout is documentation accompanying the tested application, not another code/build iteration. Private logs, runtime data and backup artifacts are not published.
+
 ## 2026-08-20 Marleigh Version 2.0 Beta illustrated guide and documentation alignment
 
 - Added an offline, print-friendly HTML setup/install/daily-use/troubleshooting guide under `docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2` for the non-technical clinical-manager administrator workflow.

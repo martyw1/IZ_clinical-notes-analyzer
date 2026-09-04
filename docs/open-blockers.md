@@ -85,7 +85,7 @@ Required resolution evidence:
 
 ## Windows Packaging and Validation
 
-Status: beta.3 source and metadata updates are prepared; fresh packaged-runtime, installer, and browser validation remain open for the isolated Task10 run. Signed MSI/MSIX remains open pending the R3 IT deployment decision.
+Status: the beta3 release folder/ZIP, rebuilt executable, embedded assets, packaged version endpoint and native Edge/Chrome office-manager flows have been verified on this Windows 11 host with synthetic data. See [final smoke results](validation/office-manager-final-smoke-2026-09-04.md) for scripted results and shutdown warnings. Fresh end-user install/repair/uninstall, every native administrative action, signed MSI/MSIX and deployment approval remain outside this proof.
 
 The recommended long-term end-user path is a packaged signed `.exe` or `.msi` with bundled runtime, built frontend assets, shortcuts, repair/modify support, uninstall support, and local app-data preservation by default.
 

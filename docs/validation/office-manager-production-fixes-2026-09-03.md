@@ -1,10 +1,10 @@
-# Office-manager production-fixes validation map
+# Office-manager production-fixes validation planning record
 
 Validation record prepared: 2026-09-04
 
 Target release metadata: `2.0.0-beta.3` / build `2026.09.03.1` / release date `2026-09-03` / channel `beta-local-desktop-v2` / stability `beta`.
 
-This record is the current beta3 validation map for the office-manager treatment-plan workflow. It is not a production, clinical-production, GA, installer, packaged-runtime, or full-smoke completion claim. The complete isolated Windows build, packaged `/api/version` proof, and native Edge/Chrome interaction run remain Task10 gates.
+This is the preserved pre-closeout planning record, not the final result. Its pending cells describe the originally proposed scope. See [Final beta3 smoke results](office-manager-final-smoke-2026-09-04.md) for actual build, backend, browser, native-interaction, failure and coverage evidence. Targeted native interaction plus a scripted matrix is not all 62 scenarios independently performed by hand in both browsers. Neither record is production or clinical-production approval.
 
 ## Evidence boundary and preservation
 

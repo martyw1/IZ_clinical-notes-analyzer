@@ -17,13 +17,13 @@ Version metadata name: `Version 2.0 Beta 3 office-manager workflow update`
 Summary:
 
 - Aligns the current beta metadata in `VERSION`, `VERSION.json`, frontend package metadata, backend settings, sample OpenAPI metadata, Windows preflight, and the visible app footer.
-- Adds the source-scoped office-manager roster/export and evidence-consistency implementation receipts as they become available; Task7 source-membership remains pending, while Task8 backend metric evidence is independently verified and its browser/package coverage remains pending.
+- Implements source-scoped roster/export, exact saved-plan selection, encrypted manual metadata, version-bound review/correction history, safe session/upload state, readable clinical evidence and explicit metric units.
 - Preserves exact source-system and treatment-plan identities, immutable plan lineage, deterministic Missing Data/Needs Review/Conflicting Evidence/Unable to Evaluate outcomes, and the existing gated Alleva read-only boundary.
-- Bundles `VERSION.json` into the packaged runtime root so a frozen `/api/version` response retains build, channel, release-date, and prerelease metadata; Task10 must prove this in a freshly built isolated package.
+- Bundles `VERSION.json` into the packaged runtime root. The rebuilt beta3 executable, embedded frontend assets, release folder/ZIP, frozen `/api/version` and native Edge/Chrome footer have been verified against build `2026.09.03.1`.
 - Keeps standalone historical patient-wide treatment reviews without a reliable plan/version link outside exact raw-plan reads; embedded plan-bound reviews remain preserved and deterministic rules are unchanged. Previously projected recurrence dates for excluded legacy reviews may differ.
 - Records the unresolved user retention choice for reused encrypted source documents; no detach or erase behavior is claimed until that choice is answered and validated.
 - Keeps the level-of-care-change update window configurable and visibly unvalidated, live Alleva validation disabled, credential rotation/history remediation open, and signing/retention/legal-hold decisions open.
-- This is a beta prerelease status update, not a production, clinical-production, GA, or full-smoke completion claim. Full packaged-runtime and Edge/Chrome user-flow evidence remains a Task10 gate.
+- Preserves pull-completion feedback while either roster refreshes, with controlled regression coverage. The final application commit is `f65b3b7`; later documentation-only changes do not change the tested binary. See [final smoke results](validation/office-manager-final-smoke-2026-09-04.md) for exact test totals, native coverage, runner warnings and operational limits. This remains beta, not production, clinical-production or GA approval.
 
 ## 2.0.0-beta.2 - V2 release-readiness update
 
