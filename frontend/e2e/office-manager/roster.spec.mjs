@@ -138,6 +138,19 @@ test('same MRN source and facility rows stay distinct and assignment never grant
     phase = 'help'
     await page.getByRole('button', { name: 'Help', exact: true }).click()
     await expect(page.getByText(/a new import never silently replaces your selection/)).toBeVisible()
+    const helpViewport = page.viewportSize()
+    const helpLayouts = []
+    try {
+      for (const width of [375, 768]) {
+        await page.setViewportSize({ width, height: 900 })
+        await expect(page.getByText(/a new import never silently replaces your selection/)).toBeVisible()
+        const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+        await capture(page, `task-10-help-${width}.png`)
+        helpLayouts.push({ width, fits })
+        expect(fits, `Help fits at ${width}`).toBe(true)
+      }
+    } finally { await page.setViewportSize(helpViewport) }
+    writeEvidence('task-10-help-responsive.json', { interaction: 'SCRIPTED Playwright', states: helpLayouts })
     await capture(page, 'task-7-help.png')
     writeEvidence('task-7-roster-error.json', { actualBackend: true, manual: identity(manual), alleva: identity(alleva),
       forbidden: identity(forbidden), denied, emptySnapshotStatus: response.status(), emptySnapshotSettleMs: settleMs,

@@ -108,6 +108,19 @@ test('explicit old version survives new import and binds UI actions correction a
     const item = page.locator('li[data-plan-version-id="' + old.plan_version_id + '"]')
     await expect(item).toHaveCount(1)
     await expect(item).toHaveAttribute('data-patient-record-id', String(old.patient_record_id))
+    const correctionViewport = page.viewportSize()
+    const correctionLayouts = []
+    try {
+      for (const width of [375, 768]) {
+        await page.setViewportSize({ width, height: 900 })
+        await expect(item.getByLabel('Resolution note', { exact: true })).toBeVisible()
+        const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+        await capture(page, `task-10-corrections-${width}.png`)
+        correctionLayouts.push({ width, fits })
+        expect(fits, `Corrections fits at ${width}`).toBe(true)
+      }
+    } finally { await page.setViewportSize(correctionViewport) }
+    writeEvidence('task-10-corrections-responsive.json', { interaction: 'SCRIPTED Playwright', states: correctionLayouts })
     await item.getByLabel('Resolution note', { exact: true }).fill('Synthetic exact-work-item correction.')
     await capture(page, 'task-7-correction-selected.png')
     const submissionResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/correction-submissions') && response.request().method() === 'POST')
