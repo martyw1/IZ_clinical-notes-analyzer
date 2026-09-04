@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const cli = path.join(repo, 'frontend/node_modules/@playwright/test/cli.js')
+const sandbox = mkdtempSync(path.join(tmpdir(), 'iz-office-discovery-'))
+const contract = path.join(sandbox, 'discovery-only-contract.json')
+after(() => rmSync(sandbox, { recursive: true }))
+const planNames = ['primaryV1', 'primaryV2', 'secondaryPlan', 'patientTwo', 'sourceCollision', 'facilityCollision']
+writeFileSync(contract, JSON.stringify({
+  run_id: 'discovery-only-no-runtime', schema_version: 1, physical_data_dir: sandbox,
+  setup_surface: 'discovery-only metadata; no seeded runtime', integrity_ok: false, foreign_keys_ok: false, live_import_enabled: false,
+  users: Object.fromEntries(['admin', 'office_manager', 'counselor', 'viewer'].map((role, index) => [role, { id: index + 1, username: `discovery-${role}` }])),
+  facilities: { primary: 1, secondary: 2 }, patients: { primary: 1, secondary: 2, sourceCollision: 3, facilityCollision: 4 },
+  plans: Object.fromEntries(planNames.map((name, index) => [name, { patient_id: 'DISCOVERY-ONLY', patient_record_id: 1,
+    plan_id: `discovery-${name}`, source_mode: 'manual_upload', plan_version_id: index + 1, version_ordinal: 1 }])),
+  files: { aggregate: path.join(sandbox, 'not-a-real-upload.json'), binder: path.join(sandbox, 'not-a-real-binder.txt') },
+}))
 
 function discovery(config, overrides = {}) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('IZ_OM_') && !key.startsWith('IZ_CNA_E2E_')))
@@ -36,12 +50,13 @@ test('ordinary config lists all seven original tests without importing the isola
 })
 
 test('dedicated config still discovers every office-manager scenario and no support self-test', () => {
-  // Given: inert discovery-only settings, with no credentials, server, browser, or fixture data.
+  // Given: metadata placeholders for supported module-scope fixture reads, with no runtime or credentials.
   const expectedFiles = readdirSync(path.join(repo, 'frontend/e2e/office-manager')).filter(name => name.endsWith('.spec.mjs')).sort()
   // When: the dedicated config lists all scenarios without executing their test bodies.
   const specs = discovery('frontend/playwright.office-manager.config.mjs', {
     IZ_OM_BASE_URL: 'http://127.0.0.1:1', IZ_OM_RUN_ID: 'discovery-only-no-runtime',
     IZ_OM_SCENARIO: 'all', IZ_OM_CASE: 'all',
+    IZ_OM_FIXTURE_CONTRACT: contract,
   })
   // Then: each scenario remains available exclusively through its intended config.
   assert.deepEqual([...new Set(specs.map(spec => spec.file))].sort(), expectedFiles)

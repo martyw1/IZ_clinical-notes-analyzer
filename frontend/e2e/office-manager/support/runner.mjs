@@ -8,15 +8,27 @@ import { allocatePort, startOwned, waitOwned, stopOwned, waitForRuntime, runtime
 
 const supportDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(supportDir, '../../../..')
-const { values } = parseArgs({ options: {
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+const { values } = parseArgs({ args: isMain ? process.argv.slice(2) : [], options: {
   scenario: { type: 'string', default: 'harness' }, case: { type: 'string', default: 'all' },
   'browser-channel': { type: 'string', default: 'msedge' }, 'runtime-mode': { type: 'string', default: 'checkout' },
   'evidence-dir': { type: 'string', default: '.omo/evidence/office-manager-production-fixes' },
   'prepared-executable': { type: 'string', default: '' }, 'base-url': { type: 'string', default: '' },
   'local-app-data-dir': { type: 'string', default: '' }, 'interactive-seconds': { type: 'string', default: '0' },
   'interactive-role': { type: 'string', default: 'office_manager' },
+  'interactive-credentials-from-environment': { type: 'boolean', default: false },
   headed: { type: 'boolean', default: false },
 } })
+
+export function selectRunPassword(options) {
+  if (!options['interactive-credentials-from-environment']) return `Qa1!${randomBytes(24).toString('hex')}`
+  const seconds = Number(options['interactive-seconds'])
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > 900) throw new HarnessError('INTERACTIVE_CREDENTIALS_REQUIRE_BOUND')
+  const suppliedPassword = process.env.IZ_OM_INTERACTIVE_PASSWORD
+  if (!suppliedPassword) throw new HarnessError('INTERACTIVE_CREDENTIALS_MISSING')
+  if (!/^Qa1![0-9a-f]{48}$/.test(suppliedPassword)) throw new HarnessError('INTERACTIVE_CREDENTIALS_INVALID')
+  return suppliedPassword
+}
 
 function installedBrowser(channel) {
   const relative = channel === 'msedge' ? 'Microsoft/Edge/Application/msedge.exe' : 'Google/Chrome/Application/chrome.exe'
@@ -24,7 +36,7 @@ function installedBrowser(channel) {
     .filter(Boolean).map(root => path.join(root, relative)).find(candidate => existsSync(candidate)) ?? ''
 }
 
-function childEnvironment(run) {
+export function childEnvironment(run) {
   const env = { ...process.env }
   for (const key of Object.keys(env)) {
     if (/^(IZ_CNA_|IZ_OM_)/i.test(key) || ['SECRET_KEY', 'DATA_ENCRYPTION_KEY', 'LOCAL_SQLITE_DB_PATH', 'BOOTSTRAP_ADMIN_USERNAME', 'BOOTSTRAP_ADMIN_PASSWORD'].includes(key)) delete env[key]
@@ -47,6 +59,7 @@ function childEnvironment(run) {
 
 async function runSmoke() {
   const id = randomUUID()
+  const password = selectRunPassword(values)
   if (!process.env.LOCALAPPDATA) throw new HarnessError('OS_LOCAL_APP_DATA_UNAVAILABLE')
   const ownedRoot = path.join(process.env.LOCALAPPDATA, 'IZ-CNA-OfficeManager-Smoke')
   const target = validateTarget({
@@ -70,7 +83,7 @@ async function runSmoke() {
   assertPlainPath(evidenceRoot)
   const evidence = path.join(evidenceRoot, `${values.scenario}-${values.case}-${values['browser-channel']}-${id}`)
   const port = await allocatePort()
-  const run = { id, port, baseUrl: `http://127.0.0.1:${port}`, evidence, target, password: `Qa1!${randomBytes(24).toString('hex')}` }
+  const run = { id, port, baseUrl: `http://127.0.0.1:${port}`, evidence, target, password }
   const env = childEnvironment(run)
   const processes = []
   const receipt = { runId: id, scenario: values.scenario, case: values.case, browserChannel: values['browser-channel'],
@@ -145,7 +158,9 @@ async function runSmoke() {
   }
 }
 
-try { await runSmoke() } catch (error) {
-  console.error(error instanceof HarnessError ? error.message : 'Office-manager smoke refused: INVALID_RUNNER_INPUT')
-  process.exitCode = 1
+if (isMain) {
+  try { await runSmoke() } catch (error) {
+    console.error(error instanceof HarnessError ? error.message : 'Office-manager smoke refused: INVALID_RUNNER_INPUT')
+    process.exitCode = 1
+  }
 }

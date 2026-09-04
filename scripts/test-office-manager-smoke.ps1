@@ -7,6 +7,8 @@ keeps credentials only in child-process memory, and records sanitized evidence.
 BaseUrl and LocalAppDataDir exist for fail-closed guard testing, not app attachment.
 InteractiveSeconds opens a separate headed QA browser after automated checks and
 keeps only the owned runtime alive for a bounded hands-on verification session.
+InteractiveCredentialsFromEnvironment optionally accepts a fresh synthetic password
+from the native controller's child environment, only with a bounded session.
 .EXAMPLE
 powershell -NoProfile -File scripts/test-office-manager-smoke.ps1 -Scenario harness -Case all -BrowserChannel msedge -EvidenceDir .omo/evidence/office-manager-production-fixes
 #>
@@ -21,6 +23,7 @@ param(
     [string]$BaseUrl = '',
     [string]$LocalAppDataDir = '',
     [ValidateRange(0, 900)][int]$InteractiveSeconds = 0,
+    [switch]$InteractiveCredentialsFromEnvironment,
     [ValidateSet('admin', 'office_manager', 'counselor', 'viewer')][string]$InteractiveRole = 'office_manager',
     [switch]$Headed
 )
@@ -37,5 +40,6 @@ if ($PreparedExecutable) { $arguments += @('--prepared-executable', $PreparedExe
 if ($BaseUrl) { $arguments += @('--base-url', $BaseUrl) }
 if ($LocalAppDataDir) { $arguments += @('--local-app-data-dir', $LocalAppDataDir) }
 if ($Headed) { $arguments += '--headed' }
+if ($InteractiveCredentialsFromEnvironment) { $arguments += '--interactive-credentials-from-environment' }
 & $node.Source @arguments
 exit $LASTEXITCODE

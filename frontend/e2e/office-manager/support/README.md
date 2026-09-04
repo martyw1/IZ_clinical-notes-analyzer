@@ -20,7 +20,7 @@ The discovery-only regression starts no application server or browser and requir
 node --test frontend/e2e/office-manager/support/discovery-check.mjs
 ```
 
-It verifies that the ordinary config lists all seven existing tests and that the dedicated config lists every office-manager scenario file. The check intentionally uses a filename without `.test` or `.spec` so a future exclusion regression cannot recursively discover the check itself.
+It verifies that the ordinary config lists all seven existing tests and that the dedicated config lists every office-manager scenario file. A temporary synthetic metadata-only contract supports module-scope fixture references; it seeds no runtime and is removed afterward. No scenario body runs and its placeholder IDs/files are not runtime fixtures. The check intentionally uses a filename without `.test` or `.spec` so a future exclusion regression cannot recursively discover the check itself.
 
 ## Feature-owned specs
 
@@ -76,6 +76,20 @@ powershell -NoProfile -File scripts/test-office-manager-smoke.ps1 -Scenario harn
 ```
 
 After automated checks, this opens a separate headed installed browser, signs in to the chosen synthetic role, writes `interactive-ready.json` with exact URL/window title/executable/PIDs, and holds that owned runtime for at most 900 seconds. The file is the readiness signal; stdout announces dispatch before browser login settles. Record actual hands-on actions separately. `handsOnActionsClaimed` is always false in the harness receipt. The deadline closes this context and runtime automatically. `-Headed` only changes automated test visibility and does not hold a context open.
+
+### In-memory native signout/relogin credentials
+
+Only a native controller that must type the password again after real signout should add `-InteractiveCredentialsFromEnvironment`. It must also specify `-InteractiveSeconds` from 1 to 900 and generate a fresh password in its own memory using `Qa1!` followed by 48 lowercase random hexadecimal characters (`randomBytes(24).toString('hex')`). Supply that value only as `IZ_OM_INTERACTIVE_PASSWORD` in the spawned PowerShell child's environment, never in command arguments or a shell assignment recorded in a transcript. Retain the value in the native controller's memory for the later approved native typing action; discard that reference when the bounded session finishes.
+
+Without this explicit switch, inherited input is ignored and the existing fresh random-password generator is unchanged. With the switch, absent/empty input, malformed synthetic shape, or a missing positive bound is refused with a fixed code before runtime/evidence setup. The runner removes the reserved input from downstream inherited environments; only its existing `IZ_OM_PASSWORD` and bootstrap-password variables carry the selected run password. Existing screenshot/evidence secret guards therefore recognize the actual selected value. Do not print, persist, attach, copy to the clipboard, or send this value through files/IPC. This is not a mechanism for reading real browser credentials or another process's memory.
+
+Focused credential guard and in-memory handoff checks, with no application runtime:
+
+```powershell
+node --test frontend/e2e/office-manager/support/native-credentials.test.mjs
+```
+
+Those checks report only scalar equality/redaction/refusal outcomes. They do not claim native login/signout/relogin coverage; record that later in the actual native controller's QA evidence.
 
 ## Prepared runtime
 
