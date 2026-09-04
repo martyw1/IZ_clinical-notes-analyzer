@@ -70,7 +70,6 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
   }, [token, user.role])
 
   if (error) return <section className='panel error-banner' role='alert'>{error}</section>
-  if (!roster) return <section className='panel muted'>Loading patient roster...</section>
 
   return (
     <div className='treatment-workbench'>
@@ -82,7 +81,7 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
           onCompleted={() => setRefreshNumber((current) => current + 1)}
         />
       )}
-      <section className='panel table-panel'>
+      {!roster ? <section className='panel muted'>Loading patient roster...</section> : <section className='panel table-panel'>
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Patient Roster</p>
@@ -149,7 +148,7 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
             {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current source and search filters.</td></tr>}
           </tbody>
         </table>
-      </section>
+      </section>}
     </div>
   )
 }

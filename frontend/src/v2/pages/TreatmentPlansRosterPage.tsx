@@ -97,7 +97,6 @@ export function TreatmentPlansRosterPage({
   }
 
   if (error) return <section className='panel error-banner' role='alert'>{error}</section>
-  if (!roster) return <section className='panel muted'>Loading treatment plans roster...</section>
 
   return (
     <div className='treatment-workbench'>
@@ -111,7 +110,7 @@ export function TreatmentPlansRosterPage({
           buttonLabel='Pull full treatment plans'
         />
       )}
-      <section className='panel table-panel'>
+      {!roster ? <section className='panel muted'>Loading treatment plans roster...</section> : <section className='panel table-panel'>
         <div className='section-heading'>
           <div>
             <p className='eyebrow'>Source-aware treatment plans</p>
@@ -189,7 +188,7 @@ export function TreatmentPlansRosterPage({
             {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={5} className='muted'>No treatment plans match the current source and search filters.</td></tr>}
           </tbody>
         </table>
-      </section>
+      </section>}
     </div>
   )
 }

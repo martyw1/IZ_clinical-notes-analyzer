@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PatientRosterPage } from './PatientRosterPage'
+import { TreatmentPlansRosterPage } from './TreatmentPlansRosterPage'
 import type { UserProfile } from '../api/types'
 
 const adminUser: UserProfile = {
@@ -18,6 +19,39 @@ const adminUser: UserProfile = {
 
 describe('Patient roster pull', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it.each(['patient', 'treatment-plan'] as const)('preserves %s pull completion while refreshed rows are pending', async (kind) => {
+    const rosterPath = kind === 'patient' ? '/api/v2/patient-roster' : '/api/v2/treatment-plan-roster'
+    const startPath = kind === 'patient' ? '/api/v2/patient-roster/pull' : '/api/v2/alleva-sync/run'
+    const pollPath = kind === 'patient' ? '/api/v2/patient-roster/jobs/roster-1' : '/api/v2/alleva-sync/jobs/roster-1'
+    let rosterReads = 0
+    let releaseRefresh: ((value: Response) => void) | undefined
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost').pathname
+      if (path === rosterPath) {
+        rosterReads += 1
+        if (rosterReads === 1) return response({ items: [] })
+        return new Promise<Response>((resolve) => { releaseRefresh = resolve })
+      }
+      if (path === '/api/api-configuration') return response(configuredProfile())
+      if (path === '/api/v2/patient-roster/jobs/latest') return response({}, 404)
+      if (path === startPath) return response(job('queued', 0), 202)
+      if (path === pollPath) return response(job('completed', 100))
+      return response({}, 404)
+    }))
+    const Page = kind === 'patient' ? PatientRosterPage : TreatmentPlansRosterPage
+    render(<Page token='token' user={adminUser} onNavigate={vi.fn()} onSelectPatient={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: kind === 'patient' ? 'Pull patient roster' : 'Pull full treatment plans' }))
+    try {
+      await waitFor(() => expect(rosterReads).toBe(2))
+      expect(await screen.findByRole('status')).toHaveTextContent(kind === 'patient' ? '1 record updated' : '1 treatment plan')
+      expect(screen.getByText(kind === 'patient' ? 'Loading patient roster...' : 'Loading treatment plans roster...')).toBeInTheDocument()
+    } finally {
+      await act(async () => { releaseRefresh?.(response({ items: [] })) })
+    }
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(kind === 'patient' ? '1 record updated' : '1 treatment plan')
+  })
 
   it('pulls the complete roster through the roster job and refreshes visible data', async () => {
     // Given: an authorized Alleva profile and an initially empty local roster.
