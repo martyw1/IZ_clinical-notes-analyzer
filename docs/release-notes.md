@@ -8,6 +8,13 @@ Current release date in version metadata: `2026-09-03`.
 
 Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
 
+## Unreleased - Checkout repair and UI cleanup (2026-09-04)
+
+- Dashboard failures now offer in-place refresh and retain explicitly marked previous counts after a failed update.
+- Compact navigation, product-focused header, keyboard skip navigation, and a risk-first dashboard use the existing clinical design system.
+- Combined browser scenarios preserve exact version and authorization checks after earlier scenarios import additional synthetic records.
+- Source-checkout validation only; release metadata and prepared installer remain at the existing beta3 build. LOC-change validation and live Alleva approval remain unresolved.
+- See [repair validation and completion record](validation/repair-ui-2026-09-04.md) for current evidence and limits.
 ## 2.0.0-beta.3 - Office-manager workflow and release-readiness update
 
 Build: `2026.09.03.1`
