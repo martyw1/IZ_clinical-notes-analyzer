@@ -228,3 +228,13 @@ The Version 2.0 Beta illustrated operator guide is a print-friendly extension of
 - **Shapes**: 16px page radius, 12px component/image radius, pills only for compact version metadata.
 - **Accessibility**: semantic landmarks, descriptive alt text, visible link underlines, 16px body text, print rules, no motion, and no color-only instruction.
 - **Responsive behavior**: two-column contents/cards collapse to one column below 680px; images remain proportional and tables retain readable cell padding.
+
+## 9. Navigation and dashboard refinement
+
+- Keep the existing calm clinical palette, Segoe UI font, border-only surfaces, and 4px spacing rhythm.
+- App header: product name at section-title size; version stays in the footer. Show the signed-in role in plain language.
+- Navigation: compact flat tabs with a green bottom border on selection, 44px minimum targets, and a single horizontally scrollable row below 720px. All existing destinations stay reachable.
+- Keyboard users can skip navigation to the main content; focus remains visibly outlined.
+- Dashboard: full-width heading and refresh action, risk counts first, source readiness below. Metrics use a semantic definition list and neutral surfaces, with risk stripes only on relevant metrics.
+- Refresh states: loading, ready, failed initial load with retry, and failed refresh with explicitly stale previous data. Keep the refresh action available after a failure and disabled while loading.
+- Shared tokens added: `--font-body: 0.95rem`, `--font-small: 0.84rem`, `--font-section: 1.05rem`, `--font-title: 1.5rem`, `--font-count: 1.3rem`, `--control-height: 44px`, `--radius-control: 8px`.

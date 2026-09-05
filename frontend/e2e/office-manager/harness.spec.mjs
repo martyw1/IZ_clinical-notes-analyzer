@@ -29,7 +29,7 @@ test('real office-manager login and beta version agree @happy', async ({ page, r
   expect(version.release_channel).toBe('beta-local-desktop-v2')
   expect(version.stability).toBe('beta')
   await expect(page.locator('.v2-footer')).toContainText(version.version)
-  await expect(page.getByText('Active runtime: V2 | office_manager', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Signed-in role', { exact: true })).toHaveText('office manager')
   await capture(page, 'task-1-authenticated.png')
   writeEvidence('task-1-login-version.json', { healthStatus: 200, loginViaRealUi: true, version,
     fixtureRoles: Object.keys(fixture.users), facilities: fixture.facilities, planVersions: fixture.plans,

@@ -7,6 +7,38 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const metrics = { active_patient_ids: 5, overdue_plans: 1, urgent_plans: 2, due_soon_plans: 3,
   needs_review: 4, missing_data: 77, returned: 6, conflicting: 7, unable: 8 }
 
+test('recovers in place after the initial dashboard request fails', async () => {
+  // Given
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response('{}', { status: 503 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ metrics, source_cards: [], blockers: [], refreshed_at: '2026-01-02T12:00:00Z' })))
+  vi.stubGlobal('fetch', fetch)
+  render(<DashboardPage token='synthetic-test-token' />)
+  await screen.findByRole('alert')
+  // When
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
+  // Then
+  expect(await screen.findByText('Patient records with plans')).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
+
+test('keeps the last dashboard visible and recoverable when refresh fails', async () => {
+  // Given
+  const payload = { metrics, source_cards: [], blockers: [], refreshed_at: '2026-01-02T12:00:00Z' }
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(payload)))
+    .mockResolvedValueOnce(new Response('{}', { status: 503 })))
+  render(<DashboardPage token='synthetic-test-token' />)
+  await screen.findByText('Patient records with plans')
+  // When
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
+  // Then
+  await screen.findByRole('alert')
+  expect(screen.getByText('Patient records with plans')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh dashboard' })).toBeEnabled()
+})
+
 test('associates every value with an explicit population unit and refreshes', async () => {
   // Given
   const fetch = vi.fn(async () => new Response(JSON.stringify({ refreshed_at: '2026-01-02T12:00:00Z',

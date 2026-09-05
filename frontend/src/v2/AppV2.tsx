@@ -173,7 +173,7 @@ export function AppV2() {
         <section className='login-card'>
           <p className='eyebrow'>Version 2.0 Beta</p>
           <h1>IZ Clinical Notes Analyzer</h1>
-          <p>Local treatment-plan workbench for authenticated V2 validation.</p>
+          <p>Review treatment plans, track deadlines, and follow up on corrections.</p>
           <form onSubmit={handleSubmit}>
             <label>
               Username

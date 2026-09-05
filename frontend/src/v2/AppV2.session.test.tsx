@@ -102,7 +102,7 @@ describe('V2 session lifecycle', () => {
     await act(async () => { finish?.(reply(user('viewer'), status)) })
     // Then: neither the new token nor the new user's protected state changes.
     expect(sessionStorage.getItem(storageKey) === 'new-session').toBe(true)
-    expect(screen.getByText(/Active runtime: V2/)).toHaveTextContent('office_manager')
+    expect(screen.getByLabelText('Signed-in role')).toHaveTextContent('office manager')
   })
 
   it.each([403, 422, 500])('retains the stored token when initial restoration fails with %s', async (status) => {

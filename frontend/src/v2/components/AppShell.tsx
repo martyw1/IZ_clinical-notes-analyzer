@@ -13,13 +13,14 @@ type AppShellProps = {
 export function AppShell({ activeView, navigationItems, user, onNavigate, onSignOut, children }: AppShellProps) {
   return (
     <div className='v2-shell'>
+      <a className='skip-link' href='#main-content'>Skip to content</a>
       <header className='v2-topbar'>
         <div>
-          <p className='eyebrow'>IZ Clinical Notes Analyzer</p>
-          <h1>Version 2.0 Beta</h1>
+          <p className='eyebrow'>R3 Recovery Services</p>
+          <h1>IZ Clinical Notes Analyzer</h1>
         </div>
         <div className='topbar-actions'>
-          <p className='runtime-pill'>Active runtime: V2 | {user.role}</p>
+          <p className='session-role' aria-label='Signed-in role'>{user.role.replace(/_/g, ' ')}</p>
           <button type='button' className='secondary-button' onClick={onSignOut}>
             Sign out
           </button>
@@ -38,7 +39,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
           </button>
         ))}
       </nav>
-      <main>{children}</main>
+      <main id='main-content' tabIndex={-1}>{children}</main>
       <footer className='v2-footer'>Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2</footer>
     </div>
   )
