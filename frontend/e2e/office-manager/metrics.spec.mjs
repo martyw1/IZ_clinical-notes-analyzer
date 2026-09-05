@@ -53,6 +53,8 @@ const metricOracle = { active_patient_ids: 3, overdue_plans: 1, urgent_plans: 1,
   needs_review: 1, missing_data: 57, returned: 1, conflicting: 1, unable: 1 }
 const labels = ['Patient records with plans', 'Overdue plans', 'Urgent plans', 'Due soon plans', 'Plans needing review',
   'Missing Data criteria', 'Open correction items', 'Plans with conflicting evidence', 'Plans unable to evaluate']
+const metricKeys = ['active_patient_ids', 'overdue_plans', 'urgent_plans', 'due_soon_plans', 'needs_review',
+  'missing_data', 'returned', 'conflicting', 'unable']
 const cases = [['overdue', -31, 'Overdue'], ['urgent', -30, 'Urgent'], ['dueSoon', -27, 'Due Soon'],
   ['full', -16, R], ['needsReview', -16, N], ['conflicting', -16, 'Conflicting Evidence'], ['unable', -16, U],
   ['missing', -16, M], ['empty', -16, M], ['partial', -16, M]]
@@ -124,8 +126,14 @@ async function detail(api, plan) {
 async function seed(api) {
   if (seededState) return seededState
   const fixture = fixtureContract(), day = localDay(), template = JSON.parse(readFileSync(fixture.files.aggregate, 'utf8')), plans = {}
+  const rowsBeforeResponse = await api.get('/api/v2/treatment-plans')
+  expect(rowsBeforeResponse.status()).toBe(200)
+  const idsBefore = (await rowsBeforeResponse.json()).items.map(row => row.plan_version_id)
+  const dashboardBeforeResponse = await api.get('/api/v2/dashboard')
+  expect(dashboardBeforeResponse.status()).toBe(200)
+  const metricsBefore = (await dashboardBeforeResponse.json()).metrics
   writeEvidence('task-8-fixture-oracle.json', { day, timezone: 'America/New_York', cases, metricOracle, oracle,
-    assumptions: 'Dedicated fresh metrics scenario: four initial latest plans / three authorized rows; each initial plan has seven Missing Data criteria. New incomplete plans add 5 + 13 + 11. No app response builds expected values.' })
+    assumptions: 'The scenario preserves the current rows already created by earlier all-suite scenarios. Each initial seeded plan has seven Missing Data criteria. New incomplete plans add 5 + 13 + 11. No app response builds the deterministic delta.' })
   for (const [kind, offset, status] of [['historical', -31, 'Overdue'], ...cases]) {
     const suffix = kind === 'historical' ? 'full' : kind
     const response = await api.post('/api/v2/manual-uploads/treatment-plan-aggregate', { data: payloadFor(template, kind, day, offset, suffix) })
@@ -141,12 +149,19 @@ async function seed(api) {
   const rowsResponse = await api.get('/api/v2/treatment-plans')
   expect(rowsResponse.status()).toBe(200)
   const actualIds = (await rowsResponse.json()).items.map(row => row.plan_version_id).sort((a, b) => a - b)
-  const expectedIds = [fixture.plans.primaryV2, fixture.plans.secondaryPlan, fixture.plans.patientTwo, fixture.plans.sourceCollision,
-    ...cases.map(([kind]) => plans[kind])].map(row => row.plan_version_id).sort((a, b) => a - b)
+  const expectedIds = [...idsBefore, ...cases.map(([kind]) => plans[kind].plan_version_id)].sort((a, b) => a - b)
   expect(actualIds).toEqual(expectedIds)
   writeEvidence('task-8-population.json', { expectedIds, actualIds, excludedHistorical: plans.historical.plan_version_id,
     deniedFacility: fixture.plans.facilityCollision.plan_version_id, correctedHistorical: fixture.plans.primaryV1.plan_version_id })
-  seededState = { day, plans, fixture }
+  const expectedMetrics = { ...metricsBefore, overdue_plans: metricsBefore.overdue_plans + 1,
+    urgent_plans: metricsBefore.urgent_plans + 1, due_soon_plans: metricsBefore.due_soon_plans + 1,
+    needs_review: metricsBefore.needs_review + 1, missing_data: metricsBefore.missing_data + 29,
+    returned: metricsBefore.returned + 1, conflicting: metricsBefore.conflicting + 1, unable: metricsBefore.unable + 1 }
+  const isolatedIds = [fixture.plans.primaryV2, fixture.plans.secondaryPlan, fixture.plans.patientTwo, fixture.plans.sourceCollision]
+    .map(row => row.plan_version_id).sort((a, b) => a - b)
+  const isolatedFixture = [...idsBefore].sort((a, b) => a - b).join(',') === isolatedIds.join(',')
+  if (isolatedFixture) expect(expectedMetrics).toEqual(metricOracle)
+  seededState = { day, plans, fixture, expectedMetrics, isolatedFixture }
   return seededState
 }
 
@@ -163,13 +178,14 @@ async function surfaces(page, name) {
   writeEvidence(`task-8-${name}-layout.json`, { states })
 }
 
-async function dashboard(page, api) {
+async function dashboard(page, api, expectedMetrics, isolatedFixture) {
   const response = await api.get('/api/v2/dashboard')
   expect(response.status()).toBe(200)
-  expect((await response.json()).metrics).toEqual(metricOracle)
+  expect((await response.json()).metrics).toEqual(expectedMetrics)
   await page.getByRole('button', { name: 'Status Dashboard', exact: true }).click()
   await expect(page.locator('.metric-tile dt')).toHaveText(labels)
-  await expect(page.locator('.metric-tile dd')).toHaveText(['3', '1', '1', '1', '1', '57', '1', '1', '1'])
+  await expect(page.locator('.metric-tile dd')).toHaveText(metricKeys.map(key => String(expectedMetrics[key])))
+  await page.getByText('How these counts are calculated', { exact: true }).click()
   await expect(page.getByText(/not active-client lifecycle counts/)).toBeVisible()
   await expect(page.getByText(/counts are not a partition/)).toBeVisible()
   await surfaces(page, 'dashboard')
@@ -189,11 +205,12 @@ async function dashboard(page, api) {
   await capture(page, 'task-8-dashboard-focus.png')
   const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v2/dashboard')
   await page.keyboard.press('Enter')
-  expect((await (await refreshed).json()).metrics).toEqual(metricOracle)
+  expect((await (await refreshed).json()).metrics).toEqual(expectedMetrics)
   await page.mouse.move(0, 0)
   await refresh.blur()
   await capture(page, 'task-8-dashboard-settled.png')
-  writeEvidence('task-8-metrics.json', { metrics: metricOracle, realBackend: true, fixtureOracleMatched: true, keyboardRefresh: true, visibleFocus })
+  writeEvidence('task-8-metrics.json', { metrics: expectedMetrics, realBackend: true, deterministicDeltaMatched: true,
+    isolatedFixtureOracleMatched: isolatedFixture, keyboardRefresh: true, visibleFocus })
 }
 
 async function coverage(page, api, plan, kind) {
@@ -240,7 +257,7 @@ test('truthful mixed-unit dashboard and full source coverage @happy', async ({ p
     await servedBundle(api, 'happy-before')
     const seeded = await seed(api)
     await login(page)
-    await dashboard(page, api)
+    await dashboard(page, api, seeded.expectedMetrics, seeded.isolatedFixture)
     await coverage(page, api, seeded.plans.full, 'full')
     expect(localDay(), 'Facility day must not roll over during the fixture').toBe(seeded.day)
     await servedBundle(api, 'happy-after')
@@ -256,7 +273,7 @@ test('empty partial uncertain historical and unauthorized evidence stay distinct
     await servedBundle(api, 'edge-before')
     const seeded = await seed(api)
     await login(page)
-    await dashboard(page, api)
+    await dashboard(page, api, seeded.expectedMetrics, seeded.isolatedFixture)
     for (const kind of ['empty', 'partial']) await coverage(page, api, seeded.plans[kind], kind)
     const denied = await api.get(`/api/v2/treatment-plans/${seeded.fixture.plans.facilityCollision.patient_id}`, { params: selector(seeded.fixture.plans.facilityCollision) })
     expect(denied.status()).toBe(403)
@@ -270,7 +287,9 @@ test('empty partial uncertain historical and unauthorized evidence stay distinct
       work_item_id: item.work_item_id, criterion_id: item.criterion_id, comment: 'Synthetic Task 8 correction submitted.',
     } })
     expect(submitted.status()).toBe(200)
-    expect((await (await api.get('/api/v2/dashboard')).json()).metrics).toEqual({ ...metricOracle, returned: 0 })
+    expect((await (await api.get('/api/v2/dashboard')).json()).metrics).toEqual({
+      ...seeded.expectedMetrics, returned: seeded.expectedMetrics.returned - 1,
+    })
     writeEvidence('task-8-metrics-error.json', { deniedStatus: denied.status(), actualUncertainSourceRetained: true,
       partialMissingStatusRetained: true, historicalOpenItemCounted: true, closedItemExcluded: true, realBackend: true })
     expect(localDay()).toBe(seeded.day)

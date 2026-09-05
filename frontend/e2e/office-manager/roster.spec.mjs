@@ -72,9 +72,15 @@ test('full filtered exports include off-screen authorized matches for All Manual
 
 test('same MRN source and facility rows stay distinct and assignment never grants membership @edge', async ({ page }) => {
   const fixture = fixtureContract(), manager = await apiFor(), counselor = await apiFor('counselor')
-  const manual = fixture.plans.primaryV2, alleva = fixture.plans.sourceCollision, forbidden = fixture.plans.facilityCollision
+  const alleva = fixture.plans.sourceCollision, forbidden = fixture.plans.facilityCollision
   let phase = 'login'
   try {
+    const rowsResponse = await manager.get('/api/v2/treatment-plans')
+    expect(rowsResponse.status()).toBe(200)
+    const currentManual = (await rowsResponse.json()).items.find(row => row.patient_record_id === fixture.plans.primaryV2.patient_record_id
+      && row.source_mode === fixture.plans.primaryV2.source_mode && row.treatment_plan_id === fixture.plans.primaryV2.plan_id)
+    expect(currentManual).toBeDefined()
+    const manual = { ...currentManual, plan_id: currentManual.treatment_plan_id }
     await login(page)
     phase = 'roster'
     await openRoster(page)

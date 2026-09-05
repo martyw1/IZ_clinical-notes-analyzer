@@ -5,6 +5,15 @@ async function paintSettled(page) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 }
 
+async function currentVersion(api, seeded) {
+  const response = await api.get('/api/v2/treatment-plans')
+  expect(response.status()).toBe(200)
+  const plan = (await response.json()).items.find(row => row.patient_record_id === seeded.patient_record_id
+    && row.source_mode === seeded.source_mode && row.treatment_plan_id === seeded.plan_id)
+  expect(plan).toBeDefined()
+  return { ...plan, plan_id: plan.treatment_plan_id }
+}
+
 async function holdActualResponse(page, matches) {
   let release, finish, started = 0, status = 0
   const gate = new Promise(resolve => { release = resolve })
@@ -24,10 +33,12 @@ test('explicit old version survives new import and binds UI actions correction a
   test.setTimeout(120_000)
   // Given: historical and current versions with the same patient, external ID and source.
   const fixture = fixtureContract(), api = await apiFor(), counselor = await apiFor('counselor')
-  const old = fixture.plans.primaryV1, current = fixture.plans.primaryV2
+  const old = fixture.plans.primaryV1
   let phase = 'initial-read'
   try {
-    const oldBefore = await detail(api, old), currentBefore = await detail(api, current)
+    const current = await currentVersion(api, fixture.plans.primaryV2)
+    const oldBefore = await detail(api, old), seededCurrentBefore = await detail(api, fixture.plans.primaryV2)
+    const currentBefore = await detail(api, current)
     phase = 'login'
     await login(page)
     const historyRequest = page.waitForRequest(request => {
@@ -81,6 +92,7 @@ test('explicit old version survives new import and binds UI actions correction a
     const oldAfter = await detail(api, old)
     expect(oldAfter.source_last_updated).toBe(oldBefore.source_last_updated)
     expect(oldAfter.manager_reviews.slice(-4).map(item => item.action)).toEqual(actions.map(item => item[1]))
+    expect((await detail(api, fixture.plans.primaryV2)).manager_reviews).toEqual(seededCurrentBefore.manager_reviews)
     expect((await detail(api, current)).manager_reviews).toEqual(currentBefore.manager_reviews)
     expect((await detail(api, fresh)).manager_reviews).toEqual(freshBefore.manager_reviews)
     phase = 'selected-csv'
@@ -138,17 +150,18 @@ test('explicit old version survives new import and binds UI actions correction a
     writeEvidence('task-7-selection.json', { actualUiActions: true, old: identity(old), fresh: identity(fresh),
       explicitHistoryQuery: Object.fromEntries(historyUrl.searchParams), oldSelectionPreserved: true, observed,
       selectedCsvRows: csv.rows.length, selectedCsvSha256: hash(bytes), workItemId: work.work_item_id,
-      correctionStatus: submitted.status(), otherVersionsUnchanged: true, oldSourceTimestampPreserved: true })
+      correctionStatus: submitted.status(), seededAndCurrentOtherVersionsUnchanged: true, oldSourceTimestampPreserved: true })
   } catch (error) { failureBoundary(error, 'selection-happy', phase); throw error } finally { await api.dispose(); await counselor.dispose() }
 })
 
 test('late actual fetch and save cannot repaint another selection and expired sessions clear it @edge', async ({ page }) => {
   test.setTimeout(120_000)
-  const fixture = fixtureContract(), manual = fixture.plans.primaryV2, alleva = fixture.plans.sourceCollision
+  const fixture = fixtureContract(), alleva = fixture.plans.sourceCollision
   const api = await apiFor()
   const holds = []
   let phase = 'initial-read'
   try {
+    const manual = await currentVersion(api, fixture.plans.primaryV2)
     const manualBefore = await detail(api, manual), allevaBefore = await detail(api, alleva)
     phase = 'login'
     await login(page)
