@@ -20,6 +20,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
           <h1>IZ Clinical Notes Analyzer</h1>
         </div>
         <div className='topbar-actions'>
+          <button type='button' className='secondary-button' aria-pressed={activeView === 'Account'} onClick={() => onNavigate('Account')}>Account</button>
           <p className='session-role' aria-label='Signed-in role'>{user.role.replace(/_/g, ' ')}</p>
           <button type='button' className='secondary-button' onClick={onSignOut}>
             Sign out
@@ -40,7 +41,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
         ))}
       </nav>
       <main id='main-content' tabIndex={-1}>{children}</main>
-      <footer className='v2-footer'>Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2</footer>
+      <footer className='v2-footer'>Version 2.0 Beta | 2.0.0-beta.4 | build 2026.09.10.1 | beta-local-desktop-v2</footer>
     </div>
   )
 }

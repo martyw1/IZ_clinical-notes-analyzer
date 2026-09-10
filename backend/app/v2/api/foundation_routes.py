@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 
 from app.v2.api.deps import AdminUser, CurrentUser, DbSession
 from app.v2.api.models import (
@@ -17,7 +17,7 @@ from app.v2.api.models import (
     UserPasswordChange,
     UserUpdate,
 )
-from app.v2.models import AppSetting, User
+from app.v2.models import AppSetting, PasswordRecovery, User
 from app.v2.authorization import facility_ids_for_user
 from app.v2.security import create_access_token, hash_password, password_policy_error, verify_password
 from app.v2.services.audit_store import record_audit_event
@@ -258,6 +258,7 @@ def admin_reset_password(user_id: int, payload: UserPasswordResetAdmin, actor: A
     target.is_locked = False
     target.locked_until = None
     target.auth_state = "password_change_required" if payload.require_reset_on_login else "active"
+    db.execute(delete(PasswordRecovery).where(PasswordRecovery.user_id == target.id))
     db.commit()
     db.refresh(target)
     record_audit_event(db, action="user.password.reset.admin", actor=actor, target_entity_type="user", target_entity_id=str(target.id))

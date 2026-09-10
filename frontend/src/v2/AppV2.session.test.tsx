@@ -13,6 +13,7 @@ function mockApi(override: Override = () => undefined) {
     if (overridden) return overridden
     if (path === '/api/auth/login') return Promise.resolve(reply({ access_token: 'new-session' }))
     if (path === '/api/users/me') return Promise.resolve(reply(user()))
+    if (path === '/api/users/me/recovery-code') return Promise.resolve(reply({ configured: true }))
     if (path === '/api/v2/navigation') return Promise.resolve(reply({ items: ['Help', 'Manual Upload'] }))
     return Promise.resolve(reply({}, path === '/api/expired' ? 401 : 200))
   })

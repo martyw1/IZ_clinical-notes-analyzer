@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "2.0.0-beta.3",
-  "build": "2026.09.03.1",
+  "version": "2.0.0-beta.4",
+  "build": "2026.09.10.1",
   "release_channel": "beta-local-desktop-v2",
-  "release_date": "2026-09-03",
+  "release_date": "2026-09-10",
   "git_branch": "main",
   "stability": "beta",
   "is_prerelease": true,
-  "version_name": "Version 2.0 Beta 3 office-manager workflow update",
-  "description": "V2 local-desktop beta update with exact treatment-plan identity, encrypted manual metadata, safer session and upload handling, source-scoped review surfaces, and evidence-linked deterministic workflows. This prerelease is not a production release and does not claim approved live Alleva validation."
+  "version_name": "Version 2.0 Beta 4 password management",
+  "description": "Focused local-desktop password setup, change, and one-time recovery update. Existing clinical workflows and live Alleva approval gates are preserved."
 }

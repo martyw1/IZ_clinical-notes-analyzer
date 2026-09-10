@@ -3,11 +3,19 @@ import { test, expect, login, credentials, apiFor, fixtureContract, capture, wri
 const tokenKey = 'iz-cna-v2-access-token'
 const navigation = page => page.getByRole('navigation', { name: 'Primary navigation' })
 
-async function signInWithoutReload(page) {
+async function signInWithoutReload(page, recoveryRequired = false) {
   const account = credentials()
   await page.getByLabel('Username', { exact: true }).fill(account.username)
   await page.getByLabel('Password', { exact: true }).fill(account.password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  if (recoveryRequired) {
+    await expect(page.getByRole('heading', { name: 'Protect your account', exact: true })).toBeVisible()
+    await page.getByLabel('Current password for recovery setup', { exact: true }).fill(account.password)
+    await page.getByRole('button', { name: 'Create recovery code', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Save your recovery code', exact: true })).toBeVisible()
+    await page.getByRole('checkbox').check()
+    await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  }
   await expect(navigation(page)).toBeVisible()
 }
 
@@ -46,7 +54,7 @@ test('revoked current session clears protected content and reauthenticates @happ
   await expect(page.getByRole('alert')).toContainText('session has expired')
   expect(await page.evaluate(key => sessionStorage.getItem(key) === null, tokenKey)).toBe(true)
   const widths = await captureLoginWidths(page, 'task-6-session-expired')
-  await signInWithoutReload(page)
+  await signInWithoutReload(page, true)
   await page.getByRole('button', { name: 'Manual Upload', exact: true }).click()
   expect(await page.getByLabel('Treatment-plan binder files', { exact: true }).evaluate(input => input.files.length)).toBe(0)
   await expect(page.getByText('No binder files selected', { exact: true })).toBeVisible()

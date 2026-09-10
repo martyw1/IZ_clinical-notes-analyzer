@@ -15,6 +15,10 @@ const safeDetails = new Set([
   'Password change is required before accessing the workspace', 'Current password is incorrect',
   'New password must differ from the current password', 'Password cannot be the same as the username.',
   'Password is too common.', 'Password must include at least one letter and one number.',
+  'Password must be at least 12 characters.', 'Password must be no more than 72 UTF-8 bytes.',
+  'The initial setup password cannot be used as your own password.',
+  'Too many recovery attempts. Try again in 15 minutes.',
+  'Unable to reset password. Check your username and recovery code.',
   'Username is required', 'Username exists', 'Confirm the MRN correction and submit again.',
   'Manual aggregate uploads must use source_mode=manual_upload', 'Select a specific treatment-plan version.',
   'MRN correction confirmation is required because conflicting MRNs were detected across the binder.',
@@ -26,6 +30,7 @@ const safeDetails = new Set([
 
 const validationFields = new Map<string, string>([
   ['username', 'Username'], ['password', 'Password'], ['current_password', 'Current password'],
+  ['recovery_code', 'Recovery code'],
   ['new_password', 'New password'], ['patient_id', 'MRN'], ['source_mode', 'Source mode'],
   ['treatment_plans', 'Treatment plans'], ['file', 'Selected file'], ['full_name', 'Full name'],
   ['role', 'Role'], ['admission_date', 'Admission date'], ['plan_version_id', 'Treatment-plan version'],

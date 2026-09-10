@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react'
 import { assignUserFacility, createUser, listFacilities, listUsers, resetUserPassword } from '../api/client'
 import { ApiRequestError } from '../api/json'
-import type { Facility, UserProfile } from '../api/types'
+import type { AuthState, Facility, UserProfile } from '../api/types'
 import { PatientAssignmentForm } from '../components/PatientAssignmentForm'
+import { PasswordFields } from '../components/PasswordFields'
 import type { SessionGuard } from '../hooks/useRequestGeneration'
 
 type UsersPageProps = {
   readonly token: string
   readonly isSessionCurrent?: SessionGuard
 }
+
+const authStateLabels = {
+  bootstrap_required: 'Initial setup required',
+  password_change_required: 'Password change required',
+  active: 'Active',
+  locked_until: 'Temporarily locked',
+} as const satisfies Record<AuthState, string>
 
 function messageForError(error: unknown): string {
   if (error instanceof ApiRequestError) return error.message
@@ -21,6 +29,9 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
   const [facilities, setFacilities] = useState<readonly Facility[]>([])
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [resetUser, setResetUser] = useState<UserProfile | null>(null)
+  const [resetError, setResetError] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -59,14 +70,22 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
     } catch (createError) { setMessage(messageForError(createError)) }
   }
 
-  async function resetPassword(user: UserProfile) {
-    const newPassword = window.prompt(`Set a temporary password for ${user.username}`)
-    if (!newPassword) return
+  async function resetPassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!resetUser) return
+    const user = resetUser
+    const form = new FormData(event.currentTarget)
+    const newPassword = String(form.get('newPassword') ?? '')
+    if (newPassword !== String(form.get('confirmPassword') ?? '')) { setResetError('The new passwords do not match.'); return }
+    setResetting(true)
+    setResetError('')
     try {
       await resetUserPassword(token, user.id, newPassword)
       await refreshUsers()
+      setResetUser(null)
       setMessage(`Password reset for ${user.username}; password change is required on next sign-in.`)
-    } catch (resetError) { setMessage(messageForError(resetError)) }
+    } catch (error) { setResetError(messageForError(error)) }
+    finally { setResetting(false) }
   }
 
   async function assignFacility(event: React.FormEvent<HTMLFormElement>) {
@@ -99,6 +118,18 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
         </div>
       </form>
       <PatientAssignmentForm token={token} users={users} isSessionCurrent={isSessionCurrent} />
+      {resetUser && <section className='panel' aria-label='Reset user password'>
+        <h3>Reset password for {resetUser.username}</h3>
+        <p>Set a temporary password and share it privately. This ends their existing sessions and requires a new password on next sign-in.</p>
+        <form onSubmit={resetPassword} className='password-form'>
+          <PasswordFields />
+          {resetError && <p role='alert' className='error-banner'>{resetError}</p>}
+          <div className='button-row'>
+            <button type='submit' disabled={resetting}>{resetting ? 'Resetting...' : 'Confirm password reset'}</button>
+            <button type='button' className='secondary-button' disabled={resetting} onClick={() => { setResetUser(null); setResetError('') }}>Cancel</button>
+          </div>
+        </form>
+      </section>}
       <table className='users-table'>
         <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Password reset</th><th>Action</th></tr></thead>
         <tbody>
@@ -106,9 +137,9 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
             <tr key={user.id}>
               <td data-label='User'>{user.fullName}</td>
               <td data-label='Role'>{user.role}</td>
-              <td data-label='Status'>{user.authState}</td>
+              <td data-label='Status'>{authStateLabels[user.authState]}</td>
               <td data-label='Password reset'>{user.mustResetPassword ? 'required' : 'not required'}</td>
-              <td data-label='Action'><button type='button' className='secondary-button' onClick={() => void resetPassword(user)} disabled={user.username === 'admin'}>Reset password</button></td>
+              <td data-label='Action'><button type='button' className='secondary-button' onClick={() => { setResetUser(user); setResetError('') }} disabled={user.username === 'admin' || resetting}>Reset password</button></td>
             </tr>
           ))}
         </tbody>

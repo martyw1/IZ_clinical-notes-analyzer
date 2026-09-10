@@ -8,10 +8,10 @@ from pytest import MonkeyPatch
 from v2_test_runtime import fresh_client as _fresh_client
 
 
-def test_beta3_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
-    expected_version = "2.0.0-beta.3"
-    expected_build = "2026.09.03.1"
+    expected_version = "2.0.0-beta.4"
+    expected_build = "2026.09.10.1"
     expected_channel = "beta-local-desktop-v2"
 
     metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))

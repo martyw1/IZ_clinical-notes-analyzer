@@ -17,6 +17,10 @@ import { SettingsPage } from './pages/SettingsPage'
 import { TreatmentPlanDetailPage } from './pages/TreatmentPlanDetailPage'
 import { TreatmentPlansRosterPage } from './pages/TreatmentPlansRosterPage'
 import { UsersPage } from './pages/UsersPage'
+import { AccountPage } from './pages/AccountPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { RecoverySetup } from './pages/RecoverySetup'
+import { recoveryConfigured } from './api/passwordClient'
 
 const tokenStorageKey = 'iz-cna-v2-access-token'
 
@@ -25,6 +29,7 @@ type Session = {
   readonly user: UserProfile
   readonly navigationItems: readonly string[]
   readonly isCurrent: () => boolean
+  readonly recoveryConfigured: boolean
 }
 
 function messageForError(error: unknown): string {
@@ -36,7 +41,9 @@ async function readSession(token: string, isCurrent: () => boolean): Promise<Ses
   const user = await getCurrentUser(token)
   if (!isCurrent()) return null
   const navigation = user.mustResetPassword ? { items: [] } : await getNavigation(token)
-  return isCurrent() ? { token, user, navigationItems: navigation.items, isCurrent } : null
+  if (!isCurrent()) return null
+  const configured = user.mustResetPassword ? false : await recoveryConfigured(token)
+  return isCurrent() ? { token, user, navigationItems: navigation.items, isCurrent, recoveryConfigured: configured } : null
 }
 
 function pageFor(
@@ -87,6 +94,8 @@ export function AppV2() {
   const [selectedPatient, setSelectedPatient] = useState<PatientSelection | null>(null)
   const [authError, setAuthError] = useState('')
   const [isSigningIn, setIsSigningIn] = useState(false)
+  const [forgotPassword, setForgotPassword] = useState(false)
+  const [authMessage, setAuthMessage] = useState('')
   const authAttempt = useRef(0)
   const signInPending = useRef(false)
 
@@ -168,12 +177,18 @@ export function AppV2() {
   }
 
   if (!session) {
+    if (forgotPassword) return <ForgotPasswordPage onBack={(recovered) => {
+      setForgotPassword(false)
+      setAuthError('')
+      setAuthMessage(recovered ? 'Password reset. Sign in with your new password, then save a replacement recovery code.' : '')
+    }} />
     return (
       <main className='login-page'>
         <section className='login-card'>
           <p className='eyebrow'>Version 2.0 Beta</p>
           <h1>IZ Clinical Notes Analyzer</h1>
           <p>Review treatment plans, track deadlines, and follow up on corrections.</p>
+          {authMessage && <p role='status'>{authMessage}</p>}
           <form onSubmit={handleSubmit}>
             <label>
               Username
@@ -188,12 +203,22 @@ export function AppV2() {
               {isSigningIn ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+          <button type='button' className='secondary-button' disabled={isSigningIn} onClick={() => setForgotPassword(true)}>Forgot password?</button>
         </section>
       </main>
     )
   }
 
-  if (session.user.mustResetPassword) return <PasswordResetPage token={session.token} onChanged={refreshSessionUser} />
+  if (session.user.mustResetPassword) return <PasswordResetPage token={session.token} onChanged={refreshSessionUser} onSignOut={handleSignOut} />
+  function recoverySaved() {
+    if (!session?.isCurrent()) return
+    setSession({ ...session, recoveryConfigured: true })
+  }
+  if (!session.recoveryConfigured) return <main className='login-page'><div className='login-card'>
+    <h1>Protect your account</h1>
+    <RecoverySetup token={session.token} configured={false} onSaved={recoverySaved} />
+    <button type='button' className='secondary-button' onClick={handleSignOut}>Sign out</button>
+  </div></main>
 
   function handleTreatmentPlanSelection(selection: TreatmentPlanSelection) {
     if (!session?.isCurrent()) return
@@ -215,7 +240,7 @@ export function AppV2() {
       onNavigate={setActiveView}
       onSignOut={handleSignOut}
     >
-      {pageFor(
+      {activeView === 'Account' ? <AccountPage token={session.token} onChanged={refreshSessionUser} configured={session.recoveryConfigured} onSaved={recoverySaved} /> : pageFor(
         activeView,
         session.token,
         session.user,

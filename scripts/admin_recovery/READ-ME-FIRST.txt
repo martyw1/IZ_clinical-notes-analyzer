@@ -1,0 +1,43 @@
+RESET YOUR IZ APP PASSWORD
+For IZ Clinical Notes Analyzer 2.0.0-beta.3
+
+You can leave IZ open at its login screen.
+You do not need to restart your computer or install anything.
+Use the same Windows account you normally use to open IZ.
+Do not choose "Run as administrator."
+
+1. Right-click the ZIP file and choose "Extract All," then "Extract."
+
+2. In the extracted folder, double-click "Reset-IZ-Admin.exe."
+   A black window opens. Wait for its instructions.
+
+3. Type RESET and press Enter.
+   Wait until you see "SUCCESS."
+
+4. Keep that window open. Return to the IZ login screen.
+   Enter the username and temporary password shown in the recovery window.
+   Include every character and hyphen. The password is case-sensitive.
+
+5. IZ asks you to choose your own new password.
+   Use at least 12 characters, including a letter and a number.
+   Save your new password somewhere secure.
+   Return to the recovery window and press Enter to close it.
+
+IF SOMETHING DOES NOT WORK
+
+- If Windows shows a security warning or blocks the file, contact R3 with
+  that message. Do not turn off antivirus or Windows security settings.
+- If the tool says "RECOVERY STOPPED," send R3 the message on that screen.
+- If it says the database is busy, wait for IZ to finish its work and retry.
+- If login still says "Invalid credentials," check that you entered the
+  NEW temporary password, including the hyphens and capital IZ.
+- If you accidentally close the password window, run the tool again.
+  Each successful run replaces the previous temporary password.
+
+IMPORTANT
+
+This changes only your IZ app account, not your Windows password.
+It preserves existing app data and settings and makes a local database
+backup. The backup stays in IZ's local data folder on this computer.
+Do not send anyone the backup, the .env file, or a password screenshot.
+The original password in .env is not updated and should not be used.

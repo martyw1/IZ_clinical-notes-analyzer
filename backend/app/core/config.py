@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Final
 
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
-APP_VERSION: Final = "2.0.0-beta.3"
+APP_VERSION: Final = "2.0.0-beta.4"
+DESKTOP_STARTER_PASSWORD: Final = "r3mar123ABC"
 BUILD_CHANNEL: Final = "beta-local-desktop-v2"
 MACOS_APPLICATION_SUPPORT: Final = Path("Library") / "Application Support"
 
@@ -96,7 +97,11 @@ def _validate_restricted_configuration(candidate: Settings) -> None:
     password_is_structured = any(character.isalpha() for character in password) and any(
         character.isdigit() for character in password
     )
-    if len(password) < 12 or password.lower() in UNSAFE_SECURITY_VALUES or not password_is_structured:
+    desktop_initial_setup = (
+        candidate.environment.strip().lower() == "local-client"
+        and password == DESKTOP_STARTER_PASSWORD
+    )
+    if not desktop_initial_setup and (len(password) < 12 or password.lower() in UNSAFE_SECURITY_VALUES or not password_is_structured):
         invalid_fields.append("administrator credential")
     if invalid_fields:
         raise ConfigurationError(
@@ -185,7 +190,7 @@ def build_settings() -> Settings:
         ),
         bootstrap_admin_username=_env("IZ_CNA_BOOTSTRAP_ADMIN_USERNAME", "BOOTSTRAP_ADMIN_USERNAME", "admin"),
         bootstrap_admin_password=_env(
-            "IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD", "local-admin-pass1"
+            "IZ_CNA_BOOTSTRAP_ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD", DESKTOP_STARTER_PASSWORD
         ),
         local_app_data_dir=_local_app_data_root(),
         allowed_hosts=allowed_hosts,

@@ -1,5 +1,7 @@
 # Isolated office-manager smoke interface
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../../../../docs/current-documentation-state.md).
+
 Run from the repository root with existing installed dependencies:
 
 ```powershell
@@ -110,3 +112,5 @@ Those checks report only scalar equality/redaction/refusal outcomes. They do not
 ## Prepared runtime
 
 Use `-RuntimeMode prepared -PreparedExecutable <verified-new-release-exe>` to start the exact packaged executable directly, with the same fresh synthetic data and `IZ_CNA_PORT`; never install it over the user's app. Seed code uses the checked-out backend, so only test a package built from the same source/version. A missing executable is covered by the refusal tests. Successful newly built package validation belongs to the release task and is not implied by checkout-mode passes.
+
+Beta.4: the shared workflow login helper provisions recovery through the authenticated API as a synthetic prerequisite. Dedicated password browser smoke exercises the real first-use, acknowledgment, change, and recovery UI separately. Recovery secrets remain in memory and are never recorded in artifacts.

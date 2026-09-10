@@ -150,7 +150,7 @@ function Ensure-EnvFile {
     }
     $secretKey = New-RandomSecret 64
     $encryptionKey = New-RandomSecret 64
-    $adminPassword = New-RandomSecret 24
+    $adminPassword = 'r3mar123ABC'
     @"
 APP_NAME=IZ Clinical Notes Analyzer
 ENVIRONMENT=local-client
@@ -169,12 +169,12 @@ LOG_DIR=logs
 RULES_CONFIG_PATH=$RootDir\config\rules\alleva_treatment_plan_completeness_rules.yaml
 BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_PASSWORD=$adminPassword
-RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true
+RESET_BOOTSTRAP_ADMIN_ON_STARTUP=false
 LLM_ENABLED=false
 EMR_API_ENABLED=false
 "@ | Set-Content -Path $EnvFile -Encoding UTF8
     Add-Check 'local_env' 'ok' 'Created local configuration outside the repo.' $EnvFile
-    Add-Check 'first_sign_in' 'warn' 'First sign-in password was generated in the local .env file.' 'Username: admin. Store the generated password securely.'
+    Add-Check 'first_sign_in' 'warn' 'Sign in with the starter password supplied by R3.' 'Username: admin. Choose your own password and save a recovery code in the app.'
 }
 
 function Test-BackendDependencyImports {
@@ -418,7 +418,7 @@ if actual_steps != expected_steps:
     raise SystemExit("Treatment Plan Checklist steps must be numbered 1 through 42.")
 
 version = build_version_payload()
-if version.get("version") != "2.0.0-beta.3" or version.get("release_channel") != "beta-local-desktop-v2":
+if version.get("version") != "2.0.0-beta.4" or version.get("release_channel") != "beta-local-desktop-v2":
     raise SystemExit("Active version metadata is not V2 beta.")
 if not v2_router.routes:
     raise SystemExit("V2 router has no active routes.")

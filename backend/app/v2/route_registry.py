@@ -22,6 +22,9 @@ ROUTE_FAMILIES: Final = {
             ("POST", "/api/auth/login"),
             ("GET", "/api/users/me"),
             ("POST", "/api/users/me/change-password"),
+            ("GET", "/api/users/me/recovery-code"),
+            ("POST", "/api/users/me/recovery-code"),
+            ("POST", "/api/auth/recover-password"),
         }
     ),
     "access_administration": frozenset(

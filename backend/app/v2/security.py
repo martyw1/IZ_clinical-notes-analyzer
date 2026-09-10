@@ -63,6 +63,10 @@ def decode_access_token(token: str) -> AccessTokenSubject | None:
 
 def password_policy_error(password: str, *, username: str | None = None) -> str | None:
     normalized = password.strip().lower()
+    if normalized == "r3mar123abc":
+        return "The initial setup password cannot be used as your own password."
+    if len(password.encode("utf-8")) > 72:
+        return "Password must be no more than 72 UTF-8 bytes."
     if len(password) < MIN_PASSWORD_LENGTH:
         return f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
     if username and normalized == username.strip().lower():

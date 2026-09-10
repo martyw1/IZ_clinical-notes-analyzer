@@ -31,6 +31,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
       return jsonResponse({ access_token: 'token-from-backend', token_type: 'bearer', must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     }
     if (path === '/api/users/me/change-password' && method === 'POST') { passwordResetRequired = false; return jsonResponse({ access_token: 'token-after-password-change', token_type: 'bearer', auth_state: 'active', must_reset_password: false }) }
+    if (path === '/api/users/me/recovery-code') return jsonResponse(method === 'POST' ? { recovery_code: 'SYNTHETIC-RECOVERY-CODE-ONLY' } : { configured: !state.mustResetPassword })
     if (path === '/api/users/me') return jsonResponse({ ...userPayload(state.role), must_reset_password: passwordResetRequired, auth_state: passwordResetRequired ? 'password_change_required' : 'active' })
     if (path === '/api/v2/navigation') return jsonResponse({ items: state.role === 'admin' ? adminNavigation : counselorNavigation, active_runtime: 'v2' })
     if (path === '/api/v2/dashboard') return jsonResponse(dashboardPayload())

@@ -1,5 +1,7 @@
 # IZ Clinical Notes Analyzer Design System
 
+Current app: `2.0.0-beta.4` / build `2026.09.10.1` / channel `beta-local-desktop-v2`.
+
 ## 1. Atmosphere & Identity
 
 IZ Clinical Notes Analyzer should feel like a clinical operations workbench: calm, dense, readable, and audit-ready. The signature is a risk-first status language: thin colored stripes, compact tabular counts, neutral rows, and document-like evidence panels that help a facility manager decide what to trust and what to act on today.

@@ -1,6 +1,13 @@
+> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](docs/password-management-beta4.md). Earlier version-specific instructions below remain historical.
+
 # IZ Clinical Notes Analyzer
 
 Current app version: `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
+
+## Client handoff and quick start
+
+Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. The existing September 4 package must be rebuilt to include later source-checkout Help changes.
+
 
 Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
 

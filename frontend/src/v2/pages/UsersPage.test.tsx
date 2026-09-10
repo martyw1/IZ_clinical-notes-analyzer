@@ -20,7 +20,7 @@ describe('Users table presentation', () => {
     await screen.findByText('Synthetic operator')
     // Then: existing values and assignment controls are still available.
     expect(screen.getByRole('cell', { name: 'office_manager' })).toBeVisible()
-    expect(screen.getByRole('cell', { name: 'active' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: 'Active' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Assign facility' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Assign patient' })).toBeVisible()
   })

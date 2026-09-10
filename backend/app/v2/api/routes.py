@@ -8,6 +8,7 @@ from app.v2.api.evaluation_routes import router as evaluation_router
 from app.v2.api.access_admin_routes import router as access_admin_router
 from app.v2.api.alleva_sync_routes import router as alleva_sync_router
 from app.v2.api.foundation_routes import router as foundation_router
+from app.v2.api.password_recovery_routes import router as password_recovery_router
 from app.v2.api.manual_upload_routes import router as manual_upload_router
 from app.v2.api.openapi_routes import router as openapi_router
 from app.v2.api.operation_routes import router as operation_router
@@ -17,6 +18,7 @@ from app.v2.api.workflow_routes import router as workflow_router
 
 router = APIRouter()
 router.include_router(foundation_router)
+router.include_router(password_recovery_router)
 router.include_router(configuration_router)
 router.include_router(access_admin_router)
 router.include_router(correction_router)

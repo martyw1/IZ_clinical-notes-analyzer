@@ -299,6 +299,13 @@ dd,
   align-items: start;
 }
 
+.password-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.password-form textarea { overflow-wrap: anywhere; }
+
 .api-harness-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);

@@ -40,6 +40,16 @@ export async function capture(page, name) {
 
 export async function login(page, role = 'office_manager') {
   const account = credentials(role)
+  const setup = await apiFor(role)
+  try {
+    const status = await setup.get('/api/users/me/recovery-code')
+    if (!status.ok()) throw new HarnessError('SYNTHETIC_RECOVERY_STATUS_FAILED')
+    if (!(await status.json()).configured) {
+      const generated = await setup.post('/api/users/me/recovery-code', { data: { current_password: account.password } })
+      if (!generated.ok()) throw new HarnessError('SYNTHETIC_RECOVERY_SETUP_FAILED')
+      secrets.add((await generated.json()).recovery_code)
+    }
+  } finally { await setup.dispose() }
   await page.goto('/')
   await page.getByLabel('Username', { exact: true }).fill(account.username)
   await page.getByLabel('Password', { exact: true }).fill(account.password)
