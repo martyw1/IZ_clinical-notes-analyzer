@@ -54,3 +54,14 @@ App Credentials Info.md
 Test-AllevaApi.ps1
 alleva-api-test-logs/
 api-connectivity-reports/
+
+# Videos remain local; supporting text documentation may be tracked.
+*.avi
+*.m4v
+*.mkv
+*.mov
+*.mp4
+*.mpeg
+*.mpg
+*.webm
+*.wmv
