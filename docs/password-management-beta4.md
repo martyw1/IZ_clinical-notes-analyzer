@@ -1,6 +1,6 @@
 # Beta.4 password management
 
-Applies to 2.0.0-beta.4 / build 2026.09.10.1, both source checkout and prepared Windows distribution.
+Applies to 2.0.0-beta.4 / build 2026.09.10.2, both source checkout and prepared Windows distribution.
 
 ## First use
 

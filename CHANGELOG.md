@@ -1,3 +1,12 @@
+## 2.0.0-beta.4 sync feedback fix — 2026-09-10
+
+Build: 2026.09.10.2; channel: beta-local-desktop-v2.
+
+- Keep persisted sync event timestamps explicitly UTC so Settings shows the correct completion time.
+- Show a safe timeout explanation after navigation or restart for newly recorded Alleva timeouts. Older unclassified failures keep safe generic feedback.
+- Display job errors separately from failed records; clinical rules and sync approval gates are unchanged.
+- Preserve rapid successive manager actions when the Windows clock gives them identical timestamps, avoiding a duplicate-record error without changing clinical rules.
+
 ## 2.0.0-beta.4 â€” 2026-09-10
 
 Build: 2026.09.10.1; channel: beta-local-desktop-v2.

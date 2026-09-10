@@ -1,6 +1,6 @@
 # IZ Clinical Notes Analyzer Design System
 
-Current app: `2.0.0-beta.4` / build `2026.09.10.1` / channel `beta-local-desktop-v2`.
+Current app: `2.0.0-beta.4` / build `2026.09.10.2` / channel `beta-local-desktop-v2`.
 
 ## 1. Atmosphere & Identity
 
@@ -153,7 +153,7 @@ All spacing derives from a base of 4px.
 
 ### Compact Job Status
 
-- **Structure**: phase and progress first, followed by compact record/warning counts and the last completed timestamp.
+- **Structure**: phase and progress first, followed by separate record, warning, and job-error counts and the last completed timestamp in UTC. Persisted job failures show a safe cause in an alert even after navigation or reload.
 - **Variants**: diagnostic preview, active patient roster pull, approved treatment-plan sync.
 - **Spacing**: `--space-2` between status rows with a thin left state stripe.
 - **States**: idle, queued, running, writing, completed, completed with warnings, failed, cancelled, interrupted.

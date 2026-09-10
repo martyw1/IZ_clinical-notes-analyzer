@@ -1,3 +1,10 @@
+## Beta.4 stability update — build 2026.09.10.2
+
+- Correct UTC completion times and persistent, safe timeout feedback in Settings.
+- Separate failed-record and job-error counts.
+- Preserve rapid successive manager actions that share a Windows clock tick. No clinical-rule or schema changes.
+- Source and client package validation: [final fix and smoke report](validation/beta4-sync-feedback-fix-2026-09-10.md).
+
 ## 2.0.0-beta.4 â€” 2026-09-10
 
 Build: 2026.09.10.1; channel: beta-local-desktop-v2.

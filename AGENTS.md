@@ -1,7 +1,7 @@
 # AGENTS.md - IZ Clinical Notes Analyzer
 
 ## Repo purpose
-Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `2.0.0-beta.4` / build `2026.09.10.1` on the `beta-local-desktop-v2` channel. Normal Windows desktop use must not require Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
+Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `2.0.0-beta.4` / build `2026.09.10.2` on the `beta-local-desktop-v2` channel. Normal Windows desktop use must not require Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
 
 ## R3 project architecture
 - Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, REST/OpenAPI/HL7 readiness boundary, gated Alleva REST treatment-plan sync readiness, workflow profiles, and version/readiness endpoints.
