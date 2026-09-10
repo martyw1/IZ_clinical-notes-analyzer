@@ -1,5 +1,7 @@
 # Deployment Readiness Report - 2026-06-12
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 App: IZ Clinical Notes Analyzer  
 Version under test: `1.1.1` / build `2026.06.12.1`  
 Goal source: `C:\Users\r3developer\Downloads\R3 Recovery Services Clinical Notes Analyzer Deployment-Readiness Goal.pdf`

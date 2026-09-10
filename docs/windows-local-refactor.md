@@ -1,5 +1,7 @@
 # Windows local refactor notes
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 ## Goal
 
 The local clinic runtime should work on ordinary Windows 10 and Windows 11 consumer machines without Docker, PostgreSQL, or unusual manual prerequisites for the end user. The app should run locally, check its runtime environment, persist audit logs, and execute deterministic completeness rules before any future LLM analysis is added.

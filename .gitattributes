@@ -1,2 +1,7 @@
 *.sh text eol=lf
 *.command text eol=lf
+
+# Preserve downloadable documents and release archives byte for byte.
+*.pdf binary
+*.docx binary
+*.zip binary

@@ -1,5 +1,7 @@
 # Windows Dell Validation and Packaging Path
 
+> Current app: `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). The checklist below is a historical V1 Dell test plan; its navigation and unfinished packaging list are superseded. For the current release, use the [Windows build/install guide](windows-installer-build-and-install.md), [beta test-session checklist](beta-client-test-run-guide.md), and [current validation record](validation/office-manager-production-fixes-2026-09-03.md). Retain the older version expectations below only for historical reproduction.
+
 Date: 2026-06-04
 
 ## Packaging Decision

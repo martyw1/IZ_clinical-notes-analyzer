@@ -1,20 +1,22 @@
 # Treatment Plan Checklist Version 1
 
+> Current runtime scope: app `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`) retains checklist content `1.2.0`. The V1 statuses, routes, date-clock behavior, and workflow-authoring instructions below are historical context. Use the [V2 rules contract](v2-beta/rules-contract.md) and [V2 UI workflows](v2-beta/ui-workflows.md) for current evaluation and operator behavior.
+
 Source of truth: `config/checklists/treatment-plan-v1.json`
 
 Checklist ID: `treatment-plan-v1`
 
 Checklist content version: `1.2.0`
 
-Current app version using this checklist: `1.4.6-beta.1`
+Current app version using this checklist: `2.0.0-beta.3`
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
-Documentation last reviewed: `2026-06-30`
+Checklist documentation baseline: `2026-06-30`; release scope aligned: `2026-09-08`
 
 ## Purpose
 
-This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `1.4.6-beta.1` is tracked separately in `VERSION` and `VERSION.json`.
+This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app beta version `2.0.0-beta.3` is tracked separately in `VERSION` and `VERSION.json`.
 
 The current implementation map for how patient treatment-plan evidence reaches this checklist is `docs/patient-treatment-plan-handling.md`. That reference names the manual-upload sync, gated Alleva REST sync, local database tables, aggregate payloads, timeliness evaluator, and Treatment Plans UI files.
 
@@ -81,7 +83,7 @@ Published workflow history is preserved. Only unused draft-only profiles that we
 
 ## LOC-Change Blocker
 
-The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Beta 1.4.6-beta.1 keeps a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
+The treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. Beta 2.0.0-beta.3 keeps a manager-editable 7-calendar-day preset, keeps this setting configurable, marks it unvalidated in the app until R3 confirms the rule, and treats LOC-change timing as `Needs Review`, `Missing Data`, or `Conflicting Evidence` when source evidence is incomplete or inconsistent.
 
 Do not hard-code a final LOC-change update window until `docs/open-blockers.md` is resolved.
 

@@ -1,5 +1,7 @@
 # V2 Test Plan
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+
 Automated checks:
 
 - Backend V2 runtime tests verify version metadata, readiness, navigation, 42 criterion aggregate, manager override reason enforcement, redacted API configuration/sample OpenAPI contract, `ClientId` pull-definition flow, large job lifecycle artifacts, immutable same-ID treatment-plan updates, unchanged replay deduplication, exact updated-ID audit details, patient-roster scoping/name exclusion, and manager-only formula-safe status export.

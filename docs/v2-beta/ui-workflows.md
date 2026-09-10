@@ -25,4 +25,4 @@ Patient-name fields are not part of either roster response or UI. Local source-m
 
 Large jobs show a job card immediately, progress, cancel, retry-ready state, artifact list, and bounded preview. The browser must not receive full all-fields payloads.
 
-The footer identifies beta.2 as `Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2`. This identifies the active prerelease build only; it is not a production-readiness assertion.
+The footer identifies beta.3 as `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`. This identifies the active prerelease build only; it is not a production-readiness assertion.

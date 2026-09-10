@@ -1,8 +1,10 @@
 # Architecture Overview
 
+> Current app: `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). This document preserves the V1 architecture, including legacy binder models and routes. Use the [V2 architecture overview](v2-beta/README.md), [current treatment-plan handling map](patient-treatment-plan-handling.md), and [documentation index](current-documentation-state.md) for the active runtime.
+
 Date: 2026-06-30
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
+Historical architecture scope: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
 
 ## Current architecture
 

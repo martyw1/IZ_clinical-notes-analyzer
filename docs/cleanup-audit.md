@@ -1,5 +1,7 @@
 # Cleanup Audit - S0 Baseline
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Date: 2026-06-04
 Branch: `refactor/codex-v0.5.0`
 Baseline: `695080d`, tagged `baseline-pre-codex-20260604-164125`

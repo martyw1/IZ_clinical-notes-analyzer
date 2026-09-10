@@ -1,5 +1,7 @@
 # V1 Deprecation And Migration Plan
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+
 V1 contained a FastAPI runtime, a monolithic React `App.tsx`, deterministic rules, treatment-plan timeliness services, manual upload, API configuration/testing, audit logging, users, workflow profiles, Windows scripts, and extensive docs.
 
 Active runtime files moved to `deprecated/v1/`:

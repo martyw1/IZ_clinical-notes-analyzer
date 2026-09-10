@@ -1,5 +1,7 @@
 # Alleva Patient Treatment-Plan Data Contract
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md).
+
 Date: 2026-07-02
 
 This contract distinguishes the current V2 operational importer from the patient-filtered API Test Harness diagnostics. The TypeScript diagnostic contract lives in `frontend/src/types/allevaTreatmentPlan.ts`; backend tests also cover the operational MRN mapping and global collection boundary.

@@ -1,5 +1,7 @@
 # V2 Validation Report
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 ## 2026-07-13 treatment-plan sync, roster, and export validation
 
 The post-beta.2 feature validation passed on Windows with a disposable local-app-data directory and local synthetic Alleva service. A real Chrome window was driven through the visible Windows UI. The Treatment Plans pull created synthetic `plan-912`; a second pull with changed content under the same ID made version 2 current and preserved version 1; an unchanged pull from API Testing Harness left the populated queue intact. Patient Roster contained IDs/status metadata without patient names, the downloaded CSV included plan ID and status, and Forensic Logs showed `updated_treatment_plan_ids=plan-912`. The audit hash chain verified across the synthetic run.

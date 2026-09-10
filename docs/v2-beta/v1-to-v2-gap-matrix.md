@@ -1,5 +1,7 @@
 # V1 to V2 Gap Matrix
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Date: 2026-07-09
 
 Purpose: recovery planning for the active `codex/v2-beta-local-rebuild` V2 beta. This matrix was produced before product code changes. It compares the active V2 runtime against the archived V1 runtime under `deprecated/v1/` and treats a capability as complete only when backend, frontend, persistence, validation, security, and tests prove it.

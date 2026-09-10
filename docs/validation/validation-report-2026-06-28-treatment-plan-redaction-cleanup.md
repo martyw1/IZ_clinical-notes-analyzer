@@ -1,5 +1,7 @@
 # Validation Report - 2026-06-28 Treatment-Plan Redaction Cleanup
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Scope: IZ Clinical Notes Analyzer remediation for Alleva treatment-plan patient-name redaction, App Settings persistence, Treatment Plans pull/refresh access, deprecated-code quarantine, and documentation sync.
 
 ## Summary

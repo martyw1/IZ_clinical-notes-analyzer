@@ -1,6 +1,8 @@
+> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
+
 # Admin Access Reset Guide
 
-Date: 2026-09-04
+Date: 2026-09-08
 
 Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
 
@@ -27,48 +29,48 @@ Version 2.0 Beta role-scope reminder:
 - Office managers can manage counselor accounts only.
 - Counselors can manage only their own account.
 
-## Local utility path when locked out
+## Client package: standalone recovery when locked out
 
-Use this path when no working admin account can sign in on a local Windows desktop install.
+For the original beta.3 Windows package, send the validated
+`output/IZ-Admin-Recovery-beta.3.zip`. It contains the standalone executable
+and a short client instruction sheet. See
+[validation and compatibility](validation/admin-recovery-beta3-2026-09-08.md).
 
-1. Close the app browser tab and app command window.
-2. Open PowerShell from the repo root or installed app root.
-3. Run:
+1. Extract the ZIP using Windows **Extract All**.
+2. Double-click **Reset-IZ-Admin.exe** under the same Windows account used for IZ.
+3. Type **RESET** and press Enter.
+4. Keep the recovery window open and sign in to IZ using the displayed temporary password.
+5. Complete the required password change, then close the recovery window.
+
+The app may remain open. No Windows restart, elevation, or Python installation
+is required. The tool checks the exact original packaged runtime, backs up
+the existing database locally, updates the account and audit chain together,
+and clears lockout. It refuses incompatible installations and disabled accounts.
+If Windows blocks the unsigned executable, contact R3 without disabling protection.
+
+## Developer checkout utility
+
+The existing script below requires `backend/.venv/Scripts/python.exe`; it is
+not a standalone client-package recovery method. It prompts the operator to
+enter a temporary password securely.
 
 ```powershell
 .\scripts\update-local-admin.ps1
 ```
 
-4. Save the generated value shown in the PowerShell window.
-5. Start the app again with:
+## Do not reset an existing account by editing .env
 
-```powershell
-.\scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
-```
-
-6. Sign in locally as `admin` using the generated value.
-7. Immediately set the desired long-term admin access state according to R3 policy.
-8. Confirm `Forensic logs` show the bootstrap admin reset event.
-
-## Manual local settings path
-
-If the utility is unavailable, an authorized administrator can edit the local settings file directly:
+The initial generated password is stored in:
 
 ```text
 %LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
 ```
 
-Update the bootstrap admin credential value, confirm the reset-on-startup setting is enabled, save the file, restart the app, and sign in locally as `admin`.
-
-Relevant settings:
-
-```text
-BOOTSTRAP_ADMIN_USERNAME=admin
-BOOTSTRAP_ADMIN_PASSWORD=<secure-local-value>
-RESET_BOOTSTRAP_ADMIN_ON_STARTUP=true
-```
-
-After recovery, turn `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` back to `false` unless an authorized admin is actively performing another local recovery. Production-like/local-client startup readiness blocks missing or known placeholder bootstrap admin values.
+`BOOTSTRAP_ADMIN_PASSWORD` is used only when creating the account. Updating
+it or setting `RESET_BOOTSTRAP_ADMIN_ON_STARTUP` does not reset an existing V2
+account. The standalone recovery utility deliberately leaves .env unchanged.
+Never replace a client's .env with another installation's file: it contains
+installation-specific encryption settings.
 
 ## Security notes
 

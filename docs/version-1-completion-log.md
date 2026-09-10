@@ -1,5 +1,7 @@
 # Version 1 Completion Log
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 ## 2026-07-06 1.4.6-beta.1 Beta Client Usability Readiness
 
 - Simplified app-shell navigation around the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with less-frequent support/admin pages as secondary shortcuts.

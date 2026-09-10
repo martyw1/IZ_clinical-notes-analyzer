@@ -1,5 +1,7 @@
 # Chart Review Workflow — Build Prompt for ChatGPT 5.3-Codex
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Use the following prompt verbatim (or with minor environment-specific edits) to direct ChatGPT 5.3-Codex to architect, build, test, harden, and validate an enterprise-ready clinical chart review application.
 
 ---

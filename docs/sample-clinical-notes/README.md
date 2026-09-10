@@ -1,5 +1,7 @@
 # Synthetic clinical note samples
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+
 These files are **synthetic examples only**. They contain no real PHI and should not be described as proprietary Alleva exports. They model fields commonly needed by the IZ Clinical Notes Analyzer manual-upload workflow and by future API/export mapping work.
 
 ## Included files

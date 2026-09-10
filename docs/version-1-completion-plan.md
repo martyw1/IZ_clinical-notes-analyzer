@@ -1,5 +1,7 @@
 # Version 1 Completion Plan
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Created: 2026-06-09
 
 ## Starting State

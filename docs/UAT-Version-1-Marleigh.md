@@ -1,8 +1,10 @@
 # UAT Version 1 Marleigh
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Use synthetic data only for this script.
 
-Current beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
+Historical V1 beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 
 Beta 1.4.6-beta.1 keeps the Windows startup reliability fixes, aligns app version metadata, keeps the 42-step PRD workflow, adds Patient-ID-only privacy hardening, adds selected-client 42-step Treatment Plans checklist evaluation with manager notes/actions, preserves treatment-plan date-clock behavior, workflow/checklist exports, source-evidence page/API traceability, draft workflow editing, manual-upload binder delete-button usability, legacy local audit-log startup repair, redacted diagnostics, REST/OpenAPI/HL7-readiness-only Alleva setup, simplified primary navigation, bounded lookup status/results, and the non-technical `docs\beta-client-test-run-guide.md`.
 

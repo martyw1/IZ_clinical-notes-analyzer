@@ -1,5 +1,7 @@
 # Validation Report - 2026-06-18 Manual Upload Button Usability
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 Version under test: `1.4.2` / build `2026.06.18.2`
 
 Scope: verify the Manual upload `Delete uploaded binder` hover/click problem, run the automated suites, run all example treatment-plan files, and sweep live UI buttons on a disposable local desktop server with synthetic data only.

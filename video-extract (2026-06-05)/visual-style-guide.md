@@ -1,5 +1,7 @@
 # Visual Style Guide From Video
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../docs/current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 The source UI is Alleva, not the Loom website. The analyzer should borrow the operational clarity and evidence-first structure, not copy branding.
 
 ## Overall Feel

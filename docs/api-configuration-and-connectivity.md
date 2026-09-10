@@ -98,7 +98,7 @@ Patient-centered treatment-plan responses show patient ID, status ID/label, exac
 
 ## Alleva REST treatment-plan sync
 
-Beta `1.4.6-beta.1` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Beta `2.0.0-beta.3` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
@@ -207,7 +207,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Beta 1.4.6-beta.1 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Beta 2.0.0-beta.3 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 

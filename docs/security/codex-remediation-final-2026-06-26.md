@@ -1,5 +1,7 @@
 # IZ Clinical Notes Analyzer Remediation Report - 2026-06-26
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 ## Summary
 
 This remediation pass hardened the local-first clinical notes analyzer across the Alleva/API readiness harness, treatment-plan completeness and timeliness workflow, PHI minimization, audit logging, encrypted local storage, manager review/export surfaces, Windows launch paths, and operator documentation.

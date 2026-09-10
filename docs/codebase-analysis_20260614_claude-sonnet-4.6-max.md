@@ -1,5 +1,7 @@
 # Codex Build Goal: IZ Clinical Notes Analyzer — Clean Windows 11 Home Rebuild
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 **Target model:** GPT-5.5 Extra High  
 **Target platform:** OpenAI Codex App on macOS  
 **Output target:** A fully clean, resilient, fault-tolerant Windows 11 Home local laptop application  

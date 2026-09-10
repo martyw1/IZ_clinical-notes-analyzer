@@ -1,5 +1,7 @@
 # Alleva Diagnostic and Complete Export Tool
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../docs/current-documentation-state.md).
+
 `Invoke-AllevaEndUserTools.ps1` and `Run-AllevaEndUserTools.cmd` are the supported diagnostic-tool pair. Keep the two files together in this folder.
 
 This folder is a standalone, local-first Windows CLI utility for inspecting Alleva patient and treatment-plan data and producing reviewable exports. It calls Alleva directly; it does not start or connect to the IZ Clinical Notes Analyzer application.

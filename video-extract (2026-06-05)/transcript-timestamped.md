@@ -1,5 +1,7 @@
 # Timestamped Transcript
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../docs/current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 This is the Loom caption transcript as phrase-level timestamps with client-identifying names redacted in the written artifact. Use the raw ignored `reference-assets/captions.vtt` only for local verification.
 
 | # | Timestamp | Caption phrase |

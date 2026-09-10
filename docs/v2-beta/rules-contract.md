@@ -1,5 +1,7 @@
 # V2 Rules Contract
 
+> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+
 The canonical checklist remains `config/checklists/treatment-plan-v1.json`, with exactly 42 ordered criteria.
 
 The completeness engine must evaluate the full treatment-plan content graph where available, including diagnoses, behavioral definitions, goals, objectives, interventions, evidence-based flags, Wiley/template flags, signature metadata, reason for admission, initial client needs, family education needs, observed field inventory, and source field paths.

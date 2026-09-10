@@ -1,4 +1,23 @@
+## 2.0.0-beta.4 — 2026-09-10
+
+Build: 2026.09.10.1; channel: beta-local-desktop-v2.
+
+- First-use desktop administrator starter password with mandatory personal password change.
+- Account password changes, saved one-time recovery codes, and Forgot password in the app.
+- Staff temporary-password reset form; existing account passwords preserved on upgrade.
+- Source and rebuilt Windows package share the same password-management flow.
+- Clinical logic unchanged. LOC-change window remains unvalidated; live Alleva approval gate remains in place.
+
+See [password management](password-management-beta4.md). Validation is recorded in docs/validation/password-management-beta4-2026-09-10.md after completion.
+
 # Release Notes
+
+## Unreleased - Documentation and help alignment (2026-09-08)
+
+- Current guidance identifies app `2.0.0-beta.3` / build `2026.09.03.1`; checklist content stays `1.2.0`.
+- The offline HTML guide and in-app Help now describe source-filtered rosters, exact saved-plan selection, filtered exports, manual processing warnings, expired sessions, and the unresolved LOC-change/live-sync gates.
+- Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
+- This checkout help update does not rebuild or revalidate the prepared installer.
 
 Current app version: `2.0.0-beta.3` / build `2026.09.03.1`.
 

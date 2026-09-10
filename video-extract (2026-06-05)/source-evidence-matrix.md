@@ -1,5 +1,7 @@
 # Source Evidence Matrix
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../docs/current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 | Analyzer field | Video source | Why it matters | Extraction / UI note |
 |---|---|---|---|
 | `admission_date` | Client Overview and treatment plan signature comparison | Anchor for initial and master plan rules | Show in selected client header and rule detail. |

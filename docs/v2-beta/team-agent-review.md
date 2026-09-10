@@ -1,5 +1,7 @@
 # Team-Agent Review
 
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+
 ## Product Architect Agent
 
 Files read: README, V2 prompt, `DESIGN.md`, active frontend. Preserve local-first desktop workflow and make Treatment Plans primary. Remove the V1 monolith from active runtime. Required tests: active V2 navigation and version proof. Sign-off: V2 slice is active; full production upload parser remains deferred.

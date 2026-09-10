@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Plain-language setup, install, administrator, daily treatment-plan audit, and troubleshooting guide for IZ Clinical Notes Analyzer Version 2.0 Beta.">
-  <title>Marleigh's Setup, Install, and User Guide - IZ Clinical Notes Analyzer</title>
+  <meta name="description" content="Plain-language setup, install, administrator, daily treatment-plan audit, and troubleshooting guide for IZ Clinical Notes Analyzer 2.0.0-beta.3, build 2026.09.03.1.">
+  <title>Marleigh's Setup, Install, and User Guide - IZ Clinical Notes Analyzer 2.0.0-beta.3</title>
   <style>
     :root {
       color-scheme: light;
@@ -252,12 +252,13 @@
     <p class="eyebrow">R3 Recovery Services • Clinical Manager Guide</p>
     <h1>IZ Clinical Notes Analyzer</h1>
     <p class="subtitle">A plain-language setup, install, and daily-use guide for Marleigh and the administrator account.</p>
-    <span class="version-pill">Version 2.0 Beta | 2.0.0-beta.2 | beta-local-desktop-v2</span>
+    <span class="version-pill">Version 2.0 Beta 3 | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2</span>
   </header>
 
   <nav aria-label="Guide contents">
     <h2>What is in this guide</h2>
     <ul>
+      <li><a href="#current">What changed in Beta 3</a></li>
       <li><a href="#before">Before you begin</a></li>
       <li><a href="#install">Install the app</a></li>
       <li><a href="#start">Start and sign in</a></li>
@@ -270,6 +271,20 @@
     </ul>
   </nav>
 
+  <section id="current">
+    <h2>What changed in Beta 3</h2>
+    <p>This guide covers app <strong>2.0.0-beta.3</strong>, build <strong>2026.09.03.1</strong>, on the <strong>beta-local-desktop-v2</strong> channel. Confirm those values in the app footer before following these instructions. Checklist content has its own version, <strong>1.2.0</strong>, and still contains 42 steps.</p>
+    <ul>
+      <li>Both rosters start with <strong>All sources</strong>. Choose <strong>Manual</strong> or <strong>Alleva</strong> in the Source filter to narrow the work queue.</li>
+      <li>Select the exact source, patient record number, plan ID, and saved version ID. An MRN or plan ID alone can repeat across sources or facilities.</li>
+      <li>Rosters show the latest saved version of each exact plan. Open older evidence explicitly with <strong>Saved treatment-plan version</strong> in the detail page. A new import does not silently change the version you selected.</li>
+      <li>Roster exports include every filtered result, including rows below the viewport, and omit patient names and search text. An empty result exports column headers only.</li>
+      <li>Manual names, original plan references, and service dates are optional. Missing names appear as <strong>Name unavailable</strong>; missing original references and service dates appear as <strong>Not supplied</strong>. They are not guessed.</li>
+      <li>Manager actions and evidence belong to the selected saved plan version. Unlinked historical reviews do not prove completion for that plan.</li>
+    </ul>
+    <div class="callout warning"><strong>Screenshot context:</strong> screenshots below are historical Beta 2 illustrations captured on 2026-08-20 using a disposable synthetic profile. They may show older version numbers, navigation, or controls. Follow this guide's Beta 3 text and current on-screen labels. The existing guide folder keeps its Beta 2 name so saved links continue to work.</div>
+  </section>
+
   <section id="before">
     <h2>Before you begin</h2>
     <p>This app runs only on the Windows laptop where it is installed. It opens in a web-browser window, but the app and its data remain on the laptop unless an authorized Alleva pull is run.</p>
@@ -280,7 +295,7 @@
 
     <h3>Have these items ready</h3>
     <ul class="checklist">
-      <li>The prepared release zip named <span class="filename">IZ-Clinical-Notes-Analyzer-v2.0.0-beta.2.zip</span>.</li>
+      <li>The prepared release zip named <span class="filename">IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip</span>.</li>
       <li>The one-time <strong>admin</strong> password supplied through an R3-approved secure method. The app does not email this password.</li>
       <li>For Alleva setup: the approved client ID and client secret from R3/Alleva. Do not place either value in a screenshot, email, or chat.</li>
       <li>A Windows 10 or 11 laptop signed in under the Windows account that will use the app.</li>
@@ -318,19 +333,19 @@
     <figure>
       <img src="02.%20Start%20Up%20Screen.png" width="1152" height="648" alt="Black startup window showing Starting IZ Clinical Notes Analyzer">
       <p class="screenshot-actions"><a href="02.%20Start%20Up%20Screen.png" target="_blank" rel="noopener">Open the startup screenshot at full size</a></p>
-      <figcaption>The startup window. Leave it open while the app starts.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The startup window. Leave it open while the app starts.</figcaption>
     </figure>
 
     <figure>
       <img src="03.%20Login%20Screen.png" width="1280" height="720" alt="IZ Clinical Notes Analyzer administrator login screen">
       <p class="screenshot-actions"><a href="03.%20Login%20Screen.png" target="_blank" rel="noopener">Open the sign-in screenshot at full size</a></p>
-      <figcaption>The sign-in screen. The username is <strong>admin</strong>.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The sign-in screen. The username is <strong>admin</strong>.</figcaption>
     </figure>
 
     <figure>
       <img src="04.%20First%20Sign%20In%20Password%20Change.png" width="1280" height="720" alt="First sign-in password update screen">
       <p class="screenshot-actions"><a href="04.%20First%20Sign%20In%20Password%20Change.png" target="_blank" rel="noopener">Open the password-change screenshot at full size</a></p>
-      <figcaption>The first sign-in requires a new password. Do not reuse an Alleva, Microsoft, or personal password.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The first sign-in requires a new password. Do not reuse an Alleva, Microsoft, or personal password.</figcaption>
     </figure>
 
     <div class="callout warning">
@@ -355,7 +370,7 @@
     <figure>
       <img src="06.%20Settings%20and%20Alleva%20Readiness.png" width="1265" height="2168" alt="Settings screen with Alleva readiness fields and disabled treatment-plan sync">
       <p class="screenshot-actions"><a href="06.%20Settings%20and%20Alleva%20Readiness.png" target="_blank" rel="noopener">Open the Settings screenshot at full size</a></p>
-      <figcaption>A safe, unconfigured demonstration. Real credentials must never appear in guide screenshots.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> A safe, unconfigured demonstration. Real credentials must never appear in guide screenshots.</figcaption>
     </figure>
 
     <div class="callout stop">
@@ -367,7 +382,7 @@
     <h2>Daily treatment-plan audit</h2>
 
     <div class="quick-card">
-      <strong>Daily sequence:</strong> Status Dashboard → Treatment Plans Roster → Pull full treatment plans → Patient Roster or Treatment Plan Detail → review evidence and checklist → document the manager action → sign out.
+      <strong>Daily sequence:</strong> Status Dashboard → either roster → authorized pull or review existing records → select the exact saved plan → review evidence and checklist → document the manager action → export filtered results if needed → sign out.
     </div>
 
     <h3>1. Check source readiness</h3>
@@ -376,22 +391,23 @@
     <figure>
       <img src="05.%20Status%20Dashboard.png" width="1265" height="1099" alt="Status Dashboard showing manual upload, API, and Alleva readiness cards">
       <p class="screenshot-actions"><a href="05.%20Status%20Dashboard.png" target="_blank" rel="noopener">Open the Status Dashboard screenshot at full size</a></p>
-      <figcaption>The dashboard clearly distinguishes missing configuration, unavailable records, and the unvalidated LOC-change rule.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The dashboard clearly distinguishes missing configuration, unavailable records, and the unvalidated LOC-change rule.</figcaption>
     </figure>
 
-    <h3>2. Pull treatment plans from Alleva</h3>
+    <h3>2. Refresh records when an Alleva pull is approved</h3>
+    <p>Use existing authorized records or Manual Upload when live sync is unavailable. Live sync is off by default; a successful OAuth test alone does not authorize production use. R3/Alleva must approve the tenant, endpoint mapping, and read-only import before enabling it.</p>
     <ol class="steps">
-      <li>Open <strong>Treatment Plans Roster</strong>.</li>
+      <li>Open <strong>Treatment Plans Roster</strong> to import plans. The separate <strong>Pull patient roster</strong> action in <strong>Patient Roster</strong> refreshes patient records and does not require treatment plans.</li>
       <li>If the pull button is disabled, read the requirement list and return to <strong>Settings</strong>. Do not bypass a blocker.</li>
       <li>Choose <strong>Pull full treatment plans</strong>. Leave the browser open while the job is working.</li>
       <li>When the pull finishes, choose <strong>Refresh roster</strong> if the new rows do not appear automatically.</li>
-      <li>Search by MRN, patient name when authorized/displayed, or treatment-plan ID.</li>
+      <li>Search by MRN, patient name when authorized/displayed, treatment-plan ID, or original plan reference. Check the Source filter and exact record identity before opening a result.</li>
     </ol>
 
     <figure>
       <img src="07.%20Treatment%20Plans%20Roster.png" width="1265" height="945" alt="Treatment Plans Roster with import requirements and roster search">
       <p class="screenshot-actions"><a href="07.%20Treatment%20Plans%20Roster.png" target="_blank" rel="noopener">Open the Treatment Plans Roster screenshot at full size</a></p>
-      <figcaption>The safe demonstration is intentionally blocked because no live credentials were entered. A configured laptop enables the pull only after every approval requirement is satisfied.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The safe demonstration is intentionally blocked because no live credentials were entered. A configured laptop enables the pull only after every approval requirement is satisfied.</figcaption>
     </figure>
 
     <h3>3. Review the patient and exact plan</h3>
@@ -409,19 +425,22 @@
       <article class="card"><h3>Unable to Evaluate</h3><p>The app cannot make a safe determination. Handle it as unresolved, not compliant.</p></article>
     </div>
 
-    <h3>4. Use Help and forensic logs</h3>
-    <p><strong>Help</strong> repeats the basic workflow. <strong>Forensic Logs</strong> lets an administrator confirm that actions were recorded without patient names, clinical narrative, or vendor secrets.</p>
+    <h3>4. Export the filtered work queue</h3>
+    <p>In <strong>Treatment Plans Roster</strong>, set the Source filter and search, then choose <strong>Export treatment plans and statuses</strong> if your role permits it. The CSV includes all matching rows, not just the visible rows. Patient names and search text are excluded. Keep exported operational records in the R3-approved protected location.</p>
+
+    <h3>5. Use Help and forensic logs</h3>
+    <p><strong>Help</strong> shows the Beta 3 version/build, exact-plan workflow, manual-upload guidance, unresolved outcomes, connection gates, and session/support instructions. <strong>Forensic Logs</strong> lets an administrator confirm that actions were recorded without patient names, clinical narrative, or vendor secrets.</p>
 
     <figure>
       <img src="09.%20Help%20Screen.png" width="1280" height="720" alt="Help screen listing the Version 2.0 Beta workflow">
       <p class="screenshot-actions"><a href="09.%20Help%20Screen.png" target="_blank" rel="noopener">Open the Help screenshot at full size</a></p>
-      <figcaption>The in-app Help screen is a quick refresher while working.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The in-app Help screen is a quick refresher while working.</figcaption>
     </figure>
 
     <figure>
       <img src="10.%20Forensic%20Logs.png" width="1265" height="1046" alt="Forensic Logs screen showing redacted audit events">
       <p class="screenshot-actions"><a href="10.%20Forensic%20Logs.png" target="_blank" rel="noopener">Open the Forensic Logs screenshot at full size</a></p>
-      <figcaption>Forensic logs show minimum-necessary actions and outcomes. Patient names, clinical narrative, and vendor secrets are excluded.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> Forensic logs show minimum-necessary actions and outcomes. Patient names, clinical narrative, and vendor secrets are excluded.</figcaption>
     </figure>
   </section>
 
@@ -433,13 +452,13 @@
       <li>Choose the approved treatment-plan file or binder files.</li>
       <li>If the file omits the MRN, enter the correct MRN. If it conflicts with detected evidence, check the correction confirmation only after verifying the patient.</li>
       <li>Choose <strong>Upload and securely process binder</strong>.</li>
-      <li>Review every warning. Image-only or legacy formats may be stored securely without being parsed.</li>
+      <li>Review every warning and the processing counts. Image-only or legacy formats may be stored securely without being parsed. Open the imported exact plan from a roster; encrypted storage does not establish checklist completion.</li>
     </ol>
 
     <figure>
       <img src="08.%20Manual%20Upload.png" width="1265" height="1263" alt="Manual Upload page for normalized aggregate or treatment-plan binder files">
       <p class="screenshot-actions"><a href="08.%20Manual%20Upload.png" target="_blank" rel="noopener">Open the Manual Upload screenshot at full size</a></p>
-      <figcaption>Manual files are stored encrypted. Original filenames are cleared from the page after submission and are not persisted.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> Manual files are stored encrypted. Original filenames are cleared from the page after submission and are not persisted.</figcaption>
     </figure>
   </section>
 
@@ -457,7 +476,7 @@
     <figure>
       <img src="11.%20Users.png" width="1265" height="1334" alt="Administrator Users screen with role and facility assignment controls">
       <p class="screenshot-actions"><a href="11.%20Users.png" target="_blank" rel="noopener">Open the Users screenshot at full size</a></p>
-      <figcaption>The bootstrap <strong>admin</strong> account cannot be reset from this table. Use the authorized local recovery process through R3 support if Marleigh is locked out.</figcaption>
+      <figcaption><strong>Historical Beta 2 illustration.</strong> The bootstrap <strong>admin</strong> account cannot be reset from this table. Use the authorized local recovery process through R3 support if Marleigh is locked out.</figcaption>
     </figure>
   </section>
 
@@ -475,7 +494,8 @@
         <tr><td>Alleva is limiting requests.</td><td>Wait several minutes before retrying. Repeated retries can extend the problem.</td></tr>
         <tr><td>The pull finishes but the roster is empty.</td><td>Choose <strong>Refresh roster</strong>. Confirm the pull completed rather than failed/cancelled. Check the Patient Roster. If still empty, capture the non-PHI status message and contact support.</td></tr>
         <tr><td>A plan says Missing Data, Needs Review, Conflicting Evidence, or Unable to Evaluate.</td><td>Open the plan detail, read the reason and source location, and reconcile the evidence in Alleva. Do not mark compliant just to clear the queue.</td></tr>
-        <tr><td>The display says <code>no-name-found_...</code>.</td><td>This is expected when patient-name import/display is off. Use the MRN and treatment-plan ID. Do not enable names unless R3 has approved it.</td></tr>
+        <tr><td>A name says <em>Name unavailable</em>, or an original reference or service date says <em>Not supplied</em>.</td><td>Optional metadata is missing. Use the MRN together with source, patient record number, plan ID, and saved version ID. Do not infer patient identity from a name or enable name display without R3 approval.</td></tr>
+        <tr><td>Your session has expired.</td><td>Sign in again before continuing. Reopen the exact record and confirm whether your last action was saved before repeating it.</td></tr>
         <tr><td>The LOC-change warning remains visible.</td><td>Leave the setting unvalidated until R3/Marleigh confirms the exact update window. The current 7-day value is a configurable preset, not a confirmed rule.</td></tr>
         <tr><td>You need to send support information.</td><td>Send the app version, time of the problem, exact non-PHI message, and the redacted diagnostics package through the approved R3 support channel. Do not send the backup zip by ordinary email.</td></tr>
       </tbody>
@@ -504,13 +524,16 @@
       <strong>Uninstall choices:</strong> normal <em>Uninstall</em> removes app files but preserves local data. <em>Complete Uninstall</em> removes the app and all local data for the Windows user. Use Complete Uninstall only when R3 intentionally wants the laptop cleared and after an approved backup.
     </div>
 
+    <p>Optional LLM features remain disabled by default and are not required for deterministic checklist or timeliness decisions. The LOC-change window, live Alleva approval, signing, and retention/legal-hold decisions remain release gates.</p>
+
     <h3>Print or save this guide</h3>
     <p>Open this HTML file in Microsoft Edge or Chrome, press <strong>Ctrl+P</strong>, and choose a printer or <strong>Save as PDF</strong>. The guide works offline; all screenshots are stored beside it.</p>
   </section>
 
   <footer class="footer">
-    <strong>Guide version:</strong> 2026-08-20 for IZ Clinical Notes Analyzer 2.0.0-beta.2.<br>
-    Screenshots were captured from a disposable local profile using synthetic/no patient data and no live Alleva credentials. Historical validation reports may retain the version they originally tested.
+    <strong>Guide version:</strong> 2026-09-08 for IZ Clinical Notes Analyzer 2.0.0-beta.3.<br>
+    Build 2026.09.03.1 · beta-local-desktop-v2. Guide text checked against the current source checkout; this update does not rebuild the prepared installer.<br>
+    Historical Beta 2 screenshots were captured from a disposable local profile using synthetic/no patient data and no live Alleva credentials. Historical validation reports may retain the version they originally tested.
   </footer>
 </main>
 </body>

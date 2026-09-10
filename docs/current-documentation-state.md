@@ -1,6 +1,8 @@
+> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
+
 # Current Documentation State
 
-Date: 2026-09-04
+Date: 2026-09-08
 
 Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
 
@@ -115,6 +117,10 @@ Use these as the active documentation set:
 - `docs\runbook.md`
 - `docs\codebase-map.md`
 - `docs\admin-access-reset.md`
+
+## 2026-09-08 help alignment
+
+The offline HTML guide now identifies beta.3/build 2026.09.03.1 and covers current source filters, exact saved-plan identity, filtered exports, manual processing outcomes, and session handling. Its beta.2 folder name remains a stable link; every retained screenshot is labeled as a historical Beta 2 illustration. In-app Help carries the same current version/build and workflow boundaries. Current source-checkout UI fixes since packaging are documented in the release notes; this documentation/help update does not change the prepared installer. Historical reports and legacy V1 procedures retain their original evidence with prominent current-release pointers.
 
 ## Documentation Maintenance Rules
 

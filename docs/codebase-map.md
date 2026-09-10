@@ -1,4 +1,6 @@
-# Codebase Map - Current Beta 1.4.6-beta.1
+# Historical V1 Codebase Map - Beta 1.4.6-beta.1
+
+> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 Date: 2026-06-30
 
@@ -10,7 +12,7 @@ Current checked-in app metadata is aligned in `VERSION`, `VERSION.json`, `fronte
 
 ## Scope
 
-This file is the current orientation map for the remote repository. Older S0/S1/S2/S3/S4/S5 notes, PRDs, walkthroughs, and external analyses remain historical references, but this document reflects the active Beta 1.4.6-beta.1 app shape.
+This file preserves the V1 orientation map. Its routes, navigation, packaging notes, and validation limits describe Beta 1.4.6-beta.1, not the active V2 runtime.
 
 ## Current architecture
 
@@ -191,7 +193,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 
 ## Version Metadata
 
-The current app version is:
+The historical app version covered below is:
 
 ```text
 1.4.6-beta.1

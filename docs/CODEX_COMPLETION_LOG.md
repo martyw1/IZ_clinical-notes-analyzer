@@ -1,5 +1,29 @@
 # Codex completion log - 2026-05-14
 
+## 2026-09-08 standalone beta.3 administrator recovery
+
+- Built `output/IZ-Admin-Recovery-beta.3.zip`: standalone x64 EXE and client instructions, no client developer runtime or elevation required.
+- Ten checks pass, including original packaged app login failure, lockout, running-app recovery, enforced password change, repeat recovery, obsolete session rejection, preserved configuration/data, audit integrity, and safe refusal cases.
+- Validated ZIP allowlist, integrity and tested binary identity; captured actual Windows console screens. Corrected obsolete .env reset guidance.
+- See [validation, checksums and limitations](validation/admin-recovery-beta3-2026-09-08.md). No client access. Original installed app executable is unchanged; recovery is an additional utility. Unsigned-executable Windows policy remains a client-side limitation.
+
+## 2026-09-08 client handoff inventory and one-page run guide
+
+- Created exact prepared-release and source-copy inventories, exclusions and dependency/setup review for `2.0.0-beta.3` / build `2026.09.03.1`.
+- Created and rendered a single-page PDF for prepared-release install, launch, sign-in, preparation and troubleshooting.
+- Verified 21 source paths, 26 packaged paths, x64 executable architecture, folder/ZIP safety scans, isolated packaged initialization and preserved configuration, plus syntax of 10 PowerShell scripts.
+- Documented source-mode automatic setup, Stop/restart source fallback, local first-login provisioning, recovery needing a venv, and the stale prepared binary. No runtime code, dependency or installer changes; no target-laptop safety guarantee.
+- Independent final review approved the inventories, dependency findings and single-page PDF with no blockers. See [handoff validation](validation/client-handoff-2026-09-08.md).
+
+## 2026-09-08 beta3 documentation and interactive help alignment
+
+- Completed S0 inventory, S1 documentation/help edits and S2 frontend/browser validation for current `2.0.0-beta.3`, build `2026.09.03.1`, channel `beta-local-desktop-v2`.
+- All 96 tracked non-credential Markdown documents identify the current release. Historical evidence retains its tested versions with current pointers; obsolete V1 procedures are labeled. Checklist content remains `1.2.0`.
+- Updated the offline HTML guide and in-app Help for source filters, exact saved-plan identity/history, filtered exports, manual processing, session handling and unresolved approval gates. Existing screenshot links remain valid and every earlier illustration is explicitly historical.
+- Frontend passed 175 tests, TypeScript checking and production build. Real isolated Edge sign-in/password change, Help navigation and sign-out passed. All 10 guide anchors and 10 images worked; 42 captures covered every section at three widths with no horizontal overflow or page errors. Both initial visual reviews passed; after correcting the patient-roster action and missing-name labels, the documentation re-review and a fresh final independent review of all 42 recaptures also passed.
+- Full backend verification is inconclusive because the tool timed out/failed before returning complete results. Verified owned orphaned test processes were stopped. Backend source, prepared installer and release metadata were unchanged.
+- See [station validation](validation/documentation-help-alignment-2026-09-08.md). Existing untracked user files, credentials and clinical data were untouched; no live vendor call or destructive cleanup occurred.
+
 ## 2026-09-04 beta3 office-manager fixes and final candidate
 
 - Backed up pre-change main `438c72644363` with verified encrypted Git history, sanitized source archive and preserved private smoke log. The restore check matched that commit; DPAPI recovery requires the same Windows account.
@@ -291,3 +315,13 @@
 - Added the narrow packaging contract that validates and bundles `VERSION.json` at the frozen runtime root; packaged archive and frozen `/api/version` proof remain pending Task10.
 - Preserved the historical beta2 documentation, illustrated guide directory/content, and the original smoke report byte-for-byte. No dependencies, commits, staging, pushes, live credentials, or production data were changed.
 - Task7 source-membership receipt remains pending. Task8 backend metric subgate is independently verified (28/28 focused tests, five raw-source probes, and byte-identical 63-by-42 clinical replay), while browser/package evidence remains pending. The source-document retention choice remains unanswered; no detach or erase behavior is claimed. LOC-change timing, live Alleva validation, credential rotation/history remediation, signing, and retention/legal-hold remain open gates.
+
+## Beta.4 password management — 2026-09-10
+
+S0: inspected existing authentication, packaging, dirty working tree, and synthetic test harness; preserved pre-existing user edits and local data.
+
+S1 implementation: focused password setup/change/recovery in existing UI and auth boundaries; beta.4 metadata and client instructions. No source deletion. Packaging exclusions omit generated output, unrelated black-hole-lab, and historical beta.3 standalone recovery source from the beta.4 distribution; those files remain on disk.
+
+S2 validation and S3 packaging: see `docs/validation/password-management-beta4-2026-09-10.md` for final receipts.
+
+Beta.4 final outcome: 506 backend and 178 frontend tests passed; 5 targeted final UI checks passed. All 31 clinical smoke scenarios covered, with the updated 4-case session group passing. Source and final packaged password browser flows, beta.3-to-beta.4 chosen-password preservation, and both visual reviews passed. Self-contained beta.4 folder and ZIP built and safety-scanned. Existing user data and beta.3 archives preserved.

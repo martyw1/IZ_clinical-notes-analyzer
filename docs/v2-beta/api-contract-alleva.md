@@ -11,7 +11,7 @@ The app must not substitute `/clients.id`, `source_id`, `chartId`, `externalId`,
 
 Live Alleva sync is disabled by default. It requires a saved client ID and encrypted secret, API and sync enablement, and explicit administrator authorization for live read-only import on the tenant.
 
-For `2.0.0-beta.2`, live validation is an external gate: R3/Alleva must approve and supervise a contract and end-to-end sync using approved non-PHI/test records. Synthetic local contract fixtures validate the implementation boundary but do not establish live production readiness.
+For `2.0.0-beta.3`, live validation is an external gate: R3/Alleva must approve and supervise a contract and end-to-end sync using approved non-PHI/test records. Synthetic local contract fixtures validate the implementation boundary but do not establish live production readiness.
 
 ## Automatic published mapping
 
