@@ -1,0 +1,37 @@
+{
+  "retrievedOn": "2026-09-05",
+  "assets": [
+    {
+      "id": "wolfe-subsolar-figure-2",
+      "localPng": "C:\\Users\\r3developer\\.codex\\tmp\\horizon-research\\wolfe-subsolar-mass-posteriors-figure-2.png",
+      "localOriginalPdf": "C:\\Users\\r3developer\\.codex\\tmp\\horizon-research\\figures\\o4\\o4-m2.pdf",
+      "title": "Simulated lighter-object mass inference with O4-design detector sensitivity",
+      "sourcePaper": "https://arxiv.org/abs/2305.19907v2",
+      "figureContext": "https://arxiv.org/html/2305.19907v2#S3.F2",
+      "sourceArchive": "https://arxiv.org/src/2305.19907v2",
+      "sourceArchiveMember": "figures/o4/o4-m2.pdf",
+      "authors": [
+        "Noah E. Wolfe",
+        "Salvatore Vitale",
+        "Colm Talbot"
+      ],
+      "year": 2023,
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "licenseEvidence": "Both the arXiv abstract license link and full HTML label state CC BY 4.0.",
+      "credit": "Noah E. Wolfe, Salvatore Vitale and Colm Talbot (2023), Too small to fail: characterizing sub-solar mass black hole mergers with gravitational waves, Figure 2, arXiv:2305.19907v2, CC BY 4.0. Original PDF rendered to PNG; scientific content unchanged.",
+      "caption": "Forecast posterior distributions for the lighter object source-frame mass in simulated signals at O4-design LIGO-Hanford, LIGO-Livingston and Virgo sensitivity. Left: non-precessing; right: precessing. Color shows network signal-to-noise ratio and line style shows the heavier object spin. These are simulated examples, not observed detections.",
+      "caution": "The curves are not normalized in this presentation; do not interpret their plotted heights as comparable probabilities. Preserve all labels and the full figure.",
+      "visuallyVerified": true
+    },
+    {
+      "id": "ligo-gw150914-waveforms",
+      "title": "Gravitational Waves, As Einstein Predicted",
+      "source": "https://www.ligo.caltech.edu/image/ligo20160211a",
+      "credit": "Caltech/MIT/LIGO Lab",
+      "license": "LIGO Lab image-use policy (not a Creative Commons license)",
+      "licenseUrl": "https://www.ligo.caltech.edu/page/image-use-policy",
+      "useNote": "Official factual GW150914 data/prediction comparison. Credit image source and avoid implying endorsement. No asset download performed."
+    }
+  ]
+}

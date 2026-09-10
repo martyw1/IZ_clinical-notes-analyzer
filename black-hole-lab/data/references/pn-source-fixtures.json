@@ -1,0 +1,199 @@
+{
+  "sourceSHA": "c54be3dd1be3c9effedc83f0dda55a0d9fa1f34c",
+  "pointwise": [
+    {
+      "eta": 0.25,
+      "v": 0.1,
+      "B": 0.9837161958717014,
+      "dv_dDimensionlessTime": 1.5739459133947233E-09,
+      "F2_intrinsic_phase": 9462.981593432381
+    },
+    {
+      "eta": 0.25,
+      "v": 0.2,
+      "B": 0.9870569385605629,
+      "dv_dDimensionlessTime": 8.085970440688135E-07,
+      "F2_intrinsic_phase": 210.10470056911385
+    },
+    {
+      "eta": 0.25,
+      "v": 0.3,
+      "B": 1.1137311997919825,
+      "dv_dDimensionlessTime": 3.507451392880894E-05,
+      "F2_intrinsic_phase": -25.364370989679887
+    },
+    {
+      "eta": 0.25,
+      "v": 0.4082482904638631,
+      "B": 1.6666715653708377,
+      "dv_dDimensionlessTime": 0.0008400195275646617,
+      "F2_intrinsic_phase": -38.42926673898146
+    },
+    {
+      "eta": 0.16,
+      "v": 0.1,
+      "B": 0.986197421030647,
+      "dv_dDimensionlessTime": 1.009866159135383E-09,
+      "F2_intrinsic_phase": 14698.425959769593
+    },
+    {
+      "eta": 0.16,
+      "v": 0.2,
+      "B": 0.9985735155318133,
+      "dv_dDimensionlessTime": 5.235401113111437E-07,
+      "F2_intrinsic_phase": 320.7249879350571
+    },
+    {
+      "eta": 0.16,
+      "v": 0.3,
+      "B": 1.1519697887174263,
+      "dv_dDimensionlessTime": 2.3218402663756898E-05,
+      "F2_intrinsic_phase": -34.25613367130583
+    },
+    {
+      "eta": 0.16,
+      "v": 0.4082482904638631,
+      "B": 1.787342121781114,
+      "dv_dDimensionlessTime": 0.0005765367827683511,
+      "F2_intrinsic_phase": -47.71523565495991
+    },
+    {
+      "eta": 0.08264462809917356,
+      "v": 0.1,
+      "B": 0.9883345277987142,
+      "dv_dDimensionlessTime": 5.227554527199814E-10,
+      "F2_intrinsic_phase": 28312.1414105243
+    },
+    {
+      "eta": 0.08264462809917356,
+      "v": 0.2,
+      "B": 1.0085710741861622,
+      "dv_dDimensionlessTime": 2.731310492473734E-07,
+      "F2_intrinsic_phase": 609.0757256099256
+    },
+    {
+      "eta": 0.08264462809917356,
+      "v": 0.3,
+      "B": 1.1857136083694042,
+      "dv_dDimensionlessTime": 1.2344278190299492E-05,
+      "F2_intrinsic_phase": -56.95706884894347
+    },
+    {
+      "eta": 0.08264462809917356,
+      "v": 0.4082482904638631,
+      "B": 1.8968615477324193,
+      "dv_dDimensionlessTime": 0.00031604549907495095,
+      "F2_intrinsic_phase": -71.66856887010024
+    }
+  ],
+  "integrals": [
+    {
+      "eta": 0.25,
+      "startSeparationProxy": 12,
+      "durationOverM": 1286.069732888611,
+      "orbitalPhaseRadians": 42.422436724201276,
+      "orbitalCycles": 6.751740502659785,
+      "durationConvergenceAbs": 4.092726157978177E-12,
+      "phaseConvergenceAbs": 6.394884621840902E-14
+    },
+    {
+      "eta": 0.25,
+      "startSeparationProxy": 20,
+      "durationOverM": 11937.310066261301,
+      "orbitalPhaseRadians": 199.61718321548008,
+      "orbitalCycles": 31.77006143482418,
+      "durationConvergenceAbs": 3.2741809263825417E-11,
+      "phaseConvergenceAbs": 6.252776074688882E-13
+    },
+    {
+      "eta": 0.25,
+      "startSeparationProxy": 30,
+      "durationOverM": 63410.95491612904,
+      "orbitalPhaseRadians": 597.2194928340858,
+      "orbitalCycles": 95.05043439537953,
+      "durationConvergenceAbs": 1.0913936421275139E-09,
+      "phaseConvergenceAbs": 2.1600499167107046E-12
+    },
+    {
+      "eta": 0.25,
+      "startSeparationProxy": 50,
+      "durationOverM": 497890.12972948345,
+      "orbitalPhaseRadians": 2226.064203221496,
+      "orbitalCycles": 354.28912158262256,
+      "durationConvergenceAbs": 5.966285243630409E-08,
+      "phaseConvergenceAbs": 4.18367562815547E-11
+    },
+    {
+      "eta": 0.16,
+      "startSeparationProxy": 12,
+      "durationOverM": 1930.9771375330456,
+      "orbitalPhaseRadians": 63.543069850030186,
+      "orbitalCycles": 10.113193665865884,
+      "durationConvergenceAbs": 7.503331289626658E-12,
+      "phaseConvergenceAbs": 4.263256414560601E-14
+    },
+    {
+      "eta": 0.16,
+      "startSeparationProxy": 20,
+      "durationOverM": 18251.36362369433,
+      "orbitalPhaseRadians": 304.21599242660585,
+      "orbitalCycles": 48.41747896230092,
+      "durationConvergenceAbs": 2.764863893389702E-10,
+      "phaseConvergenceAbs": 7.958078640513122E-13
+    },
+    {
+      "eta": 0.16,
+      "startSeparationProxy": 30,
+      "durationOverM": 97777.89882621355,
+      "orbitalPhaseRadians": 918.3432761973326,
+      "orbitalCycles": 146.15887186201118,
+      "durationConvergenceAbs": 2.9685907065868378E-09,
+      "phaseConvergenceAbs": 6.821210263296962E-12
+    },
+    {
+      "eta": 0.16,
+      "startSeparationProxy": 50,
+      "durationOverM": 772310.3595793517,
+      "orbitalPhaseRadians": 3446.587225962201,
+      "orbitalCycles": 548.5413938092676,
+      "durationConvergenceAbs": 1.1397060006856918E-07,
+      "phaseConvergenceAbs": 1.1141310096718371E-10
+    },
+    {
+      "eta": 0.08264462809917356,
+      "startSeparationProxy": 12,
+      "durationOverM": 3613.530966190148,
+      "orbitalPhaseRadians": 118.67277971128345,
+      "orbitalCycles": 18.88735950150635,
+      "durationConvergenceAbs": 4.547473508864641E-13,
+      "phaseConvergenceAbs": 9.805489753489383E-13
+    },
+    {
+      "eta": 0.08264462809917356,
+      "startSeparationProxy": 20,
+      "durationOverM": 34684.77825593253,
+      "orbitalPhaseRadians": 576.5668441634593,
+      "orbitalCycles": 91.76346327150907,
+      "durationConvergenceAbs": 1.2369127944111824E-10,
+      "phaseConvergenceAbs": 1.2505552149377763E-12
+    },
+    {
+      "eta": 0.08264462809917356,
+      "startSeparationProxy": 30,
+      "durationOverM": 187165.97996692534,
+      "orbitalPhaseRadians": 1753.7981918455414,
+      "orbitalCycles": 279.1256514178461,
+      "durationConvergenceAbs": 4.045432433485985E-09,
+      "phaseConvergenceAbs": 5.9117155615240335E-12
+    },
+    {
+      "eta": 0.08264462809917356,
+      "startSeparationProxy": 50,
+      "durationOverM": 1485884.3825586138,
+      "orbitalPhaseRadians": 6620.670392417535,
+      "orbitalCycles": 1053.7124195354093,
+      "durationConvergenceAbs": 1.7881393432617188E-07,
+      "phaseConvergenceAbs": 1.9281287677586079E-10
+    }
+  ]
+}

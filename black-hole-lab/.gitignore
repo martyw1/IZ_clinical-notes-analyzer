@@ -1,0 +1,7 @@
+node_modules/
+dist/
+evidence/
+*.tar.gz
+evidence/server.log
+evidence/server-error.log
+evidence/model-export.json
