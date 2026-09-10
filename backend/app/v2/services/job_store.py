@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.v2.db import SessionLocal
 from app.v2.models import ApiHarnessJobRecord
@@ -27,15 +27,15 @@ def record_values(job: Any) -> dict[str, object]:
 
 def record_as_job_values(row: ApiHarnessJobRecord) -> dict[str, object]:
     return {
-        "job_id": row.job_id, "job_type": row.job_type, "created_at": row.created_at.isoformat(),
-        "started_at": _as_iso(row.started_at), "updated_at": row.updated_at.isoformat(), "completed_at": _as_iso(row.completed_at),
+        "job_id": row.job_id, "job_type": row.job_type, "created_at": _as_iso(row.created_at),
+        "started_at": _as_iso(row.started_at), "updated_at": _as_iso(row.updated_at), "completed_at": _as_iso(row.completed_at),
         "cancelled_at": _as_iso(row.cancelled_at), "failed_at": _as_iso(row.failed_at), "actor_id": row.actor_id,
         "actor_role": row.actor_role, "status": row.status, "progress_percent": row.progress_percent,
         "current_endpoint": row.current_endpoint, "current_page": row.current_page, "current_cursor": row.current_cursor,
         "records_seen": row.records_seen, "records_written": row.records_written, "records_failed": row.records_failed,
         "warnings_count": row.warnings_count, "errors_count": row.errors_count, "output_dir": row.output_dir,
         "redaction_mode": row.redaction_mode, "raw_sensitive_mode_used": row.raw_sensitive_mode_used,
-        "cancel_requested": row.cancel_requested, "last_heartbeat_at": row.last_heartbeat_at.isoformat(),
+        "cancel_requested": row.cancel_requested, "last_heartbeat_at": _as_iso(row.last_heartbeat_at),
     }
 
 
@@ -57,4 +57,19 @@ def _as_datetime(value: str | None) -> datetime | None:
 
 
 def _as_iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if value is None:
+        return None
+    utc_value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return utc_value.isoformat()
+
+
+def sync_failure_message(job_id: str) -> str | None:
+    with SessionLocal() as db:
+        error_class = db.execute(text(
+            "SELECT sync_failures.error_class FROM sync_failures "
+            "JOIN sync_jobs ON sync_failures.job_id=sync_jobs.id "
+            "WHERE sync_jobs.external_job_id=:job_id ORDER BY sync_failures.id DESC LIMIT 1"
+        ), {"job_id": job_id}).scalar_one_or_none()
+    if error_class in {"ReadTimeout", "ConnectTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException"}:
+        return "Treatment-plan sync timed out waiting for Alleva. You can resume the sync to try again."
+    return None

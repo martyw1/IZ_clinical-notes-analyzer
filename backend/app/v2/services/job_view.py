@@ -5,7 +5,7 @@ from typing import Any
 from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob
 
 
-def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...]) -> ApiHarnessJob:
+def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...], failure_message: str | None = None) -> ApiHarnessJob:
     return ApiHarnessJob(
         job_id=job.job_id, job_type=job.job_type, created_at=job.created_at, started_at=job.started_at,
         updated_at=job.updated_at, completed_at=job.completed_at, cancelled_at=job.cancelled_at, failed_at=job.failed_at,
@@ -16,7 +16,7 @@ def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...]) -> ApiHarnes
         redaction_mode=job.redaction_mode, raw_sensitive_mode_used=job.raw_sensitive_mode_used,
         cancel_requested=job.cancel_requested, last_heartbeat_at=job.last_heartbeat_at,
         phase=_phase(job.status, job.current_endpoint),
-        message=_message(job.job_type, job.status),
+        message=failure_message or _message(job.job_type, job.status),
         artifacts=artifacts,
     )
 

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Final, assert_never
 from uuid import uuid4
 
+import httpx
+
 from app.core.config import settings
 from app.services.audit import log_event
 from app.v2.db import SessionLocal
@@ -31,7 +33,7 @@ from app.v2.services.alleva_contracts import (
     update_sync_ledger,
 )
 from app.v2.services.audit_store import record_audit_event
-from app.v2.services.job_store import record_as_job_values, save_job
+from app.v2.services.job_store import record_as_job_values, save_job, sync_failure_message
 from app.v2.services.job_view import public_job
 from sqlalchemy import select
 from app.v2.services.job_artifacts import DiagnosticFailure, media_type, now_iso, write_failure, write_summaries, write_tables
@@ -472,10 +474,11 @@ class ApiHarnessJobService:
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
                 return
             except AllevaSyncError as exc:
+                error_class = type(exc.__cause__).__name__ if isinstance(exc.__cause__, httpx.TimeoutException) else type(exc).__name__
                 record_sync_failure(
                     db,
                     job_id,
-                    type(exc).__name__,
+                    error_class,
                     "Sync request failed before completion.",
                     False,
                     1,
@@ -630,7 +633,8 @@ class ApiHarnessJobService:
         return Path(output_dir)
 
     def _public_job(self, job: MutableJob) -> ApiHarnessJob:
-        return public_job(job, self.artifacts(job.job_id))
+        failure_message = sync_failure_message(job.job_id) if job.status == "failed" and job.job_type == "approved_treatment_plan_sync" else None
+        return public_job(job, self.artifacts(job.job_id), failure_message)
 
     def _connection(self, job_id: str) -> HarnessConnection:
         with self._lock:

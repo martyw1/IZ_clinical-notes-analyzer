@@ -1,5 +1,5 @@
 import type { ApiHarnessJob } from '../api/jobTypes'
-import { formatDateTime24Hour } from './treatmentPlanFormatting'
+import { formatUtcEventDateTime } from './treatmentPlanFormatting'
 
 type JobStatusPanelProps = {
   readonly job: ApiHarnessJob | null
@@ -11,6 +11,9 @@ type JobStatusPanelProps = {
 
 export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobStatusPanelProps) {
   if (!job && !message && !error) return null
+  const failure = error || (job?.status === 'failed'
+    ? job.message || 'The sync failed. Check Forensic Logs for the cause, then resume the sync safely.'
+    : '')
   return (
     <div className={`compact-job-status compact-job-status--${job?.status ?? 'idle'}`} aria-live='polite' aria-atomic='true' aria-busy={isActive}>
       {job && (
@@ -26,13 +29,14 @@ export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobSt
             <div><dt>Seen</dt><dd>{job.recordsSeen}</dd></div>
             <div><dt>Updated</dt><dd>{job.recordsWritten}</dd></div>
             <div><dt>Warnings</dt><dd>{job.warningsCount}</dd></div>
-            <div><dt>Failed</dt><dd>{job.recordsFailed}</dd></div>
+            <div><dt>Failed records</dt><dd>{job.recordsFailed}</dd></div>
+            <div><dt>Errors</dt><dd>{job.errorsCount}</dd></div>
           </dl>
-          {job.completedAt && <p className='muted'>Last run completed {formatDateTime24Hour(job.completedAt)}.</p>}
+          {job.completedAt && <p className='muted'>Last run completed {formatUtcEventDateTime(job.completedAt)}.</p>}
         </>
       )}
       {message && <p role='status'>{message}</p>}
-      {error && <p role='alert' className='error-banner'>{error}</p>}
+      {failure && <p role='alert' className='error-banner'>{failure}</p>}
       {error && onRetry && <button type='button' className='secondary-button' onClick={onRetry}>Try again</button>}
     </div>
   )
