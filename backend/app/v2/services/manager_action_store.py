@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Final, TypedDict
 
 from sqlalchemy import Integer, and_, column, select, table, text
@@ -69,6 +70,16 @@ def save_manager_action_record(
     )
     db.add(row)
     db.flush()
+    if plan_version_id is not None:
+        previous = db.execute(text(
+            "SELECT MAX(created_at) FROM manager_dispositions "
+            "WHERE plan_version_id=:version_id AND criterion_id=:criterion_id AND actor_user_id=:actor_id"
+        ), {"version_id": plan_version_id, "criterion_id": criterion_id, "actor_id": actor.id}).scalar_one()
+        if previous is not None:
+            previous_time = datetime.fromisoformat(previous).replace(tzinfo=timezone.utc)
+            if row.created_at <= previous_time:
+                row.created_at = previous_time + timedelta(microseconds=1)
+                db.flush()
     db.execute(
         text("INSERT INTO manager_action_plan_links(action_id,plan_version_id) VALUES(:action_id,:version_id)"),
         {"action_id": row.id, "version_id": plan_version_id},

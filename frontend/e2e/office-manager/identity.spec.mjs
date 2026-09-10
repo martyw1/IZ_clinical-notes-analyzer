@@ -58,6 +58,7 @@ test('old selection remains bound through new import, all actions, correction an
           comment: 'Synthetic exact-version review', override_reason: 'Synthetic verification reason',
           assigned_counselor_username: fixture.users.counselor.username },
       })
+      writeEvidence(`task-3-action-${action}.json`, { action, status: saved.status() })
       expect(saved.status()).toBe(200)
       expect((await saved.json()).plan_version_id).toBe(selected.plan_version_id)
     }
@@ -73,6 +74,7 @@ test('old selection remains bound through new import, all actions, correction an
     const exported = await manager.get(`/api/v2/exports/${selected.patient_id}/checklist-evidence.csv`, { params: selector(selected) })
     expect(exported.status()).toBe(200)
     const csvRows = (await exported.text()).trim().split(/\r?\n/)
+    writeEvidence('task-3-csv-row-count.json', { rowCount: csvRows.length, expectedRows: 43 })
     expect(csvRows).toHaveLength(43)
     expect(csvRows.slice(1).every(row => row.startsWith(`${selected.plan_version_id},${selected.patient_record_id},${selected.source_mode},`))).toBe(true)
     const selectedAfter = await detail(manager, selected)
@@ -88,6 +90,9 @@ test('old selection remains bound through new import, all actions, correction an
     writeEvidence('task-3-identity.json', { apiSurfaceOnly: true, selected: selector(selected), importedVersionId: fresh.plan_version_id,
       actionKinds: actions, correctionStatus: submitted.status(), csvRows: csvRows.length - 1, selectedContentPreserved: true,
       selectedLedgerBefore: oldBefore, selectedLedgerAfter: oldAfter, otherVersionLedgersUnchanged: true })
+  } catch (error) {
+    writeEvidence('task-3-failure-location.json', { location: error.stack?.match(/identity\.spec\.mjs:\d+:\d+/)?.[0] || 'unavailable' })
+    throw error
   } finally { await manager.dispose(); await counselor.dispose() }
 })
 

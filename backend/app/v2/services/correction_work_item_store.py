@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal, TypedDict
 
 from sqlalchemy import text
@@ -145,7 +146,7 @@ def save_returned_correction_work_item(
     commit: bool = True,
 ) -> None:
     rows = db.execute(text(
-        "SELECT DISTINCT counselor.id FROM treatment_plan_versions plan "
+        "SELECT DISTINCT counselor.id,action.created_at FROM treatment_plan_versions plan "
         "JOIN patients patient ON patient.id=plan.patient_id "
         "JOIN manager_action_plan_links action_link ON action_link.plan_version_id=plan.id AND action_link.action_id=:action_id "
         "JOIN treatment_plan_manager_actions action ON action.id=action_link.action_id "
@@ -163,7 +164,7 @@ def save_returned_correction_work_item(
     if len(rows) != 1:
         raise CorrectionAssignmentError("Exactly one assigned counselor is required")
     counselor_id = int(rows[0][0])
-    created_at = utc_now().isoformat()
+    created_at = datetime.fromisoformat(str(rows[0][1])).replace(tzinfo=timezone.utc).isoformat()
     disposition = db.execute(text(
         "INSERT INTO manager_dispositions(plan_version_id,criterion_id,status,comment,actor_user_id,created_at) "
         "VALUES(:version_id,:criterion_id,'return_for_correction',:comment,:actor_id,:created_at)"
