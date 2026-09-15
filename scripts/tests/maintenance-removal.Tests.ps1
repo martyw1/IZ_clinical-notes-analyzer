@@ -385,7 +385,7 @@ Import-Module '$commonLiteral' -Force
 `$requestedResultPath = `$ResultPath
 `$requestedAssumeYes = `$AssumeYes
 . '$bootstrapLiteral' -NoRun -SourceRoot '$sourceLiteral'
-`$exitCode = Invoke-IzRemovalBootstrap -Action `$requestedAction -SourceRoot '$sourceLiteral' -SourceKind Package -NoPause -NonInteractive -ResultPath `$requestedResultPath -AssumeYes:`$requestedAssumeYes -Context `$context
+`$exitCode = Invoke-IzRemovalBootstrap -Action `$requestedAction -SourceRoot '$sourceLiteral' -SourceKind Package -NoPause -NonInteractive -ResultPath `$requestedResultPath -AssumeYes:`$requestedAssumeYes -RemainingArguments `$null -Context `$context
 exit [int]`$exitCode
 "@
     [IO.File]::WriteAllText($shimPath, $shim, [Text.UTF8Encoding]::new($true))

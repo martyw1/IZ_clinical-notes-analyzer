@@ -311,7 +311,8 @@ function Invoke-IzRemovalBootstrap {
     $requestedNonInteractive = [bool]$NonInteractive
     $requestedResultPath = [string]$ResultPath
     $requestedAssumeYes = [bool]$AssumeYes
-    $requestedRemainingArguments = @($RemainingArguments)
+    [object[]]$requestedRemainingArguments = @()
+    if ($null -ne $RemainingArguments) { $requestedRemainingArguments = @($RemainingArguments) }
     $requestedContext = $Context
     $temporaryRoot = $null
     $maintenanceContext = $null
@@ -381,12 +382,18 @@ function Invoke-IzRemovalBootstrap {
         }
 
         Import-Module (Join-Path $temporaryRoot 'maintenance-common.psm1') -Force -ErrorAction Stop
+        Import-Module (Join-Path $temporaryRoot 'maintenance-runtime.psm1') -Force -ErrorAction Stop
         $maintenanceContext = if ($requestedContext) { $requestedContext } else { Get-IzMaintenanceContext }
         Assert-IzMaintenanceContext -Context $maintenanceContext | Out-Null
         if ($maintenanceContext.transaction_id) { throw 'INTERNAL_CONTEXT_INVALID' }
         $markerContext = Get-IzBootstrapTransactionContext -Context $maintenanceContext -TransactionId $transactionId
         [void](Write-IzOwnedRootMarker -Context $markerContext -Path $temporaryRoot -Role temp_helper -TransactionId $transactionId)
         [void](Test-IzOwnedRootMarker -Context $markerContext -Path $temporaryRoot -Role temp_helper -TransactionId $transactionId)
+
+        if (Test-Path -LiteralPath $maintenanceContext.install_receipt_path -PathType Leaf) {
+            $stopResult = Stop-IzOwnedRuntime -Context $maintenanceContext -TimeoutSeconds 30
+            if ($stopResult.status -notin @('stopped', 'already_stopped')) { throw 'RUNTIME_STOP_FAILED' }
+        }
 
         if ($requestedResultPath) {
             $externalResult = Get-IzCanonicalPath -Path $requestedResultPath -AllowMissingLeaf

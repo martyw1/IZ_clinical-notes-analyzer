@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'contracts', 'contracts-negative', 'identity', 'version', 'paths', 'manifest', 'receipt', 'lock', 'journal', 'backup-roundtrip', 'backup-negative')]
+    [ValidateSet('All', 'contracts', 'contracts-negative', 'identity', 'version', 'paths', 'dispatcher', 'manifest', 'receipt', 'lock', 'journal', 'backup-roundtrip', 'backup-negative')]
     [string]$Case = 'All',
     [string]$EvidenceRoot = ''
 )
@@ -164,6 +164,14 @@ function Invoke-SystemOwnedProfileTests {
     Assert-Contract ($result.context_owner_sid -eq (Get-IzCurrentUserSid)) 'system_owned_mapped_profile_is_accepted'
     Assert-Contract ($result.generic_reason -eq 'PATH_OWNER_MISMATCH') 'generic_owner_check_stays_current_user_only'
     Assert-Contract ($result.arbitrary_reason -eq 'PATH_OWNER_MISMATCH') 'system_owned_arbitrary_path_is_rejected'
+}
+
+function Invoke-DispatcherArgumentTests {
+    . (Join-Path $repoRoot 'scripts\installer\maintenance-windows.ps1') -NoRun
+    $absent = Invoke-IzMaintenanceAction -Action Invalid -NoPause -NonInteractive -RemainingArguments $null
+    Assert-Contract ($absent.code -eq 20 -and $absent.reason -eq 'UNKNOWN_ACTION') 'dispatcher_absent_trailing_arguments_are_empty'
+    $unknown = Invoke-IzMaintenanceAction -Action Invalid -NoPause -NonInteractive -RemainingArguments @('--unknown')
+    Assert-Contract ($unknown.code -eq 20 -and $unknown.reason -eq 'UNKNOWN_ARGUMENT') 'dispatcher_unknown_trailing_argument_rejected'
 }
 
 function Invoke-ContextReceiptAndResultTests {
@@ -567,6 +575,7 @@ try {
     Assert-Contract (@($childProcessesAfter | Where-Object { $_ -notin $childProcessesBefore }).Count -eq 0) 'import_starts_no_child_process'
     if ($Case -in @('All', 'contracts', 'identity', 'version')) { Invoke-IdentityAndVersionTests }
     if ($Case -in @('All', 'contracts', 'paths')) { Invoke-SystemOwnedProfileTests -Fixture $fixture }
+    if ($Case -in @('All', 'contracts', 'dispatcher')) { Invoke-DispatcherArgumentTests }
     if ($Case -in @('All', 'contracts', 'paths', 'receipt')) {
         $context = Invoke-ContextReceiptAndResultTests -Fixture $fixture
     } else {

@@ -79,7 +79,9 @@ function Invoke-IzMaintenanceAction {
     $requestedResultPath=$ResultPath
     $requestedContext=$Context
     try{
-        if($RemainingArguments.Count){throw(New-IzDispatcherError 'UNKNOWN_ARGUMENT')}
+        [object[]]$normalizedRemainingArguments=@()
+        if($null -ne $RemainingArguments){$normalizedRemainingArguments=@($RemainingArguments)}
+        if($normalizedRemainingArguments.Count){throw(New-IzDispatcherError 'UNKNOWN_ARGUMENT')}
         if($requested -notin @('AutoInstall','Repair','Uninstall','RemoveData','Recover','Status')){throw(New-IzDispatcherError 'UNKNOWN_ACTION')}
         if($ResultPath){[void](Get-IzCanonicalPath $ResultPath -AllowMissingLeaf)}
         if($Context){Assert-IzMaintenanceContext $Context|Out-Null}
