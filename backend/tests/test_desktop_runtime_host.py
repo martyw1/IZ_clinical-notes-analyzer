@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, gettempdir
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -29,8 +29,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows managed
 
 @pytest.fixture
 def component_root() -> Path:
-    path = Path.home() / "AppData" / "Local" / "Temp" / f"iz-cna-component-{uuid.uuid4().hex[:12]}"
-    path.mkdir(parents=True)
+    path = Path(gettempdir()).resolve() / f"iz-cna-component-{uuid.uuid4().hex[:12]}"
+    path.mkdir()
     try:
         yield path
     finally:
