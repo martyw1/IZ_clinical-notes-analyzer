@@ -1,17 +1,16 @@
 # Client release packages
 
-The current source candidate is **2.0.0-beta.4**, build **2026.09.14.1**, installer revision **1**. No package is approved for client installation from this documentation station. The final build receipt, clean-commit provenance, ZIP SHA-256, and Windows qualification evidence must be present in detached completion evidence before distribution.
+Current candidate: **2.0.0-beta.4**, build **2026.09.15.2**, installer revision **1**.
 
-## Candidate package (pending)
+## Verified package
 
-Intended filename: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`
+Filename: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.15.2-installer-r1.zip`.
 
-- SHA-256: **Pending final build receipt**
-- Build receipt and commit SHA: **Pending detached completion evidence**
-- Package/default-profile, standard-user Windows Home, cross-user recovery `R07`, and power-loss recovery `R09`: **Pending/blocked**
-- Distribution status: **Not released; not client-ready**
+The clean-source build receipt, ZIP hash, live package tests, standard-account results, and remaining qualification limits are recorded in the [validation report](validation/windows-cmd-maintenance-2026-09-15.md). The receipt remains bound to its source commit; subsequent documentation updates do not rebuild or replace the immutable ZIP.
 
-Use [Windows CMD maintenance](windows-cmd-maintenance.md) for the install, smart-upgrade, normal-uninstall, complete-purge, backup, recovery, and support-code contract. Do not add the final ZIP hash or run identifier to tracked docs after the clean source build; the detached receipt is the provenance record.
+Distribution status: **Platform qualification incomplete; not approved as fully client-qualified.** Windows 10 Home and actual VM power-loss evidence are unavailable.
+
+Use [Windows CMD maintenance](windows-cmd-maintenance.md) for smart upgrade, data-preserving uninstall, separate complete purge, backup and recovery. Beta.3 does not need a complete uninstall before upgrade.
 
 ## Historical packages
 

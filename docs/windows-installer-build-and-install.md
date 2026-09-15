@@ -6,7 +6,7 @@ administrator rights.
 
 ## Beta.4 CMD maintenance candidate
 
-The current source candidate is `2.0.0-beta.4` / build `2026.09.14.1` / channel `beta-local-desktop-v2` / installer revision `1`. The intended archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. The final build receipt, ZIP SHA-256, clean-commit provenance, and package/default-profile/Home/cross-user/power-loss qualification results are pending detached completion evidence. Do not describe the candidate as released or client-ready until those records exist.
+The current candidate is `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`. The prepared ZIP and full build are verified. Read the [validation report](validation/windows-cmd-maintenance-2026-09-15.md) for the exact artifact and remaining platform limits before deployment.
 
 The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and the earlier beta.4 build for smart upgrade in place, preserves current-user data on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
 

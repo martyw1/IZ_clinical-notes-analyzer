@@ -1,6 +1,6 @@
 # Windows CMD Maintenance
 
-> **Beta.4 maintenance candidate — pending final build and qualification.** The intended identity is `2.0.0-beta.4`, build `2026.09.14.1`, channel `beta-local-desktop-v2`, installer revision `1`. The final ZIP name is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. Its final build receipt, ZIP hash, and platform qualification results are pending and must be read from the detached completion evidence before any release or client-ready statement.
+> **Beta.4 maintenance build verified; platform qualification incomplete.** Current build: `2026.09.15.2`, version `2.0.0-beta.4`, installer revision `1`. See the current validation report before deployment.
 
 This page describes the Windows CMD contract implemented for Task 17. It is an operator draft for the candidate build. It does not certify a package, a target laptop, or a client deployment.
 
@@ -62,7 +62,7 @@ The underlying maintenance dispatcher exposes these actions: `AutoInstall`, `Rep
 
 ## Qualification and clinical boundaries
 
-The immutable beta.4 candidate is bound to source `8fdc8e636e3e9a7123c96a6455f3a1753ea440c5`, with build `2026.09.14.1`, installer revision `1`, and ZIP SHA-256 `8072532e8952ad86c033c64050684fb24bf8d0eec0a98dfda1855636a6114eee`. The final build receipt records 595 backend tests with one warning, 182 frontend tests across 28 files, Vite 78 modules, the PyInstaller executable, and all seven build gates passed. Two subsequent harness-only corrections were excluded from the ZIP and did not change runtime artifacts. P02 lifecycle checks passed for immutable package/ZIP binding, beta.3 HTTP seed, upgrade, API upload/readback, normal uninstall retention, reinstall, password rotation, exact-phrase purge, and owned-process/listener cleanup. The P02 run still exited `1` (`PLAYWRIGHT_ASSERTION_FAILED`): Edge browser automation failed to launch because DevTools required a non-default data directory, leaving one scenario failed and three unrun. Full Windows Home/default-profile/standard-user, cross-user recovery (`R07`), and power-loss recovery (`R09`) qualification remain unavailable, so this candidate is not client-qualified. No real client records were accessed or authorized.
+Build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. Remaining qualification and the immutable package identity are recorded in [the validation report](validation/windows-cmd-maintenance-2026-09-15.md). Windows 10 Home and VM power-loss tests remain unavailable; no full client-qualified claim is made.
 
 The clinical LOC-change timing rule remains configurable and visibly unvalidated. Missing or conflicting evidence must retain deterministic `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` outcomes. Alleva REST treatment-plan sync remains an explicitly gated readiness path; live tenant import and startup sync remain disabled until the existing R3/Alleva authorization, mapping, compliance, and PHI approvals are complete.
 

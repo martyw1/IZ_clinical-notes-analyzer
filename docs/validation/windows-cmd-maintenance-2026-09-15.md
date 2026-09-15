@@ -1,42 +1,54 @@
-# Windows CMD maintenance validation — 2026-09-15
+# Windows CMD maintenance validation - 2026-09-15
 
-## Standard-account correction candidate
+## Current package
 
-The source candidate remains version `2.0.0-beta.4` / installer revision `1`, with a distinct corrected build identity of `2026.09.15.1`. A real non-administrator account using its default profile on Windows 11 Home exposed a preflight defect: Windows owned the exact OS profile root as LocalSystem while the account owned its LocalAppData, AppData, Programs, and Desktop folders. The original module rejected that valid profile with `PATH_OWNER_MISMATCH`.
+- Version `2.0.0-beta.4`, build `2026.09.15.2`, installer revision `1`.
+- Clean build source: `a79d2a77ce3377ba31f8b38b08e6c9f5e6dd12ef`.
+- Package folder: `dist/windows-release/IZ-CNA-337308272cfbf7e6`.
+- ZIP: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.15.2-installer-r1.zip`, 39,192,346 bytes.
+- ZIP SHA-256: `7a9dbbfa54f204cda2d88a4dfdb18a1007e79e30666db5fc2cdcaca567c52a65`.
+- Sibling build receipt SHA-256: `8ed305d3b6a39bb20ad9642ab1cde58ad5c6ef20b75f7ef4b7ae30e5fc8f59cb`.
+- Manifest SHA-256: `5e4da285b320d13b86f222be406cbfa27781dcc25bc728c65ee2cbd2f988d0bf`.
 
-The correction accepts LocalSystem ownership only for the exact UserProfile known folder when it also matches the Windows ProfileList entry for the current SID. Generic path ownership, package ownership, component-root ownership, and arbitrary LocalSystem-owned paths remain current-user-only. The focused Windows PowerShell 5.1 path suite passed all 50 assertions, including the new narrow-boundary checks. A controlled real-account red/green probe recorded the original failure and a successful corrected context with the expected default profile and data root in `C:\Users\Public\IZ-CNA-QA-20260915\results-B\ownership-probe.json`.
+The ZIP is immutable and remains bound to the clean source above. Subsequent documentation-only commits record results; they do not rebuild or replace the package. Original beta.3 and earlier beta.4 archives remain unchanged.
 
-The final full build and default-profile install test for build `2026.09.15.1` are pending and must pass before this corrected package is called client-ready.
+## Corrections found through actual Windows use
 
-## Candidate identity
+1. Accept SYSTEM ownership only for the exact Windows UserProfile known folder when the current SID's registered ProfileList path also matches. Package, application, data and arbitrary path ownership checks remain strict.
+2. Normalize absent optional arguments at both public PowerShell entry points. Windows PowerShell 5.1 previously rejected ordinary CMD invocation through a null `.Count` access.
+3. After validating the removal bundle and context, stop only the receipt-owned runtime before fingerprinting the database. This avoids reading locked, actively changing SQLite files without weakening file sharing or data checks.
+4. Remove only the bootstrap's marker-validated empty transaction scaffold before dispatching removal. Unknown files, directories and reparse points still fail closed. Complete purge now finishes in one invocation.
 
-This validation note records the immutable beta.4 candidate, not a new build:
+The temporary QA harness also needed file-backed output capture because a deliberately running child app retained redirected output pipes. Mixed diagnostic identities and old diagnostic residue were corrected in the fixture; those failed attempts are not represented as product passes. Final tests use a fresh copy of the immutable package.
 
-- Version: `2.0.0-beta.4`
-- Build: `2026.09.14.1`
-- Installer revision: `1`
-- Source revision: `8fdc8e636e3e9a7123c96a6455f3a1753ea440c5`
-- ZIP: [`IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`](../../dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip)
-- ZIP SHA-256: `8072532e8952ad86c033c64050684fb24bf8d0eec0a98dfda1855636a6114eee`
-- Receipt: [`...build-receipt.json`](../../dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.build-receipt.json)
-- Independent verification: `.omo/evidence/windows-cmd-maintenance/resume/final-build-verification.json`
+## Build and packaged-app results
 
-The receipt and independent verification bind the package to the source revision above. The ZIP hash was independently recomputed from the package on disk and matches the receipt.
+All seven build gates passed: 595 backend tests (one existing deprecation warning), 182 frontend tests across 28 files, frontend build, repository safety, release-folder safety, ZIP safety, and frozen executable inspection.
 
-## Build evidence
+The first final-source full run encountered a one-second runtime shutdown timing assertion despite observing process exit. Its immediate focused rerun passed. One unchanged full-build retry then passed all 595 backend tests; no test or timeout was weakened.
 
-The full build completed with the backend suite at **595 passed, 1 warning**, frontend tests at **182 tests across 28 files**, Vite transforming **78 modules**, PyInstaller executable completion, and all **seven named build gates passed**: backend tests, frontend tests, frontend build, repository safety, directory safety, ZIP safety, and frozen-bundle inspection. The build receipt is `dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.build-receipt.json`; the independent evidence is `.omo/evidence/windows-cmd-maintenance/resume/final-build-verification.json`.
+The exact-artifact P02 run passed using the packaged executable, live localhost HTTP and Edge. It covered beta.3 seeding, semantic upgrade preservation, browser checks, multipart upload/readback and access control, retained uninstall, reinstall, password rotation, typed purge, and zero owned processes/listeners after cleanup. This component-profile run does not by itself certify default Windows profiles.
 
-Two subsequent corrections were harness-only maintenance changes. They were excluded from the ZIP and did not change the packaged runtime artifacts or the immutable source revision recorded above.
+- P02 receipt: `.omo/evidence/windows-cmd-maintenance/cmd-d72a4fb83e16/maintenance-run-receipt.json`.
+- Receipt SHA-256: `37a1b0e04ace2468780befd5f4d934626dc1eeadcc563c5698f51705bced99bc`.
+- Case SHA-256: `ceeec7f0c8d18907729121819f5f93ab4efb4eeb97d9475218fee0ce7aa709c8`.
 
-## Qualification status
+## Actual standard accounts on Windows 11 Home
 
-P02 final live lifecycle checks passed for immutable package/ZIP binding, beta.3 HTTP seed, smart upgrade, candidate API upload/readback, normal uninstall retention, reinstall, password rotation, exact-phrase purge, and owned-process/listener/component cleanup. The run still exited `1` (`PLAYWRIGHT_ASSERTION_FAILED`): Edge browser automation failed to launch because DevTools required a non-default data directory, leaving one scenario failed and three unrun. The P02 artifacts are `.omo/evidence/windows-cmd-maintenance/cmd-8fdc8e636e3f/maintenance-run-receipt.json` and `.omo/evidence/windows-cmd-maintenance/cmd-8fdc8e636e3f/case-artifacts/p02/browser/maintenance-browser.json`. This record does not claim full P02 success or final UI qualification.
+Two temporary, separate standard Windows accounts were used with their actual default profiles on Windows 11 Home build 26200. Their installer processes were not administrators, and Git, Node, Python and Docker were absent from the test PATH. Account creation/removal required host administration; normal app installation and removal did not.
 
-The following remain unavailable and prevent a client-qualified claim: full Windows Home/default-profile/standard-user qualification, cross-user recovery `R07`, and VM power-loss recovery `R09`. No real client records were accessed or authorized; qualification data remains synthetic-only.
+The final artifact passed fresh installation, running normal uninstall retaining data, reinstall, and first-call typed complete purge under the second account. Program, data, maintenance folders and owned shortcuts were absent afterward, with zero owned app processes. The diagnostic run is preserved separately and is not substituted for final-package evidence.
 
-The maintenance contract remains unchanged: beta.3 smart upgrade proceeds without complete uninstall; normal uninstall preserves current-user data; complete purge is separate and requires the exact phrase `REMOVE IZ DATA`. The LOC-change timing rule remains configurable and visibly unvalidated. Live Alleva treatment-plan sync/import remains gated pending the existing authorization, endpoint mapping, compliance, and PHI approvals.
+The first account's beta.3 baseline was installed using the original public installer and seeded through live HTTP with four accounts, three plans and three encrypted sources. Its upgrade to the final package passed without complete uninstall. Build identity, preserved accounts/plans, new upload (201), encrypted readback/hash verification, and role denial (403) passed. Full encrypted backup and public launch also passed.
 
-## Release boundary
+R07 is not fully qualified. Cross-user backup decryption was rejected (`BACKUP_KEY_UNAVAILABLE`), but account B could terminate account A's live app process in the credential-created test session. A control test showed the same behavior for an ordinary PowerShell child owned by A: B had a different SID, was not an administrator, and had no SeDebugPrivilege, yet termination succeeded. This does not establish an app-specific defect or prove isolation on normal interactive sessions. No product or host permission changes were made. Repeat the process-isolation test using independently signed-in standard accounts in the target Windows environment. The other cross-user checks passed: B could not read A's configuration; B's own uninstall left A's runtime intact; A subsequently authenticated over live HTTP and verified four plans, four encrypted sources, readback hash equality and role denial (403). The upgraded account then passed retained uninstall, reinstall with live readback, password rotation and replacement login, and first-call typed purge. Final inspection of both accounts found no program, data, maintenance folders or owned shortcuts, and zero app/listener/controller processes.
 
-The package and build evidence are available for the parent release decision. Do not describe this candidate as client-qualified or distribute it as a final client release until P02 and the blocked platform qualification records are complete.
+The combined final standard-user receipt is `.omo/evidence/windows-cmd-maintenance/standard-user-qa-20260915/final-standard-user-qualification.json`, SHA-256 `08e4a8b3a33c0cf4b08ed440a667422f3ade68b304f0e7289fc3da7a9d68bf12`. It binds the final source, ZIP, P02, account-specific results and the process-control qualification limit. Ownership/control and platform evidence is also retained under `.omo/evidence/windows-cmd-maintenance/standard-home-20260915/`. Credentials, database contents, raw runtime logs and encrypted fixture secrets are not committed or packaged.
+
+## Remaining qualification boundary
+
+This is not a claim that the entire Home or power-loss matrix passed. Windows 10 Home, verified offline/network-isolated operation, the full running-upgrade/browser/write-drain scenario, all bootstrap-shortcut scenarios and complete Edge/Chrome Home coverage remain unqualified by this run. See the exact cases in `scripts/tests/maintenance-cases.json`.
+
+R09 remains blocked: no disposable Windows 10/11 Home guest images or VM controller have been supplied. Abrupt guest power-off before/after every defined journal-state boundary and reboot recovery were not performed. Killing a process is not power-loss evidence, and the host was not interrupted.
+
+All test records were synthetic. Live calls were to actual local app APIs; no approved tenant import or real patient access is claimed. Alleva live import/sync remains gated. LOC-change timing remains configurable and visibly unvalidated. Beta.3 supports upgrade in place; complete uninstall is not an upgrade step. Normal uninstall preserves data, and complete purge separately requires `REMOVE IZ DATA`.

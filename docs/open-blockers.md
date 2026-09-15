@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Applies to the current source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` channel. Final package and qualification evidence remain pending.
+Applies to the current source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1` on the `beta-local-desktop-v2` channel. The final package is built; platform qualification remains incomplete.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -87,20 +87,13 @@ Required resolution evidence:
 
 Status: **open; no release or client-ready claim.**
 
-The intended archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. The clean-commit build receipt, ZIP SHA-256, and final package qualification must be captured in detached completion evidence after the final build. Tracked source docs intentionally keep those final values pending so the receipt can bind the build to the clean source commit.
+Build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. Remaining qualification and the immutable package identity are recorded in [the validation report](validation/windows-cmd-maintenance-2026-09-15.md). Windows 10 Home and VM power-loss tests remain unavailable; no full client-qualified claim is made.
 
-The synthetic beta.3 component HTTP/API fixture passed its component contract, including safe stop and listener release. It does not qualify the final package. Package install/repair/uninstall, default-profile, standard-user Windows Home, cross-user recovery `R07`, and VM power-loss recovery `R09` are **Pending/blocked** because the required package and infrastructure are unavailable. No actual client records were accessed or authorized.
+R07 process isolation is also unqualified: the second credential-created standard test session could terminate both the app and an ordinary control process owned by the first account. Repeat with independently signed-in standard accounts; no app-specific cause was established.
 
-Required current qualification evidence:
+Required remaining evidence is the full Home matrix (including Windows 10, offline/network isolation, running-upgrade/write-drain, bootstrap-shortcut behavior and browser coverage) and R09 abrupt guest power-off before/after every defined state boundary on Windows 10 and Windows 11 Home. No VM controller or disposable guest images have been supplied. Successful local process termination is not power-loss evidence.
 
-- Final build receipt with commit SHA, package path, all required build gates, and ZIP SHA-256.
-- Prepared-package install, beta.3 smart upgrade in place, repair/no-op, normal data-preserving uninstall, and exact-phrase complete purge.
-- Package-root Launch delegation to the installed current-user app and the install-first code `20` behavior when absent.
-- Same-user/same-computer backup restore and immutable original archive checks.
-- Default-profile and standard-user Windows Home results, plus cross-user `R07` and power-loss `R09` recovery results.
-- Synthetic-only records and sanitized support receipts; no real client data.
-
-Use [Windows CMD maintenance](windows-cmd-maintenance.md) for the stable action/result contract. Keep the LOC-change timing rule configurable and visibly unvalidated, and keep the Alleva live-sync gate unchanged.
+The actual standard-account lifecycle and R07 results are recorded separately in the validation report; they do not certify the entire Home matrix. Clinical LOC-change validation and live Alleva approval gates remain unchanged.
 
 ## Historical beta3 Windows Packaging and Validation
 

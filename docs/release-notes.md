@@ -1,8 +1,8 @@
 # Release Notes
 
-## Beta.4 CMD maintenance candidate - build 2026.09.14.1
+## Beta.4 CMD maintenance candidate - build 2026.09.15.2
 
-Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` / channel `beta-local-desktop-v2`. The intended package is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`; its final receipt, hash, clean-commit provenance, and Windows qualification remain pending detached evidence. Do not describe this candidate as released or client-ready.
+Current candidate: `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`. Fixes cover valid SYSTEM-owned Windows profile roots, absent PowerShell arguments, verified shutdown before removal fingerprints, and cleanup of the bootstrap-owned transaction. Full build and exact-package live HTTP/Edge lifecycle passed. See [current validation](validation/windows-cmd-maintenance-2026-09-15.md) for standard-account evidence and remaining platform qualification. No clinical rules or live Alleva gates changed.
 
 ## Beta.4 stability update — build 2026.09.10.2
 
@@ -32,11 +32,11 @@ See [password management](password-management-beta4.md). Validation is recorded 
 - Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
 - This checkout help update does not rebuild or revalidate the prepared installer.
 
-Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1`.
+Current source candidate: `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`.
 
 Current release channel: `beta-local-desktop-v2`.
 
-Current source candidate date: `2026-09-14`; the final package release date remains pending.
+Current source candidate date: `2026-09-15`; the final package release date remains pending.
 
 Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
 
