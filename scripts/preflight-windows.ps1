@@ -449,8 +449,8 @@ if (-not $InitializePackagedRuntime) {
     Test-Port
 }
 
-$failed = ($Results | Where-Object { $_.status -eq 'fail' }).Count
-$warnings = ($Results | Where-Object { $_.status -eq 'warn' }).Count
+$failed = @($Results | Where-Object { $_.status -eq 'fail' }).Count
+$warnings = @($Results | Where-Object { $_.status -eq 'warn' }).Count
 $payload = [ordered]@{
     generated_at = (Get-Date).ToUniversalTime().ToString('o')
     repo_root = $RootDir

@@ -1,3 +1,9 @@
+# Release Notes
+
+## Beta.4 CMD maintenance candidate - build 2026.09.14.1
+
+Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` / channel `beta-local-desktop-v2`. The intended package is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`; its final receipt, hash, clean-commit provenance, and Windows qualification remain pending detached evidence. Do not describe this candidate as released or client-ready.
+
 ## Beta.4 stability update — build 2026.09.10.2
 
 - Correct UTC completion times and persistent, safe timeout feedback in Settings.
@@ -17,20 +23,20 @@ Build: 2026.09.10.1; channel: beta-local-desktop-v2.
 
 See [password management](password-management-beta4.md). Validation is recorded in docs/validation/password-management-beta4-2026-09-10.md after completion.
 
-# Release Notes
+
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 
-- Current guidance identifies app `2.0.0-beta.3` / build `2026.09.03.1`; checklist content stays `1.2.0`.
+- The 2026-09-08 guidance update identified app `2.0.0-beta.3` / build `2026.09.03.1`; checklist content stays `1.2.0`. That identity is historical; the current source candidate is the beta.4 build recorded above.
 - The offline HTML guide and in-app Help now describe source-filtered rosters, exact saved-plan selection, filtered exports, manual processing warnings, expired sessions, and the unresolved LOC-change/live-sync gates.
 - Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
 - This checkout help update does not rebuild or revalidate the prepared installer.
 
-Current app version: `2.0.0-beta.3` / build `2026.09.03.1`.
+Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1`.
 
 Current release channel: `beta-local-desktop-v2`.
 
-Current release date in version metadata: `2026-09-03`.
+Current source candidate date: `2026-09-14`; the final package release date remains pending.
 
 Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
 
@@ -39,9 +45,9 @@ Repository snapshot note (2026-08-16): the validated near-final Windows beta sou
 - Dashboard failures now offer in-place refresh and retain explicitly marked previous counts after a failed update.
 - Compact navigation, product-focused header, keyboard skip navigation, and a risk-first dashboard use the existing clinical design system.
 - Combined browser scenarios preserve exact version and authorization checks after earlier scenarios import additional synthetic records.
-- Source-checkout validation only; release metadata and prepared installer remain at the existing beta3 build. LOC-change validation and live Alleva approval remain unresolved.
+- That historical source-checkout validation used the beta3 release metadata and prepared installer. LOC-change validation and live Alleva approval remain unresolved.
 - See [repair validation and completion record](validation/repair-ui-2026-09-04.md) for current evidence and limits.
-## 2.0.0-beta.3 - Office-manager workflow and release-readiness update
+## Historical 2.0.0-beta.3 - Office-manager workflow and release-readiness update
 
 Build: `2026.09.03.1`
 
@@ -49,7 +55,7 @@ Version metadata name: `Version 2.0 Beta 3 office-manager workflow update`
 
 Summary:
 
-- Aligns the current beta metadata in `VERSION`, `VERSION.json`, frontend package metadata, backend settings, sample OpenAPI metadata, Windows preflight, and the visible app footer.
+- Aligned the beta3 metadata in `VERSION`, `VERSION.json`, frontend package metadata, backend settings, sample OpenAPI metadata, Windows preflight, and the visible app footer.
 - Implements source-scoped roster/export, exact saved-plan selection, encrypted manual metadata, version-bound review/correction history, safe session/upload state, readable clinical evidence and explicit metric units.
 - Preserves exact source-system and treatment-plan identities, immutable plan lineage, deterministic Missing Data/Needs Review/Conflicting Evidence/Unable to Evaluate outcomes, and the existing gated Alleva read-only boundary.
 - Bundles `VERSION.json` into the packaged runtime root. The rebuilt beta3 executable, embedded frontend assets, release folder/ZIP, frozen `/api/version` and native Edge/Chrome footer have been verified against build `2026.09.03.1`.

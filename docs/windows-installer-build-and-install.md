@@ -4,9 +4,17 @@ This guide covers the Windows release workflow for IZ Clinical Notes Analyzer.
 The build and install scripts are designed for Windows 10/11 users without
 administrator rights.
 
-## V2 beta.3 release-validation boundary
+## Beta.4 CMD maintenance candidate
 
-The active prerelease metadata is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. Before package sign-off, use `docs/validation/office-manager-production-fixes-2026-09-03.md` and run the procedure from a clean isolated local-app-data directory with synthetic data only. Never package or validate against a production SQLite database, clinical export, saved API artifact, credential profile, upload, or log. Code-signing and retention/legal-hold controls remain R3 owner decisions; this prerelease is not a production-release claim. The builder now places `VERSION.json` at the external release-folder `app/` path and in the internal PyInstaller `_MEIPASS` runtime root; Task10 must verify both archive locations and the packaged `/api/version` response.
+The current source candidate is `2.0.0-beta.4` / build `2026.09.14.1` / channel `beta-local-desktop-v2` / installer revision `1`. The intended archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. The final build receipt, ZIP SHA-256, clean-commit provenance, and package/default-profile/Home/cross-user/power-loss qualification results are pending detached completion evidence. Do not describe the candidate as released or client-ready until those records exist.
+
+The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and the earlier beta.4 build for smart upgrade in place, preserves current-user data on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
+
+The candidate build must be made from a clean source revision. The final build receipt is the authoritative place for the commit SHA, gate results, package path, and hash; adding a final ZIP hash or run identifier to tracked documentation would require another source commit and break that provenance.
+
+## Historical V2 beta.3 release-validation boundary
+
+The historical prerelease metadata recorded by this validation procedure is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. Before package sign-off, use `docs/validation/office-manager-production-fixes-2026-09-03.md` and run the procedure from a clean isolated local-app-data directory with synthetic data only. Never package or validate against a production SQLite database, clinical export, saved API artifact, credential profile, upload, or log. Code-signing and retention/legal-hold controls remain R3 owner decisions; this historical prerelease is not a production-release claim. The builder now places `VERSION.json` at the external release-folder `app/` path and in the internal PyInstaller `_MEIPASS` runtime root; Task10 must verify both archive locations and the packaged `/api/version` response.
 
 ## Builder or Developer
 
@@ -153,6 +161,9 @@ Launch-IZ-Clinical-Notes-Analyzer.cmd
 The launcher starts the backend, serves the built browser app, opens the local
 URL, and writes startup logs to the local AppData logs folder.
 
+The package-root launcher checks the installed current-user launcher before it
+delegates. If the app is absent, it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with `20` (`PREFLIGHT_FAILED`). Extracting a package does not install it.
+
 ### Diagnostics
 
 If support asks for diagnostics, run:
@@ -183,6 +194,12 @@ Normal uninstall removes app files and shortcuts, but preserves local data:
 Uninstall-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
+Use this data-preserving action for an upgrade or reinstall. A successful
+operation returns `0`; cancellation is `10`, preflight failure is `20`,
+incomplete removal is `40` (`REMOVAL_INCOMPLETE`), and cleanup pending is `41`
+(`REMOVED_CLEANUP_PENDING`). Files whose ownership, length, or hash cannot be
+verified are preserved; retained unknown files can therefore produce `40`.
+
 Complete uninstall removes app files, shortcuts, and all local IZ Clinical
 Notes Analyzer data for the current Windows user:
 
@@ -190,7 +207,12 @@ Notes Analyzer data for the current Windows user:
 Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-Use complete uninstall carefully. It requires an explicit confirmation phrase.
+Use complete uninstall only for an intentional current-user purge. It requires
+the exact confirmation phrase `REMOVE IZ DATA`; without that phrase it returns
+`10` without deleting local data. External backups, downloaded packages, and
+other Windows profiles remain outside its scope. If a transaction is pending,
+support must use `Recover` and wait for `RECOVERY_REQUIRED` (`31`) to clear
+before starting the app.
 
 ### Do not edit `.env`
 

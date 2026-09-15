@@ -1,0 +1,464 @@
+﻿{
+    "schema":  "iz-cna-maintenance-case-catalog-v1",
+    "count":  63,
+    "cases":  [
+                  {
+                      "id":  "B01",
+                      "tiers":  [
+                                    "Component"
+                                ],
+                      "scenario":  "Record source revision, versions, original archive hashes and baseline test outcomes; repeated preservation check keeps E02/E03 identical."
+                  },
+                  {
+                      "id":  "B02",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Install actual beta.3 and seed through its supported APIs; prove old app login, encrypted data and expected workflow outcomes before any upgrade."
+                  },
+                  {
+                      "id":  "B03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Install original beta.4 and seed recovery/password state; prove established account credentials before maintenance upgrade."
+                  },
+                  {
+                      "id":  "I01",
+                      "tiers":  [
+                                    "Home"
+                                ],
+                      "scenario":  "Fresh non-admin installation on Windows 10 Home and Windows 11 Home, no developer dependencies; only current-user paths/shortcuts appear."
+                  },
+                  {
+                      "id":  "I02",
+                      "tiers":  [
+                                    "Home"
+                                ],
+                      "scenario":  "Offline install, launch and removal; no attempted Git/npm/pip/vendor connection."
+                  },
+                  {
+                      "id":  "I03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Package path with spaces, apostrophe, ampersand, parentheses, Unicode, percent and exclamation variants; no argument corruption or command injection. Unsupported lengths fail before mutation with clear guidance."
+                  },
+                  {
+                      "id":  "I04",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Missing EXE/assets/config rules, digest mismatch, truncated ZIP and artifact collision; installation aborts without touching an existing app/data."
+                  },
+                  {
+                      "id":  "I05",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Wrong architecture, unsupported PowerShell, enforced organizational script restriction, read-only install destination and insufficient space; no elevation/persistent policy change or partial installation."
+                  },
+                  {
+                      "id":  "I06",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Start Menu/Desktop launch, repeat launch, second simultaneous launch; correct single runtime reused and browser opens correct configured URL."
+                  },
+                  {
+                      "id":  "I07",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Unrelated process owns configured port; it survives and app reports conflict. Existing correct owned instance is reused."
+                  },
+                  {
+                      "id":  "I08",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Slow startup succeeds within configured deadline; timeout reports failure, retains logs safely and does not leave an ungated orphan."
+                  },
+                  {
+                      "id":  "I09",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "First-use password change and recovery screen; existing workflow defaults, LLM off, live gates off, LOC warning visible."
+                  },
+                  {
+                      "id":  "I10",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Missing .env with data, missing selected DB, conflicting aliases, outside-root DB, reparse/UNC roots and unknown install owner; recovery-needed result, no new key/profile."
+                  },
+                  {
+                      "id":  "U01",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "beta.3 stopped -\u003e enhanced beta.4; expected build, same data identity, accounts, settings, encrypted uploads and clinical evidence preserved."
+                  },
+                  {
+                      "id":  "U02",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "beta.3 running with browser tab open -\u003e upgrade; only owned processes stop; in-flight write either completes before snapshot or fails without a partial record; existing browser cannot write during validation."
+                  },
+                  {
+                      "id":  "U03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Original beta.4 -\u003e enhanced beta.4 build; recovery/password state survives; package/build identity changes and old ZIP is unchanged."
+                  },
+                  {
+                      "id":  "U04",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Existing custom local DB filename/port and both generated/canonical config aliases; correct DB reused, no empty default DB created."
+                  },
+                  {
+                      "id":  "U05",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Re-run exact candidate: default Open/no-op, explicitly selected Repair restores damaged program assets and preserves data."
+                  },
+                  {
+                      "id":  "U06",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Newer app/build/schema, beta.10 ordering, unknown receipt version, equal-build different payload; downgrade/collision rejected before mutation."
+                  },
+                  {
+                      "id":  "U07",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Stop failure, ambiguous PID ownership, PID reuse and surviving PyInstaller child; abort before snapshot/swap and preserve unrelated processes."
+                  },
+                  {
+                      "id":  "U08",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Backup path unwritable/full, tampered backup/protected-key material, incomplete manifest and failed SQLite integrity; no payload activation and old profile retained. Genuine cross-user rejection is tested separately in Home R07."
+                  },
+                  {
+                      "id":  "U09",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Locked EXE/asset/shortcut, copy error and each program rename failure; verified rollback returns old program plus matching data and nonzero operation code."
+                  },
+                  {
+                      "id":  "U10",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Candidate import/migration/startup/health/version/asset failure; maintenance routes stay gated and paired rollback restores beta.3 usability."
+                  },
+                  {
+                      "id":  "U11",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "UI/static load succeeds but returned build/instance/data identity wrong; do not commit based on a random service\u0027s HTTP 200."
+                  },
+                  {
+                      "id":  "U12",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Two concurrent installers, upgrade vs restore/uninstall, and launch during pending journal; only one owner mutates state, other receives busy/recovery result."
+                  },
+                  {
+                      "id":  "U13",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Repeated upgrade/repair/recovery cycles; no duplicated users, source records, clinical versions, shortcuts or reset credentials."
+                  },
+                  {
+                      "id":  "R01",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Kill controller before/after every durable journal transition and between both program renames; rerun dispatches the prescribed recovery and preserves committed records."
+                  },
+                  {
+                      "id":  "R02",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Kill candidate during startup/migration and kill rollback midway; rerun recovers once and never starts an old app against new data."
+                  },
+                  {
+                      "id":  "R03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Kill after COMMITTED, before gate release/browser open; rerun opens candidate, no old snapshot restoration."
+                  },
+                  {
+                      "id":  "R04",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Add new synthetic work after commit, then rerun with a stale old journal/backup; new work survives and automatic downgrade is refused."
+                  },
+                  {
+                      "id":  "R05",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Corrupt/missing journal, missing previous tree/snapshot and unsupported journal schema; recovery-required, no best-effort destructive guess."
+                  },
+                  {
+                      "id":  "R06",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Full encrypted snapshot verifies and restores into an owned same-account/same-machine isolated destination; login/decryption/integrity pass there."
+                  },
+                  {
+                      "id":  "R07",
+                      "tiers":  [
+                                    "Home"
+                                ],
+                      "scenario":  "Different standard Windows account cannot decrypt snapshot or control/remove first user\u0027s runtime/data; both profiles unchanged."
+                  },
+                  {
+                      "id":  "R08",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "IZCNABK1 database-only snapshot rejected for full upgrade recovery with accurate scope message; existing IZCNABK2 backup remains readable."
+                  },
+                  {
+                      "id":  "R09",
+                      "tiers":  [
+                                    "PowerLoss"
+                                ],
+                      "scenario":  "Abrupt guest power-off immediately before and after every journal-state boundary in the state table, including both program renames, rollback steps, active-write/drain and before/after COMMITTED. Reboot recovers the authoritative state and verifies data. Enumerate each point in the receipt and run each from a restored fixture on Windows 10 Home and Windows 11 Home."
+                  },
+                  {
+                      "id":  "R10",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Full/corrupt recovery destination and interrupted plaintext scratch cleanup; fail closed, preserve encrypted backup and protect residual scratch with current-user ACL."
+                  },
+                  {
+                      "id":  "D01",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Normal uninstall while stopped/running; program and owned shortcuts disappear, correct process exits, all data and external backups remain."
+                  },
+                  {
+                      "id":  "D02",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Reinstall after ordinary uninstall; same accounts/config/keys and records return, no first-use reset."
+                  },
+                  {
+                      "id":  "D03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Repeat ordinary uninstall, absent program with data, shortcut-only remnants; correct idempotent result, data unchanged."
+                  },
+                  {
+                      "id":  "D04",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Complete removal using exact typed phrase in disposable profile; owned app/data/recovery snapshots removed; external Documents backup, other user and downloaded ZIP retained."
+                  },
+                  {
+                      "id":  "D05",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Cancel normal/full removal, wrong/empty phrase, AssumeYes or NoPause alone; full deletion never begins."
+                  },
+                  {
+                      "id":  "D06",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Installed system-bootstrap shortcut and package-root CMD entry points; final helper receipt/exit matches actual deletion, delayed verification proves caller keeps waiting, shortcut is deleted, temporary cleanup failure returns 41."
+                  },
+                  {
+                      "id":  "D07",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Locked removal file, denied shortcut deletion, failed process stop and interrupted cleanup; exact partial-failure status and repeatable continuation."
+                  },
+                  {
+                      "id":  "D08",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Junction, symlink, path traversal, drive-root/parent substitution, modified shortcut target and same-name unrelated file; unrelated content preserved."
+                  },
+                  {
+                      "id":  "D09",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Full removal during pending upgrade/rollback; recover or block first, never erase the only recovery pair implicitly."
+                  },
+                  {
+                      "id":  "D10",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Fresh reinstall after confirmed full removal produces a new profile/keys and mandatory first-use setup; old external backup is not silently restored."
+                  },
+                  {
+                      "id":  "D11",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Ctrl+C/console close during removal and while waiting for helper; terminal outcome recoverable on rerun and never falsely labeled completed."
+                  },
+                  {
+                      "id":  "A01",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Real browser login and navigation: dashboard, treatment plans, checklist, upload, review queue, help and version footer load from bundled assets."
+                  },
+                  {
+                      "id":  "A02",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Upload synthetic note/plan, read encrypted content through supported UI/API, review and checklist/timeliness outcomes; same expectations before/after upgrade."
+                  },
+                  {
+                      "id":  "A03",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Roles, facility assignments, correction workflow and source/version authorization survive; denied operations stay denied."
+                  },
+                  {
+                      "id":  "A04",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Existing login/password change, staff reset, beta.4 recovery-code use and reuse rejection; upgrade itself does not reset passwords."
+                  },
+                  {
+                      "id":  "A05",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "API configured-state flags and encryption preserved; local mock/OpenAPI flow works, no credential values leaked, production Alleva import remains gated."
+                  },
+                  {
+                      "id":  "A06",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Audit-chain continuity, immutable plan/source histories and allowed startup-added rows; no lost/moved evidence."
+                  },
+                  {
+                      "id":  "A07",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Deterministic Missing Data/Needs Review/Conflicting Evidence/Unable to Evaluate plus unvalidated LOC configuration remain correct."
+                  },
+                  {
+                      "id":  "A08",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Backup -\u003e normal uninstall -\u003e reinstall -\u003e explicitly confirmed restore under same Windows account; end-to-end data usability proved."
+                  },
+                  {
+                      "id":  "P01",
+                      "tiers":  [
+                                    "Component"
+                                ],
+                      "scenario":  "Full backend pytest, frontend tests/build, source stack/API smoke and existing lifecycle/stop tests; exact blockers documented, no silent skips."
+                  },
+                  {
+                      "id":  "P02",
+                      "tiers":  [
+                                    "Component"
+                                ],
+                      "scenario":  "Full build entry point with required tests enabled; prepared assets, runtime bundle and version/build surfaces validated."
+                  },
+                  {
+                      "id":  "P03",
+                      "tiers":  [
+                                    "Component",
+                                    "Package"
+                                ],
+                      "scenario":  "Release directory, ZIP and frozen-bundle payload scans reject canary config/DB/upload/log/credential/test artifacts; safe-name reports only."
+                  },
+                  {
+                      "id":  "P04",
+                      "tiers":  [
+                                    "Component"
+                                ],
+                      "scenario":  "PS5.1 short/long path archive regression, malicious ZIP members, duplicate case names, ADS/device paths and reparse entries rejected before extraction."
+                  },
+                  {
+                      "id":  "P05",
+                      "tiers":  [
+                                    "Component"
+                                ],
+                      "scenario":  "Generated wrappers/helpers equal expected rendered source; no drift between package/installed implementation; original ZIP hashes unchanged."
+                  },
+                  {
+                      "id":  "P06",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Actual packaged office-manager regression on Edge and Chrome where present; server is the candidate EXE, not source Python/Vite."
+                  },
+                  {
+                      "id":  "P07",
+                      "tiers":  [
+                                    "Package"
+                                ],
+                      "scenario":  "Helper crash/nonzero exit, noninteractive/NoPause modes, console progress and redaction canaries; results accurate with no secret output."
+                  },
+                  {
+                      "id":  "P08",
+                      "tiers":  [
+                                    "Package",
+                                    "Home"
+                                ],
+                      "scenario":  "Final exact-artifact rerun of fresh install, U01/U02, D01/D02/D04 and A01/A02 after packaging completes; evidence tied to final ZIP hash."
+                  }
+              ]
+}

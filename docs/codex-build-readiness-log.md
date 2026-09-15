@@ -1,12 +1,24 @@
 # Codex Deployment Readiness Build Log
 
-> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> The historical build log below retains the version, commands, and results it originally recorded. The current source candidate is `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` (`beta-local-desktop-v2`); its final build receipt and qualification evidence are pending and are not asserted by the historical log.
 
 Date started: 2026-06-12
 
+## Task 17 CMD maintenance documentation station (2026-09-14)
+
+Source candidate identity: `2.0.0-beta.4` / build `2026.09.14.1` / channel `beta-local-desktop-v2` / installer revision `1`.
+
+Documentation status: source operator/release docs now describe beta.3 smart upgrade in place, data-preserving normal uninstall, exact-phrase complete purge, same-user/same-computer recovery, package-root Launch delegation, and stable support codes. This station is a documentation update and consistency audit; it did not rerun product tests or create a final package.
+
+The final build receipt must bind the package to a clean source commit and is the authoritative record for the final ZIP path, SHA-256, build gates, and commit SHA. Tracked docs intentionally keep those final values pending so no post-build source commit changes the provenance.
+
+Qualification status remains: the synthetic beta.3 component HTTP/API fixture passed its component contract, while package install/repair/uninstall, default profile, standard-user Windows Home, cross-user recovery `R07`, and VM power-loss recovery `R09` are pending or blocked by unavailable package/infrastructure. No real client records were accessed or authorized. LOC timing and Alleva live-sync gates remain unchanged.
+
+Evidence for this station is under `.omo/evidence/windows-cmd-maintenance/docs/`; final detached completion evidence must be added after the candidate build. See [Windows CMD maintenance](windows-cmd-maintenance.md), [open blockers](open-blockers.md), and [client release packages](client-release-packages.md).
+
 Goal source: `C:\Users\r3developer\Downloads\R3 Recovery Services Clinical Notes Analyzer Deployment-Readiness Goal.pdf`
 
-## S0 Orientation
+## Historical S0 Orientation
 
 Repository confirmed:
 

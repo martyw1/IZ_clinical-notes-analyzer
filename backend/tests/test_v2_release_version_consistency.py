@@ -11,7 +11,7 @@ from v2_test_runtime import fresh_client as _fresh_client
 def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
     expected_version = "2.0.0-beta.4"
-    expected_build = "2026.09.10.2"
+    expected_build = "2026.09.14.1"
     expected_channel = "beta-local-desktop-v2"
 
     metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
@@ -22,6 +22,7 @@ def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypat
     assert metadata["version"] == expected_version
     assert metadata["build"] == expected_build
     assert metadata["release_channel"] == expected_channel
+    assert metadata["release_date"] == "2026-09-14"
     assert metadata["stability"] == "beta"
     assert metadata["is_prerelease"] is True
     assert package["version"] == expected_version
@@ -49,6 +50,8 @@ def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypat
 
     preflight_source = (root / "scripts" / "preflight-windows.ps1").read_text(encoding="utf-8")
     shell_source = (root / "frontend" / "src" / "v2" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
+    help_source = (root / "frontend" / "src" / "v2" / "pages" / "HelpPage.tsx").read_text(encoding="utf-8")
 
     assert f'version.get("version") != "{expected_version}"' in preflight_source
     assert f"{expected_version} | build {expected_build} | {expected_channel}" in shell_source
+    assert f"{expected_version} · build {expected_build} · {expected_channel}" in help_source

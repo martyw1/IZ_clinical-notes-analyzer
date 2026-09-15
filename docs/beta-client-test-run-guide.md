@@ -1,16 +1,22 @@
 # Beta Client Test Run Guide
 
-Date: 2026-09-04
+Date: 2026-09-14
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
+Applies to the source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` Windows desktop runtime. The final package, hash, and target-platform qualification are pending; this guide is not a client-ready release notice. The beta.3 validation records retain their original tested identity.
 
 This guide is for a first near-production beta test run with non-technical users. It assumes R3 provides a prepared release folder or zip. Ordinary users should not need Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work.
 
 Marleigh's primary non-technical handoff is the illustrated `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html`. Use this file as the shorter test-session checklist.
 
+## Candidate status and maintenance contract
+
+The intended package name is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. Its final build receipt, clean-commit provenance, ZIP SHA-256, package/default-profile result, standard-user Windows Home result, cross-user recovery `R07`, and power-loss recovery `R09` result are **Pending/blocked** in detached completion evidence. Do not distribute or call this candidate client-ready until those records exist.
+
+The package supports beta.3 smart upgrade in place and preserves current-user local data after a verified upgrade. Use normal uninstall for an upgrade or reinstall; it preserves local data and recovery backups. Complete purge is a separate action and requires the exact phrase `REMOVE IZ DATA`. Package-root Launch delegates to the installed launcher and prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` with exit code `20` when the app is absent. Support should record the stable result code, action, and sanitized receipt; no real client records belong in a beta run.
+
 ## What The Tester Should Receive
 
-- A folder or zip named `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`.
+- The final approved package, if qualification is complete, named `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`.
 - The R3-approved first sign-in instructions through a secure channel.
 - This checklist and the illustrated Marleigh guide.
 - Only synthetic or approved beta-test data. Do not use real PHI until R3 has approved the beta data-handling plan.
@@ -29,7 +35,7 @@ The app installs for the current Windows user under `%LOCALAPPDATA%\Programs\IZ 
 
 After sign-in, confirm these items before doing test work:
 
-1. The footer says `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`.
+1. The footer says `Version 2.0 Beta | 2.0.0-beta.4 | build 2026.09.14.1 | beta-local-desktop-v2`.
 2. The administrator navigation shows `Status Dashboard`, `Patient Roster`, `Patient Record Detail`, `Treatment Plan Detail`, `Treatment Plans Roster`, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`.
 3. The top-right runtime badge says `Active runtime: V2 | admin`.
 4. `Status Dashboard` opens without a browser error.
@@ -95,7 +101,9 @@ Backups can contain local settings, the local database, encrypted uploads, audit
 ## Maintenance
 
 - Use normal uninstall when upgrading or reinstalling. It keeps local app data.
-- Use complete uninstall only on disposable synthetic data or when R3 support confirms all local data can be removed.
+- Do not use complete uninstall as an upgrade step. Use it only on disposable synthetic data or when R3 support confirms all local data can be removed; it requires the exact phrase `REMOVE IZ DATA`.
+- If Launch reports that the app is absent, run Install first. A clean install/repair returns code `0`; `PREFLIGHT_FAILED` is `20`, `ROLLED_BACK` is `30`, `RECOVERY_REQUIRED` is `31`, `REMOVAL_INCOMPLETE` is `40`, and `REMOVED_CLEANUP_PENDING` is `41`.
+- Restore backups only on the same Windows user and same computer. Keep original archives unchanged.
 - Do not move `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` into OneDrive or another synced folder.
 - Do not manually delete random files from the local data folder. Use the app's backup, diagnostics, clear-data, uninstall, and complete-uninstall flows.
 - Do not enable live Alleva patient sync unless R3/Alleva approval and endpoint mapping validation are complete.

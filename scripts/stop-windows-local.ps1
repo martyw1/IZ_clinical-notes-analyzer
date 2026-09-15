@@ -15,7 +15,8 @@ $ScriptsDir = Join-Path $RootDir 'scripts'
 $BackendDir = Join-Path $RootDir 'backend'
 $FrontendDir = Join-Path $RootDir 'frontend'
 $BundledRuntime = Join-Path $RootDir 'runtime\IZClinicalNotesAnalyzer.exe'
-$StartCmd = Join-Path $ScriptsDir 'Start-IZ-Clinical-Notes-Analyzer.cmd'
+$PackagedLauncher = Join-Path $ScriptsDir 'launch-packaged-runtime.cmd'
+$StartCmd = if (Test-Path -LiteralPath (Join-Path $RootDir 'installer\maintenance-runtime.psm1')) { $PackagedLauncher } else { Join-Path $ScriptsDir 'Start-IZ-Clinical-Notes-Analyzer.cmd' }
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
 
 function Write-Info($Message) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [INFO] $Message" }
@@ -331,6 +332,20 @@ try {
     Write-Host "Repo: $RootDir"
     Write-Host "Local app data: $AppDataRoot"
     Write-Host ''
+
+    $installedCommon = Join-Path $RootDir 'installer\maintenance-common.psm1'
+    $installedRuntime = Join-Path $RootDir 'installer\maintenance-runtime.psm1'
+    if ((Test-Path -LiteralPath $installedCommon -PathType Leaf) -and (Test-Path -LiteralPath $installedRuntime -PathType Leaf)) {
+        Import-Module $installedCommon -Force
+        Import-Module $installedRuntime
+        $installedContext = Get-IzMaintenanceContext
+        if (-not $RootDir.Equals($installedContext.install_root, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Installed runtime path does not match the current-user installation receipt scope.'
+        }
+        $managedStop = Stop-IzOwnedRuntime -Context $installedContext -TimeoutSeconds 30
+        if ($managedStop.status -eq 'failure') { throw "Managed runtime stop blocked: $($managedStop.reason)" }
+        Write-Pass "Managed runtime status: $($managedStop.status)."
+    }
 
     $ports = @(Get-ConfiguredBackendPorts)
     Show-ProcessScope -Ports $ports

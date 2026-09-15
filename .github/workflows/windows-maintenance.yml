@@ -1,0 +1,964 @@
+name: Windows maintenance
+
+on:
+  push:
+    paths:
+      - "VERSION"
+      - "VERSION.json"
+      - "Build-IZ-Windows-Installer.cmd"
+      - "backend/**"
+      - "config/**"
+      - "frontend/**"
+      - "scripts/**"
+      - ".github/workflows/windows-maintenance.yml"
+  pull_request:
+    paths:
+      - "VERSION"
+      - "VERSION.json"
+      - "Build-IZ-Windows-Installer.cmd"
+      - "backend/**"
+      - "config/**"
+      - "frontend/**"
+      - "scripts/**"
+      - ".github/workflows/windows-maintenance.yml"
+  workflow_dispatch:
+    inputs:
+      qualification_tier:
+        description: "Controlled tier for pre-provisioned infrastructure"
+        required: true
+        type: choice
+        options:
+          - none
+          - Home
+          - PowerLoss
+        default: none
+      case:
+        description: "Exact case ID or All"
+        required: true
+        type: string
+        default: All
+      baseline_zip:
+        description: "Absolute preserved beta.3 ZIP path on the provisioned runner"
+        required: false
+        type: string
+      original_beta4_zip:
+        description: "Absolute preserved original beta.4 ZIP path on the provisioned runner"
+        required: false
+        type: string
+      candidate_zip:
+        description: "Absolute candidate ZIP path on the provisioned runner"
+        required: false
+        type: string
+      build_receipt:
+        description: "Absolute candidate build receipt path on the provisioned runner"
+        required: false
+        type: string
+      vm_control_manifest:
+        description: "Absolute external power-loss control manifest path"
+        required: false
+        type: string
+      browser_channel:
+        description: "Browser channel available on the provisioned runner"
+        required: true
+        type: choice
+        options:
+          - msedge
+          - chrome
+        default: msedge
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  component:
+    name: Windows component and build gates
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install component dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check -r backend/requirements.txt
+          npm --prefix frontend ci --no-audit --no-fund
+
+      - name: Run receipt validator tests
+        shell: pwsh
+        run: python -m pytest scripts/tests/test_validate_maintenance_ci_receipt.py -q
+
+      - name: Prepare owned CI roots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          New-Item -ItemType Directory -Path $qaParent -Force | Out-Null
+          $runId = 'cmd-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+          $harnessRoot = Join-Path $qaParent $runId
+          if (Test-Path -LiteralPath $harnessRoot) { throw 'HARNESS_ROOT_COLLISION' }
+          $outputRoot = Join-Path $env:RUNNER_TEMP ("iz-cna-maintenance-ci-$env:GITHUB_RUN_ID-component")
+          if (Test-Path -LiteralPath $outputRoot) { throw 'CI_OUTPUT_ROOT_COLLISION' }
+          New-Item -ItemType Directory -Path $outputRoot | Out-Null
+          "HARNESS_ROOT=$harnessRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CI_OUTPUT_ROOT=$outputRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Windows candidate
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & "$env:GITHUB_WORKSPACE\scripts\build-windows-installer.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate exact candidate build receipt
+        id: validate_build
+        if: always()
+        shell: pwsh
+        env:
+          BUILD_RECEIPT_PATH: ${{ steps.build.outputs.build_receipt_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH)) { throw 'BUILD_RECEIPT_OUTPUT_MISSING' }
+          $receipt = Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json
+          $candidateZip = [string]$receipt.zip_path
+          if ([string]::IsNullOrWhiteSpace($candidateZip)) { throw 'CANDIDATE_ZIP_FROM_RECEIPT_MISSING' }
+          $summary = Join-Path $env:CI_OUTPUT_ROOT 'build-receipt-summary.json'
+          python "$env:GITHUB_WORKSPACE\scripts\validate-maintenance-ci-receipt.py" `
+            --receipt $env:BUILD_RECEIPT_PATH --candidate-zip $candidateZip --expected-source-revision $env:GITHUB_SHA --output $summary
+          $code = $LASTEXITCODE
+          "BUILD_RECEIPT_PATH=$env:BUILD_RECEIPT_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Run Component maintenance matrix
+        id: component_harness
+        if: steps.validate_build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseline = Join-Path $env:GITHUB_WORKSPACE 'dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip'
+          $original = Join-Path $env:GITHUB_WORKSPACE 'dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4.zip'
+          $receipt = Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json
+          $candidate = [string]$receipt.zip_path
+          & powershell.exe -NoProfile -NonInteractive -File "$env:GITHUB_WORKSPACE\scripts\test-cmd-maintenance.ps1" `
+            -Case All -Tier Component -BaselineZip $baseline -OriginalBeta4Zip $original `
+            -CandidateZip $candidate -CandidateBuildReceipt $env:BUILD_RECEIPT_PATH -ExpectedSourceRevision $env:GITHUB_SHA `
+            -EvidenceRoot $env:HARNESS_ROOT -BrowserChannel msedge
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Stage and verify sanitized Component receipts
+        if: always()
+        shell: pwsh
+        env:
+          TIER: Component
+          REQUESTED_CASE: All
+          HARNESS_EXIT: ${{ steps.component_harness.outputs.exit_code }}
+          MAINTENANCE_RECEIPT_PATH: ${{ steps.component_harness.outputs.maintenance_receipt_path }}
+          BUILD_RECEIPT_PATH: ${{ steps.build.outputs.build_receipt_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+          $runId = Split-Path -Leaf $env:HARNESS_ROOT
+          if ($runId -notmatch '^cmd-[a-f0-9]{12}$') { throw 'HARNESS_RUN_ID_INVALID' }
+          $evidenceBase = Join-Path $env:GITHUB_WORKSPACE '.omo\evidence\windows-cmd-maintenance'
+          $publicRoot = Join-Path $evidenceBase $runId
+          $forbidden = '(?i)(password=|client_secret|access_token|bearer |begin private key|playwright|trace\.zip|\.sqlite|\.env|\.izcnabackup)'
+          $buildSummary = Join-Path $stageRoot 'build-receipt-summary.json'
+          if (-not (Test-Path -LiteralPath $buildSummary -PathType Leaf)) {
+              [ordered]@{ schema = 'iz-cna-ci-receipt-summary-v1'; status = 'failed'; reason = 'BUILD_RECEIPT_SUMMARY_UNAVAILABLE' } |
+                  ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildSummary -Encoding utf8
+          }
+          if ([string]::IsNullOrWhiteSpace($env:MAINTENANCE_RECEIPT_PATH)) {
+              $failure = [ordered]@{ schema = 'iz-cna-maintenance-terminal-failure-v1'; requested_case = $env:REQUESTED_CASE; requested_tier = $env:TIER; status = 'failed'; reason = 'HARNESS_RECEIPT_UNAVAILABLE'; source_revision = $env:GITHUB_SHA; product_write_attempted = $false; started_utc = [DateTime]::UtcNow.ToString('o'); completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $failure | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'maintenance-run-receipt.json') -Encoding utf8
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              New-Item -ItemType Directory -Path (Join-Path $stageRoot 'cases') -Force | Out-Null
+              exit 1
+          }
+          $aggregatePath = [IO.Path]::GetFullPath($env:MAINTENANCE_RECEIPT_PATH)
+          $expectedAggregatePath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-run-receipt.json'))
+          $expectedTerminalPath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-terminal-failure.json'))
+          $receiptParent = [IO.Path]::GetFullPath((Split-Path -Parent $aggregatePath))
+          $receiptLeaf = Split-Path -Leaf $aggregatePath
+          $isWrapperFailure = $receiptParent.StartsWith([IO.Path]::GetFullPath($evidenceBase) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+              (Split-Path -Leaf $receiptParent) -cmatch '^cmd-failure-[a-f0-9]{12}$' -and $receiptLeaf -ceq 'maintenance-run-receipt.json'
+          if ($aggregatePath -cne $expectedAggregatePath -and $aggregatePath -cne $expectedTerminalPath -and -not $isWrapperFailure) { throw 'MAINTENANCE_RECEIPT_PATH_MISMATCH' }
+          if (-not (Test-Path -LiteralPath $aggregatePath -PathType Leaf)) { throw 'MAINTENANCE_AGGREGATE_MISSING' }
+          $aggregateItem = Get-Item -LiteralPath $aggregatePath -Force
+          if (($aggregateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $aggregateItem.Length -le 0 -or $aggregateItem.Length -gt 1048576) { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          try { $aggregate = Get-Content -LiteralPath $aggregatePath -Raw | ConvertFrom-Json }
+          catch { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          if ($aggregate.schema -ceq 'iz-cna-maintenance-terminal-failure-v1') {
+              $terminalKeys = @('schema', 'requested_case', 'requested_tier', 'status', 'reason', 'source_revision', 'product_write_attempted', 'started_utc', 'completed_utc')
+              if (@(Compare-Object @($aggregate.PSObject.Properties.Name | Sort-Object) @($terminalKeys | Sort-Object)).Count -ne 0 -or
+                  $aggregate.status -cne 'failed' -or $aggregate.requested_case -notmatch '^(All|[A-Za-z0-9_-]{1,32}|<invalid>)$' -or
+                  $aggregate.requested_tier -notin @('Component', 'Package', 'Home', 'PowerLoss') -or
+                  $aggregate.reason -notmatch '^[A-Z][A-Z0-9_]{0,63}$' -or
+                  ($null -ne $aggregate.source_revision -and $aggregate.source_revision -notmatch '^[a-f0-9]{40}$') -or
+                  $aggregate.product_write_attempted -isnot [bool]) {
+                  throw 'MAINTENANCE_TERMINAL_RECEIPT_INVALID'
+              }
+              $terminalContent = Get-Content -LiteralPath $aggregatePath -Raw
+              if ($terminalContent -match $forbidden) { throw 'UNSAFE_TERMINAL_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              exit 1
+          }
+          if ($aggregate.run_id -cne $runId -or $aggregate.requested_case -cne $env:REQUESTED_CASE -or
+              $aggregate.requested_tier -cne $env:TIER -or $aggregate.source_revision -cne $env:GITHUB_SHA) {
+              throw 'MAINTENANCE_AGGREGATE_IDENTITY_INVALID'
+          }
+          $contractModule = Join-Path $env:GITHUB_WORKSPACE 'scripts/tests/maintenance-harness-contracts.psm1'
+          Import-Module -Name $contractModule -Force -ErrorAction Stop
+          [void](Test-IzMaintenanceRunReceipt -Receipt $aggregate -ReceiptPath $aggregatePath)
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          $casesRoot = Join-Path $stageRoot 'cases'
+          New-Item -ItemType Directory -Path $casesRoot -Force | Out-Null
+          foreach ($caseId in @($aggregate.required_case_ids)) {
+              $safeId = [string]$caseId
+              if ($safeId -notmatch '^[BIURDAP][0-9]{2}$') { throw 'CASE_ID_INVALID' }
+              $source = Join-Path $publicRoot ('cases/' + $safeId.ToLowerInvariant() + '.json')
+              if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'CASE_RECEIPT_MISSING' }
+              $item = Get-Item -LiteralPath $source -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -le 0) { throw 'CASE_RECEIPT_INVALID' }
+              $content = Get-Content -LiteralPath $source -Raw
+              if ($content -match $forbidden) { throw 'UNSAFE_CASE_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $source -Destination (Join-Path $casesRoot ($safeId.ToLowerInvariant() + '.json'))
+          }
+          $aggregateContent = Get-Content -LiteralPath $aggregatePath -Raw
+          if ($aggregateContent -match $forbidden) { throw 'UNSAFE_AGGREGATE_CONTENT' }
+          Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+          $candidateHash = ''
+          if (-not [string]::IsNullOrWhiteSpace($env:CANDIDATE_ZIP) -and
+              (Test-Path -LiteralPath $env:CANDIDATE_ZIP -PathType Leaf)) {
+              $candidateHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:CANDIDATE_ZIP).Hash.ToLowerInvariant()
+          }
+          if ([string]::IsNullOrWhiteSpace($candidateHash) -and
+              -not [string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH) -and
+              (Test-Path -LiteralPath $env:BUILD_RECEIPT_PATH -PathType Leaf)) {
+              try { $candidateHash = [string]((Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json).zip_sha256) } catch { $candidateHash = '' }
+          }
+          if ($candidateHash -notmatch '^[a-f0-9]{64}$') {
+              if ($aggregate.status -ceq 'passed') { throw 'CANDIDATE_IDENTITY_MISSING' }
+              $candidateHash = 'unavailable'
+          }
+          $environment = [ordered]@{
+              schema = 'iz-cna-maintenance-ci-environment-v1'
+              tier = $env:TIER
+              os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption
+              privilege = 'recorded-by-runner-preflight'
+              candidate_zip_sha256 = $candidateHash
+              case_count = [int]$aggregate.counts.total
+              aggregate_status = [string]$aggregate.status
+              actual_home_edition = $false
+              actual_power_loss = $false
+              completed_utc = [DateTime]::UtcNow.ToString('o')
+          }
+          $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+          $harnessExit = 0
+          if (-not [string]::IsNullOrWhiteSpace($env:HARNESS_EXIT)) { $harnessExit = [int]$env:HARNESS_EXIT }
+          $finalExit = if ($harnessExit -ne 0) { $harnessExit } elseif ($aggregate.status -ceq 'failed') { 1 } elseif ($aggregate.status -ceq 'blocked') { 2 } else { 0 }
+          if ($finalExit -ne 0) { exit $finalExit }
+
+      - name: Upload sanitized Component receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-maintenance-component-receipts
+          path: |
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-component\build-receipt-summary.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-component\maintenance-run-receipt.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-component\ci-environment.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-component\cases
+          if-no-files-found: error
+
+  package_preflight:
+    name: Verify disposable package runner provisioning
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.qualification_tier == 'none' }}
+    needs: component
+    runs-on: windows-2022
+    steps:
+      - name: Require explicit runner provisioning
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ vars.IZ_CNA_DISPOSABLE_STANDARD_PROFILE_READY }}' -cne 'true') { throw 'BLOCKED_REQUIRED_RUNNER:DISPOSABLE_STANDARD_PROFILE' }
+
+  package:
+    name: Windows disposable standard profile package matrix
+    if: ${{ needs.component.result == 'success' && needs.package_preflight.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.qualification_tier == 'none') }}
+    needs: [component, package_preflight]
+    runs-on: [self-hosted, windows, x64, disposable-standard-profile]
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify standard profile runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ vars.IZ_CNA_DISPOSABLE_STANDARD_PROFILE_READY }}' -cne 'true') { throw 'BLOCKED_REQUIRED_RUNNER:DISPOSABLE_STANDARD_PROFILE' }
+          $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+          if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'STANDARD_USER_REQUIRED' }
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          $marker = Join-Path $qaParent '.iz-cna-disposable-profile.json'
+          if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw 'DISPOSABLE_PROFILE_NOT_PROVISIONED' }
+
+      - name: Install package runner dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check -r backend/requirements.txt
+          npm --prefix frontend ci --no-audit --no-fund
+
+      - name: Prepare owned CI roots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          if (-not (Test-Path -LiteralPath $qaParent -PathType Container)) { throw 'QA_PARENT_MISSING' }
+          $runId = 'cmd-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+          $harnessRoot = Join-Path $qaParent $runId
+          if (Test-Path -LiteralPath $harnessRoot) { throw 'HARNESS_ROOT_COLLISION' }
+          $outputRoot = Join-Path $env:RUNNER_TEMP ("iz-cna-maintenance-ci-$env:GITHUB_RUN_ID-package")
+          if (Test-Path -LiteralPath $outputRoot) { throw 'CI_OUTPUT_ROOT_COLLISION' }
+          New-Item -ItemType Directory -Path $outputRoot | Out-Null
+          "HARNESS_ROOT=$harnessRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CI_OUTPUT_ROOT=$outputRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Windows candidate on package runner
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & "$env:GITHUB_WORKSPACE\scripts\build-windows-installer.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate exact package build receipt
+        id: validate_build
+        if: always()
+        shell: pwsh
+        env:
+          BUILD_RECEIPT_PATH: ${{ steps.build.outputs.build_receipt_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH)) { throw 'BUILD_RECEIPT_OUTPUT_MISSING' }
+          $receipt = Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json
+          $candidateZip = [string]$receipt.zip_path
+          if ([string]::IsNullOrWhiteSpace($candidateZip)) { throw 'CANDIDATE_ZIP_FROM_RECEIPT_MISSING' }
+          $summary = Join-Path $env:CI_OUTPUT_ROOT 'build-receipt-summary.json'
+          python "$env:GITHUB_WORKSPACE\scripts\validate-maintenance-ci-receipt.py" `
+            --receipt $env:BUILD_RECEIPT_PATH --candidate-zip $candidateZip --expected-source-revision $env:GITHUB_SHA --output $summary
+          $code = $LASTEXITCODE
+          "BUILD_RECEIPT_PATH=$env:BUILD_RECEIPT_PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Run Package maintenance matrix
+        id: package_harness
+        if: steps.validate_build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseline = Join-Path $env:GITHUB_WORKSPACE 'dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip'
+          $original = Join-Path $env:GITHUB_WORKSPACE 'dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4.zip'
+          $receipt = Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json
+          $candidate = [string]$receipt.zip_path
+          & powershell.exe -NoProfile -NonInteractive -File "$env:GITHUB_WORKSPACE\scripts\test-cmd-maintenance.ps1" `
+            -Case All -Tier Package -BaselineZip $baseline -OriginalBeta4Zip $original `
+            -CandidateZip $candidate -CandidateBuildReceipt $env:BUILD_RECEIPT_PATH -ExpectedSourceRevision $env:GITHUB_SHA `
+            -EvidenceRoot $env:HARNESS_ROOT -BrowserChannel msedge
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Stage and verify sanitized Package receipts
+        if: always()
+        shell: pwsh
+        env:
+          TIER: Package
+          REQUESTED_CASE: All
+          HARNESS_EXIT: ${{ steps.package_harness.outputs.exit_code }}
+          MAINTENANCE_RECEIPT_PATH: ${{ steps.package_harness.outputs.maintenance_receipt_path }}
+          BUILD_RECEIPT_PATH: ${{ steps.build.outputs.build_receipt_path }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+          $runId = Split-Path -Leaf $env:HARNESS_ROOT
+          if ($runId -notmatch '^cmd-[a-f0-9]{12}$') { throw 'HARNESS_RUN_ID_INVALID' }
+          $evidenceBase = Join-Path $env:GITHUB_WORKSPACE '.omo\evidence\windows-cmd-maintenance'
+          $publicRoot = Join-Path $evidenceBase $runId
+          $forbidden = '(?i)(password=|client_secret|access_token|bearer |begin private key|playwright|trace\.zip|\.sqlite|\.env|\.izcnabackup)'
+          $buildSummary = Join-Path $stageRoot 'build-receipt-summary.json'
+          if (-not (Test-Path -LiteralPath $buildSummary -PathType Leaf)) {
+              [ordered]@{ schema = 'iz-cna-ci-receipt-summary-v1'; status = 'failed'; reason = 'BUILD_RECEIPT_SUMMARY_UNAVAILABLE' } |
+                  ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildSummary -Encoding utf8
+          }
+          if ([string]::IsNullOrWhiteSpace($env:MAINTENANCE_RECEIPT_PATH)) {
+              $failure = [ordered]@{ schema = 'iz-cna-maintenance-terminal-failure-v1'; requested_case = $env:REQUESTED_CASE; requested_tier = $env:TIER; status = 'failed'; reason = 'HARNESS_RECEIPT_UNAVAILABLE'; source_revision = $env:GITHUB_SHA; product_write_attempted = $false; started_utc = [DateTime]::UtcNow.ToString('o'); completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $failure | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'maintenance-run-receipt.json') -Encoding utf8
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              New-Item -ItemType Directory -Path (Join-Path $stageRoot 'cases') -Force | Out-Null
+              exit 1
+          }
+          $aggregatePath = [IO.Path]::GetFullPath($env:MAINTENANCE_RECEIPT_PATH)
+          $expectedAggregatePath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-run-receipt.json'))
+          $expectedTerminalPath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-terminal-failure.json'))
+          $receiptParent = [IO.Path]::GetFullPath((Split-Path -Parent $aggregatePath))
+          $receiptLeaf = Split-Path -Leaf $aggregatePath
+          $isWrapperFailure = $receiptParent.StartsWith([IO.Path]::GetFullPath($evidenceBase) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+              (Split-Path -Leaf $receiptParent) -cmatch '^cmd-failure-[a-f0-9]{12}$' -and $receiptLeaf -ceq 'maintenance-run-receipt.json'
+          if ($aggregatePath -cne $expectedAggregatePath -and $aggregatePath -cne $expectedTerminalPath -and -not $isWrapperFailure) { throw 'MAINTENANCE_RECEIPT_PATH_MISMATCH' }
+          if (-not (Test-Path -LiteralPath $aggregatePath -PathType Leaf)) { throw 'MAINTENANCE_AGGREGATE_MISSING' }
+          $aggregateItem = Get-Item -LiteralPath $aggregatePath -Force
+          if (($aggregateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $aggregateItem.Length -le 0 -or $aggregateItem.Length -gt 1048576) { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          try { $aggregate = Get-Content -LiteralPath $aggregatePath -Raw | ConvertFrom-Json }
+          catch { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          if ($aggregate.schema -ceq 'iz-cna-maintenance-terminal-failure-v1') {
+              $terminalKeys = @('schema', 'requested_case', 'requested_tier', 'status', 'reason', 'source_revision', 'product_write_attempted', 'started_utc', 'completed_utc')
+              if (@(Compare-Object @($aggregate.PSObject.Properties.Name | Sort-Object) @($terminalKeys | Sort-Object)).Count -ne 0 -or
+                  $aggregate.status -cne 'failed' -or $aggregate.requested_case -notmatch '^(All|[A-Za-z0-9_-]{1,32}|<invalid>)$' -or
+                  $aggregate.requested_tier -notin @('Component', 'Package', 'Home', 'PowerLoss') -or
+                  $aggregate.reason -notmatch '^[A-Z][A-Z0-9_]{0,63}$' -or
+                  ($null -ne $aggregate.source_revision -and $aggregate.source_revision -notmatch '^[a-f0-9]{40}$') -or
+                  $aggregate.product_write_attempted -isnot [bool]) {
+                  throw 'MAINTENANCE_TERMINAL_RECEIPT_INVALID'
+              }
+              $terminalContent = Get-Content -LiteralPath $aggregatePath -Raw
+              if ($terminalContent -match $forbidden) { throw 'UNSAFE_TERMINAL_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              exit 1
+          }
+          if ($aggregate.run_id -cne $runId -or $aggregate.requested_case -cne $env:REQUESTED_CASE -or
+              $aggregate.requested_tier -cne $env:TIER -or $aggregate.source_revision -cne $env:GITHUB_SHA) {
+              throw 'MAINTENANCE_AGGREGATE_IDENTITY_INVALID'
+          }
+          $contractModule = Join-Path $env:GITHUB_WORKSPACE 'scripts/tests/maintenance-harness-contracts.psm1'
+          Import-Module -Name $contractModule -Force -ErrorAction Stop
+          [void](Test-IzMaintenanceRunReceipt -Receipt $aggregate -ReceiptPath $aggregatePath)
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          $casesRoot = Join-Path $stageRoot 'cases'
+          New-Item -ItemType Directory -Path $casesRoot -Force | Out-Null
+          foreach ($caseId in @($aggregate.required_case_ids)) {
+              $safeId = [string]$caseId
+              if ($safeId -notmatch '^[BIURDAP][0-9]{2}$') { throw 'CASE_ID_INVALID' }
+              $source = Join-Path $publicRoot ('cases/' + $safeId.ToLowerInvariant() + '.json')
+              if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'CASE_RECEIPT_MISSING' }
+              $item = Get-Item -LiteralPath $source -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -le 0) { throw 'CASE_RECEIPT_INVALID' }
+              $content = Get-Content -LiteralPath $source -Raw
+              if ($content -match $forbidden) { throw 'UNSAFE_CASE_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $source -Destination (Join-Path $casesRoot ($safeId.ToLowerInvariant() + '.json'))
+          }
+          $aggregateContent = Get-Content -LiteralPath $aggregatePath -Raw
+          if ($aggregateContent -match $forbidden) { throw 'UNSAFE_AGGREGATE_CONTENT' }
+          Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+          $candidateHash = ''
+          if (-not [string]::IsNullOrWhiteSpace($env:CANDIDATE_ZIP) -and
+              (Test-Path -LiteralPath $env:CANDIDATE_ZIP -PathType Leaf)) {
+              $candidateHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:CANDIDATE_ZIP).Hash.ToLowerInvariant()
+          }
+          if ([string]::IsNullOrWhiteSpace($candidateHash) -and
+              -not [string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH) -and
+              (Test-Path -LiteralPath $env:BUILD_RECEIPT_PATH -PathType Leaf)) {
+              try { $candidateHash = [string]((Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json).zip_sha256) } catch { $candidateHash = '' }
+          }
+          if ($candidateHash -notmatch '^[a-f0-9]{64}$') {
+              if ($aggregate.status -ceq 'passed') { throw 'CANDIDATE_IDENTITY_MISSING' }
+              $candidateHash = 'unavailable'
+          }
+          $environment = [ordered]@{
+              schema = 'iz-cna-maintenance-ci-environment-v1'
+              tier = $env:TIER
+              os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption
+              privilege = 'recorded-by-runner-preflight'
+              candidate_zip_sha256 = $candidateHash
+              case_count = [int]$aggregate.counts.total
+              aggregate_status = [string]$aggregate.status
+              actual_home_edition = $false
+              actual_power_loss = $false
+              completed_utc = [DateTime]::UtcNow.ToString('o')
+          }
+          $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+          $harnessExit = 0
+          if (-not [string]::IsNullOrWhiteSpace($env:HARNESS_EXIT)) { $harnessExit = [int]$env:HARNESS_EXIT }
+          $finalExit = if ($harnessExit -ne 0) { $harnessExit } elseif ($aggregate.status -ceq 'failed') { 1 } elseif ($aggregate.status -ceq 'blocked') { 2 } else { 0 }
+          if ($finalExit -ne 0) { exit $finalExit }
+
+      - name: Upload sanitized Package receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-maintenance-package-receipts
+          path: |
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-package\build-receipt-summary.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-package\maintenance-run-receipt.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-package\ci-environment.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-package\cases
+          if-no-files-found: error
+
+  home_preflight:
+    name: Verify Windows Home infrastructure provisioning
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.qualification_tier == 'Home' }}
+    needs: component
+    runs-on: windows-2022
+    env:
+      BASELINE_ZIP: ${{ inputs.baseline_zip }}
+      ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+      CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+      BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+    steps:
+      - name: Require explicit Home infrastructure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ vars.IZ_CNA_HOME_INFRA_READY }}' -cne 'true') { throw 'BLOCKED_REQUIRED_RUNNER:WINDOWS_HOME_INFRASTRUCTURE' }
+          foreach ($pair in @{
+              baseline_zip = $env:BASELINE_ZIP
+              original_beta4_zip = $env:ORIGINAL_BETA4_ZIP
+              candidate_zip = $env:CANDIDATE_ZIP
+              build_receipt = $env:BUILD_RECEIPT_PATH
+          }.GetEnumerator()) {
+              $name = [string]$pair.Key
+              $value = [string]$pair.Value
+              if ([string]::IsNullOrWhiteSpace($value)) { throw "BLOCKED_REQUIRED_INPUT:$name" }
+          }
+
+  home:
+    name: Controlled Windows Home qualification
+    if: ${{ needs.component.result == 'success' && needs.home_preflight.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.qualification_tier == 'Home' }}
+    needs: [component, home_preflight]
+    runs-on: [self-hosted, windows, x64, disposable-windows-home]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout harness only
+        uses: actions/checkout@v4
+
+      - name: Verify Home standard profile
+        shell: pwsh
+        env:
+          BASELINE_ZIP: ${{ inputs.baseline_zip }}
+          ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $os = Get-CimInstance Win32_OperatingSystem
+          if ($os.Caption -notmatch 'Windows (10|11) Home' -or $os.Caption -match 'Server') { throw 'WINDOWS_HOME_REQUIRED' }
+          $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+          if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'STANDARD_USER_REQUIRED' }
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          if (-not (Test-Path -LiteralPath (Join-Path $qaParent '.iz-cna-disposable-profile.json') -PathType Leaf)) { throw 'DISPOSABLE_PROFILE_NOT_PROVISIONED' }
+          foreach ($path in @($env:BASELINE_ZIP, $env:ORIGINAL_BETA4_ZIP, $env:CANDIDATE_ZIP, $env:BUILD_RECEIPT_PATH)) {
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'REQUIRED_INPUT_FILE_MISSING' }
+          }
+
+      - name: Prepare owned CI roots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          $runId = 'cmd-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+          $harnessRoot = Join-Path $qaParent $runId
+          if (Test-Path -LiteralPath $harnessRoot) { throw 'HARNESS_ROOT_COLLISION' }
+          $outputRoot = Join-Path $env:RUNNER_TEMP ("iz-cna-maintenance-ci-$env:GITHUB_RUN_ID-home")
+          if (Test-Path -LiteralPath $outputRoot) { throw 'CI_OUTPUT_ROOT_COLLISION' }
+          New-Item -ItemType Directory -Path $outputRoot | Out-Null
+          "HARNESS_ROOT=$harnessRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CI_OUTPUT_ROOT=$outputRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run controlled Home maintenance matrix
+        id: home_harness
+        shell: pwsh
+        env:
+          BASELINE_ZIP: ${{ inputs.baseline_zip }}
+          ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+          REQUESTED_CASE: ${{ inputs.case }}
+          BROWSER_CHANNEL: ${{ inputs.browser_channel }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell.exe -NoProfile -NonInteractive -File "$env:GITHUB_WORKSPACE\scripts\test-cmd-maintenance.ps1" `
+            -Case $env:REQUESTED_CASE -Tier Home -BaselineZip $env:BASELINE_ZIP `
+            -OriginalBeta4Zip $env:ORIGINAL_BETA4_ZIP -CandidateZip $env:CANDIDATE_ZIP `
+            -CandidateBuildReceipt $env:BUILD_RECEIPT_PATH -ExpectedSourceRevision $env:GITHUB_SHA `
+            -EvidenceRoot $env:HARNESS_ROOT -BrowserChannel $env:BROWSER_CHANNEL
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Stage and verify sanitized Home receipts
+        if: always()
+        shell: pwsh
+        env:
+          TIER: Home
+          REQUESTED_CASE: ${{ inputs.case }}
+          HARNESS_EXIT: ${{ steps.home_harness.outputs.exit_code }}
+          MAINTENANCE_RECEIPT_PATH: ${{ steps.home_harness.outputs.maintenance_receipt_path }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+          $runId = Split-Path -Leaf $env:HARNESS_ROOT
+          if ($runId -notmatch '^cmd-[a-f0-9]{12}$') { throw 'HARNESS_RUN_ID_INVALID' }
+          $evidenceBase = Join-Path $env:GITHUB_WORKSPACE '.omo\evidence\windows-cmd-maintenance'
+          $publicRoot = Join-Path $evidenceBase $runId
+          $forbidden = '(?i)(password=|client_secret|access_token|bearer |begin private key|playwright|trace\.zip|\.sqlite|\.env|\.izcnabackup)'
+          if ([string]::IsNullOrWhiteSpace($env:MAINTENANCE_RECEIPT_PATH)) {
+              $failure = [ordered]@{ schema = 'iz-cna-maintenance-terminal-failure-v1'; requested_case = $env:REQUESTED_CASE; requested_tier = $env:TIER; status = 'failed'; reason = 'HARNESS_RECEIPT_UNAVAILABLE'; source_revision = $env:GITHUB_SHA; product_write_attempted = $false; started_utc = [DateTime]::UtcNow.ToString('o'); completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $failure | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'maintenance-run-receipt.json') -Encoding utf8
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              New-Item -ItemType Directory -Path (Join-Path $stageRoot 'cases') -Force | Out-Null
+              exit 1
+          }
+          $aggregatePath = [IO.Path]::GetFullPath($env:MAINTENANCE_RECEIPT_PATH)
+          $expectedAggregatePath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-run-receipt.json'))
+          $expectedTerminalPath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-terminal-failure.json'))
+          $receiptParent = [IO.Path]::GetFullPath((Split-Path -Parent $aggregatePath))
+          $receiptLeaf = Split-Path -Leaf $aggregatePath
+          $isWrapperFailure = $receiptParent.StartsWith([IO.Path]::GetFullPath($evidenceBase) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+              (Split-Path -Leaf $receiptParent) -cmatch '^cmd-failure-[a-f0-9]{12}$' -and $receiptLeaf -ceq 'maintenance-run-receipt.json'
+          if ($aggregatePath -cne $expectedAggregatePath -and $aggregatePath -cne $expectedTerminalPath -and -not $isWrapperFailure) { throw 'MAINTENANCE_RECEIPT_PATH_MISMATCH' }
+          if (-not (Test-Path -LiteralPath $aggregatePath -PathType Leaf)) { throw 'MAINTENANCE_AGGREGATE_MISSING' }
+          $aggregateItem = Get-Item -LiteralPath $aggregatePath -Force
+          if (($aggregateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $aggregateItem.Length -le 0 -or $aggregateItem.Length -gt 1048576) { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          try { $aggregate = Get-Content -LiteralPath $aggregatePath -Raw | ConvertFrom-Json }
+          catch { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          if ($aggregate.schema -ceq 'iz-cna-maintenance-terminal-failure-v1') {
+              $terminalKeys = @('schema', 'requested_case', 'requested_tier', 'status', 'reason', 'source_revision', 'product_write_attempted', 'started_utc', 'completed_utc')
+              if (@(Compare-Object @($aggregate.PSObject.Properties.Name | Sort-Object) @($terminalKeys | Sort-Object)).Count -ne 0 -or
+                  $aggregate.status -cne 'failed' -or $aggregate.requested_case -notmatch '^(All|[A-Za-z0-9_-]{1,32}|<invalid>)$' -or
+                  $aggregate.requested_tier -notin @('Component', 'Package', 'Home', 'PowerLoss') -or
+                  $aggregate.reason -notmatch '^[A-Z][A-Z0-9_]{0,63}$' -or
+                  ($null -ne $aggregate.source_revision -and $aggregate.source_revision -notmatch '^[a-f0-9]{40}$') -or
+                  $aggregate.product_write_attempted -isnot [bool]) {
+                  throw 'MAINTENANCE_TERMINAL_RECEIPT_INVALID'
+              }
+              $terminalContent = Get-Content -LiteralPath $aggregatePath -Raw
+              if ($terminalContent -match $forbidden) { throw 'UNSAFE_TERMINAL_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              exit 1
+          }
+          if ($aggregate.run_id -cne $runId -or $aggregate.requested_case -cne $env:REQUESTED_CASE -or
+              $aggregate.requested_tier -cne $env:TIER -or $aggregate.source_revision -cne $env:GITHUB_SHA) {
+              throw 'MAINTENANCE_AGGREGATE_IDENTITY_INVALID'
+          }
+          $contractModule = Join-Path $env:GITHUB_WORKSPACE 'scripts/tests/maintenance-harness-contracts.psm1'
+          Import-Module -Name $contractModule -Force -ErrorAction Stop
+          [void](Test-IzMaintenanceRunReceipt -Receipt $aggregate -ReceiptPath $aggregatePath)
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          $casesRoot = Join-Path $stageRoot 'cases'
+          New-Item -ItemType Directory -Path $casesRoot -Force | Out-Null
+          foreach ($caseId in @($aggregate.required_case_ids)) {
+              $safeId = [string]$caseId
+              if ($safeId -notmatch '^[BIURDAP][0-9]{2}$') { throw 'CASE_ID_INVALID' }
+              $source = Join-Path $publicRoot ('cases/' + $safeId.ToLowerInvariant() + '.json')
+              if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'CASE_RECEIPT_MISSING' }
+              $item = Get-Item -LiteralPath $source -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -le 0) { throw 'CASE_RECEIPT_INVALID' }
+              $content = Get-Content -LiteralPath $source -Raw
+              if ($content -match $forbidden) { throw 'UNSAFE_CASE_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $source -Destination (Join-Path $casesRoot ($safeId.ToLowerInvariant() + '.json'))
+          }
+          $aggregateContent = Get-Content -LiteralPath $aggregatePath -Raw
+          if ($aggregateContent -match $forbidden) { throw 'UNSAFE_AGGREGATE_CONTENT' }
+          Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+          $candidateHash = ''
+          if (-not [string]::IsNullOrWhiteSpace($env:CANDIDATE_ZIP) -and
+              (Test-Path -LiteralPath $env:CANDIDATE_ZIP -PathType Leaf)) {
+              $candidateHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:CANDIDATE_ZIP).Hash.ToLowerInvariant()
+          }
+          if ([string]::IsNullOrWhiteSpace($candidateHash) -and
+              -not [string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH) -and
+              (Test-Path -LiteralPath $env:BUILD_RECEIPT_PATH -PathType Leaf)) {
+              try { $candidateHash = [string]((Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json).zip_sha256) } catch { $candidateHash = '' }
+          }
+          if ($candidateHash -notmatch '^[a-f0-9]{64}$') {
+              if ($aggregate.status -ceq 'passed') { throw 'CANDIDATE_IDENTITY_MISSING' }
+              $candidateHash = 'unavailable'
+          }
+          $environment = [ordered]@{
+              schema = 'iz-cna-maintenance-ci-environment-v1'
+              tier = $env:TIER
+              os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption
+              privilege = 'recorded-by-runner-preflight'
+              candidate_zip_sha256 = $candidateHash
+              case_count = [int]$aggregate.counts.total
+              aggregate_status = [string]$aggregate.status
+              actual_home_edition = $true
+              actual_power_loss = $false
+              completed_utc = [DateTime]::UtcNow.ToString('o')
+          }
+          $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+          $harnessExit = 0
+          if (-not [string]::IsNullOrWhiteSpace($env:HARNESS_EXIT)) { $harnessExit = [int]$env:HARNESS_EXIT }
+          $finalExit = if ($harnessExit -ne 0) { $harnessExit } elseif ($aggregate.status -ceq 'failed') { 1 } elseif ($aggregate.status -ceq 'blocked') { 2 } else { 0 }
+          if ($finalExit -ne 0) { exit $finalExit }
+
+      - name: Upload sanitized Home receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-maintenance-home-receipts
+          path: |
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-home\maintenance-run-receipt.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-home\ci-environment.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-home\cases
+          if-no-files-found: error
+
+  powerloss_preflight:
+    name: Verify external PowerLoss infrastructure provisioning
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.qualification_tier == 'PowerLoss' }}
+    needs: component
+    runs-on: windows-2022
+    env:
+      BASELINE_ZIP: ${{ inputs.baseline_zip }}
+      ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+      CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+      BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+      VM_CONTROL_MANIFEST: ${{ inputs.vm_control_manifest }}
+    steps:
+      - name: Require explicit PowerLoss infrastructure
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ vars.IZ_CNA_POWERLOSS_INFRA_READY }}' -cne 'true') { throw 'BLOCKED_REQUIRED_RUNNER:POWERLOSS_INFRASTRUCTURE' }
+          foreach ($pair in @{
+              baseline_zip = $env:BASELINE_ZIP
+              original_beta4_zip = $env:ORIGINAL_BETA4_ZIP
+              candidate_zip = $env:CANDIDATE_ZIP
+              build_receipt = $env:BUILD_RECEIPT_PATH
+              vm_control_manifest = $env:VM_CONTROL_MANIFEST
+          }.GetEnumerator()) {
+              $name = [string]$pair.Key
+              $value = [string]$pair.Value
+              if ([string]::IsNullOrWhiteSpace($value)) { throw "BLOCKED_REQUIRED_INPUT:$name" }
+          }
+
+  powerloss:
+    name: Controlled external PowerLoss qualification
+    if: ${{ needs.component.result == 'success' && needs.powerloss_preflight.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.qualification_tier == 'PowerLoss' }}
+    needs: [component, powerloss_preflight]
+    runs-on: [self-hosted, windows, x64, disposable-powerloss-vm-control]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout harness only
+        uses: actions/checkout@v4
+
+      - name: Verify external control manifest
+        shell: pwsh
+        env:
+          BASELINE_ZIP: ${{ inputs.baseline_zip }}
+          ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+          VM_CONTROL_MANIFEST: ${{ inputs.vm_control_manifest }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in @($env:BASELINE_ZIP, $env:ORIGINAL_BETA4_ZIP, $env:CANDIDATE_ZIP, $env:BUILD_RECEIPT_PATH, $env:VM_CONTROL_MANIFEST)) {
+              if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'REQUIRED_POWERLOSS_INPUT_MISSING' }
+          }
+          $manifestText = Get-Content -LiteralPath $env:VM_CONTROL_MANIFEST -Raw
+          if ($manifestText -match '(?i)(password=|client_secret|access_token|bearer |private key)') { throw 'UNSAFE_VM_MANIFEST_CONTENT' }
+
+      - name: Prepare owned CI roots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+          New-Item -ItemType Directory -Path $qaParent -Force | Out-Null
+          $runId = 'cmd-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
+          $harnessRoot = Join-Path $qaParent $runId
+          if (Test-Path -LiteralPath $harnessRoot) { throw 'HARNESS_ROOT_COLLISION' }
+          $outputRoot = Join-Path $env:RUNNER_TEMP ("iz-cna-maintenance-ci-$env:GITHUB_RUN_ID-powerloss")
+          if (Test-Path -LiteralPath $outputRoot) { throw 'CI_OUTPUT_ROOT_COLLISION' }
+          New-Item -ItemType Directory -Path $outputRoot | Out-Null
+          "HARNESS_ROOT=$harnessRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CI_OUTPUT_ROOT=$outputRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run controlled PowerLoss case
+        id: powerloss_harness
+        shell: pwsh
+        env:
+          BASELINE_ZIP: ${{ inputs.baseline_zip }}
+          ORIGINAL_BETA4_ZIP: ${{ inputs.original_beta4_zip }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+          VM_CONTROL_MANIFEST: ${{ inputs.vm_control_manifest }}
+          REQUESTED_CASE: ${{ inputs.case }}
+          BROWSER_CHANNEL: ${{ inputs.browser_channel }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell.exe -NoProfile -NonInteractive -File "$env:GITHUB_WORKSPACE\scripts\test-cmd-maintenance.ps1" `
+            -Case $env:REQUESTED_CASE -Tier PowerLoss -BaselineZip $env:BASELINE_ZIP `
+            -OriginalBeta4Zip $env:ORIGINAL_BETA4_ZIP -CandidateZip $env:CANDIDATE_ZIP `
+            -CandidateBuildReceipt $env:BUILD_RECEIPT_PATH -ExpectedSourceRevision $env:GITHUB_SHA `
+            -EvidenceRoot $env:HARNESS_ROOT -BrowserChannel $env:BROWSER_CHANNEL `
+            -VmControlManifest $env:VM_CONTROL_MANIFEST
+          $code = $LASTEXITCODE
+          "exit_code=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($code -ne 0) { exit $code }
+
+      - name: Stage and verify sanitized PowerLoss receipts
+        if: always()
+        shell: pwsh
+        env:
+          TIER: PowerLoss
+          REQUESTED_CASE: ${{ inputs.case }}
+          HARNESS_EXIT: ${{ steps.powerloss_harness.outputs.exit_code }}
+          MAINTENANCE_RECEIPT_PATH: ${{ steps.powerloss_harness.outputs.maintenance_receipt_path }}
+          BUILD_RECEIPT_PATH: ${{ inputs.build_receipt }}
+          CANDIDATE_ZIP: ${{ inputs.candidate_zip }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+          $runId = Split-Path -Leaf $env:HARNESS_ROOT
+          if ($runId -notmatch '^cmd-[a-f0-9]{12}$') { throw 'HARNESS_RUN_ID_INVALID' }
+          $evidenceBase = Join-Path $env:GITHUB_WORKSPACE '.omo\evidence\windows-cmd-maintenance'
+          $publicRoot = Join-Path $evidenceBase $runId
+          $forbidden = '(?i)(password=|client_secret|access_token|bearer |begin private key|playwright|trace\.zip|\.sqlite|\.env|\.izcnabackup)'
+          if ([string]::IsNullOrWhiteSpace($env:MAINTENANCE_RECEIPT_PATH)) {
+              $failure = [ordered]@{ schema = 'iz-cna-maintenance-terminal-failure-v1'; requested_case = $env:REQUESTED_CASE; requested_tier = $env:TIER; status = 'failed'; reason = 'HARNESS_RECEIPT_UNAVAILABLE'; source_revision = $env:GITHUB_SHA; product_write_attempted = $false; started_utc = [DateTime]::UtcNow.ToString('o'); completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $failure | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'maintenance-run-receipt.json') -Encoding utf8
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              New-Item -ItemType Directory -Path (Join-Path $stageRoot 'cases') -Force | Out-Null
+              exit 1
+          }
+          $aggregatePath = [IO.Path]::GetFullPath($env:MAINTENANCE_RECEIPT_PATH)
+          $expectedAggregatePath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-run-receipt.json'))
+          $expectedTerminalPath = [IO.Path]::GetFullPath((Join-Path $publicRoot 'maintenance-terminal-failure.json'))
+          $receiptParent = [IO.Path]::GetFullPath((Split-Path -Parent $aggregatePath))
+          $receiptLeaf = Split-Path -Leaf $aggregatePath
+          $isWrapperFailure = $receiptParent.StartsWith([IO.Path]::GetFullPath($evidenceBase) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
+              (Split-Path -Leaf $receiptParent) -cmatch '^cmd-failure-[a-f0-9]{12}$' -and $receiptLeaf -ceq 'maintenance-run-receipt.json'
+          if ($aggregatePath -cne $expectedAggregatePath -and $aggregatePath -cne $expectedTerminalPath -and -not $isWrapperFailure) { throw 'MAINTENANCE_RECEIPT_PATH_MISMATCH' }
+          if (-not (Test-Path -LiteralPath $aggregatePath -PathType Leaf)) { throw 'MAINTENANCE_AGGREGATE_MISSING' }
+          $aggregateItem = Get-Item -LiteralPath $aggregatePath -Force
+          if (($aggregateItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $aggregateItem.Length -le 0 -or $aggregateItem.Length -gt 1048576) { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          try { $aggregate = Get-Content -LiteralPath $aggregatePath -Raw | ConvertFrom-Json }
+          catch { throw 'MAINTENANCE_AGGREGATE_INVALID' }
+          if ($aggregate.schema -ceq 'iz-cna-maintenance-terminal-failure-v1') {
+              $terminalKeys = @('schema', 'requested_case', 'requested_tier', 'status', 'reason', 'source_revision', 'product_write_attempted', 'started_utc', 'completed_utc')
+              if (@(Compare-Object @($aggregate.PSObject.Properties.Name | Sort-Object) @($terminalKeys | Sort-Object)).Count -ne 0 -or
+                  $aggregate.status -cne 'failed' -or $aggregate.requested_case -notmatch '^(All|[A-Za-z0-9_-]{1,32}|<invalid>)$' -or
+                  $aggregate.requested_tier -notin @('Component', 'Package', 'Home', 'PowerLoss') -or
+                  $aggregate.reason -notmatch '^[A-Z][A-Z0-9_]{0,63}$' -or
+                  ($null -ne $aggregate.source_revision -and $aggregate.source_revision -notmatch '^[a-f0-9]{40}$') -or
+                  $aggregate.product_write_attempted -isnot [bool]) {
+                  throw 'MAINTENANCE_TERMINAL_RECEIPT_INVALID'
+              }
+              $terminalContent = Get-Content -LiteralPath $aggregatePath -Raw
+              if ($terminalContent -match $forbidden) { throw 'UNSAFE_TERMINAL_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+              $environment = [ordered]@{ schema = 'iz-cna-maintenance-ci-environment-v1'; tier = $env:TIER; os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption; privilege = 'recorded-by-runner-preflight'; candidate_zip_sha256 = 'unavailable'; case_count = 0; aggregate_status = 'failed'; actual_home_edition = $false; actual_power_loss = $false; completed_utc = [DateTime]::UtcNow.ToString('o') }
+              $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+              exit 1
+          }
+          if ($aggregate.run_id -cne $runId -or $aggregate.requested_case -cne $env:REQUESTED_CASE -or
+              $aggregate.requested_tier -cne $env:TIER -or $aggregate.source_revision -cne $env:GITHUB_SHA) {
+              throw 'MAINTENANCE_AGGREGATE_IDENTITY_INVALID'
+          }
+          $contractModule = Join-Path $env:GITHUB_WORKSPACE 'scripts/tests/maintenance-harness-contracts.psm1'
+          Import-Module -Name $contractModule -Force -ErrorAction Stop
+          [void](Test-IzMaintenanceRunReceipt -Receipt $aggregate -ReceiptPath $aggregatePath)
+          $stageRoot = $env:CI_OUTPUT_ROOT
+          $casesRoot = Join-Path $stageRoot 'cases'
+          New-Item -ItemType Directory -Path $casesRoot -Force | Out-Null
+          foreach ($caseId in @($aggregate.required_case_ids)) {
+              $safeId = [string]$caseId
+              if ($safeId -notmatch '^[BIURDAP][0-9]{2}$') { throw 'CASE_ID_INVALID' }
+              $source = Join-Path $publicRoot ('cases/' + $safeId.ToLowerInvariant() + '.json')
+              if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'CASE_RECEIPT_MISSING' }
+              $item = Get-Item -LiteralPath $source -Force
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -le 0) { throw 'CASE_RECEIPT_INVALID' }
+              $content = Get-Content -LiteralPath $source -Raw
+              if ($content -match $forbidden) { throw 'UNSAFE_CASE_RECEIPT_CONTENT' }
+              Copy-Item -LiteralPath $source -Destination (Join-Path $casesRoot ($safeId.ToLowerInvariant() + '.json'))
+          }
+          $aggregateContent = Get-Content -LiteralPath $aggregatePath -Raw
+          if ($aggregateContent -match $forbidden) { throw 'UNSAFE_AGGREGATE_CONTENT' }
+          Copy-Item -LiteralPath $aggregatePath -Destination (Join-Path $stageRoot 'maintenance-run-receipt.json')
+          $candidateHash = ''
+          if (-not [string]::IsNullOrWhiteSpace($env:CANDIDATE_ZIP) -and
+              (Test-Path -LiteralPath $env:CANDIDATE_ZIP -PathType Leaf)) {
+              $candidateHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $env:CANDIDATE_ZIP).Hash.ToLowerInvariant()
+          }
+          if ([string]::IsNullOrWhiteSpace($candidateHash) -and
+              -not [string]::IsNullOrWhiteSpace($env:BUILD_RECEIPT_PATH) -and
+              (Test-Path -LiteralPath $env:BUILD_RECEIPT_PATH -PathType Leaf)) {
+              try { $candidateHash = [string]((Get-Content -LiteralPath $env:BUILD_RECEIPT_PATH -Raw | ConvertFrom-Json).zip_sha256) } catch { $candidateHash = '' }
+          }
+          if ($candidateHash -notmatch '^[a-f0-9]{64}$') {
+              if ($aggregate.status -ceq 'passed') { throw 'CANDIDATE_IDENTITY_MISSING' }
+              $candidateHash = 'unavailable'
+          }
+          $environment = [ordered]@{
+              schema = 'iz-cna-maintenance-ci-environment-v1'
+              tier = $env:TIER
+              os_edition = [string](Get-CimInstance Win32_OperatingSystem).Caption
+              privilege = 'recorded-by-runner-preflight'
+              candidate_zip_sha256 = $candidateHash
+              case_count = [int]$aggregate.counts.total
+              aggregate_status = [string]$aggregate.status
+              actual_home_edition = $false
+              actual_power_loss = $true
+              completed_utc = [DateTime]::UtcNow.ToString('o')
+          }
+          $environment | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageRoot 'ci-environment.json') -Encoding utf8
+          $harnessExit = 0
+          if (-not [string]::IsNullOrWhiteSpace($env:HARNESS_EXIT)) { $harnessExit = [int]$env:HARNESS_EXIT }
+          $finalExit = if ($harnessExit -ne 0) { $harnessExit } elseif ($aggregate.status -ceq 'failed') { 1 } elseif ($aggregate.status -ceq 'blocked') { 2 } else { 0 }
+          if ($finalExit -ne 0) { exit $finalExit }
+
+      - name: Upload sanitized PowerLoss receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-maintenance-powerloss-receipts
+          path: |
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-powerloss\maintenance-run-receipt.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-powerloss\ci-environment.json
+            ${{ runner.temp }}\iz-cna-maintenance-ci-${{ github.run_id }}-powerloss\cases
+          if-no-files-found: error

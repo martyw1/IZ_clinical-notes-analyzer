@@ -7,105 +7,119 @@ param(
     [switch]$NoPause
 )
 
+Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Security
-$LocalDataDir = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
+$script:ExitCode = 0
+$script:LockHandle = $null
+$script:Context = $null
 
-function Read-UInt32BigEndian([IO.Stream]$Stream) {
-    $bytes = New-Object byte[] 4
-    if ($Stream.Read($bytes, 0, 4) -ne 4) { throw 'Backup header is truncated.' }
-    if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($bytes) }
-    return [BitConverter]::ToUInt32($bytes, 0)
+function New-IzRestoreEntryPointError {
+    param([string]$Reason, [int]$Code = 20)
+    $exception = [InvalidOperationException]::new($Reason)
+    $exception.Data['iz_reason'] = $Reason
+    $exception.Data['iz_exit_code'] = $Code
+    return $exception
 }
 
-function Confirm-Restore {
+function Get-IzSafeRestoreReason {
+    param([Management.Automation.ErrorRecord]$Record)
+    if ($Record.Exception.Data.Contains('iz_reason')) { return [string]$Record.Exception.Data['iz_reason'] }
+    return 'RESTORE_FAILED'
+}
+
+function Get-IzRestoreRuntimeLayout {
+    $applicationRoot = Get-IzCanonicalPath -Path (Split-Path $PSScriptRoot -Parent)
+    $containerRoot = Get-IzCanonicalPath -Path (Split-Path $applicationRoot -Parent)
+    $runtimePath = Join-Path $applicationRoot 'runtime\IZClinicalNotesAnalyzer.exe'
+    $sourcePython = Join-Path $applicationRoot 'backend\.venv\Scripts\python.exe'
+    $sourceRuntime = Join-Path $applicationRoot 'backend\app\desktop_runtime.py'
+    $sourceVersion = Join-Path $applicationRoot 'VERSION.json'
+    $installedManifest = Join-Path $applicationRoot 'release-manifest.json'
+    $packageManifest = Join-Path $containerRoot 'release-manifest.json'
+    $matches = New-Object Collections.Generic.List[object]
+    if ((Test-Path -LiteralPath $sourcePython -PathType Leaf) -and (Test-Path -LiteralPath $sourceRuntime -PathType Leaf) -and (Test-Path -LiteralPath $sourceVersion -PathType Leaf)) {
+        $matches.Add([pscustomobject]@{ role = 'SourceTest'; package_root = $applicationRoot; manifest_root = $null })
+    }
+    if ((Test-Path -LiteralPath $runtimePath -PathType Leaf) -and (Test-Path -LiteralPath $packageManifest -PathType Leaf) -and (Split-Path $applicationRoot -Leaf) -eq 'app') {
+        $matches.Add([pscustomobject]@{ role = 'Package'; package_root = $containerRoot; manifest_root = $containerRoot })
+    }
+    if ((Test-Path -LiteralPath $runtimePath -PathType Leaf) -and (Test-Path -LiteralPath $installedManifest -PathType Leaf)) {
+        $matches.Add([pscustomobject]@{ role = 'Installed'; package_root = $null; manifest_root = $applicationRoot })
+    }
+    if ($matches.Count -ne 1) { throw (New-IzRestoreEntryPointError 'RESTORE_RUNTIME_LAYOUT_INVALID') }
+    $selected = $matches[0]
+    $manifest = if ($selected.manifest_root) { Read-IzReleaseManifest -PackageRoot $selected.manifest_root } else { $null }
+    return [pscustomobject]@{ role = [string]$selected.role; package_root = $selected.package_root; manifest = $manifest }
+}
+
+function Assert-IzExternalRestoreInput {
+    param([object]$Context, [string]$Path)
+    $candidate = Get-IzCanonicalPath -Path $Path
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw (New-IzRestoreEntryPointError 'BACKUP_FILE_MISSING') }
+    foreach ($root in @($Context.install_root, $Context.data_root, $Context.maintenance_root, $Context.package_root)) {
+        if (-not $root) { continue }
+        try {
+            [void](Assert-IzContainedPath -Path $candidate -Parent $root -AllowEqual)
+            throw (New-IzRestoreEntryPointError 'BACKUP_INPUT_OVERLAPS_PRODUCT_DATA')
+        } catch {
+            if (-not $_.Exception.Data.Contains('iz_reason') -or $_.Exception.Data['iz_reason'] -ne 'PATH_OUTSIDE_SCOPE') { throw }
+        }
+    }
+    return $candidate
+}
+
+function Confirm-IzRestore {
     if ($AssumeYes) { return $true }
     Write-Host ''
     Write-Host 'This will replace this Windows user''s current IZ Clinical Notes Analyzer local data with the encrypted backup.' -ForegroundColor Yellow
     return ((Read-Host 'Type RESTORE to continue').Trim() -eq 'RESTORE')
 }
 
-if (-not (Confirm-Restore)) { Write-Host 'Restore cancelled.'; exit 1 }
-$resolvedBackup = (Resolve-Path -LiteralPath $BackupPath).Path
-if (-not $NoStop) {
+function Invoke-IzStopForRestore {
+    if ($NoStop) { return }
     $stopScript = Join-Path $PSScriptRoot 'stop-windows-local.ps1'
-    if (Test-Path -LiteralPath $stopScript) { & $stopScript -NoRestartPrompt -NoPause }
+    if (-not (Test-Path -LiteralPath $stopScript -PathType Leaf)) { throw (New-IzRestoreEntryPointError 'RESTORE_STOP_HELPER_MISSING') }
+    & $stopScript -NoRestartPrompt -NoPause
+    if ($LASTEXITCODE -ne 0) { throw (New-IzRestoreEntryPointError 'RESTORE_STOP_FAILED') }
 }
 
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) "iz-cna-restore-$([Guid]::NewGuid().ToString('N'))"
-$rollbackDir = "$LocalDataDir.restore-rollback-$([Guid]::NewGuid().ToString('N'))"
+function Remove-IzResolvedRestoreTransaction {
+    if (-not $script:Context -or -not (Test-Path -LiteralPath $script:Context.transaction_root)) { return }
+    [void](Test-IzOwnedRootMarker -Context $script:Context -Path $script:Context.transaction_root -Role transaction -TransactionId ([Guid]$script:Context.transaction_id))
+    Remove-Item -LiteralPath $script:Context.transaction_root -Recurse -Force
+}
+
 try {
-    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-    $stream = [IO.File]::OpenRead($resolvedBackup)
-    try {
-        $magic = New-Object byte[] 8
-        if ($stream.Read($magic, 0, 8) -ne 8 -or [Text.Encoding]::ASCII.GetString($magic) -ne 'IZCNABK2') { throw 'Backup is not an IZ Clinical Notes Analyzer encrypted backup.' }
-        $headerLength = Read-UInt32BigEndian -Stream $stream
-        if ($headerLength -lt 2 -or $headerLength -gt 65536) { throw 'Backup header length is invalid.' }
-        $headerBytes = New-Object byte[] $headerLength
-        if ($stream.Read($headerBytes, 0, $headerLength) -ne $headerLength) { throw 'Backup header is truncated.' }
-        $header = [Text.Encoding]::UTF8.GetString($headerBytes) | ConvertFrom-Json
-        if ($header.format -ne 'IZCNABK2' -or $header.version -ne 2) { throw 'Backup format is unsupported.' }
-        $payloadLength = $stream.Length - 8 - 4 - $headerLength - 32
-        if ($payloadLength -le 0) { throw 'Backup payload is truncated.' }
-        $stream.Dispose()
-        $allWithoutTag = [IO.File]::ReadAllBytes($resolvedBackup)
-        $tag = New-Object byte[] 32
-        [Array]::Copy($allWithoutTag, $allWithoutTag.Length - 32, $tag, 0, 32)
-        $protectedKey = [Convert]::FromBase64String([string]$header.protected_key)
-        $rawKey = [Security.Cryptography.ProtectedData]::Unprotect($protectedKey, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
-        if ($rawKey.Length -ne 64) { throw 'Backup encryption key is invalid.' }
-        $macKey = New-Object byte[] 32; [Array]::Copy($rawKey, 32, $macKey, 0, 32)
-        $hmac = [Security.Cryptography.HMACSHA256]::new([byte[]]$macKey)
-        try { $expectedTag = $hmac.ComputeHash($allWithoutTag, 0, $allWithoutTag.Length - 32) } finally { $hmac.Dispose() }
-        $different = 0
-        for ($index = 0; $index -lt $tag.Length; $index++) { $different = $different -bor ($tag[$index] -bxor $expectedTag[$index]) }
-        if ($different -ne 0) { throw 'Backup authentication failed. Current local data was not changed.' }
-
-        $cipherStream = [IO.File]::OpenRead($resolvedBackup)
-        $cipherStream.Seek(8 + 4 + $headerLength, [IO.SeekOrigin]::Begin) | Out-Null
-        $cipherOnly = Join-Path $tempRoot 'cipher.bin'
-        $cipherOutput = [IO.File]::Open($cipherOnly, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        try {
-            $remaining = [int64]$payloadLength
-            $buffer = New-Object byte[] 65536
-            while ($remaining -gt 0) {
-                $read = $cipherStream.Read($buffer, 0, [Math]::Min($buffer.Length, $remaining))
-                if ($read -le 0) { throw 'Backup payload is truncated.' }
-                $cipherOutput.Write($buffer, 0, $read)
-                $remaining -= $read
-            }
-        } finally { $cipherOutput.Dispose(); $cipherStream.Dispose() }
-        $encKey = New-Object byte[] 32; [Array]::Copy($rawKey, 0, $encKey, 0, 32)
-        $aes = New-Object Security.Cryptography.AesManaged
-        $aes.KeySize = 256; $aes.Mode = [Security.Cryptography.CipherMode]::CBC; $aes.Padding = [Security.Cryptography.PaddingMode]::PKCS7
-        $aes.Key = $encKey; $aes.IV = [Convert]::FromBase64String([string]$header.iv)
-        $plainZip = Join-Path $tempRoot 'payload.zip'
-        $decryptor = $aes.CreateDecryptor()
-        $cipherInput = [IO.File]::OpenRead($cipherOnly)
-        $crypto = New-Object Security.Cryptography.CryptoStream($cipherInput, $decryptor, [Security.Cryptography.CryptoStreamMode]::Read)
-        $output = [IO.File]::Open($plainZip, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        try {
-            $crypto.CopyTo($output)
-        } finally { $output.Dispose(); $crypto.Dispose(); $cipherInput.Dispose(); $decryptor.Dispose(); $aes.Dispose() }
-        if ((Get-FileHash -LiteralPath $plainZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$header.plaintext_sha256) { throw 'Backup plaintext hash verification failed. Current local data was not changed.' }
-    } finally { if ($stream) { $stream.Dispose() } }
-
-    $extractRoot = Join-Path $tempRoot 'extract'
-    Expand-Archive -LiteralPath (Join-Path $tempRoot 'payload.zip') -DestinationPath $extractRoot -Force
-    $candidateData = Join-Path $extractRoot 'IZ Clinical Notes Analyzer'
-    if (-not (Test-Path -LiteralPath $candidateData) -or -not (Test-Path -LiteralPath (Join-Path $extractRoot 'backup-manifest.json'))) { throw 'Backup contents are incomplete. Current local data was not changed.' }
-    if (Test-Path -LiteralPath $LocalDataDir) { Move-Item -LiteralPath $LocalDataDir -Destination $rollbackDir }
-    try {
-        Move-Item -LiteralPath $candidateData -Destination $LocalDataDir
-    } catch {
-        if (Test-Path -LiteralPath $rollbackDir) { Move-Item -LiteralPath $rollbackDir -Destination $LocalDataDir }
-        throw
+    $commonModule = Join-Path $PSScriptRoot 'installer\maintenance-common.psm1'
+    $backupModule = Join-Path $PSScriptRoot 'installer\backup-verification.psm1'
+    if (-not (Test-Path -LiteralPath $commonModule -PathType Leaf) -or -not (Test-Path -LiteralPath $backupModule -PathType Leaf)) {
+        throw (New-IzRestoreEntryPointError 'RESTORE_HELPER_MISSING')
     }
-    if (Test-Path -LiteralPath $rollbackDir) { Remove-Item -LiteralPath $rollbackDir -Recurse -Force }
+    Import-Module $commonModule -Force
+    Import-Module $backupModule -Force
+    $layout = Get-IzRestoreRuntimeLayout
+    $transactionId = [Guid]::NewGuid()
+    $contextArguments = @{ TransactionId = $transactionId }
+    if ($layout.package_root) { $contextArguments.PackageRoot = [string]$layout.package_root }
+    $script:Context = Get-IzMaintenanceContext @contextArguments
+    $resolvedBackup = Assert-IzExternalRestoreInput -Context $script:Context -Path $BackupPath
+    if (-not (Confirm-IzRestore)) {
+        Write-Host 'Restore cancelled.'
+        $script:ExitCode = 10
+    } else {
+        Initialize-IzMaintenanceStorage -Context $script:Context | Out-Null
+        $script:LockHandle = Enter-IzMaintenanceLock -Context $script:Context -Action Restore -TransactionId $transactionId
+        Invoke-IzStopForRestore
+        [void](Restore-IzFullBackup -Context $script:Context -BackupPath $resolvedBackup -RuntimeRole $layout.role -Manifest $layout.manifest -Confirmed)
+        Remove-IzResolvedRestoreTransaction
+        Write-Host 'Encrypted backup restored and semantically verified for this Windows user.' -ForegroundColor Green
+    }
+} catch {
+    $reason = Get-IzSafeRestoreReason -Record $_
+    $script:ExitCode = if ($_.Exception.Data.Contains('iz_exit_code')) { [int]$_.Exception.Data['iz_exit_code'] } else { 20 }
+    Write-Error "Restore did not complete: $reason" -ErrorAction Continue
 } finally {
-    if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }
+    if ($script:LockHandle) { Exit-IzMaintenanceLock -LockHandle $script:LockHandle }
 }
 
-Write-Host 'Encrypted backup restored. Start IZ Clinical Notes Analyzer and confirm the local version/readiness status.' -ForegroundColor Green
-exit 0
+exit $script:ExitCode

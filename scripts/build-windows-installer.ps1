@@ -1,40 +1,39 @@
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
-    [switch]$SkipFrontendBuild
+    [switch]$SkipFrontendBuild,
+    [switch]$ValidationOnly
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Version = (Get-Content -LiteralPath (Join-Path $RootDir 'VERSION') -Raw).Trim()
+$VersionMetadata = [IO.File]::ReadAllText(
+    (Join-Path $RootDir 'VERSION.json'),
+    [Text.UTF8Encoding]::new($false, $true)
+) | ConvertFrom-Json -ErrorAction Stop
+$Build = [string]$VersionMetadata.build
+$ReleaseChannel = [string]$VersionMetadata.release_channel
+$InstallerRevision = 1
+$ProductId = 'r3.iz-clinical-notes-analyzer.desktop'
 $ReleaseRoot = Join-Path $RootDir 'dist\windows-release'
-$PackageName = "IZ-Clinical-Notes-Analyzer-v$Version"
-$PackageDir = Join-Path $ReleaseRoot $PackageName
-$AppDir = Join-Path $PackageDir 'app'
+$PackageName = "IZ-Clinical-Notes-Analyzer-v$Version-build-$Build-installer-r$InstallerRevision"
+$FinalPackageDir = Join-Path $ReleaseRoot $PackageName
+$FinalZipPath = Join-Path $ReleaseRoot "$PackageName.zip"
+$FinalReceiptPath = Join-Path $ReleaseRoot "$PackageName.build-receipt.json"
+$FinalGateEvidencePath = Join-Path $ReleaseRoot "$PackageName.build-gates.json"
+$LatestPathsFile = Join-Path $ReleaseRoot 'latest-release-paths.txt'
 $VenvDir = Join-Path $RootDir 'backend\.venv'
 $VenvPython = Join-Path $VenvDir 'Scripts\python.exe'
-$LatestPathsFile = Join-Path $ReleaseRoot 'latest-release-paths.txt'
 . (Join-Path $RootDir 'scripts\release-safety.ps1')
+Import-Module (Join-Path $RootDir 'scripts\installer\build-windows-package.psm1') -Force
 
-function Write-Step($Message) {
-    Write-Host "[setup] $Message"
-}
-
-function Write-Build($Message) {
-    Write-Host "[build] $Message"
-}
-
-function Write-Ok($Message) {
-    Write-Host "[ok] $Message" -ForegroundColor Green
-}
-
-function Write-Warn($Message) {
-    Write-Host "[warn] $Message" -ForegroundColor Yellow
-}
-
-function Write-Fail($Message) {
-    Write-Host "[fail] $Message" -ForegroundColor Red
-}
+function Write-Step($Message) { Write-Host "[setup] $Message" }
+function Write-Build($Message) { Write-Host "[build] $Message" }
+function Write-Ok($Message) { Write-Host "[ok] $Message" -ForegroundColor Green }
+function Write-Warn($Message) { Write-Host "[warn] $Message" -ForegroundColor Yellow }
+function Write-Fail($Message) { Write-Host "[fail] $Message" -ForegroundColor Red }
 
 function Get-NormalizedPath {
     param([string]$Path)
@@ -43,156 +42,119 @@ function Get-NormalizedPath {
 }
 
 function Assert-PathInside {
-    param(
-        [string]$Path,
-        [string]$Parent,
-        [string]$Label
-    )
+    param([string]$Path, [string]$Parent, [string]$Label)
     $normalizedPath = Get-NormalizedPath -Path $Path
     $normalizedParent = Get-NormalizedPath -Path $Parent
-    $comparison = [System.StringComparison]::OrdinalIgnoreCase
     $separator = [System.IO.Path]::DirectorySeparatorChar
-    if (-not $normalizedPath.StartsWith("$normalizedParent$separator", $comparison)) {
+    if (-not $normalizedPath.StartsWith("$normalizedParent$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "$Label must be inside $normalizedParent; resolved to $normalizedPath"
     }
 }
 
 function Get-RelativePathInside {
-    param(
-        [string]$Path,
-        [string]$Parent
-    )
+    param([string]$Path, [string]$Parent)
     $normalizedPath = Get-NormalizedPath -Path $Path
     $normalizedParent = Get-NormalizedPath -Path $Parent
     $separator = [System.IO.Path]::DirectorySeparatorChar
-    $comparison = [System.StringComparison]::OrdinalIgnoreCase
-    if (-not $normalizedPath.StartsWith("$normalizedParent$separator", $comparison)) {
+    if (-not $normalizedPath.StartsWith("$normalizedParent$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Path $normalizedPath is not inside $normalizedParent"
     }
     return $normalizedPath.Substring($normalizedParent.Length + 1)
 }
 
 function Remove-GeneratedDirectory {
-    param(
-        [string]$Path,
-        [string]$Parent,
-        [string]$Label
-    )
+    param([string]$Path, [string]$Parent, [string]$Label)
     Assert-PathInside -Path $Path -Parent $Parent -Label $Label
     if (-not (Test-Path -LiteralPath $Path)) { return }
-
-    $emptyDir = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-empty-$([System.Guid]::NewGuid().ToString('N'))"
-    New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
+    if ((Get-Item -LiteralPath $Path).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        throw "$Label cannot be a reparse point."
+    }
+    $emptyDir = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-empty-$([Guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType Directory -Path $emptyDir | Out-Null
     try {
         robocopy $emptyDir $Path /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -gt 7) { throw "cleanup mirror failed with robocopy exit code $LASTEXITCODE" }
     } finally {
         Remove-Item -LiteralPath $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-
     Remove-Item -LiteralPath $Path -Recurse -Force
+    $global:LASTEXITCODE = 0
 }
 
 function Copy-RepoContent {
     param([string]$Destination)
     $excludeDirs = @(
-        (Join-Path $RootDir '.git'),
-        (Join-Path $RootDir '.codegraph'),
-        (Join-Path $RootDir '.omo'),
-        (Join-Path $RootDir '.codex'),
-        (Join-Path $RootDir '.github'),
-        (Join-Path $RootDir '.venv'),
-        (Join-Path $RootDir 'backend\.venv'),
-        (Join-Path $RootDir 'frontend\node_modules'),
-        (Join-Path $RootDir 'node_modules'),
-        (Join-Path $RootDir 'pip'),
-        (Join-Path $RootDir 'dist'),
-        (Join-Path $RootDir 'output'),
-        (Join-Path $RootDir 'black-hole-lab'),
-        (Join-Path $RootDir 'scripts\admin_recovery'),
-        (Join-Path $RootDir 'uploads'),
-        (Join-Path $RootDir 'exports'),
-        (Join-Path $RootDir 'logs'),
-        (Join-Path $RootDir 'api-connectivity-reports'),
-        (Join-Path $RootDir 'alleva-api-test-logs'),
-        (Join-Path $RootDir '.pytest_cache'),
-        (Join-Path $RootDir '.mypy_cache'),
-        (Join-Path $RootDir '.ruff_cache'),
-        (Join-Path $RootDir 'htmlcov'),
-        (Join-Path $RootDir 'coverage'),
-        (Join-Path $RootDir 'frontend\coverage'),
-        (Join-Path $RootDir 'frontend\test-results'),
-        (Join-Path $RootDir 'frontend\playwright-report'),
-        (Join-Path $RootDir 'frontend\.agents'),
-        (Join-Path $RootDir 'depricated'),
-        (Join-Path $RootDir 'deprecated'),
-        (Join-Path $RootDir 'depriceated'),
+        (Join-Path $RootDir '.git'), (Join-Path $RootDir '.codegraph'), (Join-Path $RootDir '.omo'),
+        (Join-Path $RootDir '.codex'), (Join-Path $RootDir '.github'), (Join-Path $RootDir '.venv'),
+        (Join-Path $RootDir 'backend\.venv'), (Join-Path $RootDir 'backend\tests'),
+        (Join-Path $RootDir 'frontend\node_modules'), (Join-Path $RootDir 'frontend\src'),
+        (Join-Path $RootDir 'frontend\e2e'), (Join-Path $RootDir 'node_modules'),
+        (Join-Path $RootDir 'pip'), (Join-Path $RootDir 'dist'), (Join-Path $RootDir 'output'),
+        (Join-Path $RootDir 'black-hole-lab'), (Join-Path $RootDir 'scripts\admin_recovery'),
+        (Join-Path $RootDir 'scripts\installer'), (Join-Path $RootDir 'scripts\tests'),
+        (Join-Path $RootDir 'uploads'), (Join-Path $RootDir 'exports'), (Join-Path $RootDir 'logs'),
+        (Join-Path $RootDir 'api-connectivity-reports'), (Join-Path $RootDir 'alleva-api-test-logs'),
+        (Join-Path $RootDir '.pytest_cache'), (Join-Path $RootDir '.mypy_cache'),
+        (Join-Path $RootDir '.ruff_cache'), (Join-Path $RootDir 'htmlcov'),
+        (Join-Path $RootDir 'coverage'), (Join-Path $RootDir 'frontend\coverage'),
+        (Join-Path $RootDir 'frontend\test-results'), (Join-Path $RootDir 'frontend\playwright-report'),
+        (Join-Path $RootDir 'frontend\.agents'), (Join-Path $RootDir 'depricated'),
+        (Join-Path $RootDir 'deprecated'), (Join-Path $RootDir 'depriceated'),
         (Join-Path $RootDir 'walkthroughs (2026-03-04)'),
         (Join-Path $RootDir 'video-extract (2026-06-05)'),
         (Join-Path $RootDir 'example-treatment-plans'),
-        '__pycache__',
-        '.codegraph',
-        '.omo',
-        '.codex',
-        '.github',
-        '.agents',
-        'node_modules',
-        'pip',
-        '.pytest_cache',
-        '.tmp',
-        '.cache',
-        'test-results',
-        'playwright-report',
-        '.mypy_cache',
-        '.ruff_cache',
-        'htmlcov',
-        'logs',
-        'uploads',
-        'exports',
-        'reports',
-        'venv',
-        'api-connectivity-reports',
-        'alleva-api-test-logs'
+        '__pycache__', '.codegraph', '.omo', '.codex', '.github', '.agents', 'node_modules',
+        'pip', '.pytest_cache', '.tmp', '.cache', 'test-results', 'playwright-report',
+        '.mypy_cache', '.ruff_cache', 'htmlcov', 'coverage', 'logs', 'uploads', 'exports',
+        'reports', 'venv', 'api-connectivity-reports', 'alleva-api-test-logs'
     )
     $excludeFiles = @(
-        '.git',
-        '.env',
-        '.env.*',
-        '*.local.*',
-        '*.local-*',
-        '.alleva.local.ps1',
-        'App Credentials Info.md',
-        'Test-AllevaApi.ps1',
-        '*credential*',
-        '*secret*',
-        '*token*',
-        '*.sqlite',
-        '*.sqlite3',
-        '*.db',
-        '*.izcnabackup',
-        '*.log',
-        '*.tmp',
-        '*.bak',
-        '*.pyc',
-        '.debug-journal.md',
-        'smoke-test-*.md'
+        '.git', '.env', '.env.*', '*.local.*', '*.local-*', '.alleva.local.ps1',
+        'App Credentials Info.md', 'Test-AllevaApi.ps1', '*credential*', '*secret*', '*token*',
+        '*.sqlite', '*.sqlite3', '*.db', '*.izcnabackup', '*.log', '*.tmp', '*.bak', '*.pyc',
+        '.debug-journal.md', 'smoke-test-*.md', 'test-*.md', 'test-*.ps1', 'test-*.mjs', 'test_*.py',
+        '*.test.*', '*.spec.*', '*controller*', 'Build-IZ-Windows-Installer.cmd',
+        'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd', 'complete-uninstall-local-data.ps1'
     )
-    robocopy $RootDir $Destination /MIR /XD $excludeDirs /XF $excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
+    robocopy $RootDir $Destination /MIR /XJ /XD $excludeDirs /XF $excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
+    $global:LASTEXITCODE = 0
 }
 
 function Copy-SafeDataTree {
-    param(
-        [string]$Source,
-        [string]$Destination
-    )
+    param([string]$Source, [string]$Destination)
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Recurse -Force) {
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "Safe data source contains a reparse point: $($item.FullName)"
+        }
+    }
     foreach ($file in Get-ChildItem -LiteralPath $Source -Recurse -File) {
         $relativePath = Get-RelativePathInside -Path $file.FullName -Parent $Source
         if (Get-ForbiddenReleaseCategory -RelativePath $relativePath -Distribution) { continue }
         $destinationPath = Join-Path $Destination $relativePath
         New-Item -ItemType Directory -Path (Split-Path $destinationPath -Parent) -Force | Out-Null
-        Copy-Item -LiteralPath $file.FullName -Destination $destinationPath -Force
+        Copy-Item -LiteralPath $file.FullName -Destination $destinationPath
+    }
+}
+
+function Copy-ApplicationMaintenanceHelpers {
+    param([string]$TargetAppDirectory)
+    $sourceRoot = Join-Path $RootDir 'scripts\installer'
+    $targetRoot = Join-Path $TargetAppDirectory 'scripts\installer'
+    $helperNames = @(
+        'backup-verification.psm1', 'maintenance-common.psm1', 'maintenance-contracts.psm1',
+        'maintenance-paths.psm1', 'maintenance-version.psm1', 'maintenance-lock.psm1',
+        'maintenance-journal.psm1', 'maintenance-runtime.psm1'
+    )
+    foreach ($name in $helperNames) {
+        if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $name) -PathType Leaf)) {
+            throw "Required application maintenance helper is missing: $name"
+        }
+    }
+    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+    foreach ($name in $helperNames) {
+        Copy-Item -LiteralPath (Join-Path $sourceRoot $name) -Destination (Join-Path $targetRoot $name)
     }
 }
 
@@ -202,7 +164,6 @@ function Find-Python {
         (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe')
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
-
     foreach ($candidate in $candidates) {
         try {
             $versionText = & $candidate -c "import sys; print('{}.{}.{}'.format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))" 2>$null
@@ -213,170 +174,192 @@ function Find-Python {
 }
 
 function Find-Npm {
-    $commands = @(
+    $commands = @(@(
         (Get-Command npm.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),
         (Get-Command npm.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue)
-    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) })
     if ($commands.Count -gt 0) { return $commands | Select-Object -First 1 }
-
     $wingetPackageRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
     if (Test-Path -LiteralPath $wingetPackageRoot) {
-        $wingetNpm = Get-ChildItem -Path $wingetPackageRoot -Recurse -Filter npm.cmd -ErrorAction SilentlyContinue |
+        return Get-ChildItem -Path $wingetPackageRoot -Recurse -Filter npm.cmd -ErrorAction SilentlyContinue |
             Select-Object -First 1 -ExpandProperty FullName
-        if ($wingetNpm -and (Test-Path -LiteralPath $wingetNpm)) { return $wingetNpm }
     }
     return $null
 }
 
-function Invoke-CheckedCommand {
-    param(
-        [scriptblock]$Command,
-        [string]$FailureMessage
-    )
-    & $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage Exit code: $LASTEXITCODE."
+function Invoke-LoggedCommand {
+    param([scriptblock]$Command, [string]$FailureMessage, [string]$LogPath, [switch]$Append)
+    $logParent = Split-Path $LogPath -Parent
+    if (-not (Test-Path -LiteralPath $logParent)) { New-Item -ItemType Directory -Path $logParent -Force | Out-Null }
+    if (-not $Append) { [System.IO.File]::WriteAllText($LogPath, '', [System.Text.UTF8Encoding]::new($false)) }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 wraps native stderr as NativeCommandError. The
+        # native exit code remains the build gate; a scriptblock throw still terminates.
+        $ErrorActionPreference = 'Continue'
+        & $Command *>&1 | Tee-Object -FilePath $LogPath -Append | ForEach-Object { Write-Host $_ }
+        $exitCode = [int]$LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) { throw "$FailureMessage Exit code: $exitCode." }
+    return [pscustomobject][ordered]@{
+        exit_code = 0
+        log_length = [long](Get-Item -LiteralPath $LogPath).Length
+        log_sha256 = Get-IzFileSha256 -Path $LogPath
     }
 }
 
 function Ensure-BackendBuildEnvironment {
+    param([string]$LogPath)
     $runtimeRequirements = Join-Path $RootDir 'backend\requirements-windows-local.txt'
-    if (-not (Test-Path -LiteralPath $runtimeRequirements)) {
-        $runtimeRequirements = Join-Path $RootDir 'backend\requirements.txt'
-    }
+    if (-not (Test-Path -LiteralPath $runtimeRequirements)) { $runtimeRequirements = Join-Path $RootDir 'backend\requirements.txt' }
     $buildRequirements = Join-Path $RootDir 'backend\requirements-build.txt'
-    if (-not (Test-Path -LiteralPath $runtimeRequirements)) {
-        throw "Backend runtime requirements file was not found. Expected backend\requirements-windows-local.txt or backend\requirements.txt."
+    if (-not (Test-Path -LiteralPath $runtimeRequirements) -or -not (Test-Path -LiteralPath $buildRequirements)) {
+        throw 'Backend runtime or build requirements file is missing.'
     }
-    if (-not (Test-Path -LiteralPath $buildRequirements)) {
-        throw "Backend build/test requirements file was not found at backend\requirements-build.txt."
-    }
-
+    [System.IO.File]::WriteAllText($LogPath, '', [System.Text.UTF8Encoding]::new($false))
     if (-not (Test-Path -LiteralPath $VenvPython)) {
         $python = Find-Python
-        if (-not $python) {
-            throw "Python 3.11 or newer was not found. Install Python 3.12 from https://www.python.org/downloads/windows/ and check 'Add python.exe to PATH', then double-click Build-IZ-Windows-Installer.cmd again."
-        }
+        if (-not $python) { throw 'Python 3.11 or newer was not found.' }
         Write-Step 'Creating backend environment...'
-        Invoke-CheckedCommand -Command { & $python -m venv $VenvDir } -FailureMessage 'Could not create backend\.venv.'
+        $null = Invoke-LoggedCommand -Command { & $python -m venv $VenvDir } -FailureMessage 'Could not create backend\.venv.' -LogPath $LogPath -Append
     }
-
     Write-Step 'Installing backend runtime packages...'
-    Invoke-CheckedCommand -Command { & $VenvPython -m pip install -r $runtimeRequirements } -FailureMessage 'Backend runtime dependency installation failed.'
+    $null = Invoke-LoggedCommand -Command { & $VenvPython -m pip install -r $runtimeRequirements } -FailureMessage 'Backend runtime dependency installation failed.' -LogPath $LogPath -Append
+    Write-Step 'Installing backend build/test packages...'
+    $null = Invoke-LoggedCommand -Command { & $VenvPython -m pip install -r $buildRequirements } -FailureMessage 'Backend build/test dependency installation failed.' -LogPath $LogPath -Append
+    $null = Invoke-LoggedCommand -Command { & $VenvPython -m pytest --version } -FailureMessage 'pytest is unavailable.' -LogPath $LogPath -Append
+    Write-Ok 'Backend build environment is ready.'
+}
 
-    Write-Step 'Installing backend test packages...'
-    Invoke-CheckedCommand -Command { & $VenvPython -m pip install -r $buildRequirements } -FailureMessage 'Backend test dependency installation failed.'
-
-    Write-Step 'Verifying pytest is available...'
-    Invoke-CheckedCommand -Command { & $VenvPython -m pytest --version } -FailureMessage 'pytest is still unavailable after installing backend test packages.'
-    Write-Ok 'Backend test runner is available.'
+function Invoke-InBuildQaEnvironment {
+    param([string]$QaRoot, [scriptblock]$Action)
+    $saved = @{}
+    foreach ($name in @('LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'IZ_CNA_LOCAL_APP_DATA_DIR', 'IZ_CNA_ENV_FILE', 'PSModuleAnalysisCachePath')) {
+        $item = Get-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        $saved[$name] = if ($null -eq $item) { $null } else { [string]$item.Value }
+    }
+    $localAppData = Join-Path $QaRoot 'LocalAppData'
+    $appData = Join-Path $QaRoot 'AppData'
+    $userProfile = Join-Path $QaRoot 'UserProfile'
+    $appLocalData = Join-Path $localAppData 'IZ Clinical Notes Analyzer'
+    $moduleCache = Join-Path $QaRoot 'PowerShell\ModuleAnalysisCache'
+    New-Item -ItemType Directory -Path $localAppData, $appData, $userProfile, $appLocalData, (Split-Path $moduleCache -Parent) -Force | Out-Null
+    try {
+        $env:LOCALAPPDATA = $localAppData
+        $env:APPDATA = $appData
+        $env:USERPROFILE = $userProfile
+        $env:IZ_CNA_LOCAL_APP_DATA_DIR = $appLocalData
+        $env:IZ_CNA_ENV_FILE = Join-Path $appLocalData '.env'
+        $env:PSModuleAnalysisCachePath = $moduleCache
+        & $Action
+    } finally {
+        foreach ($name in $saved.Keys) {
+            if ($null -eq $saved[$name]) { Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue }
+            else { Set-Item -LiteralPath "Env:$name" -Value $saved[$name] }
+        }
+    }
 }
 
 function Invoke-BackendTests {
+    param([string]$LogPath, [string]$QaRoot)
     if ($SkipTests) {
-        Write-Warn 'Backend tests skipped because -SkipTests was provided.'
-        return
+        [System.IO.File]::WriteAllText($LogPath, 'validation-only: backend tests skipped', [System.Text.UTF8Encoding]::new($false))
+        return [pscustomobject]@{ exit_code = 0; status = 'skipped'; log_length = (Get-Item $LogPath).Length; log_sha256 = Get-IzFileSha256 $LogPath }
     }
     Write-Step 'Running backend tests...'
-    $previousEnvFile = $env:IZ_CNA_ENV_FILE
-    try {
+    $observation = Invoke-InBuildQaEnvironment -QaRoot $QaRoot -Action {
         Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
-        $env:PYTHONPATH = Join-Path $RootDir 'backend'
-        Invoke-CheckedCommand -Command { & $VenvPython -m pytest (Join-Path $RootDir 'backend\tests') -q } -FailureMessage 'Backend tests failed.'
-    } finally {
-        if ($null -eq $previousEnvFile) {
-            Remove-Item Env:\IZ_CNA_ENV_FILE -ErrorAction SilentlyContinue
-        } else {
-            $env:IZ_CNA_ENV_FILE = $previousEnvFile
+        $previousPythonPath = $env:PYTHONPATH
+        try {
+            $env:PYTHONPATH = Join-Path $RootDir 'backend'
+            Invoke-LoggedCommand -Command { & $VenvPython -m pytest (Join-Path $RootDir 'backend\tests') -q } -FailureMessage 'Backend tests failed.' -LogPath $LogPath
+        } finally {
+            if ($null -eq $previousPythonPath) { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue }
+            else { $env:PYTHONPATH = $previousPythonPath }
         }
     }
+    $observation | Add-Member -NotePropertyName status -NotePropertyValue 'passed'
     Write-Ok 'Backend tests passed.'
+    return $observation
 }
 
 function Assert-FrontendDist {
     $distDir = Join-Path $RootDir 'frontend\dist'
     $indexFile = Join-Path $distDir 'index.html'
     $assetsDir = Join-Path $distDir 'assets'
-    if (-not (Test-Path -LiteralPath $indexFile)) {
-        throw "The browser app build is missing frontend\dist\index.html. Install Node.js LTS and rerun the build."
+    if (-not (Test-Path -LiteralPath $indexFile -PathType Leaf)) { throw 'frontend\dist\index.html is missing.' }
+    $assets = @(Get-ChildItem -LiteralPath $assetsDir -Recurse -File -ErrorAction SilentlyContinue)
+    if (@($assets | Where-Object Extension -eq '.js').Count -eq 0 -or @($assets | Where-Object Extension -eq '.css').Count -eq 0) {
+        throw 'frontend\dist does not contain JavaScript and CSS assets.'
     }
-    if (-not (Test-Path -LiteralPath $assetsDir)) {
-        throw "The browser app build is missing frontend\dist\assets. Run the normal build without -SkipFrontendBuild."
-    }
-    $assetFiles = @(Get-ChildItem -LiteralPath $assetsDir -Recurse -File -ErrorAction SilentlyContinue)
-    $jsAssets = @($assetFiles | Where-Object { $_.Extension -eq '.js' -and $_.Length -gt 0 })
-    $cssAssets = @($assetFiles | Where-Object { $_.Extension -eq '.css' -and $_.Length -gt 0 })
-    if ($jsAssets.Count -eq 0) {
-        throw "The browser app build does not contain a JavaScript asset under frontend\dist\assets."
-    }
-    if ($cssAssets.Count -eq 0) {
-        throw "The browser app build does not contain a CSS asset under frontend\dist\assets."
-    }
-    $indexText = Get-Content -LiteralPath $indexFile -Raw
-    if ($indexText -notmatch '/assets/.+\.js') {
-        throw "frontend\dist\index.html does not reference a built JavaScript asset."
-    }
+    if ((Get-Content -LiteralPath $indexFile -Raw) -notmatch '/assets/.+\.js') { throw 'frontend\dist\index.html does not reference a JavaScript asset.' }
 }
 
 function Invoke-FrontendBuild {
+    param([string]$TestLogPath, [string]$BuildLogPath)
     if ($SkipFrontendBuild) {
-        Write-Step 'Checking existing browser app build...'
         Assert-FrontendDist
-        Write-Ok 'Existing frontend build is valid.'
-        return
+        [System.IO.File]::WriteAllText($BuildLogPath, 'validation-only: existing frontend build inspected', [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($TestLogPath, 'validation-only: frontend tests skipped with frontend build', [System.Text.UTF8Encoding]::new($false))
+        return [pscustomobject]@{
+            tests = [pscustomobject]@{ exit_code = 0; status = 'skipped'; log_length = (Get-Item $TestLogPath).Length; log_sha256 = Get-IzFileSha256 $TestLogPath }
+            build = [pscustomobject]@{ exit_code = 0; status = 'skipped_existing'; log_length = (Get-Item $BuildLogPath).Length; log_sha256 = Get-IzFileSha256 $BuildLogPath }
+        }
     }
-
     $npm = Find-Npm
-    if (-not $npm) {
-        throw "Node.js/npm was not found. Install Node.js LTS for Windows, then double-click Build-IZ-Windows-Installer.cmd again. Suggested command for advanced users: winget install OpenJS.NodeJS.LTS --scope user --accept-package-agreements --accept-source-agreements"
-    }
-
+    if (-not $npm) { throw 'Node.js/npm was not found.' }
+    $previousPath = $env:PATH
     $env:PATH = "$(Split-Path $npm -Parent);$env:PATH"
     Push-Location (Join-Path $RootDir 'frontend')
     try {
+        [System.IO.File]::WriteAllText($BuildLogPath, '', [System.Text.UTF8Encoding]::new($false))
         if (Test-Path -LiteralPath (Join-Path $RootDir 'frontend\package-lock.json')) {
-            Write-Step 'Installing frontend dependencies with npm ci...'
-            Invoke-CheckedCommand -Command { & $npm ci } -FailureMessage 'npm ci failed while installing frontend dependencies.'
+            $null = Invoke-LoggedCommand -Command { & $npm ci } -FailureMessage 'npm ci failed.' -LogPath $BuildLogPath -Append
         } else {
-            Write-Step 'Installing frontend dependencies with npm install...'
-            Invoke-CheckedCommand -Command { & $npm install } -FailureMessage 'npm install failed while installing frontend dependencies.'
+            $null = Invoke-LoggedCommand -Command { & $npm install } -FailureMessage 'npm install failed.' -LogPath $BuildLogPath -Append
         }
-
         if ($SkipTests) {
-            Write-Warn 'Frontend tests skipped because -SkipTests was provided.'
+            [System.IO.File]::WriteAllText($TestLogPath, 'validation-only: frontend tests skipped', [System.Text.UTF8Encoding]::new($false))
+            $testObservation = [pscustomobject]@{ exit_code = 0; status = 'skipped'; log_length = (Get-Item $TestLogPath).Length; log_sha256 = Get-IzFileSha256 $TestLogPath }
         } else {
-            Write-Step 'Running frontend tests...'
-            Invoke-CheckedCommand -Command { & $npm run test -- --run } -FailureMessage 'Frontend tests failed.'
-            Write-Ok 'Frontend tests passed.'
+            $testObservation = Invoke-LoggedCommand -Command { & $npm run test -- --run } -FailureMessage 'Frontend tests failed.' -LogPath $TestLogPath
+            $testObservation | Add-Member -NotePropertyName status -NotePropertyValue 'passed'
         }
-
-        Write-Step 'Building browser app...'
-        Invoke-CheckedCommand -Command { & $npm run build } -FailureMessage 'Frontend build failed.'
+        $buildObservation = Invoke-LoggedCommand -Command { & $npm run build } -FailureMessage 'Frontend build failed.' -LogPath $BuildLogPath -Append
+        $buildObservation | Add-Member -NotePropertyName status -NotePropertyValue 'passed'
     } finally {
         Pop-Location
+        $env:PATH = $previousPath
     }
     Assert-FrontendDist
-    Write-Ok 'Frontend build complete.'
+    Write-Ok 'Frontend tests/build complete.'
+    return [pscustomobject]@{ tests = $testObservation; build = $buildObservation }
 }
 
 function Build-DesktopRuntime {
-    param([string]$TargetPackageDir)
+    param([string]$TargetPackageDir, [string]$LogPath)
     $runtimeDir = Join-Path $TargetPackageDir 'app\runtime'
-    $runtimeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-runtime-$([System.Guid]::NewGuid().ToString('N'))"
+    $runtimeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-runtime-$([Guid]::NewGuid().ToString('N'))"
     $runtimeFrontendDir = Join-Path $runtimeBuildRoot 'data\frontend-dist'
     $runtimeConfigDir = Join-Path $runtimeBuildRoot 'data\config'
     $runtimeVersionFile = Join-Path $runtimeBuildRoot 'data\VERSION.json'
     $entryPoint = Join-Path $RootDir 'backend\app\desktop_runtime.py'
-    if (-not (Test-Path -LiteralPath $entryPoint)) { throw "Desktop runtime entry point is missing: $entryPoint" }
+    if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw "Desktop runtime entry point is missing: $entryPoint" }
     $versionFile = Join-Path $RootDir 'VERSION.json'
-    if (-not (Test-Path -LiteralPath $versionFile)) { throw "Version metadata is missing: $versionFile" }
+    if (-not (Test-Path -LiteralPath $versionFile -PathType Leaf)) { throw "Version metadata is missing: $versionFile" }
+    $passlibHookDirectory = Join-Path $RootDir 'scripts\installer\pyinstaller-hooks'
+    if (-not (Test-Path -LiteralPath (Join-Path $passlibHookDirectory 'hook-passlib.py') -PathType Leaf)) {
+        throw 'The filtered PyInstaller passlib hook is missing.'
+    }
     New-Item -ItemType Directory -Path $runtimeDir, $runtimeBuildRoot -Force | Out-Null
     try {
         Copy-SafeDataTree -Source (Join-Path $RootDir 'frontend\dist') -Destination $runtimeFrontendDir
         Copy-SafeDataTree -Source (Join-Path $RootDir 'config') -Destination $runtimeConfigDir
         Copy-Item -LiteralPath $versionFile -Destination $runtimeVersionFile -Force
         Write-Build 'Bundling the self-contained Windows desktop runtime...'
-        Invoke-CheckedCommand -Command {
+        $null = Invoke-LoggedCommand -Command {
             & $VenvPython -m PyInstaller --noconfirm --clean --onefile --noconsole --name IZClinicalNotesAnalyzer `
                 --paths (Join-Path $RootDir 'backend') `
                 --add-data "$runtimeFrontendDir;app\static" `
@@ -384,34 +367,44 @@ function Build-DesktopRuntime {
                 --add-data "$runtimeVersionFile;." `
                 --collect-submodules app `
                 --hidden-import app.desktop_main `
-                --collect-all passlib `
+                --additional-hooks-dir $passlibHookDirectory `
+                --exclude-module passlib.tests `
+                --exclude-module pytest `
+                --exclude-module _pytest `
                 --distpath $runtimeDir `
                 --workpath (Join-Path $runtimeBuildRoot 'work') `
                 --specpath (Join-Path $runtimeBuildRoot 'spec') `
                 $entryPoint
-        } -FailureMessage 'Bundled Windows runtime build failed.'
+        } -FailureMessage 'Bundled Windows runtime build failed.' -LogPath $LogPath
     } finally {
         if (Test-Path -LiteralPath $runtimeBuildRoot) { Remove-Item -LiteralPath $runtimeBuildRoot -Recurse -Force }
     }
     $runtimeExe = Join-Path $runtimeDir 'IZClinicalNotesAnalyzer.exe'
-    if (-not (Test-Path -LiteralPath $runtimeExe)) { throw 'Bundled Windows runtime was not produced.' }
+    if (-not (Test-Path -LiteralPath $runtimeExe -PathType Leaf)) { throw 'Bundled Windows runtime was not produced.' }
     Write-Ok 'Self-contained Windows desktop runtime is present.'
+    return $runtimeExe
+}
+
+function Write-InstallerFiles {
+    param([string]$TargetPackageDir, [object]$LegacyProgramInventory)
+    return Write-IzPackageInstallerFiles `
+        -RepositoryRoot $RootDir `
+        -PackageRoot $TargetPackageDir `
+        -LegacyProgramInventory $LegacyProgramInventory
 }
 
 function Assert-RelativePathAllowed {
-    param(
-        [string]$RelativePath,
-        [string]$Source
-    )
+    param([string]$RelativePath, [string]$Source)
     Assert-SafeRelativePath -RelativePath $RelativePath -Source $Source -Distribution
 }
 
 function Assert-NoForbiddenReleaseItems {
     param([string]$TargetPackageDir)
-    $items = Get-ChildItem -LiteralPath $TargetPackageDir -Recurse -Force -ErrorAction SilentlyContinue
-    foreach ($item in $items) {
-        $relative = Get-RelativePathInside -Path $item.FullName -Parent $TargetPackageDir
-        Assert-RelativePathAllowed -RelativePath $relative -Source 'Release package'
+    foreach ($item in Get-ChildItem -LiteralPath $TargetPackageDir -Recurse -Force -ErrorAction Stop) {
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw 'Release package contains a reparse point.'
+        }
+        Assert-RelativePathAllowed -RelativePath (Get-RelativePathInside -Path $item.FullName -Parent $TargetPackageDir) -Source 'Release package'
     }
     Write-Ok 'Release package forbidden-file scan passed.'
 }
@@ -419,30 +412,19 @@ function Assert-NoForbiddenReleaseItems {
 function Assert-ReleaseRequiredItems {
     param([string]$TargetPackageDir)
     $requiredItems = @(
-        'app\backend',
-        'app\frontend',
-        'app\frontend\dist',
-        'app\frontend\dist\index.html',
-        'app\VERSION.json',
-        'app\runtime\IZClinicalNotesAnalyzer.exe',
-        'app\docs\patient-treatment-plan-handling.md',
-        'app\docs\beta-client-test-run-guide.md',
-        'app\scripts',
-        'Install-IZ-Clinical-Notes-Analyzer.cmd',
-        'Launch-IZ-Clinical-Notes-Analyzer.cmd',
-        'Stop-IZ-Clinical-Notes-Analyzer.cmd',
-        'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd',
-        'Backup-IZ-Clinical-Notes-Analyzer.cmd',
-        'Restore-IZ-Clinical-Notes-Analyzer.cmd',
-        'Uninstall-IZ-Clinical-Notes-Analyzer.cmd',
-        'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd',
+        'app\backend', 'app\frontend', 'app\frontend\dist', 'app\frontend\dist\index.html',
+        'app\VERSION', 'app\VERSION.json', 'app\runtime\IZClinicalNotesAnalyzer.exe',
+        'app\config\rules', 'app\config\checklists\treatment-plan-v1.json',
+        'app\docs\patient-treatment-plan-handling.md', 'app\docs\beta-client-test-run-guide.md', 'app\scripts',
+        'Install-IZ-Clinical-Notes-Analyzer.cmd', 'Launch-IZ-Clinical-Notes-Analyzer.cmd',
+        'Stop-IZ-Clinical-Notes-Analyzer.cmd', 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd',
+        'Backup-IZ-Clinical-Notes-Analyzer.cmd', 'Restore-IZ-Clinical-Notes-Analyzer.cmd',
+        'Uninstall-IZ-Clinical-Notes-Analyzer.cmd', 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd',
         'release-manifest.json'
     )
+    $requiredItems += @(Get-IzInstallerRuntimeRelativePaths | ForEach-Object { "installer\$_" })
     foreach ($item in $requiredItems) {
-        $path = Join-Path $TargetPackageDir $item
-        if (-not (Test-Path -LiteralPath $path)) {
-            throw "Release package is missing required item: $item"
-        }
+        if (-not (Test-Path -LiteralPath (Join-Path $TargetPackageDir $item))) { throw "Release package is missing required item: $item" }
     }
     Write-Ok 'Release package required-file validation passed.'
 }
@@ -452,537 +434,407 @@ function Assert-ZipHasNoForbiddenItems {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
     try {
-        foreach ($entry in $zip.Entries) {
-            Assert-RelativePathAllowed -RelativePath $entry.FullName -Source 'Release zip'
-        }
-    } finally {
-        $zip.Dispose()
-    }
+        foreach ($entry in $zip.Entries) { Assert-RelativePathAllowed -RelativePath $entry.FullName -Source 'Release zip' }
+    } finally { $zip.Dispose() }
     Write-Ok 'Release zip forbidden-file scan passed.'
 }
 
-function Write-InstallerFiles {
-    param([string]$TargetPackageDir)
-    $installCmd = Join-Path $TargetPackageDir 'Install-IZ-Clinical-Notes-Analyzer.cmd'
-    $launchCmd = Join-Path $TargetPackageDir 'Launch-IZ-Clinical-Notes-Analyzer.cmd'
-    $stopCmd = Join-Path $TargetPackageDir 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
-    $diagnosticsCmd = Join-Path $TargetPackageDir 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
-    $backupCmd = Join-Path $TargetPackageDir 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
-    $restoreCmd = Join-Path $TargetPackageDir 'Restore-IZ-Clinical-Notes-Analyzer.cmd'
-    $uninstallCmd = Join-Path $TargetPackageDir 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-    $completeUninstallCmd = Join-Path $TargetPackageDir 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-cd /d "%PACKAGE_DIR%"
-title Install IZ Clinical Notes Analyzer
-echo IZ Clinical Notes Analyzer installer
-echo.
-echo This installs the app for the current Windows user. Administrator access is not required.
-echo Existing local data under %%LOCALAPPDATA%%\IZ Clinical Notes Analyzer will be preserved.
-echo Current treatment-plan handling docs are included under app\docs.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%installer\install-windows-release.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Install completed.
-    echo Launch from the Start Menu, Desktop shortcut, or Launch-IZ-Clinical-Notes-Analyzer.cmd.
-) else (
-    echo [fail] Install did not complete.
-    echo Review the message above or send a screenshot of this window to R3 support.
-)
-echo.
-pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $installCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-cd /d "%PACKAGE_DIR%"
-title IZ Clinical Notes Analyzer
-echo Starting IZ Clinical Notes Analyzer...
-echo.
-call "%PACKAGE_DIR%app\scripts\launch-packaged-runtime.cmd" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-if not "%EXIT_CODE%"=="0" (
-    echo.
-    echo [fail] The app did not start.
-    echo Review the startup log under %%LOCALAPPDATA%%\IZ Clinical Notes Analyzer\logs.
-    echo Send a screenshot of this window to R3 support if the message is unclear.
-    echo.
-    if not "%NO_PAUSE%"=="1" pause
-)
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $launchCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%app\scripts\stop-windows-local.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-if not "%EXIT_CODE%"=="0" if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $stopCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title IZ Clinical Notes Analyzer Diagnostics
-echo Collecting IZ Clinical Notes Analyzer diagnostics...
-echo This does not include uploaded clinical documents, raw .env secrets, or SQLite databases.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%app\scripts\collect-diagnostics.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Diagnostics collection finished.
-) else (
-    echo [fail] Diagnostics collection did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $diagnosticsCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title Backup IZ Clinical Notes Analyzer
-echo Backup IZ Clinical Notes Analyzer local data
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%app\scripts\backup-local-data.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Backup command finished.
-) else (
-    echo [fail] Backup did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $backupCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-title Restore IZ Clinical Notes Analyzer
-call "%PACKAGE_DIR%app\scripts\Restore-IZ-Clinical-Notes-Analyzer.cmd" %*
-exit /b %ERRORLEVEL%
-"@ | Set-Content -Path $restoreCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title Uninstall IZ Clinical Notes Analyzer
-echo Uninstall IZ Clinical Notes Analyzer app files
-echo Local data under %%LOCALAPPDATA%%\IZ Clinical Notes Analyzer will be preserved.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%installer\uninstall-windows-release.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Uninstall completed. Local data was preserved.
-) else (
-    echo [fail] Uninstall did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $uninstallCmd -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "PACKAGE_DIR=%~dp0"
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title Complete Uninstall IZ Clinical Notes Analyzer
-echo Complete uninstall removes app files AND local IZ Clinical Notes Analyzer data.
-echo Use this only when R3 intentionally wants this Windows user account cleaned.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PACKAGE_DIR%app\scripts\complete-uninstall-local-data.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Complete uninstall finished.
-) else (
-    echo [fail] Complete uninstall did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $completeUninstallCmd -Encoding ASCII
-
-    $installerDir = Join-Path $TargetPackageDir 'installer'
-    New-Item -ItemType Directory -Path $installerDir -Force | Out-Null
-
-@'
-[CmdletBinding()]
-param()
-
-$ErrorActionPreference = 'Stop'
-$PackageDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$SourceAppDir = Join-Path $PackageDir 'app'
-$InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer'
-$StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer'
-$DesktopDir = [Environment]::GetFolderPath('Desktop')
-$Launcher = Join-Path $InstallRoot 'scripts\launch-packaged-runtime.cmd'
-$StopLauncher = Join-Path $InstallRoot 'scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd'
-$DiagnosticsLauncher = Join-Path $InstallRoot 'scripts\Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
-$BackupLauncher = Join-Path $InstallRoot 'scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd'
-$RestoreLauncher = Join-Path $InstallRoot 'scripts\Restore-IZ-Clinical-Notes-Analyzer.cmd'
-$InstalledInstallerDir = Join-Path $InstallRoot 'installer'
-$StartShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer.lnk'
-$StopShortcut = Join-Path $StartMenuDir 'Stop IZ Clinical Notes Analyzer.lnk'
-$DiagnosticsShortcut = Join-Path $StartMenuDir 'IZ Clinical Notes Analyzer Diagnostics.lnk'
-$BackupShortcut = Join-Path $StartMenuDir 'Backup IZ Clinical Notes Analyzer.lnk'
-$RestoreShortcut = Join-Path $StartMenuDir 'Restore IZ Clinical Notes Analyzer.lnk'
-$UninstallShortcut = Join-Path $StartMenuDir 'Uninstall IZ Clinical Notes Analyzer.lnk'
-$CompleteUninstallShortcut = Join-Path $StartMenuDir 'Complete Uninstall IZ Clinical Notes Analyzer.lnk'
-$DesktopStartShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer.lnk'
-$DesktopDiagnosticsShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer Diagnostics.lnk'
-$DesktopBackupShortcut = Join-Path $DesktopDir 'IZ Clinical Notes Analyzer Backup.lnk'
-$Uninstaller = Join-Path $InstallRoot 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-$CompleteUninstaller = Join-Path $InstallRoot 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-$LocalDataDir = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'
-
-function Write-InstallStep($Message) { Write-Host "[setup] $Message" }
-function Write-InstallOk($Message) { Write-Host "[ok] $Message" -ForegroundColor Green }
-
-function New-Shortcut {
-    param(
-        [string]$ShortcutPath,
-        [string]$TargetPath,
-        [string]$WorkingDirectory,
-        [string]$IconLocation = ''
-    )
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($ShortcutPath)
-    $shortcut.TargetPath = $TargetPath
-    $shortcut.WorkingDirectory = $WorkingDirectory
-    $shortcut.IconLocation = if ($IconLocation) { $IconLocation } else { "$env:SystemRoot\System32\shell32.dll,220" }
-    $shortcut.Save()
+function Get-StreamSha256 {
+    param([System.IO.Stream]$Stream)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
 }
 
-function Assert-RequiredPackageItem {
-    param([string]$RelativePath)
-    $path = Join-Path $PackageDir $RelativePath
-    if (-not (Test-Path -LiteralPath $path)) {
-        throw "This release package is incomplete. Missing: $RelativePath. Download or unzip the release package again."
+function Assert-ZipMatchesManifest {
+    param([string]$ZipPath, [string]$PackageDir)
+    $manifest = Assert-IzReleaseManifest -PackageRoot $PackageDir
+    $expected = @{}
+    foreach ($file in $manifest.files) { $expected[[string]$file.path] = $file }
+    $manifestPath = Join-Path $PackageDir 'release-manifest.json'
+    $expected['release-manifest.json'] = [pscustomobject]@{ path = 'release-manifest.json'; length = (Get-Item $manifestPath).Length; sha256 = Get-IzFileSha256 $manifestPath }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $entries = @($zip.Entries | Where-Object { $_.Name })
+        if ($entries.Count -ne $expected.Count) { throw 'ZIP_FILE_COUNT_MISMATCH' }
+        $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $entries) {
+            $name = $entry.FullName.Replace('\', '/')
+            if (-not $seen.Add($name) -or -not $expected.ContainsKey($name)) { throw 'ZIP_MEMBER_MISMATCH' }
+            $record = $expected[$name]
+            if ([long]$entry.Length -ne [long]$record.length) { throw 'ZIP_MEMBER_LENGTH_MISMATCH' }
+            $stream = $entry.Open()
+            try { $entryHash = Get-StreamSha256 -Stream $stream } finally { $stream.Dispose() }
+            if ($entryHash -cne [string]$record.sha256) { throw 'ZIP_MEMBER_HASH_MISMATCH' }
+        }
+    } finally { $zip.Dispose() }
+    Write-Ok 'Release zip matches the internal manifest byte-for-byte.'
+}
+
+function Inspect-FrozenBundle {
+    param([string]$RuntimePath, [string]$LogPath)
+    $observation = Invoke-LoggedCommand -Command {
+        & $VenvPython -m PyInstaller.utils.cliutils.archive_viewer -r -b $RuntimePath
+    } -FailureMessage 'Frozen bundle inspection failed.' -LogPath $LogPath
+    $listing = Get-Content -LiteralPath $LogPath -Raw
+    foreach ($required in @('app.desktop_runtime', 'app.desktop_main', 'passlib', 'configparser', 'VERSION.json', 'treatment-plan-v1.json', 'app\static\index.html')) {
+        if (-not $listing.Contains($required)) { throw "FROZEN_BUNDLE_REQUIRED_MEMBER_MISSING:$required" }
+    }
+    if ($listing -match '(?im)(^|[\s''"/\\])(?:app\.)?tests?(?:[./\\''"\s]|$)' -or
+        $listing -match '(?im)(^|[\s''"/\\])pytest(?:[./\\''"\s]|$)' -or
+        $listing -match '(?i)installer[\\/]templates|complete-uninstall-local-data') {
+        throw 'FROZEN_BUNDLE_FORBIDDEN_MEMBER'
+    }
+    return [pscustomobject][ordered]@{
+        exit_code = 0
+        status = 'passed'
+        executable_length = [long](Get-Item -LiteralPath $RuntimePath).Length
+        executable_sha256 = Get-IzFileSha256 $RuntimePath
+        listing_length = [long]$observation.log_length
+        listing_sha256 = [string]$observation.log_sha256
     }
 }
 
-function Invoke-Robocopy {
-    param(
-        [string]$Source,
-        [string]$Destination,
-        [string]$Label
+function Assert-PreservedArchives {
+    $expected = @(
+        [pscustomobject]@{ name = 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip'; length = 43716351L; sha256 = '9c5fd47203242e1a21df612f719f1c14fa4240c86ba869f924ec4690834fc89c'; version = '2.0.0-beta.3'; build = '2026.09.03.1' },
+        [pscustomobject]@{ name = 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4.zip'; length = 43873389L; sha256 = '67b83eea402566658dea6d64ac6cba37a192a7d1bd670cf560541324c0092b14'; version = '2.0.0-beta.4'; build = '2026.09.10.2' }
     )
-    robocopy $Source $Destination /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-    $robocopyExitCode = [int]$LASTEXITCODE
-    if ($robocopyExitCode -gt 7) { throw "$Label failed with robocopy exit code $robocopyExitCode" }
-    $global:LASTEXITCODE = 0
+    $verified = [Collections.Generic.List[object]]::new()
+    foreach ($item in $expected) {
+        $path = Join-Path $ReleaseRoot $item.name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+            (Get-Item -LiteralPath $path).Length -ne $item.length -or
+            (Get-IzFileSha256 $path) -cne $item.sha256) { throw "PRESERVED_ARCHIVE_CHANGED:$($item.name)" }
+        $verified.Add([pscustomobject][ordered]@{
+            name = $item.name
+            length = [long]$item.length
+            sha256 = $item.sha256
+            version = $item.version
+            build = $item.build
+            path = (Resolve-Path -LiteralPath $path).Path
+        })
+    }
+    Write-Ok 'Original beta.3 and beta.4 ZIP bytes remain unchanged.'
+    return @($verified.ToArray())
 }
 
-Assert-RequiredPackageItem 'app\backend'
-Assert-RequiredPackageItem 'app\frontend\dist\index.html'
-Assert-RequiredPackageItem 'app\scripts\preflight-windows.ps1'
-Assert-RequiredPackageItem 'app\runtime\IZClinicalNotesAnalyzer.exe'
-
-if (Test-Path -LiteralPath $LocalDataDir) {
-    $existingStopScript = Join-Path $InstallRoot 'scripts\stop-windows-local.ps1'
-    if (Test-Path -LiteralPath $existingStopScript) { & $existingStopScript -NoRestartPrompt -NoPause }
-    Write-InstallStep 'Creating verified Pre-upgrade encrypted backup'
-    $preUpgradeBackup = & (Join-Path $SourceAppDir 'scripts\backup-local-data.ps1') -AssumeYes -NoStop -PassThru
-    if (-not $preUpgradeBackup -or -not (Test-Path -LiteralPath $preUpgradeBackup.Path)) { throw 'Pre-upgrade encrypted backup failed. Existing data was not modified.' }
-    Write-InstallOk "Pre-upgrade encrypted backup: $($preUpgradeBackup.Path)"
-}
-
-Write-InstallStep "Installing app files to $InstallRoot"
-New-Item -ItemType Directory -Path $InstallRoot, $StartMenuDir -Force | Out-Null
-Invoke-Robocopy -Source $SourceAppDir -Destination $InstallRoot -Label 'Install copy'
-Copy-Item -LiteralPath (Join-Path $PackageDir 'release-manifest.json') -Destination (Join-Path $InstallRoot 'release-manifest.json') -Force
-Invoke-Robocopy -Source (Join-Path $PackageDir 'installer') -Destination $InstalledInstallerDir -Label 'Installer helper copy'
-Write-InstallStep 'Initializing local packaged-runtime configuration'
-& (Join-Path $InstallRoot 'scripts\\preflight-windows.ps1') -AssumeYes -InitializePackagedRuntime
-if ($LASTEXITCODE -ne 0) { throw 'Packaged-runtime configuration initialization failed.' }
-if (-not (Test-Path -LiteralPath (Join-Path $LocalDataDir '.env'))) { throw 'Packaged-runtime configuration file was not created.' }
-
-@"
-@echo off
-setlocal
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title Uninstall IZ Clinical Notes Analyzer
-echo Uninstall IZ Clinical Notes Analyzer app files
-echo Local data under %%LOCALAPPDATA%%\IZ Clinical Notes Analyzer will be preserved.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\uninstall-windows-release.ps1" -InstalledAppRoot "%~dp0." %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Uninstall completed. Local data was preserved.
-) else (
-    echo [fail] Uninstall did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $Uninstaller -Encoding ASCII
-
-@"
-@echo off
-setlocal
-set "NO_PAUSE="
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set "NO_PAUSE=1"
-    if /I "%%~A"=="/NoPause" set "NO_PAUSE=1"
-)
-title Complete Uninstall IZ Clinical Notes Analyzer
-echo Complete uninstall removes app files AND local IZ Clinical Notes Analyzer data.
-echo Use this only when R3 intentionally wants this Windows user account cleaned.
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\complete-uninstall-local-data.ps1" -InstalledAppRoot "%~dp0." %*
-set "EXIT_CODE=%ERRORLEVEL%"
-echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Complete uninstall finished.
-) else (
-    echo [fail] Complete uninstall did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
-exit /b %EXIT_CODE%
-"@ | Set-Content -Path $CompleteUninstaller -Encoding ASCII
-
-Write-InstallStep 'Creating Start Menu and Desktop shortcuts'
-New-Shortcut -ShortcutPath $StartShortcut -TargetPath $Launcher -WorkingDirectory $InstallRoot
-New-Shortcut -ShortcutPath $StopShortcut -TargetPath $StopLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,27"
-New-Shortcut -ShortcutPath $DiagnosticsShortcut -TargetPath $DiagnosticsLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,23"
-New-Shortcut -ShortcutPath $BackupShortcut -TargetPath $BackupLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,258"
-New-Shortcut -ShortcutPath $RestoreShortcut -TargetPath $RestoreLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,167"
-New-Shortcut -ShortcutPath $UninstallShortcut -TargetPath $Uninstaller -WorkingDirectory $InstallRoot
-New-Shortcut -ShortcutPath $CompleteUninstallShortcut -TargetPath $CompleteUninstaller -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,131"
-New-Shortcut -ShortcutPath $DesktopStartShortcut -TargetPath $Launcher -WorkingDirectory $InstallRoot
-New-Shortcut -ShortcutPath $DesktopDiagnosticsShortcut -TargetPath $DiagnosticsLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,23"
-New-Shortcut -ShortcutPath $DesktopBackupShortcut -TargetPath $BackupLauncher -WorkingDirectory $InstallRoot -IconLocation "$env:SystemRoot\System32\shell32.dll,258"
-
-Write-InstallOk "Installed IZ Clinical Notes Analyzer to $InstallRoot"
-Write-Host "Local data folder: $LocalDataDir"
-Write-Host "Start Menu shortcut: $StartShortcut"
-if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'runtime\IZClinicalNotesAnalyzer.exe'))) { throw 'The bundled runtime is missing after install.' }
-Write-InstallOk 'Install complete. Use the Start Menu shortcut or Desktop shortcut to launch the app.'
-exit 0
-'@ | Set-Content -Path (Join-Path $installerDir 'install-windows-release.ps1') -Encoding UTF8
-
-@'
-[CmdletBinding()]
-param(
-    [string]$InstalledAppRoot = '',
-    [switch]$NoPause,
-    [int]$DelaySeconds = 0
-)
-
-$ErrorActionPreference = 'Stop'
-if ($DelaySeconds -gt 0) {
-    Start-Sleep -Seconds $DelaySeconds
-}
-$InstallRoot = if ($InstalledAppRoot) { $InstalledAppRoot } else { Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer' }
-$ExpectedInstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\IZ Clinical Notes Analyzer'
-$StartMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer'
-$DesktopDir = [Environment]::GetFolderPath('Desktop')
-$DesktopShortcuts = @(
-    'IZ Clinical Notes Analyzer.lnk',
-    'IZ Clinical Notes Analyzer Diagnostics.lnk',
-    'IZ Clinical Notes Analyzer Backup.lnk'
-) | ForEach-Object { Join-Path $DesktopDir $_ }
-
-function Get-NormalizedPath {
+function Assert-LegacyInstalledRelativePath {
     param([string]$Path)
-    $trimChars = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    return [System.IO.Path]::GetFullPath($Path).TrimEnd($trimChars)
+    if ([string]::IsNullOrWhiteSpace($Path) -or $Path.Length -gt 1024 -or
+        $Path.StartsWith('/') -or $Path.StartsWith('\\') -or $Path.Contains('//') -or
+        $Path.IndexOf([char]0) -ge 0 -or $Path -match '^[A-Za-z]:' -or
+        @($Path.Split('/') | Where-Object { $_ -in @('', '.', '..') }).Count -ne 0) {
+        throw 'LEGACY_INVENTORY_PATH_INVALID'
+    }
 }
 
-function Assert-ExpectedPath {
-    param(
-        [string]$Path,
-        [string]$Expected,
-        [string]$Label
+function Get-LegacyGeneratedCommandRecords {
+    param([string]$InstallerSource)
+    $definitions = @(
+        [pscustomobject]@{ variable = 'Uninstaller'; path = 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd' },
+        [pscustomobject]@{ variable = 'CompleteUninstaller'; path = 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd' }
     )
-    $normalizedPath = Get-NormalizedPath -Path $Path
-    $normalizedExpected = Get-NormalizedPath -Path $Expected
-    if (-not $normalizedPath.Equals($normalizedExpected, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "$Label resolved to $normalizedPath, expected $normalizedExpected"
+    $records = [Collections.Generic.List[object]]::new()
+    foreach ($definition in $definitions) {
+        $pattern = '(?ms)^@"\r?\n(?<body>(?:(?!\r?\n"@).)*)\r?\n"@\s*\|\s*Set-Content\s+-Path\s+\$' +
+            [regex]::Escape($definition.variable) + '\s+-Encoding\s+ASCII\s*$'
+        $matches = [regex]::Matches($InstallerSource, $pattern)
+        if ($matches.Count -ne 1) { throw 'LEGACY_GENERATED_COMMAND_SOURCE_INVALID' }
+        $body = $matches[0].Groups['body'].Value
+        if ($body.Contains('$') -or $body.Contains('`')) { throw 'LEGACY_GENERATED_COMMAND_SOURCE_INVALID' }
+        $content = $body.Replace("`r`n", "`n").Replace("`r", "`n").Replace("`n", "`r`n") + "`r`n"
+        $bytes = [Text.ASCIIEncoding]::new().GetBytes($content)
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose(); [Array]::Clear($bytes, 0, $bytes.Length) }
+        $records.Add([pscustomobject][ordered]@{ path = $definition.path; length = [long]$content.Length; sha256 = $hash })
+    }
+    return @($records.ToArray())
+}
+
+function New-LegacyProgramInventory {
+    param([object[]]$Archives)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $sources = [Collections.Generic.List[object]]::new()
+    foreach ($source in $Archives) {
+        $recordsByPath = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+        $archive = [IO.Compression.ZipFile]::OpenRead([string]$source.path)
+        try {
+            $fileCount = 0
+            $expandedBytes = [long]0
+            foreach ($entry in $archive.Entries) {
+                if (-not $entry.Name) { continue }
+                $fileCount++
+                if ($fileCount -gt 10000 -or [long]$entry.Length -gt 536870912L -or
+                    $expandedBytes -gt (2147483648L - [long]$entry.Length)) { throw 'LEGACY_ARCHIVE_BOUNDS_EXCEEDED' }
+                $expandedBytes += [long]$entry.Length
+                $archivePath = $entry.FullName.Replace('\\', '/')
+                $installedPath = if ($archivePath.StartsWith('app/', [StringComparison]::Ordinal)) {
+                    $archivePath.Substring(4)
+                } elseif ($archivePath.StartsWith('installer/', [StringComparison]::Ordinal)) {
+                    $archivePath
+                } elseif ($archivePath -ceq 'release-manifest.json') {
+                    $archivePath
+                } else { $null }
+                if (-not $installedPath) { continue }
+                Assert-LegacyInstalledRelativePath $installedPath
+                if ($recordsByPath.ContainsKey($installedPath)) { throw 'LEGACY_INVENTORY_PATH_COLLISION' }
+                $stream = $entry.Open()
+                try { $hash = Get-StreamSha256 -Stream $stream } finally { $stream.Dispose() }
+                $recordsByPath.Add($installedPath, [pscustomobject][ordered]@{
+                    path = $installedPath
+                    length = [long]$entry.Length
+                    sha256 = $hash
+                })
+            }
+            $installEntries = @($archive.Entries | Where-Object {
+                $_.FullName.Replace('\\', '/') -ceq 'installer/install-windows-release.ps1'
+            })
+            if ($installEntries.Count -ne 1) { throw 'LEGACY_INSTALLER_SOURCE_INVALID' }
+            $stream = $installEntries[0].Open()
+            $reader = [IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($false, $true), $true)
+            try { $installerSource = $reader.ReadToEnd() } finally { $reader.Dispose(); $stream.Dispose() }
+            foreach ($record in @(Get-LegacyGeneratedCommandRecords -InstallerSource $installerSource)) {
+                $recordsByPath[[string]$record.path] = $record
+            }
+        } finally { $archive.Dispose() }
+        $paths = [string[]]@($recordsByPath.Keys)
+        [Array]::Sort($paths, [StringComparer]::Ordinal)
+        $sources.Add([pscustomobject][ordered]@{
+            archive_name = [string]$source.name
+            archive_length = [long]$source.length
+            archive_sha256 = [string]$source.sha256
+            version = [string]$source.version
+            build = [string]$source.build
+            files = @($paths | ForEach-Object { $recordsByPath[$_] })
+        })
+    }
+    return [pscustomobject][ordered]@{
+        schema = 'iz-cna-legacy-program-inventory-v1'
+        product_id = $ProductId
+        sources = @($sources.ToArray())
     }
 }
 
-Assert-ExpectedPath -Path $InstallRoot -Expected $ExpectedInstallRoot -Label 'Install folder'
-Assert-ExpectedPath -Path $StartMenuDir -Expected (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\IZ Clinical Notes Analyzer') -Label 'Start Menu folder'
-
-$normalizedInstallRoot = Get-NormalizedPath -Path $InstallRoot
-if ($PSCommandPath) {
-    $normalizedScriptPath = Get-NormalizedPath -Path $PSCommandPath
-    $separator = [System.IO.Path]::DirectorySeparatorChar
-    if ($normalizedScriptPath.StartsWith("$normalizedInstallRoot$separator", [System.StringComparison]::OrdinalIgnoreCase)) {
-        $helperPath = Join-Path ([System.IO.Path]::GetTempPath()) "iz-cna-uninstall-$([System.Guid]::NewGuid().ToString('N')).ps1"
-        Copy-Item -LiteralPath $PSCommandPath -Destination $helperPath -Force
-        $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$helperPath`" -InstalledAppRoot `"$InstallRoot`" -NoPause -DelaySeconds 2"
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -WindowStyle Hidden
-        Write-Host 'Uninstall cleanup started. The app folder will be removed in a few seconds.'
-        Write-Host "Local data under %LOCALAPPDATA%\IZ Clinical Notes Analyzer will be preserved."
-        exit 0
+function Assert-ReleaseMetadata {
+    if ($VersionMetadata.version -cne $Version -or $Version -cne '2.0.0-beta.4' -or
+        $Build -cne '2026.09.14.1' -or $ReleaseChannel -cne 'beta-local-desktop-v2') {
+        throw 'Release version metadata is inconsistent.'
     }
 }
 
-$stopScript = Join-Path $InstallRoot 'scripts\stop-windows-local.ps1'
-if (Test-Path -LiteralPath $stopScript) {
-    Write-Host 'Stopping any running local app process...'
-    & $stopScript -NoRestartPrompt -NoPause
+function Assert-CleanSourceRevision {
+    param([string]$ExpectedHead)
+    $head = (& git -C $RootDir rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $head -cne $ExpectedHead) { throw 'stale_repository_state' }
+    $dirty = @(& git -C $RootDir status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw 'dirty_worktree' }
 }
-Set-Location ([System.IO.Path]::GetTempPath())
 
-foreach ($shortcut in $DesktopShortcuts) {
-    if (Test-Path -LiteralPath $shortcut) {
-        Remove-Item -LiteralPath $shortcut -Force
+function New-OwnedRoot {
+    param([string]$Parent, [string]$Name, [string]$Owner)
+    if (-not (Test-Path -LiteralPath $Parent)) { New-Item -ItemType Directory -Path $Parent | Out-Null }
+    if ((Get-Item -LiteralPath $Parent).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'OWNED_PARENT_REPARSE_POINT' }
+    $root = Join-Path $Parent $Name
+    if (Test-Path -LiteralPath $root) { throw 'ARTIFACT_COLLISION' }
+    New-Item -ItemType Directory -Path $root | Out-Null
+    [IO.File]::WriteAllText((Join-Path $root 'owner.json'), "{`"owner`":`"$Owner`"}", [Text.UTF8Encoding]::new($false))
+    return $root
+}
+
+function Remove-OwnedRoot {
+    param([string]$Path, [string]$Parent, [string]$Owner)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return }
+    $fullPath = (Resolve-Path -LiteralPath $Path).Path
+    $fullParent = (Resolve-Path -LiteralPath $Parent).Path
+    $marker = Join-Path $fullPath 'owner.json'
+    $expectedMarker = "{`"owner`":`"$Owner`"}"
+    if ((Split-Path $fullPath -Parent) -cne $fullParent -or
+        -not (Test-Path -LiteralPath $marker -PathType Leaf) -or
+        [IO.File]::ReadAllText($marker) -cne $expectedMarker -or
+        ((Get-Item -LiteralPath $fullPath).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'OWNED_ROOT_CLEANUP_REFUSED'
     }
+    Remove-GeneratedDirectory -Path $fullPath -Parent $fullParent -Label 'Owned build root'
 }
 
-if (Test-Path $StartMenuDir) {
-    Remove-Item -LiteralPath $StartMenuDir -Recurse -Force
+function Write-JsonNoBom {
+    param($Value, [string]$Path, [int]$Depth = 10)
+    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth $Depth), [Text.UTF8Encoding]::new($false))
 }
-if (Test-Path $InstallRoot) {
-    Remove-Item -LiteralPath $InstallRoot -Recurse -Force
+
+function New-Gate {
+    param([string]$Name, [string]$Command, [string]$Evidence)
+    return [ordered]@{ name = $Name; status = 'passed'; command = $Command; exit_code = 0; evidence = $Evidence }
 }
-Write-Host "Removed IZ Clinical Notes Analyzer application files and shortcuts."
-Write-Host "Local data under %LOCALAPPDATA%\IZ Clinical Notes Analyzer was preserved."
-'@ | Set-Content -Path (Join-Path $installerDir 'uninstall-windows-release.ps1') -Encoding UTF8
-}
+
+$qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
+$invocationId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
+$buildQaRoot = $null
+$stageOwnerRoot = $null
+$published = $false
 
 try {
     Set-Location $RootDir
-    Write-Build 'IZ Clinical Notes Analyzer Windows release build'
-    Write-Build "Version: $Version"
-    Write-Build "Repository: $RootDir"
-
-    Write-Step 'Running Windows preflight...'
-    & (Join-Path $RootDir 'scripts\preflight-windows.ps1') -AssumeYes -SkipFrontendCheck
-    if ($LASTEXITCODE -ne 0) {
-        throw "Windows preflight failed. Review %LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json."
+    Assert-ReleaseMetadata
+    if (($SkipTests -or $SkipFrontendBuild) -and -not $ValidationOnly) {
+        throw 'Client-ready builds reject -SkipTests and -SkipFrontendBuild. Use -ValidationOnly for a non-release diagnostic run.'
+    }
+    New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
+    $legacyArchives = @(Assert-PreservedArchives)
+    $legacyProgramInventory = New-LegacyProgramInventory -Archives $legacyArchives
+    $sourceRevision = (& git -C $RootDir rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-f]{40}$') { throw 'malformed_repository_head' }
+    if (-not $ValidationOnly) {
+        Assert-IzArtifactPathsAvailable -Paths @($FinalPackageDir, $FinalZipPath, $FinalReceiptPath, $FinalGateEvidencePath)
+        Assert-CleanSourceRevision -ExpectedHead $sourceRevision
     }
 
-    Ensure-BackendBuildEnvironment
-    Invoke-BackendTests
-    Invoke-FrontendBuild
-    Assert-NoForbiddenRepositoryIndexItems -RepositoryRoot $RootDir -AllowDirty
-    Write-Ok 'Repository staged/untracked safety scan passed.'
+    $buildQaRoot = New-OwnedRoot -Parent $qaParent -Name "build-$invocationId" -Owner 'iz-cna-windows-build-v1'
+    $logRoot = Join-Path $buildQaRoot 'logs'
+    New-Item -ItemType Directory -Path $logRoot | Out-Null
+    $preflightLog = Join-Path $logRoot 'preflight.log'
+    $backendEnvironmentLog = Join-Path $logRoot 'backend-environment.log'
+    $backendTestsLog = Join-Path $logRoot 'backend-tests.log'
+    $frontendTestsLog = Join-Path $logRoot 'frontend-tests.log'
+    $frontendBuildLog = Join-Path $logRoot 'frontend-build.log'
+    $runtimeBuildLog = Join-Path $logRoot 'runtime-build.log'
+    $frozenInspectionLog = Join-Path $logRoot 'frozen-bundle-inspection.log'
 
-    Write-Build "Creating release package at $PackageDir"
-    New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
-    Remove-GeneratedDirectory -Path $PackageDir -Parent $ReleaseRoot -Label 'Release package directory'
+    Write-Build "IZ Clinical Notes Analyzer $Version build $Build installer revision $InstallerRevision"
+    Write-Step 'Running Windows preflight in an isolated QA profile...'
+    Invoke-InBuildQaEnvironment -QaRoot (Join-Path $buildQaRoot 'preflight-profile') -Action {
+        $null = Invoke-LoggedCommand -Command {
+            & (Join-Path $RootDir 'scripts\preflight-windows.ps1') -AssumeYes -SkipFrontendCheck -ReportPath (Join-Path $buildQaRoot 'preflight-report.json')
+        } -FailureMessage 'Windows preflight failed.' -LogPath $preflightLog
+    }
+
+    Ensure-BackendBuildEnvironment -LogPath $backendEnvironmentLog
+    $backendObservation = Invoke-BackendTests -LogPath $backendTestsLog -QaRoot (Join-Path $buildQaRoot 'backend-test-profile')
+    $frontendObservation = Invoke-FrontendBuild -TestLogPath $frontendTestsLog -BuildLogPath $frontendBuildLog
+    if ($ValidationOnly) {
+        $repositorySafetyObservation = [ordered]@{ status = 'not_release_ready'; source_revision = $sourceRevision }
+    } else {
+        Assert-NoForbiddenRepositoryIndexItems -RepositoryRoot $RootDir -ExpectedHead $sourceRevision
+        Assert-CleanSourceRevision -ExpectedHead $sourceRevision
+        $repositorySafetyObservation = [ordered]@{ status = 'passed'; source_revision = $sourceRevision }
+    }
+
+    if ($ValidationOnly) {
+        $stageOwnerRoot = $buildQaRoot
+        $PackageDir = Join-Path $stageOwnerRoot "$PackageName.NOT-RELEASE-READY"
+        $ZipPath = Join-Path $stageOwnerRoot "$PackageName.NOT-RELEASE-READY.zip"
+    } else {
+        $stageOwnerRoot = New-OwnedRoot -Parent $ReleaseRoot -Name ".$PackageName.stage-$invocationId" -Owner 'iz-cna-release-stage-v1'
+        $PackageDir = Join-Path $stageOwnerRoot 'package'
+        $ZipPath = Join-Path $stageOwnerRoot 'candidate.zip'
+    }
+    $AppDir = Join-Path $PackageDir 'app'
     New-Item -ItemType Directory -Path $AppDir -Force | Out-Null
     Copy-RepoContent -Destination $AppDir
-    Build-DesktopRuntime -TargetPackageDir $PackageDir
-    Write-InstallerFiles -TargetPackageDir $PackageDir
-
-    $manifest = [ordered]@{
-        app_name = 'IZ Clinical Notes Analyzer'
-        version = $Version
-        created_at = (Get-Date).ToUniversalTime().ToString('o')
-        package_name = $PackageName
-        install_root = '%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer'
-        local_data_root = '%LOCALAPPDATA%\IZ Clinical Notes Analyzer'
-        install_command = 'Install-IZ-Clinical-Notes-Analyzer.cmd'
-        launch_command = 'Launch-IZ-Clinical-Notes-Analyzer.cmd'
-        stop_command = 'Stop-IZ-Clinical-Notes-Analyzer.cmd'
-        diagnostics_command = 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd'
-        backup_command = 'Backup-IZ-Clinical-Notes-Analyzer.cmd'
-        restore_command = 'Restore-IZ-Clinical-Notes-Analyzer.cmd'
-        uninstall_command = 'Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-        complete_uninstall_command = 'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
-        treatment_plan_handling_reference = 'app\docs\patient-treatment-plan-handling.md'
-        beta_client_test_run_guide = 'app\docs\beta-client-test-run-guide.md'
-        treatment_plan_compliance_engine = 'local deterministic timeliness and checklist evaluation'
-        frontend_dist_validated = $true
-        bundled_runtime = 'app\runtime\IZClinicalNotesAnalyzer.exe'
-        backup_encryption = 'DPAPI current-user + AES-256-CBC + HMAC-SHA-256'
-        forbidden_file_scan = 'passed'
-    }
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PackageDir 'release-manifest.json') -Encoding UTF8
-
+    Copy-ApplicationMaintenanceHelpers -TargetAppDirectory $AppDir
+    $runtimePath = Build-DesktopRuntime -TargetPackageDir $PackageDir -LogPath $runtimeBuildLog
+    $null = Write-InstallerFiles -TargetPackageDir $PackageDir -LegacyProgramInventory $legacyProgramInventory
+    $manifest = Write-IzReleaseManifest -PackageRoot $PackageDir -Version $Version -Build $Build -InstallerRevision $InstallerRevision -ReleaseChannel $ReleaseChannel
     Assert-ReleaseRequiredItems -TargetPackageDir $PackageDir
     Assert-NoForbiddenReleaseItems -TargetPackageDir $PackageDir
+    $null = Assert-IzReleaseManifest -PackageRoot $PackageDir
+    $frozenObservation = Inspect-FrozenBundle -RuntimePath $runtimePath -LogPath $frozenInspectionLog
 
-    $zipPath = Join-Path $ReleaseRoot "$PackageName.zip"
-    Assert-PathInside -Path $zipPath -Parent $ReleaseRoot -Label 'Release zip path'
-    if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-    # PS5 Compress-Archive cannot read long release paths; keep every original name via extended paths.
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.AppContext]::SetSwitch('Switch.System.IO.Compression.ZipFile.UseBackslash', $false)
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         ('\\?\' + ($PackageDir -replace '^\\\\', 'UNC\')),
-        ('\\?\' + ($zipPath -replace '^\\\\', 'UNC\'))
+        ('\\?\' + ($ZipPath -replace '^\\\\', 'UNC\'))
     )
-    Assert-ZipHasNoForbiddenItems -ZipPath $zipPath
+    Assert-ZipHasNoForbiddenItems -ZipPath $ZipPath
+    Assert-ZipMatchesManifest -ZipPath $ZipPath -PackageDir $PackageDir
 
+    $gateEvidenceName = "$PackageName.build-gates.json"
+    $gateObservations = [ordered]@{
+        schema = 'iz-cna-build-gate-evidence-v1'
+        product_id = $ProductId
+        version = $Version
+        build = $Build
+        installer_revision = $InstallerRevision
+        source_revision = $sourceRevision
+        release_ready = -not $ValidationOnly
+        preflight = [ordered]@{ log_length = (Get-Item $preflightLog).Length; log_sha256 = Get-IzFileSha256 $preflightLog }
+        backend_tests = $backendObservation
+        frontend_tests = $frontendObservation.tests
+        frontend_build = $frontendObservation.build
+        repository_safety = $repositorySafetyObservation
+        directory_safety = [ordered]@{ status = 'passed'; file_count = @($manifest.files).Count; payload_identity = $manifest.payload_identity }
+        zip_safety = [ordered]@{ status = 'passed'; length = (Get-Item $ZipPath).Length; sha256 = Get-IzFileSha256 $ZipPath }
+        frozen_bundle_inspection = $frozenObservation
+        preserved_archives = [ordered]@{
+            beta3_sha256 = '9c5fd47203242e1a21df612f719f1c14fa4240c86ba869f924ec4690834fc89c'
+            beta4_sha256 = '67b83eea402566658dea6d64ac6cba37a192a7d1bd670cf560541324c0092b14'
+        }
+    }
+
+    if ($ValidationOnly) {
+        $validationSummaryPath = Join-Path $buildQaRoot 'validation-summary.NOT-RELEASE-READY.json'
+        Write-JsonNoBom -Value $gateObservations -Path $validationSummaryPath
+        Write-Warn 'Validation-only artifact is not release-ready and has no build receipt.'
+        Write-Host "VALIDATION_DIRECTORY=$PackageDir"
+        Write-Host "VALIDATION_ZIP=$ZipPath"
+        Write-Host "VALIDATION_SUMMARY=$validationSummaryPath"
+        $published = $true
+        exit 0
+    }
+
+    if ($backendObservation.status -cne 'passed' -or $frontendObservation.tests.status -cne 'passed' -or $frontendObservation.build.status -cne 'passed') {
+        throw 'Client-ready build gate was skipped.'
+    }
+    Assert-CleanSourceRevision -ExpectedHead $sourceRevision
+    Assert-PreservedArchives
+    Assert-IzArtifactPathsAvailable -Paths @($FinalPackageDir, $FinalZipPath, $FinalReceiptPath, $FinalGateEvidencePath)
+    $stagedGateEvidencePath = Join-Path $stageOwnerRoot 'build-gates.json'
+    Write-JsonNoBom -Value $gateObservations -Path $stagedGateEvidencePath
+    Move-Item -LiteralPath $PackageDir -Destination $FinalPackageDir
+    Move-Item -LiteralPath $ZipPath -Destination $FinalZipPath
+    Move-Item -LiteralPath $stagedGateEvidencePath -Destination $FinalGateEvidencePath
+    $gates = @(
+        New-Gate -Name 'backend_tests' -Command 'backend/.venv/Scripts/python.exe -m pytest backend/tests -q' -Evidence $gateEvidenceName
+        New-Gate -Name 'frontend_tests' -Command 'npm run test -- --run' -Evidence $gateEvidenceName
+        New-Gate -Name 'frontend_build' -Command 'npm run build' -Evidence $gateEvidenceName
+        New-Gate -Name 'repository_safety' -Command 'git status and release-safety repository scan' -Evidence $gateEvidenceName
+        New-Gate -Name 'directory_safety' -Command 'release manifest and directory safety validation' -Evidence $gateEvidenceName
+        New-Gate -Name 'zip_safety' -Command 'ZIP inventory/hash and release safety validation' -Evidence $gateEvidenceName
+        New-Gate -Name 'frozen_bundle_inspection' -Command 'PyInstaller archive recursive member inspection' -Evidence $gateEvidenceName
+    )
+    $null = Write-IzBuildReceipt `
+        -ReceiptPath $FinalReceiptPath -ProductId $ProductId -Version $Version -Build $Build `
+        -InstallerRevision $InstallerRevision -SourceRevision $sourceRevision `
+        -PackageDirectory $FinalPackageDir -ZipPath $FinalZipPath `
+        -ManifestPath (Join-Path $FinalPackageDir 'release-manifest.json') `
+        -PayloadIdentity $manifest.payload_identity -Gates $gates
     @"
-Release folder: $PackageDir
-Release zip: $zipPath
-"@ | Set-Content -Path $LatestPathsFile -Encoding ASCII
-
-    Write-Ok "Release package ready: $PackageDir"
-    Write-Ok "Release zip ready: $zipPath"
+Release folder: $FinalPackageDir
+Release zip: $FinalZipPath
+Build receipt: $FinalReceiptPath
+"@ | Set-Content -LiteralPath $LatestPathsFile -Encoding ASCII
+    Write-Host "BUILD_RECEIPT_PATH=$FinalReceiptPath"
+    if ($env:GITHUB_OUTPUT) {
+        [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "build_receipt_path=$FinalReceiptPath`n", [Text.UTF8Encoding]::new($false))
+    }
+    Write-Ok "Release package ready: $FinalPackageDir"
+    Write-Ok "Release zip ready: $FinalZipPath"
+    $published = $true
     exit 0
-}
-catch {
+} catch {
     Write-Host ''
     Write-Fail 'Windows release build failed.'
     Write-Host $_.Exception.Message
-    Write-Host ''
-    Write-Host 'What to do next:'
-    Write-Host '  1. Read the message above.'
-    Write-Host '  2. Fix the named missing dependency, failed test, or unsafe file.'
-    Write-Host '  3. Double-click Build-IZ-Windows-Installer.cmd again.'
     exit 1
+} finally {
+    if (-not $ValidationOnly -and $stageOwnerRoot -and (Test-Path -LiteralPath $stageOwnerRoot)) {
+        Remove-OwnedRoot -Path $stageOwnerRoot -Parent $ReleaseRoot -Owner 'iz-cna-release-stage-v1'
+    }
+    if (-not $ValidationOnly -and $buildQaRoot -and (Test-Path -LiteralPath $buildQaRoot)) {
+        Remove-OwnedRoot -Path $buildQaRoot -Parent $qaParent -Owner 'iz-cna-windows-build-v1'
+    }
 }

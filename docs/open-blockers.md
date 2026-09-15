@@ -1,8 +1,8 @@
 # Open Blockers
 
-Date: 2026-09-04
+Date: 2026-09-14
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
+Applies to the current source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` channel. Final package and qualification evidence remain pending.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -83,7 +83,26 @@ Required resolution evidence:
 - Required signature/date/completion fields are present or documented as unavailable with deterministic missing-data behavior.
 - A documented decision exists for treatment-review due-date availability through a trusted review ID or an explicit unavailable state.
 
-## Windows Packaging and Validation
+## Beta.4 CMD maintenance qualification
+
+Status: **open; no release or client-ready claim.**
+
+The intended archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. The clean-commit build receipt, ZIP SHA-256, and final package qualification must be captured in detached completion evidence after the final build. Tracked source docs intentionally keep those final values pending so the receipt can bind the build to the clean source commit.
+
+The synthetic beta.3 component HTTP/API fixture passed its component contract, including safe stop and listener release. It does not qualify the final package. Package install/repair/uninstall, default-profile, standard-user Windows Home, cross-user recovery `R07`, and VM power-loss recovery `R09` are **Pending/blocked** because the required package and infrastructure are unavailable. No actual client records were accessed or authorized.
+
+Required current qualification evidence:
+
+- Final build receipt with commit SHA, package path, all required build gates, and ZIP SHA-256.
+- Prepared-package install, beta.3 smart upgrade in place, repair/no-op, normal data-preserving uninstall, and exact-phrase complete purge.
+- Package-root Launch delegation to the installed current-user app and the install-first code `20` behavior when absent.
+- Same-user/same-computer backup restore and immutable original archive checks.
+- Default-profile and standard-user Windows Home results, plus cross-user `R07` and power-loss `R09` recovery results.
+- Synthetic-only records and sanitized support receipts; no real client data.
+
+Use [Windows CMD maintenance](windows-cmd-maintenance.md) for the stable action/result contract. Keep the LOC-change timing rule configurable and visibly unvalidated, and keep the Alleva live-sync gate unchanged.
+
+## Historical beta3 Windows Packaging and Validation
 
 Status: the beta3 release folder/ZIP, rebuilt executable, embedded assets, packaged version endpoint and native Edge/Chrome office-manager flows have been verified on this Windows 11 host with synthetic data. See [final smoke results](validation/office-manager-final-smoke-2026-09-04.md) for scripted results and shutdown warnings. Fresh end-user install/repair/uninstall, every native administrative action, signed MSI/MSIX and deployment approval remain outside this proof.
 
@@ -94,8 +113,8 @@ Current implementation state: Version 2.0 Beta keeps Windows preflight, source-c
 Required resolution evidence:
 
 - Source checkout validation passes on the target Windows 10/11 laptop.
-- `/api/version` and the UI footer show `2.0.0-beta.3`, build `2026.09.03.1`, and `beta-local-desktop-v2` on that machine.
-- The `Treatment Plans` workbench shows the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`, proving the V2 workflow UI is the currently served build.
+- The historical beta.3 machine evidence showed `/api/version` and the UI footer at `2.0.0-beta.3`, build `2026.09.03.1`, and `beta-local-desktop-v2`.
+- That historical `Treatment Plans` validation showed the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`.
 - `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
 - The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
 - The Backup shortcut creates a full local-data backup zip under the user's Documents folder and warns that it can contain clinical data and encryption material.

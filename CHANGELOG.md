@@ -21,11 +21,11 @@ See [password management](docs/password-management-beta4.md). Validation is reco
 
 # Changelog
 
-Current app: `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`.
+Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` / channel `beta-local-desktop-v2`. The final package receipt, hash, and target-platform qualification remain pending.
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 
-- Updated current documentation references and the offline HTML guide to beta.3, with exact-plan selection, source filters, filtered CSV exports, session handling, and unresolved approval gates.
+- The 2026-09-08 documentation update covered the beta.3 guide and exact-plan selection, source filters, filtered CSV exports, session handling, and unresolved approval gates.
 - Expanded in-app Help with the current version/build and workflow instructions.
 - Historical validation results retain their tested versions; legacy procedures point to current V2 guidance. The stable beta.2 guide directory remains in place and its screenshots are explicitly labeled historical.
 - App metadata and prepared installer are unchanged.

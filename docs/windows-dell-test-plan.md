@@ -1,10 +1,26 @@
 # Windows Dell Validation and Packaging Path
 
-> Current app: `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). The checklist below is a historical V1 Dell test plan; its navigation and unfinished packaging list are superseded. For the current release, use the [Windows build/install guide](windows-installer-build-and-install.md), [beta test-session checklist](beta-client-test-run-guide.md), and [current validation record](validation/office-manager-production-fixes-2026-09-03.md). Retain the older version expectations below only for historical reproduction.
+> The checklist below is a historical V1 Dell test plan. The current source candidate is `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` (`beta-local-desktop-v2`); its final package and Dell qualification are still pending. Use the [Windows build/install guide](windows-installer-build-and-install.md), [Windows CMD maintenance](windows-cmd-maintenance.md), and [beta test-session checklist](beta-client-test-run-guide.md) for the current contract. Retain the older version expectations below only for historical reproduction.
 
-Date: 2026-06-04
+Date: 2026-09-14 (current documentation station; historical V1 procedure retained below)
 
-## Packaging Decision
+## Beta.4 CMD maintenance qualification
+
+The intended candidate archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`. The final clean-commit build receipt and ZIP SHA-256 belong in detached completion evidence after the final build; this tracked plan keeps them **Pending** so a later source commit does not invalidate build provenance.
+
+Current station status:
+
+- **Component HTTP/API fixture:** passed for the synthetic shipped beta.3 executable contract, including safe stop, listener release, and hash/length verification. This is component evidence only.
+- **Package install/repair/uninstall:** Pending final candidate package and final receipt.
+- **Default-profile qualification:** Blocked; the approved default-profile infrastructure is unavailable.
+- **Standard-user Windows Home qualification:** Blocked; the approved Home and standard-user target path is unavailable.
+- **Cross-user recovery R07:** Blocked; the required second-user path is unavailable for the final package.
+- **VM power-loss recovery R09:** Blocked; the required VM/power-control infrastructure is unavailable.
+- **Client data:** no real client records were accessed or authorized; use synthetic data only.
+
+When the target laptop and final package are available, record the package hash, `/api/version`, install/upgrade/uninstall receipts, normal data preservation, exact-phrase purge refusal, same-user/same-computer restore, and the R07/R09 results in detached evidence. The LOC-change rule and Alleva live-sync gates remain unchanged.
+
+## Historical V1 Packaging Decision
 
 Recommended path for R3 office use: **Option A, packaged non-technical deliverable**.
 

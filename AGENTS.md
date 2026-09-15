@@ -1,7 +1,7 @@
 # AGENTS.md - IZ Clinical Notes Analyzer
 
 ## Repo purpose
-Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current app version is `2.0.0-beta.4` / build `2026.09.10.2` on the `beta-local-desktop-v2` channel. Normal Windows desktop use must not require Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
+Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker app for R3 Recovery Services. The current source candidate is `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` channel; final package and qualification evidence are pending. Normal Windows desktop use must not require Windows administrator access, Docker, PostgreSQL, Git, Node.js, or command-line work when a prepared release folder with built frontend assets is used.
 
 ## R3 project architecture
 - Backend: `backend/app/` FastAPI service with auth/RBAC, settings, audit logging, encrypted uploads, deterministic rules, API connectivity harness, REST/OpenAPI/HL7 readiness boundary, gated Alleva REST treatment-plan sync readiness, workflow profiles, and version/readiness endpoints.
@@ -9,7 +9,7 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - Desktop runtime: `backend/app/desktop_main.py` mounts the built React app plus desktop-only rules/API pages for one-service localhost use.
 - Data: default SQLite, uploads, logs, reports, and user `.env` live in OS-local app data, not the repo. Relative runtime paths must resolve through `Settings.local_app_data_dir`.
 - Rules: deterministic YAML rules in `config/rules/` and the canonical 42-step checklist in `config/checklists/treatment-plan-v1.json` remain the primary workflow engine. Optional LLM behavior must stay disabled by default and must never be required for compliance or timeliness decisions.
-- Windows scripts: `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` and `scripts/startup-windows-local.ps1` are the ordinary Windows checkout launch path; PowerShell test scripts cover local stack and API configuration smoke flows.
+- Windows scripts: `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` and `scripts/startup-windows-local.ps1` are the ordinary Windows checkout launch path; PowerShell test scripts cover local stack and API configuration smoke flows. The beta.4 package maintenance contract is documented in [`docs/windows-cmd-maintenance.md`](docs/windows-cmd-maintenance.md); package-root Launch delegates to the current-user installed launcher and tells the user to run Install first when no install exists.
 
 ## Important directories
 - `backend/app/` - FastAPI API, auth/RBAC, audit logging, uploads, encrypted storage, rules execution, API connectivity boundary, workflow profiles, and timeliness services.

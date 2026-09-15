@@ -1,6 +1,21 @@
 # Client release packages
 
-Use **2.0.0-beta.4**, build **2026.09.10.2**, for new client installations. Earlier packages are retained as historical releases. Download the ZIP, extract it completely, and follow its included startup instructions.
+The current source candidate is **2.0.0-beta.4**, build **2026.09.14.1**, installer revision **1**. No package is approved for client installation from this documentation station. The final build receipt, clean-commit provenance, ZIP SHA-256, and Windows qualification evidence must be present in detached completion evidence before distribution.
+
+## Candidate package (pending)
+
+Intended filename: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`
+
+- SHA-256: **Pending final build receipt**
+- Build receipt and commit SHA: **Pending detached completion evidence**
+- Package/default-profile, standard-user Windows Home, cross-user recovery `R07`, and power-loss recovery `R09`: **Pending/blocked**
+- Distribution status: **Not released; not client-ready**
+
+Use [Windows CMD maintenance](windows-cmd-maintenance.md) for the install, smart-upgrade, normal-uninstall, complete-purge, backup, recovery, and support-code contract. Do not add the final ZIP hash or run identifier to tracked docs after the clean source build; the detached receipt is the provenance record.
+
+## Historical packages
+
+The hashes below belong to archives that were actually preserved and verified in their original validation scope. They remain historical and are not the current candidate.
 
 | Package | SHA-256 |
 | --- | --- |

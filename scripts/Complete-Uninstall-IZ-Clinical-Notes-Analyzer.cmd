@@ -1,22 +1,16 @@
 @echo off
-setlocal
-set NO_PAUSE=
-for %%A in (%*) do (
-    if /I "%%~A"=="-NoPause" set NO_PAUSE=1
-    if /I "%%~A"=="/NoPause" set NO_PAUSE=1
-)
+setlocal DisableDelayedExpansion
 title Complete Uninstall IZ Clinical Notes Analyzer
-echo Complete uninstall removes app files AND local IZ Clinical Notes Analyzer data.
-echo Use this only when R3 intentionally wants this Windows user account cleaned.
+echo Complete uninstall removes app files AND app-owned local data for this Windows user.
+echo External backups, downloaded packages, and other Windows profiles are outside its scope.
+echo The PowerShell prompt requires the exact phrase REMOVE IZ DATA.
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0complete-uninstall-local-data.ps1" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
-if "%EXIT_CODE%"=="0" (
-    echo [ok] Complete uninstall finished.
-) else (
-    echo [fail] Complete uninstall did not complete.
-)
-echo.
-if not "%NO_PAUSE%"=="1" pause
+if "%EXIT_CODE%"=="0" echo [ok] Complete uninstall finished.
+if "%EXIT_CODE%"=="10" echo [cancelled] No app files or local data were deleted.
+if "%EXIT_CODE%"=="40" echo [partial] Some app-owned items remain; review the result before retrying.
+if "%EXIT_CODE%"=="41" echo [partial] The app and local data were removed, but temporary cleanup remains.
+if not "%EXIT_CODE%"=="0" if not "%EXIT_CODE%"=="10" if not "%EXIT_CODE%"=="40" if not "%EXIT_CODE%"=="41" echo [fail] Complete uninstall did not complete.
 exit /b %EXIT_CODE%

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/office-manager/**',
+  testIgnore: ['**/office-manager/**', '**/installer/**'],
   globalSetup: process.env.IZ_CNA_E2E_DESKTOP === '1' ? './e2e/desktop-global-setup.mjs' : undefined,
   timeout: 30_000,
   fullyParallel: false,

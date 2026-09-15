@@ -1,24 +1,35 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
-def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(monkeypatch) -> None:
-    # Given: PyInstaller --noconsole runs with sys.stdout unavailable to Uvicorn's default formatter.
-    monkeypatch.delenv("IZ_CNA_PORT", raising=False)
-    from app import desktop_runtime
+def _windows_powershell_environment(cache_root: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    cache_root.mkdir(parents=True, exist_ok=True)
+    environment["PSModuleAnalysisCachePath"] = str(cache_root / "ModuleAnalysisCache")
+    environment["PSModulePath"] = os.pathsep.join(
+        (
+            str(Path.home() / "Documents" / "WindowsPowerShell" / "Modules"),
+            str(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "WindowsPowerShell" / "Modules"),
+            str(Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "Modules"),
+        )
+    )
+    return environment
 
-    # When: the frozen desktop runtime starts the local Uvicorn server.
-    with patch.object(desktop_runtime.uvicorn, "run") as run:
-        desktop_runtime.main()
 
-    # Then: it does not install the formatter that calls sys.stdout.isatty().
+def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration() -> None:
+    from app import desktop_runtime, desktop_runtime_host
+
+    with patch("uvicorn.run") as run:
+        assert desktop_runtime._run_unmanaged(8000) == 0
     run.assert_called_once_with(
         "app.desktop_main:app",
         host="127.0.0.1",
@@ -27,13 +38,80 @@ def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration(m
         log_config=None,
     )
 
+    launch = SimpleNamespace(authority=SimpleNamespace(gate="open"))
+    config_value = object()
+    with (
+        patch.object(desktop_runtime_host.uvicorn, "Config", return_value=config_value) as config,
+        patch.object(desktop_runtime_host.uvicorn, "Server") as server,
+        patch.object(desktop_runtime_host.ManagedRuntimeHost, "_new_identity", return_value=object()),
+        patch.object(desktop_runtime_host, "RuntimeController"),
+    ):
+        desktop_runtime_host.ManagedRuntimeHost(launch, object(), 8123)
 
-def test_windows_release_installer_initializes_packaged_runtime_configuration() -> None:
-    build_script = Path(__file__).resolve().parents[2] / "scripts" / "build-windows-installer.ps1"
-    preflight_script = Path(__file__).resolve().parents[2] / "scripts" / "preflight-windows.ps1"
+    _, config_kwargs = config.call_args
+    assert config_kwargs == {
+        "host": "127.0.0.1",
+        "port": 8123,
+        "access_log": False,
+        "log_config": None,
+    }
+    server.assert_called_once_with(config_value)
 
-    assert "-InitializePackagedRuntime" in build_script.read_text(encoding="utf-8")
-    assert "[switch]$InitializePackagedRuntime" in preflight_script.read_text(encoding="utf-8")
+
+def test_windows_release_installer_renders_and_executes_versioned_wrapper(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    build_script = root / "scripts" / "build-windows-installer.ps1"
+    packaging_test = root / "scripts" / "test-windows-installer-packaging.ps1"
+
+    if os.name != "nt":
+        build_source = build_script.read_text(encoding="utf-8")
+        assert "Write-IzPackageInstallerFiles" in build_source
+        assert "function New-Shortcut" not in build_source
+        return
+
+    report_path = tmp_path / "packaging-wrapper-results.json"
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    environment = _windows_powershell_environment(tmp_path / "PowerShell")
+    completed = subprocess.run(
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(packaging_test),
+            "-ReportPath",
+            str(report_path),
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["wrapper"]["unknown_flag_exit_code"] == 20
+    assert report["wrapper"]["real_unknown_flag_exit_code"] == 20
+    assert report["wrapper"]["success_exit_code"] == 0
+    assert report["wrapper"]["default_pause_observed"] is True
+    assert {entry["variant"] for entry in report["wrapper"]["variants"]} == {
+        "spaces",
+        "apostrophe",
+        "ampersand",
+        "parentheses",
+        "unicode",
+        "percent",
+        "exclamation",
+    }
+    assert report["launch_wrapper"] == {
+        "missing_install_exit_code": 20,
+        "installed_launcher_exit_code": 37,
+        "forwarded_arguments": "-NoBrowser -NoPause",
+    }
 
 
 def test_windows_release_build_excludes_local_pip_cache() -> None:
@@ -42,20 +120,66 @@ def test_windows_release_build_excludes_local_pip_cache() -> None:
     assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
 
 
-def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success() -> None:
-    # Given: a packaged launcher starts its runtime in the background.
-    launcher = Path(__file__).resolve().parents[2] / "scripts" / "launch-packaged-runtime.cmd"
+def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    command_wrapper = (root / "scripts" / "launch-packaged-runtime.cmd").read_text(encoding="utf-8")
+    powershell_launcher = (root / "scripts" / "launch-packaged-runtime.ps1").read_text(encoding="utf-8")
+    runtime_module = (root / "scripts" / "installer" / "maintenance-runtime.psm1").read_text(encoding="utf-8")
 
-    # When: the launcher contract is inspected.
-    launcher_contents = launcher.read_text(encoding="utf-8")
+    assert "launch-packaged-runtime.ps1" in command_wrapper
+    assert "exit /b %EXIT_CODE%" in command_wrapper
+    assert "Start-IzOwnedRuntime -Context $context -RuntimeRole Installed" in powershell_launcher
+    assert "Get-IzConfiguredRuntimePort -Context $Context" in runtime_module
+    assert "Read-IzRuntimeIdentity -Context $Context" in runtime_module
+    assert "Invoke-IzRuntimeControl -Context $Context -Operation status" in runtime_module
+    assert "RUNTIME_IDENTITY_TIMEOUT" in runtime_module
 
-    # Then: it probes the documented readiness endpoint and returns failure on timeout.
-    assert "/api/readiness" in launcher_contents
-    assert "Readiness check failed" in launcher_contents
-    assert "BACKEND_PORT" in launcher_contents
-    assert "127.0.0.1:%IZ_CNA_PORT%" in launcher_contents
-    assert "configured local port is invalid or already in use" in launcher_contents
-    assert "exit /b 1" in launcher_contents
+    if os.name != "nt":
+        return
+
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    evidence_root = root / ".omo" / "evidence" / "windows-cmd-maintenance" / "packaging" / "launcher-production-config"
+    environment = _windows_powershell_environment(tmp_path / "PowerShell")
+    completed = subprocess.run(
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(root / "scripts" / "tests" / "maintenance-launch-stop.Tests.ps1"),
+            "-Case",
+            "All",
+            "-EvidenceRoot",
+            str(evidence_root),
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=90,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    evidence_lines = [line for line in completed.stdout.splitlines() if line.startswith("Evidence: ")]
+    assert len(evidence_lines) == 1
+    receipt_path = Path(evidence_lines[0].removeprefix("Evidence: ")).resolve()
+    assert receipt_path.is_relative_to(evidence_root.resolve())
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8-sig"))
+    results = {entry["name"]: entry for entry in receipt["results"]}
+    assert receipt["status"] == "passed"
+    assert all(entry["status"] == "passed" for entry in results.values())
+    readiness = results["configured_port_runtime_readiness"]["binary_observables"]
+    assert readiness == {
+        "configured_port": 48123,
+        "control_status": "ok",
+        "runtime_identity_port": 48123,
+    }
+    timeout = results["runtime_identity_timeout_fails"]["binary_observables"]
+    assert timeout["reason"] == "RUNTIME_IDENTITY_TIMEOUT"
+    assert timeout["processes_remaining"] == 0
 
 
 def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() -> None:

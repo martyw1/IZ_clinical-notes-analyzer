@@ -1,12 +1,12 @@
-> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](docs/password-management-beta4.md). Earlier version-specific instructions below remain historical.
+> Beta.4 CMD maintenance candidate (2026-09-14): the current source checkout targets `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1`. The final package receipt and Windows qualification evidence are still pending. See [Windows CMD maintenance](docs/windows-cmd-maintenance.md) for the operator contract and [password management and beta.3 upgrades](docs/password-management-beta4.md) for the earlier beta.4 application changes. Historical validation sections retain the version they actually tested.
 
 # IZ Clinical Notes Analyzer
 
-Current app version: `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
+Current source version: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` channel. The final candidate ZIP, hash, and target-platform qualification remain pending.
 
 ## Client handoff and quick start
 
-Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. The existing September 4 package must be rebuilt to include later source-checkout Help changes.
+Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. The current candidate is documented in [Windows CMD maintenance](docs/windows-cmd-maintenance.md); do not distribute it until the detached final build receipt and qualification evidence are present.
 
 
 Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
@@ -31,7 +31,7 @@ Version 2.0 Beta is the current local Windows desktop beta. It includes:
 - V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
 Version 2.0 Beta still does not include startup-triggered Alleva import or a signed MSI/MSIX. Operator-triggered treatment-plan sync remains off by default and requires a client ID, encrypted secret, explicit API/sync enablement, and live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and versioned internally; no separate mapping-approval form is required. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
-`2.0.0-beta.3` is a prerelease office-manager workflow and release-readiness update, not a production declaration. Before a production release, R3 must complete supervised approved live Alleva validation; rotate the exposed credential and approve downstream/history remediation; and record signing and retention/legal-hold decisions. The current validation status is recorded in `docs/validation/office-manager-production-fixes-2026-09-03.md`; the historical beta.2 procedure remains in `docs/v2-beta/release-readiness-2026-07-11.md`.
+`2.0.0-beta.4` / build `2026.09.14.1` is a maintenance candidate, not a released or client-ready package. The intended archive is `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`; its final hash, clean-commit receipt, and package/default-profile/Home/cross-user/power-loss qualifications must be read from detached completion evidence after the final build. R3 must still complete supervised approved live Alleva validation, retain the LOC-change rule as configurable and visibly unvalidated, and record signing and retention/legal-hold decisions. The historical beta.3 validation remains recorded in `docs/validation/office-manager-production-fixes-2026-09-03.md`; the historical beta.2 procedure remains in `docs/v2-beta/release-readiness-2026-07-11.md`.
 
 ## Interactive Architecture Diagram
 
@@ -88,7 +88,7 @@ flowchart TB
 
     subgraph Packaging["Packaging and legacy boundary"]
         Builder["Release-folder builder<br/>scripts/build-windows-installer.ps1"]
-        Release["Prepared release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3"]
+        Release["Candidate release folder<br/>dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1"]
         Legacy["Archived V1 runtime<br/>deprecated/v1"]
     end
 
@@ -171,21 +171,23 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. For the current Version 2.0 Beta (`2.0.0-beta.3`), it writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1`) writes:
 
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip`
 
-The `2.0.0-beta.1` and beta.2 output names recorded in earlier validation reports are historical evidence, not current beta.3 installation instructions.
+The candidate folder and ZIP are not a release until the final build receipt and detached qualification evidence exist. The `2.0.0-beta.1`, beta.2, beta.3, and original beta.4 output names recorded in earlier validation reports are historical evidence, not current candidate installation instructions.
 
 To install from a prepared release folder:
 
-1. Open `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3`.
+1. Open the candidate release folder after its final receipt has been published internally.
 2. Double-click `Install-IZ-Clinical-Notes-Analyzer.cmd`.
 3. Wait for preflight to finish.
 4. Launch from the Start Menu shortcut named `IZ Clinical Notes Analyzer`.
 
 The per-user install path is `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer`. Local runtime data is preserved under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` when the normal uninstall removes app files.
+
+The package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed launcher. If the current user has not installed the app, it says `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`). Use normal uninstall for an upgrade or reinstall; complete uninstall is a separate exact-phrase purge action.
 
 The prepared release folder also includes double-click commands for diagnostics, backup, data-preserving uninstall, and complete uninstall:
 
@@ -323,7 +325,7 @@ Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API outp
 
 Current 2026-06-17 validation evidence: the public Swagger UI at `https://api.allevasoft.com/swagger/index.html` and OpenAPI definitions at `/swagger/v1/swagger.json` and `/swagger/v2/swagger.json` are reachable. The OpenAPI definitions describe Alleva REST API operations. `https://api.allevasoft.com/advanced-form-elements` is a protected REST operation path and returned `401 Unauthorized` without credentials.
 
-Version `2.0.0-beta.3` removes active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
+Historical beta.3 implementation note: Version `2.0.0-beta.3` removed active FHIR/SMART-on-FHIR configuration, discovery, import-plan, scopes, UI fields, defaults, and validation requirements from Alleva workflows. The V2 REST sync path uses the saved Alleva API base URL, token URL, client ID, encrypted client secret, token auth style, and automatic canonical Alleva v1 mapping. It uses `/clients.mrn` as the canonical local patient key, retains `/clients.id` only as the Alleva relationship key, pulls the complete bounded global treatment-plan collection across all patient lifecycle states, and fetches bounded plan detail/diagnosis evidence for every attributable plan. Treatment-review evidence remains unknown unless a trusted review-to-plan identifier exists. Alleva does not perform the compliance decision; R3's deterministic local rules run after normalization. Operator-triggered sync is disabled by default and requires API/sync enablement plus explicit live read-only tenant authorization.
 
 ## Treatment Plan Tracking Rules
 
@@ -431,11 +433,13 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 
 ## Version Metadata
 
-The current app version is:
+The current source candidate version is:
 
 ```text
-2.0.0-beta.3
+2.0.0-beta.4
 ```
+
+Build `2026.09.14.1` / installer revision `1`; final package and qualification evidence remain pending.
 
 Checklist content version is separate and remains:
 
