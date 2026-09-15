@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -120,7 +121,7 @@ def test_windows_release_build_excludes_local_pip_cache() -> None:
     assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
 
 
-def test_windows_release_stage_and_public_paths_fit_powershell_51() -> None:
+def test_windows_release_stage_and_public_paths_fit_powershell_51(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     build_script = root / "scripts" / "build-windows-installer.ps1"
     build_source = build_script.read_text(encoding="utf-8")
@@ -129,6 +130,70 @@ def test_windows_release_stage_and_public_paths_fit_powershell_51() -> None:
     package_name = (
         f"IZ-Clinical-Notes-Analyzer-v{version}-build-{metadata['build']}-installer-r1"
     )
+    identity_inputs = (
+        package_name,
+        package_name.replace(str(metadata["build"]), "2026.09.14.2"),
+        package_name.replace(version, "2.0.0-beta.5"),
+        package_name.removesuffix("r1") + "r2",
+    )
+    public_names = [
+        f"IZ-CNA-{hashlib.sha256(value.encode('utf-8')).hexdigest()[:16]}"
+        for value in identity_inputs
+    ]
+    if os.name == "nt":
+        controller = tmp_path / "release-directory-name.ps1"
+        names_path = tmp_path / "release-directory-inputs.json"
+        names_path.write_text(json.dumps(identity_inputs), encoding="utf-8")
+        controller_source = "\n".join(
+            (
+                "param([string]$BuildScript, [string]$NamesPath)",
+                "$ErrorActionPreference = 'Stop'",
+                "$tokens = $null",
+                "$errors = $null",
+                "$ast = [Management.Automation.Language.Parser]::ParseFile($BuildScript, [ref]$tokens, [ref]$errors)",
+                "if ($errors.Count) { throw 'BUILDER_PARSE_FAILED' }",
+                "$definitions = @($ast.FindAll({ param($node)",
+                "    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and",
+                "    $node.Name -ceq 'Get-IzReleaseDirectoryName'",
+                "}, $true))",
+                "if ($definitions.Count -ne 1) { throw 'RELEASE_DIRECTORY_FUNCTION_REQUIRED' }",
+                ". ([ScriptBlock]::Create($definitions[0].Extent.Text))",
+                "$names = Get-Content -LiteralPath $NamesPath -Raw | ConvertFrom-Json",
+                "$actual = @(foreach ($name in $names) { Get-IzReleaseDirectoryName -PackageName ([string]$name) })",
+                "ConvertTo-Json -InputObject $actual -Compress",
+            )
+        )
+        controller.write_text(
+            controller_source + "\n",
+            encoding="utf-8",
+        )
+        powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        completed = subprocess.run(
+            [
+                str(powershell),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(controller),
+                "-BuildScript",
+                str(build_script),
+                "-NamesPath",
+                str(names_path),
+            ],
+            cwd=root,
+            env=_windows_powershell_environment(tmp_path / "PowerShell"),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert json.loads(completed.stdout) == public_names
+    assert len(set(public_names)) == 4
+    assert all(re.fullmatch(r"IZ-CNA-[0-9a-f]{16}", name) for name in public_names)
     guide = Path(
         "docs",
         "guides",
@@ -140,7 +205,7 @@ def test_windows_release_stage_and_public_paths_fit_powershell_51() -> None:
     old_staged_path = release_root / f".{package_name}.stage-{token}" / "package" / "app" / guide
     bounded_staged_path = release_root / f".stage-{token}" / "package" / "app" / guide
     versioned_public_path = release_root / package_name / "app" / guide
-    bounded_public_path = release_root / f"IZ-CNA-{version}-r1" / "app" / guide
+    bounded_public_path = release_root / public_names[0] / "app" / guide
 
     assert (root / guide).is_file()
     assert len(str(bounded_public_path)) < len(str(bounded_staged_path)) < len(str(old_staged_path))
@@ -163,13 +228,13 @@ def test_windows_release_stage_and_public_paths_fit_powershell_51() -> None:
     assert (
         original_release_root_length
         + 1
-        + len(f"IZ-CNA-{version}-r1")
+        + len(public_names[0])
         + 1
         + packaged_guide_length
-    ) == 252
+    ) == 253
     assert original_release_root_length + 1 + len(f"{package_name}.zip") == 193
     assert (
-        '$FinalPackageDir = Join-Path $ReleaseRoot "IZ-CNA-$Version-r$InstallerRevision"'
+        '$FinalPackageDir = Join-Path $ReleaseRoot (Get-IzReleaseDirectoryName -PackageName $PackageName)'
         in build_source
     )
     assert '$FinalZipPath = Join-Path $ReleaseRoot "$PackageName.zip"' in build_source

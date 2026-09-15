@@ -7,6 +7,19 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Get-IzReleaseDirectoryName {
+    param([Parameter(Mandatory = $true)][string]$PackageName)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes($PackageName)
+        $hash = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+    return "IZ-CNA-$($hash.Substring(0, 16))"
+}
+
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Version = (Get-Content -LiteralPath (Join-Path $RootDir 'VERSION') -Raw).Trim()
 $VersionMetadata = [IO.File]::ReadAllText(
@@ -19,7 +32,7 @@ $InstallerRevision = 1
 $ProductId = 'r3.iz-clinical-notes-analyzer.desktop'
 $ReleaseRoot = Join-Path $RootDir 'dist\windows-release'
 $PackageName = "IZ-Clinical-Notes-Analyzer-v$Version-build-$Build-installer-r$InstallerRevision"
-$FinalPackageDir = Join-Path $ReleaseRoot "IZ-CNA-$Version-r$InstallerRevision"
+$FinalPackageDir = Join-Path $ReleaseRoot (Get-IzReleaseDirectoryName -PackageName $PackageName)
 $FinalZipPath = Join-Path $ReleaseRoot "$PackageName.zip"
 $FinalReceiptPath = Join-Path $ReleaseRoot "$PackageName.build-receipt.json"
 $FinalGateEvidencePath = Join-Path $ReleaseRoot "$PackageName.build-gates.json"
