@@ -122,6 +122,50 @@ function Invoke-IdentityAndVersionTests {
     Assert-Contract (Test-IzReleaseCompatibility -SourceRelease $newBuild -SourceSchema 12 -Manifest $repairManifest -Repair) 'same_build_repair_bypasses_source_bounds'
 }
 
+function Invoke-SystemOwnedProfileTests {
+    param([object]$Fixture)
+    $pathsModule = Get-Module maintenance-paths
+    $profile = [Environment]::GetFolderPath(
+        [Environment+SpecialFolder]::UserProfile,
+        [Environment+SpecialFolderOption]::DoNotVerify
+    )
+    $result = & $pathsModule {
+        param($ExpectedProfile, $ArbitraryPath)
+        $originalOwner = (Get-Item Function:Get-IzExistingOwnerSid).ScriptBlock
+        $script:IzTestProfilePath = Get-IzCanonicalPath $ExpectedProfile
+        try {
+            Set-Item Function:Get-IzExistingOwnerSid -Value {
+                param([string]$Path)
+                $canonical = Get-IzCanonicalPath -Path $Path -AllowMissingLeaf
+                if ($canonical.Equals($script:IzTestProfilePath, [StringComparison]::OrdinalIgnoreCase)) {
+                    return 'S-1-5-18'
+                }
+                return Get-IzCurrentUserSid
+            }
+            $context = Get-IzMaintenanceContext
+            $genericReason = try {
+                Assert-IzCurrentUserOwner -Path $ExpectedProfile
+                ''
+            } catch { [string]$_.Exception.Data['iz_reason'] }
+            $arbitraryReason = try {
+                Assert-IzCurrentUserProfileRoot -Path $ArbitraryPath
+                ''
+            } catch { [string]$_.Exception.Data['iz_reason'] }
+            return [pscustomobject]@{
+                context_owner_sid = [string]$context.owner_sid
+                generic_reason = $genericReason
+                arbitrary_reason = $arbitraryReason
+            }
+        } finally {
+            Set-Item Function:Get-IzExistingOwnerSid -Value $originalOwner
+            Remove-Variable IzTestProfilePath -Scope Script -ErrorAction SilentlyContinue
+        }
+    } $profile $Fixture.run_root
+    Assert-Contract ($result.context_owner_sid -eq (Get-IzCurrentUserSid)) 'system_owned_mapped_profile_is_accepted'
+    Assert-Contract ($result.generic_reason -eq 'PATH_OWNER_MISMATCH') 'generic_owner_check_stays_current_user_only'
+    Assert-Contract ($result.arbitrary_reason -eq 'PATH_OWNER_MISMATCH') 'system_owned_arbitrary_path_is_rejected'
+}
+
 function Invoke-ContextReceiptAndResultTests {
     param([object]$Fixture)
     $transactionId = [Guid]::NewGuid()
@@ -522,6 +566,7 @@ try {
     $childProcessesAfter = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | ForEach-Object ProcessId)
     Assert-Contract (@($childProcessesAfter | Where-Object { $_ -notin $childProcessesBefore }).Count -eq 0) 'import_starts_no_child_process'
     if ($Case -in @('All', 'contracts', 'identity', 'version')) { Invoke-IdentityAndVersionTests }
+    if ($Case -in @('All', 'contracts', 'paths')) { Invoke-SystemOwnedProfileTests -Fixture $fixture }
     if ($Case -in @('All', 'contracts', 'paths', 'receipt')) {
         $context = Invoke-ContextReceiptAndResultTests -Fixture $fixture
     } else {

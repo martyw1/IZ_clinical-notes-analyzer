@@ -11,7 +11,7 @@ from v2_test_runtime import fresh_client as _fresh_client
 def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
     expected_version = "2.0.0-beta.4"
-    expected_build = "2026.09.14.1"
+    expected_build = "2026.09.15.1"
     expected_channel = "beta-local-desktop-v2"
 
     metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
@@ -22,7 +22,7 @@ def test_beta4_version_surfaces_match_release_metadata(tmp_path: Path, monkeypat
     assert metadata["version"] == expected_version
     assert metadata["build"] == expected_build
     assert metadata["release_channel"] == expected_channel
-    assert metadata["release_date"] == "2026-09-14"
+    assert metadata["release_date"] == "2026-09-15"
     assert metadata["stability"] == "beta"
     assert metadata["is_prerelease"] is True
     assert package["version"] == expected_version

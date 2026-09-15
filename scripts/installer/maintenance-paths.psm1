@@ -130,6 +130,39 @@ function Assert-IzCurrentUserOwner {
     }
 }
 
+function Assert-IzCurrentUserProfileRoot {
+    param([Parameter(Mandatory)][string]$Path)
+    $sid = Get-IzCurrentUserSid
+    $profile = Get-IzKnownFolderPath ([Environment+SpecialFolder]::UserProfile)
+    try {
+        $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey(
+            "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid",
+            $false
+        )
+        if ($null -eq $key) { throw 'PROFILE_KEY_MISSING' }
+        try {
+            $mappedValue = [string]$key.GetValue(
+                'ProfileImagePath',
+                $null,
+                [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
+            )
+        } finally { $key.Dispose() }
+    } catch { throw (New-IzPathError 'PATH_OWNER_UNAVAILABLE') }
+    if ([string]::IsNullOrWhiteSpace($mappedValue)) {
+        throw (New-IzPathError 'PATH_OWNER_UNAVAILABLE')
+    }
+    $mapped = Get-IzCanonicalPath ([Environment]::ExpandEnvironmentVariables($mappedValue))
+    $canonical = Get-IzCanonicalPath $Path
+    if (-not $canonical.Equals($profile, [StringComparison]::OrdinalIgnoreCase) -or
+        -not $canonical.Equals($mapped, [StringComparison]::OrdinalIgnoreCase)) {
+        throw (New-IzPathError 'PATH_OWNER_MISMATCH')
+    }
+    $owner = Get-IzExistingOwnerSid -Path $canonical
+    if ($owner -notin @($sid, 'S-1-5-18')) {
+        throw (New-IzPathError 'PATH_OWNER_MISMATCH')
+    }
+}
+
 function Assert-IzContainedPath {
     [CmdletBinding()]
     param(
@@ -194,7 +227,8 @@ function Get-IzMaintenanceContext {
         $startMenu = Get-IzKnownFolderPath ([Environment+SpecialFolder]::Programs)
         $desktop = Get-IzKnownFolderPath ([Environment+SpecialFolder]::DesktopDirectory)
         Assert-IzInheritedPathMatches $env:LOCALAPPDATA $local;Assert-IzInheritedPathMatches $env:APPDATA $appData;Assert-IzInheritedPathMatches $env:USERPROFILE $profile
-        foreach($known in @($local,$appData,$profile,$startMenu,$desktop)){Assert-IzCurrentUserOwner $known}
+        foreach($known in @($local,$appData,$startMenu,$desktop)){Assert-IzCurrentUserOwner $known}
+        Assert-IzCurrentUserProfileRoot $profile
     }
     $local = Get-IzCanonicalPath $local -AllowMissingLeaf
     $programParent = Join-Path $local 'Programs'

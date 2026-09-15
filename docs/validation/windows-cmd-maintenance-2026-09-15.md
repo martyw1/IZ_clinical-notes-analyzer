@@ -1,5 +1,13 @@
 # Windows CMD maintenance validation — 2026-09-15
 
+## Standard-account correction candidate
+
+The source candidate remains version `2.0.0-beta.4` / installer revision `1`, with a distinct corrected build identity of `2026.09.15.1`. A real non-administrator account using its default profile on Windows 11 Home exposed a preflight defect: Windows owned the exact OS profile root as LocalSystem while the account owned its LocalAppData, AppData, Programs, and Desktop folders. The original module rejected that valid profile with `PATH_OWNER_MISMATCH`.
+
+The correction accepts LocalSystem ownership only for the exact UserProfile known folder when it also matches the Windows ProfileList entry for the current SID. Generic path ownership, package ownership, component-root ownership, and arbitrary LocalSystem-owned paths remain current-user-only. The focused Windows PowerShell 5.1 path suite passed all 50 assertions, including the new narrow-boundary checks. A controlled real-account red/green probe recorded the original failure and a successful corrected context with the expected default profile and data root in `C:\Users\Public\IZ-CNA-QA-20260915\results-B\ownership-probe.json`.
+
+The final full build and default-profile install test for build `2026.09.15.1` are pending and must pass before this corrected package is called client-ready.
+
 ## Candidate identity
 
 This validation note records the immutable beta.4 candidate, not a new build:
