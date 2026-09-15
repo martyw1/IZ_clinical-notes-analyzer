@@ -260,6 +260,111 @@ function Invoke-StopIdentityGuardCase {
     }
 }
 
+function Invoke-PriorCommittedRepairHandoffCase {
+    Import-Module (Join-Path $repoRoot 'scripts\installer\maintenance-common.psm1') -Force
+    Import-Module (Join-Path $repoRoot 'scripts\installer\maintenance-runtime.psm1') -Force
+    $componentRoot = New-EmptyComponentRoot
+    $baseContext = Get-IzMaintenanceContext -ComponentTestRoot $componentRoot
+    Initialize-IzMaintenanceStorage -Context $baseContext | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $baseContext.install_root 'runtime'), $baseContext.data_root -Force | Out-Null
+
+    $source = 'namespace IzRepairHandoff { using System.Threading; public static class Program { public static void Main() { Thread.Sleep(30000); } } }'
+    $executable = Join-Path $baseContext.install_root 'runtime\IZClinicalNotesAnalyzer.exe'
+    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $executable -OutputType ConsoleApplication
+    $runtimeRecord = [pscustomobject][ordered]@{
+        path = 'app/runtime/IZClinicalNotesAnalyzer.exe'
+        length = [long](Get-Item -LiteralPath $executable).Length
+        sha256 = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    $canonical = "$($runtimeRecord.path)`t$($runtimeRecord.length)`t$($runtimeRecord.sha256)`n"
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $payloadIdentity = ([BitConverter]::ToString($sha.ComputeHash([Text.UTF8Encoding]::new($false).GetBytes($canonical)))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    $manifest = [pscustomobject][ordered]@{
+        schema = 'iz-cna-release-manifest-v1'; product_id = $baseContext.product_id; version = '2.0.0-beta.4'; build = '2026.09.10.2'
+        installer_revision = 1; release_channel = 'beta-local-desktop-v2'; compatibility = [pscustomobject][ordered]@{
+            source_version_minimum = '2.0.0-beta.3'; source_version_maximum = '2.0.0-beta.4'; source_build_minimum = '2026.09.03.1'
+            source_build_maximum = '2026.09.10.2'; source_schema_minimum = 12; source_schema_maximum = 12; target_schema = 12
+        }; payload_identity = $payloadIdentity; files = @($runtimeRecord)
+    }
+    $manifestPath = Join-Path $baseContext.install_root 'release-manifest.json'
+    [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $ownedFiles = @(
+        [pscustomobject][ordered]@{ path = 'runtime/IZClinicalNotesAnalyzer.exe'; length = $runtimeRecord.length; sha256 = $runtimeRecord.sha256 },
+        [pscustomobject][ordered]@{ path = 'release-manifest.json'; length = [long](Get-Item -LiteralPath $manifestPath).Length; sha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() }
+    )
+    $release = New-IzReleaseIdentity $manifest.version $manifest.build $manifest.installer_revision $manifest.payload_identity
+    $dataIdentity = 'd' * 64
+    $committedTransaction = [Guid]::NewGuid()
+    $receipt = New-IzInstallReceipt $baseContext $dataIdentity $release $ownedFiles @() $committedTransaction
+    Write-IzInstallReceipt $baseContext $receipt $null | Out-Null
+    $priorReceiptSha256 = (Get-FileHash -LiteralPath $baseContext.install_receipt_path -Algorithm SHA256).Hash.ToLowerInvariant()
+
+    $repairTransaction = [Guid]::NewGuid()
+    $repairContext = Get-IzMaintenanceContext -ComponentTestRoot $componentRoot -TransactionId $repairTransaction
+    New-Item -ItemType Directory -Path $repairContext.transaction_root -Force | Out-Null
+    Write-IzOwnedRootMarker -Context $repairContext -Path $repairContext.transaction_root -Role transaction -TransactionId $repairTransaction | Out-Null
+    $journal = New-IzMaintenanceJournal $repairContext Repair $release $release $dataIdentity $payloadIdentity $priorReceiptSha256
+    Write-IzMaintenanceJournal $repairContext $journal -1 | Out-Null
+    $journal = New-IzMaintenanceTransition $journal PAYLOAD_VERIFIED @('PAYLOAD_STAGED','PAYLOAD_VERIFIED')
+    Write-IzMaintenanceJournal $repairContext $journal 0 | Out-Null
+
+    $validProcess = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden
+    $validHandle = $validProcess.Handle
+    try {
+        $identity = [ordered]@{
+            schema = 'iz-cna-runtime-identity-v1'; product_id = $baseContext.product_id; owner_sid = $baseContext.owner_sid
+            scope_id = $baseContext.scope_id; data_identity = $dataIdentity; instance_id = [Guid]::NewGuid().ToString('N')
+            transaction_id = $committedTransaction.ToString('N'); process_id = [int]$validProcess.Id
+            process_started_utc = $validProcess.StartTime.ToUniversalTime().ToString('o'); executable_path = $executable
+            executable_sha256 = $runtimeRecord.sha256; version = $release.version; build = $release.build
+            installer_revision = $release.installer_revision; port = 48125; pipe_name = $baseContext.pipe_name
+            gate = 'open'; draining = $false; created_utc = [DateTime]::UtcNow.ToString('o')
+        }
+        [IO.File]::WriteAllText($baseContext.runtime_identity_path, ($identity | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        $valid = Stop-IzOwnedRuntime -Context $repairContext -TimeoutSeconds 1 -AllowLegacyFallback
+        $validProcess.Refresh()
+        $validPassed = $valid.status -ceq 'stopped' -and $valid.reason -ceq 'OWNED_TREE_FORCED' -and $validProcess.HasExited
+        Add-Result -Name 'repair_handoff_stops_prior_committed_runtime' -Status $(if ($validPassed) { 'passed' } else { 'failed' }) -Observable @{
+            status = [string]$valid.status; reason = [string]$valid.reason; prior_transaction_bound = ($identity.transaction_id -ceq $receipt.last_committed_transaction)
+            process_exited = [bool]$validProcess.HasExited; prior_receipt_sha256 = $priorReceiptSha256
+        }
+    }
+    finally {
+        if (-not $validProcess.HasExited) { Stop-Process -Id $validProcess.Id -Force -ErrorAction SilentlyContinue }
+        $validProcess.WaitForExit(); $validProcess.Dispose()
+    }
+
+    $staleReceipt = Get-Content -LiteralPath $baseContext.install_receipt_path -Raw | ConvertFrom-Json
+    $staleReceipt.written_utc = [DateTime]::UtcNow.AddMinutes(1).ToString('o')
+    [IO.File]::WriteAllText($baseContext.install_receipt_path, ($staleReceipt | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $staleProcess = Start-Process -FilePath $executable -PassThru -WindowStyle Hidden
+    $staleHandle = $staleProcess.Handle
+    try {
+        $staleIdentity = [ordered]@{
+            schema = 'iz-cna-runtime-identity-v1'; product_id = $baseContext.product_id; owner_sid = $baseContext.owner_sid
+            scope_id = $baseContext.scope_id; data_identity = $dataIdentity; instance_id = [Guid]::NewGuid().ToString('N')
+            transaction_id = $committedTransaction.ToString('N'); process_id = [int]$staleProcess.Id
+            process_started_utc = $staleProcess.StartTime.ToUniversalTime().ToString('o'); executable_path = $executable
+            executable_sha256 = $runtimeRecord.sha256; version = $release.version; build = $release.build
+            installer_revision = $release.installer_revision; port = 48125; pipe_name = $baseContext.pipe_name
+            gate = 'open'; draining = $false; created_utc = [DateTime]::UtcNow.ToString('o')
+        }
+        [IO.File]::WriteAllText($baseContext.runtime_identity_path, ($staleIdentity | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+        $stale = Stop-IzOwnedRuntime -Context $repairContext -TimeoutSeconds 1 -AllowLegacyFallback
+        $staleProcess.Refresh()
+        $stalePassed = $stale.status -ceq 'failure' -and $stale.reason -ceq 'RUNTIME_TRANSACTION_MISMATCH' -and -not $staleProcess.HasExited
+        Add-Result -Name 'repair_handoff_rejects_stale_receipt_binding' -Status $(if ($stalePassed) { 'passed' } else { 'failed' }) -Observable @{
+            status = [string]$stale.status; reason = [string]$stale.reason; receipt_hash_changed = ((Get-FileHash -LiteralPath $baseContext.install_receipt_path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $priorReceiptSha256)
+            process_survived_refusal = (-not $staleProcess.HasExited)
+        }
+    }
+    finally {
+        if (-not $staleProcess.HasExited) { Stop-Process -Id $staleProcess.Id -Force -ErrorAction SilentlyContinue }
+        $staleProcess.WaitForExit(); $staleProcess.Dispose()
+    }
+}
+
 if ($Case -in @('launch-stop', 'All')) {
     Invoke-WrapperDelegationCase
     Invoke-RuntimeModuleSurfaceCase
@@ -279,6 +384,7 @@ if ($Case -in @('launch-negative', 'All')) {
         delayed_expansion_disabled = ($launcherText -match 'DisableDelayedExpansion')
     }
     Invoke-StopIdentityGuardCase
+    Invoke-PriorCommittedRepairHandoffCase
 }
 
 $failed = @($results | Where-Object { $_.status -eq 'failed' })

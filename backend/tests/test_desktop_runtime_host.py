@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows managed
 @pytest.fixture
 def component_root() -> Path:
     path = Path.home() / "AppData" / "Local" / "Temp" / f"iz-cna-component-{uuid.uuid4().hex[:12]}"
-    path.mkdir()
+    path.mkdir(parents=True)
     try:
         yield path
     finally:

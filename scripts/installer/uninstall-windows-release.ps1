@@ -393,21 +393,7 @@ function New-IzDataRemovalPlan {
                 if (-not $Unresolved.Contains('data-incomplete')) { $Unresolved.Add('data-incomplete') }
             }
         } elseif (-not $files.Contains($item.FullName)) {
-            $ownedBackup = $false
-            try {
-                if ($item.Length -ge 8) {
-                    $stream = [IO.File]::Open($item.FullName, 'Open', 'Read', 'Read')
-                    try {
-                        $magicBytes = New-Object byte[] 8
-                        if ($stream.Read($magicBytes, 0, 8) -eq 8) {
-                            $magic = [Text.Encoding]::ASCII.GetString($magicBytes)
-                            $ownedBackup = $magic -in @('IZCNABK1', 'IZCNABK2')
-                        }
-                    } finally { $stream.Dispose() }
-                }
-            } catch { $ownedBackup = $false }
-            if ($ownedBackup) { $files.Add($item.FullName) }
-            elseif (-not $Unresolved.Contains('data-incomplete')) { $Unresolved.Add('data-incomplete') }
+            if (-not $Unresolved.Contains('data-incomplete')) { $Unresolved.Add('data-incomplete') }
         }
     }
     return [pscustomobject]@{ files = @($files); directories = @($directories) }

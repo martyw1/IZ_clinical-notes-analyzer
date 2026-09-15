@@ -648,6 +648,19 @@ function Invoke-PurgeConfirmationTests {
     Assert-Removal (-not (Test-Path -LiteralPath (Join-Path $unclassified.context.data_root 'logs\synthetic.log'))) 'classified_data_removed' $unclassifiedScenario
     Assert-Removal (Test-Path -LiteralPath (Join-Path $unclassified.context.maintenance_root '.iz-cna-owned-root.json')) 'maintenance_authority_preserved' $unclassifiedScenario
 
+    $fakeBackupScenario = 'purge_preserves_unowned_valid_backup_magic'
+    $fakeBackup = New-RemovalFixture -Name 'purge-unowned-valid-backup-magic'
+    $fakeBackupFile = Join-Path $fakeBackup.context.data_root 'operator-unowned.izcnabackup'
+    [IO.File]::WriteAllBytes($fakeBackupFile, [Text.Encoding]::ASCII.GetBytes('IZCNABK2synthetic-unowned-root-file'))
+    $fakeBackupHash = (Get-FileHash -LiteralPath $fakeBackupFile -Algorithm SHA256).Hash
+    $fakeBackupRun = Invoke-RemovalControllerProcess -Fixture $fakeBackup -Action RemoveData -InputText 'REMOVE IZ DATA' -ResultName 'purge-unowned-valid-backup-magic-result.json'
+    Add-ScenarioResult -Id $fakeBackupScenario -Invocation 'RemoveData exact phrase with an unowned data-root file beginning with the valid IZCNABK2 magic' -Observable 'exit 40; unowned magic-prefixed file remains byte-identical while verified program and classified data are removed' -Process $fakeBackupRun
+    Assert-Removal ((Test-Path -LiteralPath $fakeBackupFile) -and (Get-FileHash -LiteralPath $fakeBackupFile -Algorithm SHA256).Hash -eq $fakeBackupHash) 'unowned_valid_backup_magic_preserved' $fakeBackupScenario
+    Assert-Removal ($fakeBackupRun.exit_code -eq 40 -and $fakeBackupRun.result.code -eq 40) 'unowned_valid_backup_magic_exit_40' $fakeBackupScenario
+    Assert-Removal (-not (Test-Path -LiteralPath $fakeBackup.context.install_root)) 'unowned_valid_backup_magic_program_removed' $fakeBackupScenario
+    Assert-Removal (-not (Test-Path -LiteralPath (Join-Path $fakeBackup.context.data_root 'logs\synthetic.log'))) 'unowned_valid_backup_magic_classified_data_removed' $fakeBackupScenario
+    Assert-Removal (Test-Path -LiteralPath (Join-Path $fakeBackup.context.maintenance_root '.iz-cna-owned-root.json')) 'unowned_valid_backup_magic_authority_preserved' $fakeBackupScenario
+
     $pendingScenario = 'purge_recovery_required_blocks_mutation'
     $pending = New-RemovalFixture -Name 'purge-pending'
     [IO.File]::WriteAllText($pending.context.journal_path, '{corrupt', [Text.UTF8Encoding]::new($false))

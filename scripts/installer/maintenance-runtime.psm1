@@ -277,6 +277,41 @@ function New-IzStopResult {
     return [pscustomobject][ordered]@{ schema='iz-cna-runtime-stop-v1'; status=$Status; reason=$Reason; graceful=$Graceful; legacy=$Legacy; process_ids=@($ProcessIds) }
 }
 
+function Test-IzPriorCommittedRuntimeHandoff {
+    param([object]$Context,[object]$Identity)
+    if (-not $Context.transaction_id -or -not $Identity.transaction_id -or
+        [string]$Context.transaction_id -ceq [string]$Identity.transaction_id) {
+        throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH')
+    }
+    [void](Test-IzOwnedRootMarker -Context $Context -Path $Context.transaction_root -Role transaction -TransactionId ([Guid]$Context.transaction_id))
+    $journal = Read-IzMaintenanceJournal -Context $Context
+    $steps = @($journal.completed_steps)
+    if ($journal.action -notin @('AutoInstall','Repair') -or $journal.state -cne 'PAYLOAD_VERIFIED' -or
+        'PAYLOAD_STAGED' -notin $steps -or 'PAYLOAD_VERIFIED' -notin $steps -or 'RUNTIME_QUIESCED' -in $steps -or
+        -not $journal.source_release -or -not $journal.target_release -or
+        [string]$journal.payload_identity -cne [string]$journal.target_release.payload_identity) {
+        throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH')
+    }
+    $installed = Test-IzInstalledRuntimeAuthority -Context $Context
+    $receipt = $installed.receipt
+    $source = $journal.source_release
+    $actualReceiptSha256 = Get-IzFileSha256 -Path $Context.install_receipt_path
+    if ([string]$journal.prior_receipt_sha256 -cne $actualReceiptSha256 -or
+        [string]$receipt.last_committed_transaction -cne [string]$Identity.transaction_id -or
+        [string]$journal.data_identity -cne [string]$receipt.data_identity -or
+        [string]$receipt.data_identity -cne [string]$Identity.data_identity -or
+        [string]$source.version -cne [string]$receipt.version -or
+        [string]$source.build -cne [string]$receipt.build -or
+        [int]$source.installer_revision -ne [int]$receipt.installer_revision -or
+        [string]$source.payload_identity -cne [string]$receipt.payload_identity -or
+        [string]$receipt.version -cne [string]$Identity.version -or
+        [string]$receipt.build -cne [string]$Identity.build -or
+        [int]$receipt.installer_revision -ne [int]$Identity.installer_revision) {
+        throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH')
+    }
+    return $true
+}
+
 function Test-IzLegacyRelease {
     param([object]$Context)
     $metadataPath = Join-Path $Context.install_root 'VERSION.json'
@@ -379,8 +414,10 @@ function Stop-IzOwnedRuntime {
                 throw (New-IzRuntimeError 'RUNTIME_RECEIPT_MISMATCH')
             }
         } elseif ($Context.transaction_id -cne [string]$identity.transaction_id) {
-            if ($Context.transaction_id) { throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH') }
-            try {
+            if ($Context.transaction_id) {
+                try { [void](Test-IzPriorCommittedRuntimeHandoff -Context $Context -Identity $identity) }
+                catch { throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH') }
+            } else { try {
                 $receipt = Read-IzInstallReceipt -Context $Context
                 $pending = Get-IzPendingMaintenanceStatus -Context $Context
                 if ($pending.status -cne 'COMMITTED' -or -not $pending.journal -or -not $pending.authority -or
@@ -401,6 +438,7 @@ function Stop-IzOwnedRuntime {
                 [void](Test-IzInstalledRuntimeAuthority -Context $Context)
             }
             catch { throw (New-IzRuntimeError 'RUNTIME_TRANSACTION_MISMATCH') }
+            }
         }
         try {
             $drain = Invoke-IzRuntimeControl -Context $Context -Operation drain -RuntimeIdentity $identity -TimeoutSeconds ([Math]::Min(30,$TimeoutSeconds))
