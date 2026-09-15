@@ -155,6 +155,39 @@ function Get-IzBootstrapTransactionContext {
     return $derived
 }
 
+function Remove-IzBootstrapTransactionScaffold {
+    param([object]$Context, [Guid]$TransactionId)
+    $root = [string]$Context.transaction_root
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { return $true }
+    [void](Test-IzOwnedRootMarker -Context $Context -Path $root -Role transaction -TransactionId $TransactionId)
+    $allowedDirectories = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($directory in @($root, $Context.requests_root, $Context.results_root, (Split-Path -Parent $Context.snapshot_path), $Context.verification_root)) {
+        [void]$allowedDirectories.Add([IO.Path]::GetFullPath($directory))
+    }
+    $transactionMarker = Join-Path $root '.iz-cna-owned-root.json'
+    $verificationMarker = Join-Path $Context.verification_root '.iz-cna-owned-root.json'
+    if (Test-Path -LiteralPath $Context.verification_root -PathType Container) {
+        [void](Test-IzOwnedRootMarker -Context $Context -Path $Context.verification_root -Role verification -TransactionId $TransactionId)
+    }
+    foreach ($item in @(Get-ChildItem -LiteralPath $root -Force -Recurse)) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'TEMP_TRANSACTION_INVALID' }
+        $full = [IO.Path]::GetFullPath($item.FullName)
+        if ($item.PSIsContainer) {
+            if (-not $allowedDirectories.Contains($full)) { throw 'TEMP_TRANSACTION_INVALID' }
+        } elseif (-not $full.Equals($transactionMarker, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $full.Equals($verificationMarker, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'TEMP_TRANSACTION_INVALID'
+        }
+    }
+    foreach ($marker in @($verificationMarker, $transactionMarker)) {
+        if (Test-Path -LiteralPath $marker -PathType Leaf) { [IO.File]::Delete($marker) }
+    }
+    foreach ($directory in @($allowedDirectories | Sort-Object Length -Descending)) {
+        if (Test-Path -LiteralPath $directory -PathType Container) { [IO.Directory]::Delete($directory, $false) }
+    }
+    return -not (Test-Path -LiteralPath $root)
+}
+
 function Assert-IzBootstrapTreeNoReparse {
     param([string]$Root)
     if (-not (Test-Path -LiteralPath $Root)) { return }
@@ -394,6 +427,7 @@ function Invoke-IzRemovalBootstrap {
             $stopResult = Stop-IzOwnedRuntime -Context $maintenanceContext -TimeoutSeconds 30
             if ($stopResult.status -notin @('stopped', 'already_stopped')) { throw 'RUNTIME_STOP_FAILED' }
         }
+        if (-not (Remove-IzBootstrapTransactionScaffold -Context $markerContext -TransactionId $transactionId)) { throw 'TEMP_TRANSACTION_CLEANUP_FAILED' }
 
         if ($requestedResultPath) {
             $externalResult = Get-IzCanonicalPath -Path $requestedResultPath -AllowMissingLeaf

@@ -167,11 +167,25 @@ function Invoke-SystemOwnedProfileTests {
 }
 
 function Invoke-DispatcherArgumentTests {
+    param([object]$Fixture)
     . (Join-Path $repoRoot 'scripts\installer\maintenance-windows.ps1') -NoRun
     $absent = Invoke-IzMaintenanceAction -Action Invalid -NoPause -NonInteractive -RemainingArguments $null
     Assert-Contract ($absent.code -eq 20 -and $absent.reason -eq 'UNKNOWN_ACTION') 'dispatcher_absent_trailing_arguments_are_empty'
     $unknown = Invoke-IzMaintenanceAction -Action Invalid -NoPause -NonInteractive -RemainingArguments @('--unknown')
     Assert-Contract ($unknown.code -eq 20 -and $unknown.reason -eq 'UNKNOWN_ARGUMENT') 'dispatcher_unknown_trailing_argument_rejected'
+
+    . (Join-Path $repoRoot 'scripts\installer\templates\Remove-IZ-Clinical-Notes-Analyzer.bootstrap.ps1') -NoRun -SourceRoot $repoRoot
+    $transactionId = [Guid]::NewGuid()
+    $transactionContext = Get-IzMaintenanceContext -ComponentTestRoot $Fixture.component_root -TransactionId $transactionId
+    Initialize-IzMaintenanceStorage -Context $transactionContext | Out-Null
+    Assert-Contract (Remove-IzBootstrapTransactionScaffold -Context $transactionContext -TransactionId $transactionId) 'bootstrap_owned_empty_transaction_scaffold_removed'
+    Initialize-IzMaintenanceStorage -Context $transactionContext | Out-Null
+    $unknownPath = Join-Path $transactionContext.transaction_root 'unknown.txt'
+    [IO.File]::WriteAllText($unknownPath, 'unowned', [Text.UTF8Encoding]::new($false))
+    $rejected = $false
+    try { [void](Remove-IzBootstrapTransactionScaffold -Context $transactionContext -TransactionId $transactionId) }
+    catch { $rejected = $_.Exception.Message -eq 'TEMP_TRANSACTION_INVALID' }
+    Assert-Contract ($rejected -and (Test-Path -LiteralPath $unknownPath -PathType Leaf)) 'bootstrap_transaction_scaffold_preserves_unknown_file'
 }
 
 function Invoke-ContextReceiptAndResultTests {
@@ -575,7 +589,7 @@ try {
     Assert-Contract (@($childProcessesAfter | Where-Object { $_ -notin $childProcessesBefore }).Count -eq 0) 'import_starts_no_child_process'
     if ($Case -in @('All', 'contracts', 'identity', 'version')) { Invoke-IdentityAndVersionTests }
     if ($Case -in @('All', 'contracts', 'paths')) { Invoke-SystemOwnedProfileTests -Fixture $fixture }
-    if ($Case -in @('All', 'contracts', 'dispatcher')) { Invoke-DispatcherArgumentTests }
+    if ($Case -in @('All', 'contracts', 'dispatcher')) { Invoke-DispatcherArgumentTests -Fixture $fixture }
     if ($Case -in @('All', 'contracts', 'paths', 'receipt')) {
         $context = Invoke-ContextReceiptAndResultTests -Fixture $fixture
     } else {
