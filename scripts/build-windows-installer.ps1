@@ -19,7 +19,7 @@ $InstallerRevision = 1
 $ProductId = 'r3.iz-clinical-notes-analyzer.desktop'
 $ReleaseRoot = Join-Path $RootDir 'dist\windows-release'
 $PackageName = "IZ-Clinical-Notes-Analyzer-v$Version-build-$Build-installer-r$InstallerRevision"
-$FinalPackageDir = Join-Path $ReleaseRoot $PackageName
+$FinalPackageDir = Join-Path $ReleaseRoot "IZ-CNA-$Version-r$InstallerRevision"
 $FinalZipPath = Join-Path $ReleaseRoot "$PackageName.zip"
 $FinalReceiptPath = Join-Path $ReleaseRoot "$PackageName.build-receipt.json"
 $FinalGateEvidencePath = Join-Path $ReleaseRoot "$PackageName.build-gates.json"
@@ -727,7 +727,7 @@ try {
         $PackageDir = Join-Path $stageOwnerRoot "$PackageName.NOT-RELEASE-READY"
         $ZipPath = Join-Path $stageOwnerRoot "$PackageName.NOT-RELEASE-READY.zip"
     } else {
-        $stageOwnerRoot = New-OwnedRoot -Parent $ReleaseRoot -Name ".$PackageName.stage-$invocationId" -Owner 'iz-cna-release-stage-v1'
+        $stageOwnerRoot = New-OwnedRoot -Parent $ReleaseRoot -Name ".stage-$invocationId" -Owner 'iz-cna-release-stage-v1'
         $PackageDir = Join-Path $stageOwnerRoot 'package'
         $ZipPath = Join-Path $stageOwnerRoot 'candidate.zip'
     }

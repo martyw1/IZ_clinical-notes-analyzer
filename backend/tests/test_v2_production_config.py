@@ -120,6 +120,68 @@ def test_windows_release_build_excludes_local_pip_cache() -> None:
     assert "(Join-Path $RootDir 'pip')" in build_script.read_text(encoding="utf-8")
 
 
+def test_windows_release_stage_and_public_paths_fit_powershell_51() -> None:
+    root = Path(__file__).resolve().parents[2]
+    build_script = root / "scripts" / "build-windows-installer.ps1"
+    build_source = build_script.read_text(encoding="utf-8")
+    version = (root / "VERSION").read_text(encoding="utf-8").strip()
+    metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
+    package_name = (
+        f"IZ-Clinical-Notes-Analyzer-v{version}-build-{metadata['build']}-installer-r1"
+    )
+    guide = Path(
+        "docs",
+        "guides",
+        "Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2",
+        "Marleigh-Setup-Install-and-User-Guide.html",
+    )
+    release_root = root / "dist" / "windows-release"
+    token = "0123456789ab"
+    old_staged_path = release_root / f".{package_name}.stage-{token}" / "package" / "app" / guide
+    bounded_staged_path = release_root / f".stage-{token}" / "package" / "app" / guide
+    versioned_public_path = release_root / package_name / "app" / guide
+    bounded_public_path = release_root / f"IZ-CNA-{version}-r1" / "app" / guide
+
+    assert (root / guide).is_file()
+    assert len(str(bounded_public_path)) < len(str(bounded_staged_path)) < len(str(old_staged_path))
+    assert len(str(bounded_public_path)) < len(str(versioned_public_path))
+    if os.name == "nt":
+        assert len(str(bounded_staged_path)) < 260
+        assert len(str(bounded_public_path)) < 260
+    original_release_root_length = 116
+    packaged_guide_length = len(str(Path("app") / guide))
+    assert packaged_guide_length == 112
+    assert (
+        original_release_root_length
+        + 1
+        + len(f".stage-{token}")
+        + 1
+        + len("package")
+        + 1
+        + packaged_guide_length
+    ) == 257
+    assert (
+        original_release_root_length
+        + 1
+        + len(f"IZ-CNA-{version}-r1")
+        + 1
+        + packaged_guide_length
+    ) == 252
+    assert original_release_root_length + 1 + len(f"{package_name}.zip") == 193
+    assert (
+        '$FinalPackageDir = Join-Path $ReleaseRoot "IZ-CNA-$Version-r$InstallerRevision"'
+        in build_source
+    )
+    assert '$FinalZipPath = Join-Path $ReleaseRoot "$PackageName.zip"' in build_source
+    assert '$FinalReceiptPath = Join-Path $ReleaseRoot "$PackageName.build-receipt.json"' in build_source
+    assert 'New-OwnedRoot -Parent $ReleaseRoot -Name ".stage-$invocationId"' in build_source
+    assert '.$PackageName.stage-$invocationId' not in build_source
+    assert (
+        "Remove-OwnedRoot -Path $stageOwnerRoot -Parent $ReleaseRoot "
+        "-Owner 'iz-cna-release-stage-v1'"
+    ) in build_source
+
+
 def test_windows_packaged_launcher_waits_for_runtime_readiness_before_success(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     command_wrapper = (root / "scripts" / "launch-packaged-runtime.cmd").read_text(encoding="utf-8")
