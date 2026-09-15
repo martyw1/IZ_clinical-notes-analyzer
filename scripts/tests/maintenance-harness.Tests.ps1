@@ -111,9 +111,16 @@ Assert-True (-not (Test-Path -LiteralPath (Join-Path (Split-Path $EvidenceRoot -
 # Given a receipt missing one frozen gate, when candidate validation runs, then it fails without touching an app canary.
 $candidate = Join-Path $EvidenceRoot 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip'
 [IO.File]::WriteAllBytes($candidate, [Text.Encoding]::ASCII.GetBytes('synthetic-candidate'))
-$receiptPath = [IO.Path]::ChangeExtension($candidate, $null) + '.build-receipt.json'
+$receiptPath = [IO.Path]::ChangeExtension($candidate, '.build-receipt.json')
 $gateDir = Split-Path $receiptPath -Parent
-$packageDirectory = Join-Path $EvidenceRoot 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1'
+$packageIdentity = [IO.Path]::GetFileNameWithoutExtension([IO.Path]::GetFileName($candidate))
+$packageIdentitySha = [Security.Cryptography.SHA256]::Create()
+try {
+    $packageIdentityBytes = [Text.UTF8Encoding]::new($false).GetBytes($packageIdentity)
+    $packageIdentityHash = ([BitConverter]::ToString($packageIdentitySha.ComputeHash($packageIdentityBytes))).Replace('-', '').ToLowerInvariant()
+}
+finally { $packageIdentitySha.Dispose() }
+$packageDirectory = Join-Path $EvidenceRoot "IZ-CNA-$($packageIdentityHash.Substring(0, 16))"
 $null = New-Item -ItemType Directory -Path $packageDirectory
 $gateNames = @('backend_tests', 'frontend_tests', 'frontend_build', 'repository_safety', 'directory_safety', 'zip_safety')
 $gates = @($gateNames | ForEach-Object {
@@ -131,6 +138,11 @@ $badReceipt = [ordered]@{
 }
 $badReceipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
 Assert-Reason { Read-IzHarnessBuildReceipt -CandidateZip $candidate -ExpectedSourceRevision ('a' * 40) } 'BUILD_GATE_SET_MISMATCH'; Pass-Assertion
+$wrongPackageDirectory = Join-Path $EvidenceRoot 'IZ-CNA-0000000000000000'
+$null = New-Item -ItemType Directory -Path $wrongPackageDirectory
+$badReceipt.package_directory = $wrongPackageDirectory
+$badReceipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+Assert-Reason { Read-IzHarnessBuildReceipt -CandidateZip $candidate -ExpectedSourceRevision ('a' * 40) } 'BUILD_RECEIPT_PATH_MISMATCH'; Pass-Assertion
 Assert-True ((Get-IzHarnessSha256 -Path $productCanary) -ceq 'acb86a9cb70a84f695de89e7fe22819466205759d798d52d4a3dd95b0cdaa2a1') 'BUILD_REFUSAL_CANARY'; Pass-Assertion
 
 # Given terminal observations, when receipts are built, then Component cannot satisfy Package and failure stays nonzero.

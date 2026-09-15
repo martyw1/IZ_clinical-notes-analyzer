@@ -227,7 +227,7 @@ function Read-IzHarnessBuildReceipt {
     if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
         throw (New-IzHarnessSafetyError 'CANDIDATE_ZIP_MISSING')
     }
-    $derivedReceiptPath = [IO.Path]::ChangeExtension($zipPath, $null) + '.build-receipt.json'
+    $derivedReceiptPath = [IO.Path]::ChangeExtension($zipPath, '.build-receipt.json')
     $receiptPath = if ($CandidateBuildReceipt) {
         $suppliedReceiptPath = Assert-IzSafeLocalPath -Path $CandidateBuildReceipt -Purpose build_receipt
         if (-not $suppliedReceiptPath.Equals($derivedReceiptPath, [StringComparison]::OrdinalIgnoreCase)) {
@@ -251,7 +251,8 @@ function Read-IzHarnessBuildReceipt {
     $receiptZip = Assert-IzSafeLocalPath -Path $receipt.zip_path -Purpose candidate
     $packageDirectory = Assert-IzSafeLocalPath -Path $receipt.package_directory -Purpose package
     $expectedLeaf = "IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-$($receipt.build)-installer-r1.zip"
-    $expectedPackageLeaf = [IO.Path]::GetFileNameWithoutExtension($expectedLeaf)
+    $expectedPackageIdentity = [IO.Path]::GetFileNameWithoutExtension($expectedLeaf)
+    $expectedPackageLeaf = "IZ-CNA-$((Get-IzHarnessTextSha256 -Text $expectedPackageIdentity).Substring(0, 16))"
     if (-not $receiptZip.Equals($zipPath, [StringComparison]::OrdinalIgnoreCase) -or
         [IO.Path]::GetFileName($zipPath) -cne $expectedLeaf -or
         [IO.Path]::GetFileName($packageDirectory) -cne $expectedPackageLeaf -or
