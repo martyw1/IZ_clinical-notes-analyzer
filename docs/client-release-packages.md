@@ -8,7 +8,9 @@ Filename: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.15.2-installer
 
 The clean-source build receipt, ZIP hash, live package tests, standard-account results, and remaining qualification limits are recorded in the [validation report](validation/windows-cmd-maintenance-2026-09-15.md). The receipt remains bound to its source commit; subsequent documentation updates do not rebuild or replace the immutable ZIP.
 
-Distribution status: **Platform qualification incomplete; not approved as fully client-qualified.** Windows 10 Home and actual VM power-loss evidence are unavailable.
+The final core-acceptance P02 rerun passed all nine live HTTP/Edge/executable lifecycle steps for install, beta.3 smart upgrade with preserved data, live local API/browser operation, data-preserving uninstall, reinstall, typed complete purge, and cleanup with zero owned processes or listeners. Receipt: `.omo/evidence/windows-cmd-maintenance/cmd-9ac37e50b421/maintenance-run-receipt.json`, SHA-256 `cda9db5e33682d4940ba1d7dc357b495524e142f7a0a7ac2be527e6f944ca9df`; case SHA-256 `7f6e40146b1f65a68b120d699579904e2dec36737532d640e55c305c5364f034`.
+
+Distribution status: **Accepted for the user-defined core deployment scope; not approved as fully client-qualified.** The broader Windows Home matrix, VM power-loss tests, and process-isolation edge cases remain unverified and are deferred by the user. They are not critical blockers for the accepted core deployment.
 
 Use [Windows CMD maintenance](windows-cmd-maintenance.md) for smart upgrade, data-preserving uninstall, separate complete purge, backup and recovery. Beta.3 does not need a complete uninstall before upgrade.
 

@@ -33,6 +33,19 @@ The exact-artifact P02 run passed using the packaged executable, live localhost 
 - Receipt SHA-256: `37a1b0e04ace2468780befd5f4d934626dc1eeadcc563c5698f51705bced99bc`.
 - Case SHA-256: `ceeec7f0c8d18907729121819f5f93ab4efb4eeb97d9475218fee0ce7aa709c8`.
 
+## User-approved core deployment acceptance
+
+The user accepted this immutable package for the critical core deployment scope: fresh install, beta.3 smart upgrade with preserved data, live local API and browser operation, data-preserving uninstall, reinstall, and typed complete purge. The final exact-package acceptance rerun passed all nine live HTTP/Edge/executable lifecycle steps, safety and redaction checks, and cleanup with zero owned processes or listeners.
+
+- Final core-acceptance P02 receipt: `.omo/evidence/windows-cmd-maintenance/cmd-9ac37e50b421/maintenance-run-receipt.json`.
+- Receipt SHA-256: `cda9db5e33682d4940ba1d7dc357b495524e142f7a0a7ac2be527e6f944ca9df`.
+- Case SHA-256: `7f6e40146b1f65a68b120d699579904e2dec36737532d640e55c305c5364f034`.
+- Bound source: `a79d2a77ce3377ba31f8b38b08e6c9f5e6dd12ef`; immutable ZIP SHA-256: `7a9dbbfa54f204cda2d88a4dfdb18a1007e79e30666db5fc2cdcaca567c52a65`.
+
+This is a scoped deployment acceptance, not a claim that every Home, VM, browser, power-loss, or process-isolation case passed. The broader cases under **Remaining qualification boundary** remain explicitly unverified and are deferred by the user; they are not critical blockers for the accepted core deployment.
+
+Host cleanup subsequently verified zero temporary QA accounts, profiles, profile directories, and credential XML files. One verified public QA staging folder remains because automatic approval policy blocked its removal; it is noncritical housekeeping and not an application deployment blocker.
+
 ## Actual standard accounts on Windows 11 Home
 
 Two temporary, separate standard Windows accounts were used with their actual default profiles on Windows 11 Home build 26200. Their installer processes were not administrators, and Git, Node, Python and Docker were absent from the test PATH. Account creation/removal required host administration; normal app installation and removal did not.

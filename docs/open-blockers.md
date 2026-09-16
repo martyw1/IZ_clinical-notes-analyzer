@@ -85,15 +85,19 @@ Required resolution evidence:
 
 ## Beta.4 CMD maintenance qualification
 
-Status: **open; no release or client-ready claim.**
+Status: **core deployment accepted; broader platform qualification remains open.**
 
-Build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. Remaining qualification and the immutable package identity are recorded in [the validation report](validation/windows-cmd-maintenance-2026-09-15.md). Windows 10 Home and VM power-loss tests remain unavailable; no full client-qualified claim is made.
+Build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. A final core-acceptance P02 rerun also passed all nine live HTTP/Edge/executable lifecycle steps, including smart upgrade and preserved data, uninstall, reinstall, typed purge, safety/redaction checks, and cleanup with zero owned processes or listeners. Its receipt is `.omo/evidence/windows-cmd-maintenance/cmd-9ac37e50b421/maintenance-run-receipt.json`, SHA-256 `cda9db5e33682d4940ba1d7dc357b495524e142f7a0a7ac2be527e6f944ca9df`; the case SHA-256 is `7f6e40146b1f65a68b120d699579904e2dec36737532d640e55c305c5364f034`.
+
+The user accepted the immutable package for the critical core deployment scope: install, upgrade with preserved data, live local API/browser operation, data-preserving uninstall, reinstall, and complete purge. Windows 10 Home, the broader Home matrix, VM power-loss testing, and process-isolation edge cases remain explicitly unverified and are deferred by the user. They are not critical blockers for this accepted core deployment, and no full client-qualified claim is made.
 
 R07 process isolation is also unqualified: the second credential-created standard test session could terminate both the app and an ordinary control process owned by the first account. Repeat with independently signed-in standard accounts; no app-specific cause was established.
 
-Required remaining evidence is the full Home matrix (including Windows 10, offline/network isolation, running-upgrade/write-drain, bootstrap-shortcut behavior and browser coverage) and R09 abrupt guest power-off before/after every defined state boundary on Windows 10 and Windows 11 Home. No VM controller or disposable guest images have been supplied. Successful local process termination is not power-loss evidence.
+Deferred remaining evidence is the full Home matrix (including Windows 10, offline/network isolation, running-upgrade/write-drain, bootstrap-shortcut behavior and browser coverage) and R09 abrupt guest power-off before/after every defined state boundary on Windows 10 and Windows 11 Home. No VM controller or disposable guest images have been supplied. Successful local process termination is not power-loss evidence.
 
 The actual standard-account lifecycle and R07 results are recorded separately in the validation report; they do not certify the entire Home matrix. Clinical LOC-change validation and live Alleva approval gates remain unchanged.
+
+Post-qualification host cleanup verified zero temporary QA accounts, profiles, profile directories, and credential XML files. One scope-verified public QA staging folder remains after automatic approval policy blocked removal. That folder is noncritical housekeeping, not an application deployment blocker; no bypass or further deletion attempt is planned.
 
 ## Historical beta3 Windows Packaging and Validation
 
