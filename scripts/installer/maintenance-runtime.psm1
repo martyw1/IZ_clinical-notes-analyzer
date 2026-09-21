@@ -270,7 +270,10 @@ function Stop-IzExactProcessTree {
         if(-not $started.ContainsKey($id) -or [Math]::Abs(($currentStarted.ToUniversalTime()-$started[$id]).TotalSeconds) -gt 1){
             throw (New-IzRuntimeError 'RUNTIME_PROCESS_IDENTITY_CHANGED')
         }
-        Stop-Process -Id $id -Force
+        try { Stop-Process -Id $id -Force -ErrorAction Stop }
+        catch [Microsoft.PowerShell.Commands.ProcessCommandException] {
+            if (Get-Process -Id $id -ErrorAction SilentlyContinue) { throw }
+        }
     }
     if (-not (Wait-IzProcessExit -ProcessIds $ids.ToArray() -TimeoutSeconds $TimeoutSeconds)) { throw (New-IzRuntimeError 'RUNTIME_PROCESS_DID_NOT_EXIT') }
     return $ids.ToArray()
