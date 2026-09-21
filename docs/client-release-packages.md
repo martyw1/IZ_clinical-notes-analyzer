@@ -1,8 +1,16 @@
 # Client release packages
 
-Current candidate: **2.0.0-beta.4**, build **2026.09.15.2**, installer revision **1**.
+Current candidate: **1.0.0**, build **2026.09.21.1**, installer revision **1**.
 
-## Verified package
+Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
+
+## Candidate package under validation
+
+Expected filename: `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.1-installer-r1.zip`.
+
+The portable ZIP, clean-source build receipt, hash, relocated normal-folder and OneDrive-backed package tests, fresh-install credential check, upgrade password-preservation check, and Windows 10/11 lifecycle evidence are pending. Track them in [installer portability validation](validation/installer-portability-2026-09-21.md). Do not distribute this candidate as client-ready until those criteria are filled with passing evidence.
+
+## Historical verified package: build 2026.09.15.2
 
 Filename: `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.15.2-installer-r1.zip`.
 
@@ -29,6 +37,6 @@ The hashes below belong to archives that were actually preserved and verified in
 
 All six archives passed the repository release safety scanner on September 10, 2026. Expanded release folders are represented by their complete ZIP packages.
 
-Local v1.0.0 and v1.1.1 archives are excluded: v1.0.0 contains caches and repository metadata; v1.1.1 also contains files classified as credentials and clinical exports. They have not been modified or uploaded.
+Old archives named only v1.0.0 and v1.1.1 are excluded (they are unrelated to the new build-qualified production 1.0.0 package): v1.0.0 contains caches and repository metadata; v1.1.1 also contains files classified as credentials and clinical exports. They have not been modified or uploaded.
 
 Videos, private runtime data, local credentials, databases, and raw clinical exports remain excluded.

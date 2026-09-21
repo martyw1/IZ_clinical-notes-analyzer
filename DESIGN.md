@@ -1,6 +1,6 @@
 # IZ Clinical Notes Analyzer Design System
 
-Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` / channel `beta-local-desktop-v2`. Final package and qualification evidence are pending.
+Current source candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1` / channel `stable-local-desktop`. Package qualification is pending; the existing V2 design system remains in use.
 
 ## 1. Atmosphere & Identity
 

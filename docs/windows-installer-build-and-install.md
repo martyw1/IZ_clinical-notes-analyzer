@@ -4,11 +4,11 @@ This guide covers the Windows release workflow for IZ Clinical Notes Analyzer.
 The build and install scripts are designed for Windows 10/11 users without
 administrator rights.
 
-## Beta.4 CMD maintenance candidate
+## Production 1.0 candidate
 
-The current candidate is `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`. The prepared ZIP and full build are verified. Read the [validation report](validation/windows-cmd-maintenance-2026-09-15.md) for the exact artifact and remaining platform limits before deployment.
+The current candidate is `1.0.0` / build `2026.09.21.1` / installer revision `1`. Its prepared ZIP, full build, and relocated-package lifecycle are under validation. Read the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The September 15 package and [its validation report](validation/windows-cmd-maintenance-2026-09-15.md) remain immutable historical evidence.
 
-The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and the earlier beta.4 build for smart upgrade in place, preserves current-user data on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
+The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and earlier beta.4 builds for smart upgrade in place, preserves current-user data and existing account passwords on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
 
 The candidate build must be made from a clean source revision. The final build receipt is the authoritative place for the commit SHA, gate results, package path, and hash; adding a final ZIP hash or run identifier to tracked documentation would require another source commit and break that provenance.
 
@@ -123,8 +123,8 @@ Use `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-
 
 ### Install
 
-1. Unzip the release zip.
-2. Open the unzipped release folder.
+1. Unzip the release zip completely. The candidate is designed to accept a normal local folder such as Downloads or Desktop and a OneDrive-backed package folder; do not run commands from inside the ZIP preview.
+2. Open the unzipped release folder. The bootstrap stages and verifies the package before it writes the per-user installed application.
 3. Double-click:
 
 ```text
@@ -145,6 +145,8 @@ Local app data is stored separately under:
 
 Normal installs preserve existing `.env`, local database, uploads, exports,
 reports, and logs.
+
+On a truly fresh install, sign in with the starter administrator credential supplied by R3 and replace it immediately when prompted. The starter credential is the same approved value across supported devices; it is not documented in the package. An upgrade or reinstall preserves existing account passwords and does not restore the starter credential for an initialized account.
 
 The release includes `app\docs\patient-treatment-plan-handling.md`, the current reference for how patient treatment-plan data moves from manual upload or approved Alleva sync into local storage, deterministic timeliness status, aggregate diagnostics, and the Treatment Plans screen.
 

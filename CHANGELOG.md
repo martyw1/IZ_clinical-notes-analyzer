@@ -1,4 +1,20 @@
-## 2.0.0-beta.4 sync feedback fix — 2026-09-10
+## 1.0.0 production candidate - 2026-09-21
+
+Build: 2026.09.21.1; installer revision: 1; channel: stable-local-desktop.
+
+- Stage and verify a prepared package before installation when the extracted package is relocated to a normal local folder or a OneDrive-backed folder.
+- Preserve strict validation of the installed application root and local data root.
+- Keep the R3-supplied starter administrator credential and mandatory first-use password change consistent across supported Windows devices on a truly fresh install.
+- Preserve existing account passwords and password state during upgrade or reinstall.
+- Clinical rules are unchanged. The LOC-change window remains unvalidated and the live Alleva gate remains in place.
+- Candidate validation is pending in [installer portability validation](docs/validation/installer-portability-2026-09-21.md).
+
+
+Production 1.0 adds safe forensic correlation for login attempts and Alleva jobs: categorical failure reasons, job/stage identifiers, request attempts, HTTP status, elapsed time, and record counts. Passwords, token values, raw vendor responses, and clinical identifiers are excluded from these diagnostic additions. Administrator recovery invalidates prior sessions and recovery codes atomically.
+
+A narrow installer bridge accepts supported beta.3/beta.4 releases into this exact initial production release while retaining ownership, integrity, schema, backup, and rollback checks. General semantic-version ordering and downgrade protection remain unchanged.
+
+## 2.0.0-beta.4 sync feedback fix â€“ 2026-09-10
 
 Build: 2026.09.10.2; channel: beta-local-desktop-v2.
 
@@ -21,7 +37,7 @@ See [password management](docs/password-management-beta4.md). Validation is reco
 
 # Changelog
 
-Current source candidate: `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` / channel `beta-local-desktop-v2`. The final package receipt, hash, and target-platform qualification remain pending.
+Current source candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1` / channel `stable-local-desktop`. The portable ZIP, final receipt, and target-platform qualification remain pending.
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 

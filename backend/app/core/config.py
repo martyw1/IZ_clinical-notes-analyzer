@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Final
 
 APP_NAME: Final = "IZ Clinical Notes Analyzer"
-APP_VERSION: Final = "2.0.0-beta.4"
+APP_VERSION: Final = "1.0.0"
 DESKTOP_STARTER_PASSWORD: Final = "r3mar123ABC"
-BUILD_CHANNEL: Final = "beta-local-desktop-v2"
+BUILD_CHANNEL: Final = "stable-local-desktop"
 MACOS_APPLICATION_SUPPORT: Final = Path("Library") / "Application Support"
 
 

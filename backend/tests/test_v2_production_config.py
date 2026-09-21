@@ -232,7 +232,7 @@ def test_windows_release_stage_and_public_paths_fit_powershell_51(tmp_path: Path
         + 1
         + packaged_guide_length
     ) == 253
-    assert original_release_root_length + 1 + len(f"{package_name}.zip") == 193
+    assert original_release_root_length + 1 + len(f"{package_name}.zip") == 186
     assert (
         '$FinalPackageDir = Join-Path $ReleaseRoot (Get-IzReleaseDirectoryName -PackageName $PackageName)'
         in build_source

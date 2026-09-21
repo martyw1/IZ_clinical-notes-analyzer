@@ -1,10 +1,23 @@
 # Release Notes
 
-## Beta.4 CMD maintenance candidate - build 2026.09.15.2
+## Production 1.0 candidate - build 2026.09.21.1
 
-Current candidate: `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`. Fixes cover valid SYSTEM-owned Windows profile roots, absent PowerShell arguments, verified shutdown before removal fingerprints, and cleanup of the bootstrap-owned transaction. Full build and exact-package live HTTP/Edge lifecycle passed. See [current validation](validation/windows-cmd-maintenance-2026-09-15.md) for standard-account evidence and remaining platform qualification. No clinical rules or live Alleva gates changed.
+Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
 
-## Beta.4 stability update — build 2026.09.10.2
+Current candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
+
+The candidate ZIP, build receipt, Windows 10/11 lifecycle evidence, and client-ready determination remain pending. See [installer portability validation](validation/installer-portability-2026-09-21.md). No clinical rules, LOC-change validation status, or live Alleva gates changed.
+
+
+Production 1.0 adds safe forensic correlation for login attempts and Alleva jobs: categorical failure reasons, job/stage identifiers, request attempts, HTTP status, elapsed time, and record counts. Passwords, token values, raw vendor responses, and clinical identifiers are excluded from these diagnostic additions. Administrator recovery invalidates prior sessions and recovery codes atomically.
+
+A narrow installer bridge accepts supported beta.3/beta.4 releases into this exact initial production release while retaining ownership, integrity, schema, backup, and rollback checks. General semantic-version ordering and downgrade protection remain unchanged.
+
+## Historical Beta.4 CMD maintenance package - build 2026.09.15.2
+
+The September 15 package and its validation report are immutable historical evidence. Its receipt, hash, and results are not claims about the September 21 candidate. That historical build fixed valid SYSTEM-owned Windows profile roots, absent PowerShell arguments, verified shutdown before removal fingerprints, and cleanup of the bootstrap-owned transaction. Full build and exact-package live HTTP/Edge lifecycle passed in its recorded scope. See [the September 15 validation report](validation/windows-cmd-maintenance-2026-09-15.md).
+
+## Beta.4 stability update â€” build 2026.09.10.2
 
 - Correct UTC completion times and persistent, safe timeout feedback in Settings.
 - Separate failed-record and job-error counts.
@@ -27,16 +40,16 @@ See [password management](password-management-beta4.md). Validation is recorded 
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 
-- The 2026-09-08 guidance update identified app `2.0.0-beta.3` / build `2026.09.03.1`; checklist content stays `1.2.0`. That identity is historical; the current source candidate is the beta.4 build recorded above.
+- The 2026-09-08 guidance update identified app `2.0.0-beta.3` / build `2026.09.03.1`; checklist content stays `1.2.0`. That identity is historical; the current source candidate is the production 1.0 build recorded above.
 - The offline HTML guide and in-app Help now describe source-filtered rosters, exact saved-plan selection, filtered exports, manual processing warnings, expired sessions, and the unresolved LOC-change/live-sync gates.
 - Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
 - This checkout help update does not rebuild or revalidate the prepared installer.
 
-Current source candidate: `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`.
+Current source candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1`.
 
-Current release channel: `beta-local-desktop-v2`.
+Current release channel: `stable-local-desktop`.
 
-Current source candidate date: `2026-09-15`; the final package release date remains pending.
+Current source candidate date: `2026-09-21`; the final package release date remains pending.
 
 Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
 

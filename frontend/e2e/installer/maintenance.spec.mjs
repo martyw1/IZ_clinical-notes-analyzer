@@ -114,7 +114,7 @@ test.describe('marker-owned packaged maintenance runtime', () => {
       ['Patient Roster', 'Patient roster'],
       ['Manual Upload', 'Point-in-time treatment-plan evidence'],
       ['Treatment Plans Roster', 'Treatment Plans Roster'],
-      ['Help', 'Version 2.0 Beta 4 workflow'],
+      ['Help', 'Production 1.0 workflow'],
     ]
     for (const [button, heading] of views) {
       await page.getByRole('button', { name: button, exact: true }).click()

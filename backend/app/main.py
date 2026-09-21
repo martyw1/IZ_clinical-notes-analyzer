@@ -17,7 +17,7 @@ def create_app() -> FastAPI:
     settings.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
     init_database()
     api = FastAPI(
-        title=f"{settings.app_name} V2 Beta",
+        title=f"{settings.app_name} Production 1.0",
         docs_url=None,
         openapi_url=None,
         redoc_url=None,

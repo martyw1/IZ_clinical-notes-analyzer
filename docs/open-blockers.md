@@ -1,8 +1,8 @@
 # Open Blockers
 
-Date: 2026-09-14
+Date: 2026-09-21
 
-Applies to the current source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1` on the `beta-local-desktop-v2` channel. The final package is built; platform qualification remains incomplete.
+Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.1` / installer revision `1` on the `stable-local-desktop` channel. The portable ZIP and target-platform qualification are pending.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -83,9 +83,19 @@ Required resolution evidence:
 - Required signature/date/completion fields are present or documented as unavailable with deterministic missing-data behavior.
 - A documented decision exists for treatment-review due-date availability through a trusted review ID or an explicit unavailable state.
 
-## Beta.4 CMD maintenance qualification
+## Production 1.0 package validation
 
-Status: **core deployment accepted; broader platform qualification remains open.**
+Status: **candidate under validation; no client-ready claim.**
+
+Build `2026.09.21.1` must pass a clean full build and exact-package lifecycle from relocated normal folders and OneDrive-backed package locations on the available Windows 10/11 matrix. Evidence must confirm that bootstrap staging and verification succeeds without Windows administrator access or client-side Python, Node.js, Git, Docker, or PostgreSQL; installed-app and local-data root checks remain strict; a truly fresh install accepts the R3-supplied starter administrator credential and requires immediate change; and upgrades or reinstalls preserve existing account passwords and password state.
+
+The pending criteria and evidence slots are in [installer portability validation](validation/installer-portability-2026-09-21.md). Until they are filled, do not publish the September 21 ZIP as client-ready.
+
+Clinical scope did not change. The LOC-change window remains configurable and unvalidated, deterministic unresolved outcomes remain required, and live Alleva treatment-plan sync remains gated.
+
+## Historical Beta.4 CMD maintenance qualification
+
+Status: **September 15 core deployment accepted in its recorded scope; broader platform qualification remained open.**
 
 Build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. A final core-acceptance P02 rerun also passed all nine live HTTP/Edge/executable lifecycle steps, including smart upgrade and preserved data, uninstall, reinstall, typed purge, safety/redaction checks, and cleanup with zero owned processes or listeners. Its receipt is `.omo/evidence/windows-cmd-maintenance/cmd-9ac37e50b421/maintenance-run-receipt.json`, SHA-256 `cda9db5e33682d4940ba1d7dc357b495524e142f7a0a7ac2be527e6f944ca9df`; the case SHA-256 is `7f6e40146b1f65a68b120d699579904e2dec36737532d640e55c305c5364f034`.
 
@@ -121,7 +131,7 @@ Required resolution evidence:
 
 ## Alleva Client-Credentials Token Request
 
-Status: blocked by vendor/auth response until R3/Alleva supplies a confirmed working tenant credential set.
+Status: live OAuth and initial protected endpoint reads passed on September 21, 2026. Full operational pull validation is in progress; older failed token attempts below are historical.
 
 The public Alleva Swagger UI and OpenAPI JSON are reachable, and the supplied Swagger/OpenAPI field mapping export is available as documentation evidence. Alleva confirmed it does not currently support FHIR, so active app configuration excludes FHIR/SMART-on-FHIR fields, discovery, scopes, and import-plan workflows. The app and simple standalone connectivity script support client-credentials token testing, keep returned access tokens in memory only, and redact token/secret values from reports and audit logs.
 

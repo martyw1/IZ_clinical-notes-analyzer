@@ -1,25 +1,25 @@
-> Beta.4 CMD maintenance build `2026.09.15.2`: full build and live packaged-app checks passed. See [current validation](docs/validation/windows-cmd-maintenance-2026-09-15.md) for the immutable package and remaining platform limits. Beta.3 supports upgrade in place without complete uninstall.
+> Production 1.0 candidate build `2026.09.21.1` is under validation. It targets installation from relocated normal folders and OneDrive-backed package locations while preserving strict installed-app and local-data path checks. See [current validation criteria](docs/validation/installer-portability-2026-09-21.md). The verified September 15 package remains immutable historical evidence.
 
 # IZ Clinical Notes Analyzer
 
-Current source version: `2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1` on the `beta-local-desktop-v2` channel. The candidate ZIP is built and verified; full target-platform qualification remains incomplete.
+Current source version: `1.0.0` / build `2026.09.21.1` / installer revision `1` on the `stable-local-desktop` channel. The candidate ZIP and portability lifecycle are under validation; no client-ready claim is made yet.
 
 ## Client handoff and quick start
 
 Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. The current candidate is documented in [Windows CMD maintenance](docs/windows-cmd-maintenance.md); do not distribute it until the detached final build receipt and qualification evidence are present.
 
 
-Version 2.0 Beta is the active local desktop runtime. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
+Production 1.0 retains the active V2 local desktop runtime and data schema. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
 
 IZ Clinical Notes Analyzer is a local-first clinical chart-review and Treatment Plan Timeliness Tracker app for Windows 10/11 desktop use. It helps R3 staff check clinical-note binders and treatment-plan tracking evidence before office-manager approval. The current app runs as one local FastAPI desktop service with a React/Vite browser interface at `http://localhost:8000`, SQLite under the user's local app-data folder, encrypted local uploaded-file storage, encrypted API configuration storage, role-based access control, deterministic treatment-plan rules, workflow profiles, readiness checks, optional LLM configuration disabled by default, and forensic audit logging.
 
 The normal R3 Windows user path does not require Windows administrator access, Docker, PostgreSQL, cloud hosting, Git, Node.js, command-line work, or a database administrator when a prepared release folder with built frontend assets is used.
 
-Marleigh's illustrated, non-technical setup/install/daily-use/troubleshooting guide is [Marleigh-Setup-Install-and-User-Guide.html](<docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2/Marleigh-Setup-Install-and-User-Guide.html>). It is the primary clinical-manager handoff for Version 2.0 Beta and includes synthetic, non-PHI screenshots from the real local startup and V2 UI.
+Marleigh's illustrated, non-technical setup/install/daily-use/troubleshooting guide is [Marleigh-Setup-Install-and-User-Guide.html](<docs/guides/Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2/Marleigh-Setup-Install-and-User-Guide.html>). It is a historical clinical-manager guide for the V2 workflow and includes synthetic, non-PHI screenshots from the real local startup and V2 UI.
 
-## Current Version 2.0 Beta State
+## Current production 1.0 candidate
 
-Version 2.0 Beta is the current local Windows desktop beta. It includes:
+The production 1.0 candidate includes:
 
 - A focused V2 FastAPI runtime in `backend/app/` with active V2 routes in `backend/app/v2/api/routes.py`.
 - A focused V2 React/Vite UI in `frontend/src/v2/` led by Status Dashboard, an MRN-centered Patient Roster, Manual Upload, Treatment Plan Detail, an Alleva Treatment Plans Roster, API Testing Harness, Users, Forensic Logs, Settings, and Help.
@@ -29,9 +29,9 @@ Version 2.0 Beta is the current local Windows desktop beta. It includes:
 - Local-first audit/version/readiness services, safe forensic log summaries, encrypted/local app-data boundaries, and frontend footer version metadata.
 - Windows preflight, local-stack smoke, API-configuration smoke, release-folder packaging, required-file validation, and forbidden-file scans for a prepared release folder.
 - V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
-Version 2.0 Beta still does not include startup-triggered Alleva import or a signed MSI/MSIX. Operator-triggered treatment-plan sync remains off by default and requires a client ID, encrypted secret, explicit API/sync enablement, and live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and versioned internally; no separate mapping-approval form is required. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
+The app does not include startup-triggered Alleva import or a signed MSI/MSIX. Operator-triggered treatment-plan sync remains off by default and requires a client ID, encrypted secret, explicit API/sync enablement, and live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and versioned internally; no separate mapping-approval form is required. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
-The current maintenance package passed its full build and live package lifecycle. See [current validation](docs/validation/windows-cmd-maintenance-2026-09-15.md) for Windows standard-account results and unverified platform scenarios. Live Alleva approval, configurable unvalidated LOC-change timing, signing, and retention/legal-hold decisions remain separate release boundaries.
+The September 15 maintenance package passed its recorded build and live package lifecycle. The current September 21 portability candidate remains under validation against the [named portability criteria](docs/validation/installer-portability-2026-09-21.md). Live Alleva approval, configurable unvalidated LOC-change timing, signing, and retention/legal-hold decisions remain separate release boundaries.
 
 ## Interactive Architecture Diagram
 
@@ -171,10 +171,10 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`2.0.0-beta.4` / build `2026.09.15.2` / installer revision `1`) writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`1.0.0` / build `2026.09.21.1` / installer revision `1`) writes:
 
 - `dist\windows-release\IZ-CNA-337308272cfbf7e6`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.15.2-installer-r1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.21.1-installer-r1.zip`
 
 The candidate folder and ZIP are not a release until the final build receipt and detached qualification evidence exist. The `2.0.0-beta.1`, beta.2, beta.3, and original beta.4 output names recorded in earlier validation reports are historical evidence, not current candidate installation instructions.
 
@@ -439,7 +439,7 @@ The current source candidate version is:
 2.0.0-beta.4
 ```
 
-Build `2026.09.15.2` / installer revision `1`; package verified, full platform qualification incomplete.
+Build `2026.09.21.1` / installer revision `1`; portable-installer candidate under validation.
 
 Checklist content version is separate and remains:
 

@@ -22,8 +22,8 @@ def _frontend_missing_page() -> HTMLResponse:
     html = (
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\" />"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-        "<title>IZ Clinical Notes Analyzer V2 Beta</title></head><body><main>"
-        "<h1>IZ Clinical Notes Analyzer V2 Beta backend is running</h1>"
+        "<title>IZ Clinical Notes Analyzer Production 1.0</title></head><body><main>"
+        "<h1>IZ Clinical Notes Analyzer Production 1.0 backend is running</h1>"
         f"<p>The V2 browser build was not found at <code>{dist_dir}</code>.</p>"
         "<p>Run <code>cd frontend && npm run build</code>, then restart the desktop service.</p>"
         "</main></body></html>"
