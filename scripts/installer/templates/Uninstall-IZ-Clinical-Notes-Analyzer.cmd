@@ -4,7 +4,7 @@ title Uninstall IZ Clinical Notes Analyzer
 echo Removing IZ Clinical Notes Analyzer app files for this Windows user.
 echo Local data and recovery backups will be preserved.
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\Remove-IZ-Clinical-Notes-Analyzer.bootstrap.ps1" -Action Uninstall -SourceRoot "%~dp0installer" -SourceKind Package %*
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\start-package.ps1" -Action Uninstall -SourceRoot "%~dp0\" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
 if "%EXIT_CODE%"=="0" echo [ok] App removal finished. Local data was preserved.

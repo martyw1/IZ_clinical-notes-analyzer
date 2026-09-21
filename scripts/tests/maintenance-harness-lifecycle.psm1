@@ -106,7 +106,7 @@ function New-IzLifecycleCandidateBinding {
     try { $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json }
     catch { throw (New-IzLifecycleError 'LIFECYCLE_MANIFEST_INVALID') }
     if ($manifest.schema -cne 'iz-cna-release-manifest-v1' -or $manifest.product_id -cne $script:ProductId -or
-        $manifest.version -cne '2.0.0-beta.4' -or [int]$manifest.installer_revision -ne 1 -or
+        $manifest.version -cnotin @('2.0.0-beta.4','1.0.0') -or [int]$manifest.installer_revision -ne 1 -or
         [string]$manifest.build -cnotmatch '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' -or
         [string]$manifest.payload_identity -cnotmatch '^[a-f0-9]{64}$' -or @($manifest.files).Count -eq 0) {
         throw (New-IzLifecycleError 'LIFECYCLE_MANIFEST_INVALID')

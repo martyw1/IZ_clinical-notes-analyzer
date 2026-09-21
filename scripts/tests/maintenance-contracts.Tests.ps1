@@ -120,6 +120,27 @@ function Invoke-IdentityAndVersionTests {
     Assert-Contract (Test-IzReleaseCompatibility -SourceRelease $beta3 -SourceSchema 12 -Manifest ([pscustomobject]@{compatibility=$compatibility})) 'version_boundary_does_not_compare_payload_hash'
     $repairManifest=[pscustomobject]@{version=$newBuild.version;build=$newBuild.build;installer_revision=$newBuild.installer_revision;payload_identity=$newBuild.payload_identity;compatibility=$compatibility}
     Assert-Contract (Test-IzReleaseCompatibility -SourceRelease $newBuild -SourceSchema 12 -Manifest $repairManifest -Repair) 'same_build_repair_bypasses_source_bounds'
+    $production = [pscustomobject]@{version='1.0.0';build='2026.09.21.1';installer_revision=1;release_channel='stable-local-desktop'}
+    Assert-Contract (Test-IzProductionVersionTransition $beta3 $production) 'production_bridge_accepts_beta3'
+    Assert-Contract (Test-IzProductionVersionTransition $beta4 $production) 'production_bridge_accepts_beta4'
+    $lastBeta=New-IzReleaseIdentity -Version '2.0.0-beta.4' -Build '2026.09.15.2' -InstallerRevision 1 -PayloadIdentity ('d'*64)
+    Assert-Contract (Test-IzProductionVersionTransition $lastBeta $production) 'production_bridge_accepts_last_supported_beta'
+    Assert-Contract (-not(Test-IzProductionVersionTransition $beta10 $production)) 'production_bridge_rejects_future_beta'
+    $laterBeta=New-IzReleaseIdentity -Version '2.0.0-beta.4' -Build '2026.09.21.2' -InstallerRevision 1 -PayloadIdentity ('e'*64)
+    Assert-Contract (-not(Test-IzProductionVersionTransition $laterBeta $production)) 'production_bridge_rejects_newer_beta_build'
+    $stable=New-IzReleaseIdentity -Version '1.0.0' -Build '2026.09.21.1' -InstallerRevision 1 -PayloadIdentity ('f'*64)
+    Assert-Contract (-not(Test-IzProductionVersionTransition $stable $production)) 'production_bridge_does_not_override_same_version'
+    Assert-Contract ((Compare-IzReleaseIdentity $lastBeta $stable) -gt 0) 'production_bridge_keeps_semver_ordering'
+    foreach($field in @('version','build','release_channel','installer_revision')) {
+        $wrong=$production.PSObject.Copy()
+        $wrong.$field=if($field -eq 'installer_revision'){2}else{'unexpected'}
+        Assert-Contract (-not(Test-IzProductionVersionTransition $lastBeta $wrong)) ('production_bridge_rejects_target_'+$field)
+    }
+    $stableCompatibility=[pscustomobject]@{source_version_minimum='1.0.0';source_version_maximum='2.0.0-beta.4';source_build_minimum='2026.09.03.1';source_build_maximum='2026.09.21.1';source_schema_minimum=12;source_schema_maximum=12}
+    $production | Add-Member compatibility $stableCompatibility
+    Assert-Contract (Test-IzReleaseCompatibility $lastBeta 12 $production) 'production_bridge_retains_schema_compatibility'
+    Assert-ContractError { Test-IzReleaseCompatibility $lastBeta 13 $production | Out-Null } 'SOURCE_NOT_COMPATIBLE' 'production_bridge_rejects_wrong_schema'
+
 }
 
 function Invoke-SystemOwnedProfileTests {

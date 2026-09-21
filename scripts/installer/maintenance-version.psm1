@@ -117,6 +117,18 @@ function Compare-IzReleaseIdentity {
     return $value
 }
 
+function Test-IzProductionVersionTransition {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][object]$SourceRelease,[Parameter(Mandatory)][object]$Manifest)
+    $source=Assert-IzReleaseIdentityObject $SourceRelease
+    if ($Manifest.version -cne '1.0.0' -or $Manifest.build -cne '2026.09.21.1' -or
+        $Manifest.installer_revision -ne 1 -or $Manifest.release_channel -cne 'stable-local-desktop' -or
+        $source.version -cnotin @('2.0.0-beta.3','2.0.0-beta.4') -or $source.installer_revision -gt 1) { return $false }
+    $build=ConvertTo-IzBuildVersion $source.build
+    return ((Compare-IzBuildVersion $build (ConvertTo-IzBuildVersion '2026.09.03.1')) -ge 0 -and
+        (Compare-IzBuildVersion $build (ConvertTo-IzBuildVersion '2026.09.15.2')) -le 0)
+}
+
 function Test-IzReleaseCompatibility {
     param([object]$SourceRelease,[int]$SourceSchema,[object]$Manifest,[switch]$Repair)
     $source=Assert-IzReleaseIdentityObject $SourceRelease
@@ -138,4 +150,4 @@ function Test-IzReleaseCompatibility {
     return $true
 }
 
-Export-ModuleMember -Function ConvertTo-IzSemanticVersion,ConvertTo-IzBuildVersion,New-IzReleaseIdentity,Compare-IzReleaseIdentity,Test-IzReleaseCompatibility,Assert-IzReleaseIdentityObject
+Export-ModuleMember -Function ConvertTo-IzSemanticVersion,ConvertTo-IzBuildVersion,New-IzReleaseIdentity,Compare-IzReleaseIdentity,Test-IzReleaseCompatibility,Test-IzProductionVersionTransition,Assert-IzReleaseIdentityObject

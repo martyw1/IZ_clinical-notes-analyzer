@@ -258,12 +258,16 @@ function Stop-IzExactProcessTree {
     $started=@{}
     foreach($id in $ids.ToArray()){
         $process=Get-Process -Id $id -ErrorAction SilentlyContinue
-        if($process){$started[$id]=$process.StartTime.ToUniversalTime()}
+        if(-not $process){continue}
+        $processStarted=$process.StartTime
+        if($null -ne $processStarted){$started[$id]=$processStarted.ToUniversalTime()}
     }
     foreach ($id in @($ids.ToArray() | Sort-Object -Descending)) {
         $process=Get-Process -Id $id -ErrorAction SilentlyContinue
         if(-not $process){continue}
-        if(-not $started.ContainsKey($id) -or [Math]::Abs(($process.StartTime.ToUniversalTime()-$started[$id]).TotalSeconds) -gt 1){
+        $currentStarted=$process.StartTime
+        if($null -eq $currentStarted){continue}
+        if(-not $started.ContainsKey($id) -or [Math]::Abs(($currentStarted.ToUniversalTime()-$started[$id]).TotalSeconds) -gt 1){
             throw (New-IzRuntimeError 'RUNTIME_PROCESS_IDENTITY_CHANGED')
         }
         Stop-Process -Id $id -Force

@@ -115,9 +115,10 @@ function Get-IzRuntimeCommandSpec {
 }
 
 $exports=@(
+ 'Assert-IzPathSyntax','ConvertTo-IzManifest',
  'Get-IzCurrentUserSid','Get-IzMaintenanceContext','Initialize-IzMaintenanceStorage','Get-IzCanonicalPath','Assert-IzCurrentUserOwner','Assert-IzContainedPath','Assert-IzMaintenanceContext','Protect-IzMaintenancePath','Assert-IzExternalBackupDestination','Get-IzExternalBackupPublicationPaths','Get-IzFileSha256','Get-IzUtf8Sha256',
  'New-IzOwnedRootMarker','Write-IzOwnedRootMarker','Read-IzOwnedRootMarker','Test-IzOwnedRootMarker','New-IzProgramInventory','Read-IzProgramInventory','Test-IzProgramInventory','New-IzDataIdentity',
- 'Assert-IzExactProperties','Read-IzStrictJsonFile','ConvertTo-IzSemanticVersion','ConvertTo-IzBuildVersion','New-IzReleaseIdentity','Compare-IzReleaseIdentity','Test-IzReleaseCompatibility','Read-IzReleaseManifest','Test-IzReleasePayload','New-IzInstallReceipt','ConvertTo-IzInstallReceipt','Read-IzInstallReceipt','Write-IzInstallReceipt',
+ 'Assert-IzExactProperties','Read-IzStrictJsonFile','ConvertTo-IzSemanticVersion','ConvertTo-IzBuildVersion','New-IzReleaseIdentity','Compare-IzReleaseIdentity','Test-IzReleaseCompatibility','Test-IzProductionVersionTransition','Read-IzReleaseManifest','Test-IzReleasePayload','New-IzInstallReceipt','ConvertTo-IzInstallReceipt','Read-IzInstallReceipt','Write-IzInstallReceipt',
  'Enter-IzMaintenanceLock','Exit-IzMaintenanceLock','New-IzMaintenanceJournal','Read-IzMaintenanceJournal','Read-IzResolvedMaintenanceJournal','Write-IzMaintenanceJournal','New-IzMaintenanceTransition','Get-IzMaintenanceAuthority','Get-IzPendingMaintenanceStatus',
  'New-IzMaintenanceResult','Read-IzMaintenanceResult','Write-IzMaintenanceResult','New-IzDatabaseSnapshotRequest','New-IzVerifyDataRequest','Read-IzRuntimeMaintenanceResult','Get-IzRuntimeCommandSpec'
 )

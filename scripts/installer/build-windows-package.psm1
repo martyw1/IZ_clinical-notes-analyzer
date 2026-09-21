@@ -13,6 +13,8 @@ $script:RootCommandNames = @(
     'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd'
 )
 $script:CopiedInstallerNames = @(
+    'package-source.psm1',
+    'start-package.ps1',
     'maintenance-windows.ps1',
     'install-windows-release.ps1',
     'uninstall-windows-release.ps1',
@@ -478,10 +480,10 @@ function Write-IzReleaseManifest {
         installer_revision = $InstallerRevision
         release_channel = $ReleaseChannel
         compatibility = [ordered]@{
-            source_version_minimum = '2.0.0-beta.3'
+            source_version_minimum = '1.0.0'
             source_version_maximum = '2.0.0-beta.4'
             source_build_minimum = '2026.09.03.1'
-            source_build_maximum = '2026.09.10.2'
+            source_build_maximum = '2026.09.21.1'
             source_schema_minimum = 12
             source_schema_maximum = 12
             target_schema = 12
@@ -513,7 +515,7 @@ function Assert-IzReleaseManifest {
         throw 'RELEASE_MANIFEST_IDENTITY_INVALID'
     }
     $expectedCompatibility = @(
-        '2.0.0-beta.3', '2.0.0-beta.4', '2026.09.03.1', '2026.09.10.2', 12, 12, 12
+        '1.0.0', '2.0.0-beta.4', '2026.09.03.1', '2026.09.21.1', 12, 12, 12
     )
     $actualCompatibility = @(
         $manifest.compatibility.source_version_minimum,

@@ -160,6 +160,10 @@ try {
         Assert-True -Condition (Test-Path -LiteralPath $renderedPath -PathType Leaf) -Label "rendered_root_command:$relativePath"
         $renderedText = [System.IO.File]::ReadAllText($renderedPath)
         $renderedBytes = [System.IO.File]::ReadAllBytes($renderedPath)
+        Assert-True -Condition ($renderedText -notmatch '(?im)^powershell(?:\.exe)?\s') -Label "no_package_search_interpreter:$relativePath"
+        if ($relativePath -in @('Install-IZ-Clinical-Notes-Analyzer.cmd','Uninstall-IZ-Clinical-Notes-Analyzer.cmd','Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd')) {
+            Assert-True -Condition ($renderedText.Contains('"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"')) -Label "absolute_system_interpreter:$relativePath"
+        }
         Assert-True -Condition ($renderedText -notmatch '@@[A-Z][A-Z0-9_]*@@') -Label "no_unresolved_token:$relativePath"
         $withoutCrlf = $renderedText.Replace("`r`n", '')
         Assert-True -Condition (-not $withoutCrlf.Contains("`r") -and -not $withoutCrlf.Contains("`n")) -Label "cmd_uses_only_crlf:$relativePath"
@@ -263,7 +267,7 @@ try {
 [CmdletBinding()]
 param(
     [string]$Action,
-    [string]$PackageRoot,
+    [Alias('SourceRoot')][string]$PackageRoot,
     [switch]$NoPause,
     [switch]$NonInteractive,
     [string]$ResultPath,
@@ -303,7 +307,7 @@ exit [int]$env:IZ_CNA_SYNTHETIC_DISPATCH_EXIT
             New-Item -ItemType Directory -Path $behaviorRoot | Out-Null
             $null = Write-IzPackageInstallerFiles -RepositoryRoot $repositoryRoot -PackageRoot $behaviorRoot -LegacyProgramInventory $legacyProgramInventory
             [System.IO.File]::WriteAllText(
-                (Join-Path $behaviorRoot 'installer\maintenance-windows.ps1'),
+                (Join-Path $behaviorRoot 'installer\start-package.ps1'),
                 $stubSource,
                 [System.Text.UTF8Encoding]::new($true)
             )

@@ -5,7 +5,7 @@ echo Complete uninstall removes app files AND app-owned local data for this Wind
 echo External backups, downloaded packages, and other Windows profiles are outside its scope.
 echo The PowerShell prompt requires the exact phrase REMOVE IZ DATA.
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\Remove-IZ-Clinical-Notes-Analyzer.bootstrap.ps1" -Action RemoveData -SourceRoot "%~dp0installer" -SourceKind Package %*
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\start-package.ps1" -Action RemoveData -SourceRoot "%~dp0\" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
 if "%EXIT_CODE%"=="0" echo [ok] Complete uninstall finished.

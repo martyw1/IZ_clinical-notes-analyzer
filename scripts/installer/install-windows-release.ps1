@@ -555,6 +555,7 @@ function Invoke-IzWindowsInstall {
         $effectiveAction=$Action
         if($source.release){
             $comparison=Compare-IzReleaseIdentity $source.release $target
+            if($comparison -gt 0 -and (Test-IzProductionVersionTransition $source.release $manifest)){$comparison=-1}
             if($comparison -gt 0){throw(New-IzInstallError 'DOWNGRADE_BLOCKED')}
             if($Action -eq 'Repair' -and $comparison -ne 0){throw(New-IzInstallError 'REPAIR_VERSION_MISMATCH')}
             if($comparison -eq 0 -and $source.mode -eq 'owned'){

@@ -342,4 +342,4 @@ function Assert-IzExternalBackupDestination {
     return Get-IzExternalBackupPublicationPaths -Context $Context -BackupPath $BackupPath -TransactionId $TransactionId
 }
 
-Export-ModuleMember -Function Get-IzCurrentUserSid,Get-IzCanonicalPath,ConvertTo-IzPathKey,Get-IzRootPathHash,Get-IzUtf8Sha256,Assert-IzCurrentUserOwner,Assert-IzContainedPath,Get-IzMaintenanceContext,Assert-IzMaintenanceContext,Protect-IzMaintenancePath,Get-IzExternalBackupPublicationPaths,Assert-IzExternalBackupDestination
+Export-ModuleMember -Function Assert-IzPathSyntax,Get-IzCurrentUserSid,Get-IzCanonicalPath,ConvertTo-IzPathKey,Get-IzRootPathHash,Get-IzUtf8Sha256,Assert-IzCurrentUserOwner,Assert-IzContainedPath,Get-IzMaintenanceContext,Assert-IzMaintenanceContext,Protect-IzMaintenancePath,Get-IzExternalBackupPublicationPaths,Assert-IzExternalBackupDestination

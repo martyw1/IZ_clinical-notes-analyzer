@@ -243,14 +243,14 @@ function Read-IzHarnessBuildReceipt {
     catch { throw (New-IzHarnessSafetyError 'BUILD_RECEIPT_INVALID') }
     Assert-IzSafetyExactKeys $receipt $script:BuildReceiptKeys 'BUILD_RECEIPT_KEYS_INVALID'
     if ($receipt.schema -cne 'iz-cna-build-receipt-v1' -or $receipt.product_id -cne $script:ProductId -or
-        $receipt.version -cne '2.0.0-beta.4' -or $receipt.build -cnotmatch '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' -or
+        $receipt.version -cnotin @('2.0.0-beta.4','1.0.0') -or $receipt.build -cnotmatch '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' -or
         $receipt.installer_revision -ne 1 -or $receipt.source_revision -cne $ExpectedSourceRevision -or
         $receipt.manifest_sha256 -cnotmatch '^[a-f0-9]{64}$' -or $receipt.payload_identity -cnotmatch '^[a-f0-9]{64}$') {
         throw (New-IzHarnessSafetyError 'BUILD_RECEIPT_VALUE_INVALID')
     }
     $receiptZip = Assert-IzSafeLocalPath -Path $receipt.zip_path -Purpose candidate
     $packageDirectory = Assert-IzSafeLocalPath -Path $receipt.package_directory -Purpose package
-    $expectedLeaf = "IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-$($receipt.build)-installer-r1.zip"
+    $expectedLeaf = "IZ-Clinical-Notes-Analyzer-v$($receipt.version)-build-$($receipt.build)-installer-r1.zip"
     $expectedPackageIdentity = [IO.Path]::GetFileNameWithoutExtension($expectedLeaf)
     $expectedPackageLeaf = "IZ-CNA-$((Get-IzHarnessTextSha256 -Text $expectedPackageIdentity).Substring(0, 16))"
     if (-not $receiptZip.Equals($zipPath, [StringComparison]::OrdinalIgnoreCase) -or
