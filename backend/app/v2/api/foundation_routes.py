@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from time import perf_counter_ns
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import delete, select, text
@@ -20,7 +22,7 @@ from app.v2.api.models import (
 from app.v2.models import AppSetting, PasswordRecovery, User
 from app.v2.authorization import facility_ids_for_user
 from app.v2.security import create_access_token, hash_password, password_policy_error, verify_password
-from app.v2.services.audit_store import record_audit_event
+from app.v2.services.audit_store import JsonValue, record_audit_event
 from app.v2.services.evaluation_store import reevaluate_all_plan_versions
 
 router = APIRouter()
@@ -38,6 +40,40 @@ RULE_SETTING_FIELDS = frozenset(
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _forensic_auth_state(user: User | None) -> str:
+    if user is None:
+        return "unresolved"
+    if user.auth_state == "password_change_required":
+        return "change_required"
+    return user.auth_state
+
+
+def _login_audit_details(
+    *,
+    attempt_id: str,
+    started_ns: int,
+    reason: str,
+    user: User | None,
+) -> dict[str, JsonValue]:
+    details: dict[str, JsonValue] = {
+        "attempt_id": attempt_id,
+        "elapsed_ms": max(0, (perf_counter_ns() - started_ns) // 1_000_000),
+        "reason": reason,
+        "account_state": _forensic_auth_state(user),
+        "credential_change_required": bool(user and user.must_reset_password),
+    }
+    if user is not None:
+        details.update(
+            {
+                "account_active": user.is_active,
+                "account_locked": user.is_locked,
+                "failed_attempts": user.failed_login_attempts,
+                "lockout_expires_at": user.locked_until.isoformat() if user.locked_until else None,
+            }
+        )
+    return details
 
 
 def _user_out(user: User, db: DbSession) -> UserOut:
@@ -81,16 +117,32 @@ def _settings_out(row: AppSetting) -> AppSettingsOut:
 
 @router.post("/api/auth/login", response_model=TokenOut)
 def login(payload: LoginInput, db: DbSession) -> TokenOut:
+    attempt_id = uuid4().hex
+    started_ns = perf_counter_ns()
     username = payload.username.strip()
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     now = _utc_now()
+    was_bootstrap_required = bool(user and user.auth_state == "bootstrap_required")
     if user and user.auth_state == "locked_until":
         locked_until = user.locked_until
         if locked_until is not None and locked_until.tzinfo is None:
             locked_until = locked_until.replace(tzinfo=timezone.utc)
         if locked_until is not None and now < locked_until:
-            record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="denied")
-            raise HTTPException(status_code=423, detail="Account temporarily locked")
+            record_audit_event(
+                db,
+                action="auth.login.blocked",
+                actor=user,
+                target_entity_type="user",
+                target_entity_id=str(user.id),
+                outcome_status="denied",
+                details=_login_audit_details(
+                    attempt_id=attempt_id,
+                    started_ns=started_ns,
+                    reason="active_lockout",
+                    user=user,
+                ),
+            )
+            raise HTTPException(status_code=401, detail="Invalid credentials")
         user.is_locked = False
         user.locked_until = None
         user.auth_state = "password_change_required" if user.must_reset_password else "active"
@@ -105,15 +157,69 @@ def login(payload: LoginInput, db: DbSession) -> TokenOut:
                 user.locked_until = now + timedelta(minutes=15)
             db.commit()
             if user.auth_state == "locked_until":
-                record_audit_event(db, action="auth.lockout.started", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="denied", details={"duration_minutes": 15})
-        record_audit_event(db, action="auth.login.failed", target_entity_type="user", target_entity_id=username, outcome_status="failure")
+                lockout_details = _login_audit_details(
+                    attempt_id=attempt_id,
+                    started_ns=started_ns,
+                    reason="failure_threshold_reached",
+                    user=user,
+                )
+                lockout_details["duration_minutes"] = 15
+                record_audit_event(
+                    db,
+                    action="auth.lockout.started",
+                    actor=user,
+                    target_entity_type="user",
+                    target_entity_id=str(user.id),
+                    outcome_status="denied",
+                    details=lockout_details,
+                )
+        record_audit_event(
+            db,
+            action="auth.login.failed",
+            actor=user,
+            target_entity_type="user",
+            target_entity_id=str(user.id) if user else "unresolved",
+            outcome_status="failure",
+            details=_login_audit_details(
+                attempt_id=attempt_id,
+                started_ns=started_ns,
+                reason="credential_mismatch" if user else "unknown_account",
+                user=user,
+            ),
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
-        record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
-        raise HTTPException(status_code=403, detail="Account inactive")
+        record_audit_event(
+            db,
+            action="auth.login.blocked",
+            actor=user,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            outcome_status="failure",
+            details=_login_audit_details(
+                attempt_id=attempt_id,
+                started_ns=started_ns,
+                reason="inactive_account",
+                user=user,
+            ),
+        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.is_locked or user.auth_state == "locked_until":
-        record_audit_event(db, action="auth.login.blocked", actor=user, target_entity_type="user", target_entity_id=str(user.id), outcome_status="failure")
-        raise HTTPException(status_code=403, detail="Account locked")
+        record_audit_event(
+            db,
+            action="auth.login.blocked",
+            actor=user,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            outcome_status="failure",
+            details=_login_audit_details(
+                attempt_id=attempt_id,
+                started_ns=started_ns,
+                reason="locked_account",
+                user=user,
+            ),
+        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     user.failed_login_attempts = 0
     user.last_login_at = now
     if user.auth_state == "bootstrap_required":
@@ -121,9 +227,33 @@ def login(payload: LoginInput, db: DbSession) -> TokenOut:
         user.must_reset_password = True
     db.commit()
     token = create_access_token(user.username, user.password_changed_at)
-    if user.auth_state == "password_change_required" and user.password_changed_at is None:
-        record_audit_event(db, action="auth.bootstrap.completed", actor=user, target_entity_type="user", target_entity_id=str(user.id))
-    record_audit_event(db, action="auth.login.success", actor=user, target_entity_type="user", target_entity_id=str(user.id))
+    if was_bootstrap_required:
+        record_audit_event(
+            db,
+            action="auth.bootstrap.completed",
+            actor=user,
+            target_entity_type="user",
+            target_entity_id=str(user.id),
+            details=_login_audit_details(
+                attempt_id=attempt_id,
+                started_ns=started_ns,
+                reason="starter_credential_accepted",
+                user=user,
+            ),
+        )
+    record_audit_event(
+        db,
+        action="auth.login.success",
+        actor=user,
+        target_entity_type="user",
+        target_entity_id=str(user.id),
+        details=_login_audit_details(
+            attempt_id=attempt_id,
+            started_ns=started_ns,
+            reason="authenticated",
+            user=user,
+        ),
+    )
     return TokenOut(access_token=token, must_reset_password=user.must_reset_password, auth_state=user.auth_state)
 
 

@@ -139,8 +139,8 @@ def test_five_failures_lock_for_exactly_fifteen_minutes_with_injected_clock(tmp_
     # Then: the correct credential remains locked just before the boundary.
     monkeypatch.setattr("app.v2.api.foundation_routes._utc_now", lambda: start + timedelta(minutes=14, seconds=59))
     locked = client.post("/api/auth/login", json={"username": "admin", "password": "StrongLocalActivePass2"})
-    assert locked.status_code == 423
-    assert locked.json()["detail"] == "Account temporarily locked"
+    assert locked.status_code == 401
+    assert locked.json()["detail"] == "Invalid credentials"
 
     # When: the exact 15-minute boundary arrives.
     monkeypatch.setattr("app.v2.api.foundation_routes._utc_now", lambda: start + timedelta(minutes=15))

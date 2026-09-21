@@ -5,11 +5,11 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.core.config import settings
 from app.v2.db import SessionLocal, init_database
-from app.v2.models import User
+from app.v2.models import PasswordRecovery, User
 from app.v2.security import hash_password, password_policy_error
 from app.v2.services.audit_store import record_audit_event
 
@@ -41,15 +41,17 @@ def recover_local_admin(new_password: str) -> None:
         administrator.is_locked = False
         administrator.locked_until = None
         administrator.recovery_required = True
-        db.commit()
+        db.execute(delete(PasswordRecovery).where(PasswordRecovery.user_id == administrator.id))
         record_audit_event(
             db,
             action="auth.local_admin.recovered",
             actor=administrator,
             target_entity_type="user",
             target_entity_id=str(administrator.id),
-            details={"resulting_state": "password_change_required"},
+            details={"resulting_state": "change_required"},
+            commit=False,
         )
+        db.commit()
 
 
 def main() -> int:
