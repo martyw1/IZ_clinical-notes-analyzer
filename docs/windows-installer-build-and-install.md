@@ -4,13 +4,13 @@ This guide covers the Windows release workflow for IZ Clinical Notes Analyzer.
 The build and install scripts are designed for Windows 10/11 users without
 administrator rights.
 
-## Production 1.0 candidate
+## Production 1.0
 
-The current candidate is `1.0.0` / build `2026.09.21.2` / installer revision `1`. Its prepared ZIP, full build, and relocated-package lifecycle are under validation. Read the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The September 15 package and [its validation report](validation/windows-cmd-maintenance-2026-09-15.md) remain immutable historical evidence.
+The current candidate is `1.0.0` / build `2026.09.21.2` / installer revision `1`. Its prepared ZIP, full build and core component-profile lifecycle passed; client-site and full platform qualification remain open. Read the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The September 15 package and [its validation report](validation/windows-cmd-maintenance-2026-09-15.md) remain immutable historical evidence.
 
 The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and earlier beta.4 builds for smart upgrade in place, preserves current-user data and existing account passwords on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
 
-The candidate build must be made from a clean source revision. The final build receipt is the authoritative place for the commit SHA, gate results, package path, and hash; adding a final ZIP hash or run identifier to tracked documentation would require another source commit and break that provenance.
+The candidate build must be made from a clean source revision. The final build receipt is the authoritative place for the commit SHA, gate results, package path, and hash; later documentation-only commits may record the final hash and receipts without rebuilding the ZIP; the immutable receipt remains bound to the original clean build source.
 
 ## Historical V2 beta.3 release-validation boundary
 

@@ -1,12 +1,12 @@
-> Production 1.0 candidate build `2026.09.21.2` is under validation. It targets installation from relocated normal folders and OneDrive-backed package locations while preserving strict installed-app and local-data path checks. See [current validation criteria](docs/validation/installer-portability-2026-09-21.md). The verified September 15 package remains immutable historical evidence.
+> Production 1.0 build `2026.09.21.2` passed core acceptance: 799 tests, seven build gates, two fresh-profile password lifecycles, packaged upgrade/reinstall and source portability checks. Use the exact ZIP in [client release packages](docs/client-release-packages.md). [Validation](docs/validation/installer-portability-2026-09-21.md) distinguishes local evidence from untested client/Windows 10 deployment.
 
 # IZ Clinical Notes Analyzer
 
-Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The candidate ZIP and portability lifecycle are under validation; no client-ready claim is made yet.
+Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The immutable ZIP and detached receipt passed the documented local core checks; full platform and client-site qualification remain open.
 
 ## Client handoff and quick start
 
-Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. The current candidate is documented in [Windows CMD maintenance](docs/windows-cmd-maintenance.md); do not distribute it until the detached final build receipt and qualification evidence are present.
+Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. Use the final ZIP and `Production-1.0-START-HERE.txt` in `dist/windows-release`; the [package index](docs/client-release-packages.md) records the exact filename, checksum and acceptance limits.
 
 
 Production 1.0 retains the active V2 local desktop runtime and data schema. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
@@ -31,7 +31,7 @@ The production 1.0 candidate includes:
 - V2 documentation under `docs\v2-beta\`, including validation evidence and task coverage audit.
 The app does not include startup-triggered Alleva import or a signed MSI/MSIX. Operator-triggered treatment-plan sync remains off by default and requires a client ID, encrypted secret, explicit API/sync enablement, and live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and versioned internally; no separate mapping-approval form is required. The level-of-care-change treatment-plan update window remains unvalidated by R3/Marleigh and must stay configurable and visibly marked as unresolved.
 
-The September 15 maintenance package passed its recorded build and live package lifecycle. The current September 21 portability candidate remains under validation against the [named portability criteria](docs/validation/installer-portability-2026-09-21.md). Live Alleva approval, configurable unvalidated LOC-change timing, signing, and retention/legal-hold decisions remain separate release boundaries.
+The September 15 maintenance package passed its recorded build and live package lifecycle. The September 21 production package passed the [documented core portability criteria](docs/validation/installer-portability-2026-09-21.md). Live Alleva approval, configurable unvalidated LOC-change timing, signing, and retention/legal-hold decisions remain separate release boundaries.
 
 ## Interactive Architecture Diagram
 
@@ -439,7 +439,7 @@ The current source candidate version is:
 2.0.0-beta.4
 ```
 
-Build `2026.09.21.2` / installer revision `1`; portable-installer candidate under validation.
+Build `2026.09.21.2` / installer revision `1`; exact production ZIP passed documented local core acceptance. Client-site and full platform qualification remain open.
 
 Checklist content version is separate and remains:
 

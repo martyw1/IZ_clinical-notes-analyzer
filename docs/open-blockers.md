@@ -2,7 +2,7 @@
 
 Date: 2026-09-21
 
-Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The portable ZIP and target-platform qualification are pending.
+Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The exact portable ZIP passed local core acceptance. Client-site and full target-platform qualification remain open.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -85,11 +85,11 @@ Required resolution evidence:
 
 ## Production 1.0 package validation
 
-Status: **candidate under validation; no client-ready claim.**
+Status: **core package acceptance passed; external client/platform qualification remains open.**
 
-Build `2026.09.21.2` must pass a clean full build and exact-package lifecycle from relocated normal folders and OneDrive-backed package locations on the available Windows 10/11 matrix. Evidence must confirm that bootstrap staging and verification succeeds without Windows administrator access or client-side Python, Node.js, Git, Docker, or PostgreSQL; installed-app and local-data root checks remain strict; a truly fresh install accepts the R3-supplied starter administrator credential and requires immediate change; and upgrades or reinstalls preserve existing account passwords and password state.
+Build `2026.09.21.2` passed a clean normal build (617 backend plus 182 frontend tests, all seven gates), exact-package upgrade/uninstall/reinstall, two independent fresh component-profile password/recovery/restart flows and 13 normal/OneDrive source portability assertions. The exact ZIP and source binding are in [installer portability validation](validation/installer-portability-2026-09-21.md).
 
-The pending criteria and evidence slots are in [installer portability validation](validation/installer-portability-2026-09-21.md). Until they are filled, do not publish the September 21 ZIP as client-ready.
+The actual client laptop is not connected. Windows 10, default-profile CMD/shortcut deployment, the broader Home/browser matrix and VM power-loss tests remain unverified for this archive. Local component tests are not evidence of those scenarios. Code signing, credential rotation and retention/legal-hold decisions remain owner responsibilities. Three local temporary backup-staging directories also remain because automatic approval review blocked cleanup by policy; they are excluded from the ZIP.
 
 Clinical scope did not change. The LOC-change window remains configurable and unvalidated, deterministic unresolved outcomes remain required, and live Alleva treatment-plan sync remains gated.
 

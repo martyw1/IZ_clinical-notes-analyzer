@@ -1,12 +1,12 @@
 # Release Notes
 
-## Production 1.0 candidate - build 2026.09.21.2
+## Production 1.0 - build 2026.09.21.2
 
 Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
 
 Current candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
 
-The candidate ZIP, build receipt, Windows 10/11 lifecycle evidence, and client-ready determination remain pending. See [installer portability validation](validation/installer-portability-2026-09-21.md). No clinical rules, LOC-change validation status, or live Alleva gates changed.
+The final ZIP passed 799 tests, seven build gates, two fresh-profile browser password/recovery/restart flows, packaged upgrade/reinstall and 13 normal/OneDrive source checks on the Windows 11 host. The client laptop, Windows 10 and full platform qualification remain unverified. See [installer portability validation](validation/installer-portability-2026-09-21.md). No clinical rules, LOC-change validation status, or live Alleva gates changed.
 
 
 Production 1.0 adds safe forensic correlation for login attempts and Alleva jobs: categorical failure reasons, job/stage identifiers, request attempts, HTTP status, elapsed time, and record counts. Passwords, token values, raw vendor responses, and clinical identifiers are excluded from these diagnostic additions. Administrator recovery invalidates prior sessions and recovery codes atomically.
@@ -49,7 +49,7 @@ Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1
 
 Current release channel: `stable-local-desktop`.
 
-Current source candidate date: `2026-09-21`; the final package release date remains pending.
+Production package completion date: `2026-09-21`; source-bound final receipt and client handoff checksum are recorded in the package index.
 
 Repository snapshot note (2026-08-16): the validated near-final Windows beta source is preserved by the annotated tag `windows-near-final-beta-2026-08-16` on `main`. This repository-state snapshot does not change the app version, build number, release channel, or live Alleva/LOC-change approval gates.
 

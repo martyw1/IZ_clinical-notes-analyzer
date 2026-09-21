@@ -1,4 +1,4 @@
-## 1.0.0 production candidate - 2026-09-21
+## 1.0.0 production - 2026-09-21
 
 Build: 2026.09.21.2; installer revision: 1; channel: stable-local-desktop.
 
@@ -7,7 +7,7 @@ Build: 2026.09.21.2; installer revision: 1; channel: stable-local-desktop.
 - Keep the R3-supplied starter administrator credential and mandatory first-use password change consistent across supported Windows devices on a truly fresh install.
 - Preserve existing account passwords and password state during upgrade or reinstall.
 - Clinical rules are unchanged. The LOC-change window remains unvalidated and the live Alleva gate remains in place.
-- Candidate validation is pending in [installer portability validation](docs/validation/installer-portability-2026-09-21.md).
+- Core package acceptance passed: 799 tests, seven build gates, two fresh-profile password/recovery/restart flows, packaged upgrade/reinstall and 13 source portability assertions. See [qualification and limits](docs/validation/installer-portability-2026-09-21.md).
 
 
 Production 1.0 adds safe forensic correlation for login attempts and Alleva jobs: categorical failure reasons, job/stage identifiers, request attempts, HTTP status, elapsed time, and record counts. Passwords, token values, raw vendor responses, and clinical identifiers are excluded from these diagnostic additions. Administrator recovery invalidates prior sessions and recovery codes atomically.
@@ -37,7 +37,7 @@ See [password management](docs/password-management-beta4.md). Validation is reco
 
 # Changelog
 
-Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1` / channel `stable-local-desktop`. The portable ZIP, final receipt, and target-platform qualification remain pending.
+Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1` / channel `stable-local-desktop`. The immutable ZIP and final receipt passed local core acceptance; client-site, Windows 10 and full platform qualification remain open.
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 

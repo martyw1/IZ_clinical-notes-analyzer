@@ -1,14 +1,20 @@
 # Client release packages
 
-Current candidate: **1.0.0**, build **2026.09.21.2**, installer revision **1**.
+Current production package: **1.0.0**, build **2026.09.21.2**, installer revision **1**.
 
-Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
+## Verified core handoff package
 
-## Candidate package under validation
+Provide `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip` from `dist/windows-release` in the original project workspace. The final copy is 39,220,133 bytes and was verified against the tested archive.
 
-Expected filename: `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip`.
+SHA-256: `91d08cd08d01dfff121a3823fd6a62cb93b91ef33e7d1ab7f3adc8cf78be17ec`.
 
-The portable ZIP, clean-source build receipt, hash, relocated normal-folder and OneDrive-backed package tests, fresh-install credential check, upgrade password-preservation check, and Windows 10/11 lifecycle evidence are pending. Track them in [installer portability validation](validation/installer-portability-2026-09-21.md). Do not distribute this candidate as client-ready until those criteria are filled with passing evidence.
+Build source: `f5d32d30a2aa88d48776694545dd7ba48351c3af`. Detached `.build-receipt.json`, `.build-gates.json`, `.sha256` and `Production-1.0-START-HERE.txt` accompany it. Documentation-only commits do not replace this immutable ZIP or change its source binding.
+
+The normal build passed 617 backend and 182 frontend tests and all seven gates. The exact ZIP passed the nine-step upgrade/removal/reinstall lifecycle and two independent fresh-profile browser password/recovery/restart flows. All 13 final normal/OneDrive source portability assertions passed. Final live sync testing retrieved 401 current vendor clients and 591 plans with zero errors, warnings or duplicate writes. See [production validation](validation/production-1-0-2026-09-21.md) and [portability qualification](validation/installer-portability-2026-09-21.md).
+
+Extract completely, run Install, then Launch. Fresh installs use the supplied portable starter account and require password change. Upgrades preserve existing passwords and settings. This laptop's authorized reset is separate from normal upgrade behavior. The client's Windows laptop, Windows 10 and the broader platform matrix have not been qualified for this archive; do not represent component-profile tests as those deployments.
+
+Do not send build `2026.09.21.1`: its fresh-profile acceptance exposed a long staging-path defect, repaired and requalified in `.2`.
 
 ## Historical verified package: build 2026.09.15.2
 

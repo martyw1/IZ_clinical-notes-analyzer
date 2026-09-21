@@ -1,85 +1,56 @@
 # Installer Portability Validation - 2026-09-21
 
-## Candidate identity and status
+## Package identity and status
 
-Version: `1.0.0`
+**Production 1.0 core acceptance passed.** Version `1.0.0`, build `2026.09.21.2`, installer revision `1`, channel `stable-local-desktop`, schema `12`.
 
-Build: `2026.09.21.2`
+Client file: `dist/windows-release/IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip` in the original project workspace. Size: 39,220,133 bytes.
 
-Installer revision: `1`
+SHA-256: `91d08cd08d01dfff121a3823fd6a62cb93b91ef33e7d1ab7f3adc8cf78be17ec`.
 
-Channel: `stable-local-desktop`
+Clean build source: `f5d32d30a2aa88d48776694545dd7ba48351c3af`. The same basename `.build-receipt.json`, `.build-gates.json` and `.sha256` accompany the ZIP; `Production-1.0-START-HERE.txt` gives the client sequence. The receipt stays bound to this source even when final validation documentation is committed later. Historical packages remain unchanged.
 
-Status: **under validation; not yet client-ready.**
+## Client contract
 
-This document defines the evidence required for the portable Windows release candidate. Fill each pending field from the final clean-source package and its exact extracted ZIP. Do not reuse receipts, hashes, or lifecycle results from build `2026.09.15.2`; that package remains immutable historical evidence in [windows-cmd-maintenance-2026-09-15.md](windows-cmd-maintenance-2026-09-15.md).
+Extract the entire ZIP, run `Install-IZ-Clinical-Notes-Analyzer.cmd`, then `Launch-IZ-Clinical-Notes-Analyzer.cmd`. Package-root Launch delegates to the installed current-user launcher; it does not create a new account or installation by itself.
 
-## Intended client contract
+The prepared runtime includes its frontend and backend; normal use requires no administrator elevation, Python, Node.js, Git, Docker or PostgreSQL. Source staging accepts relocated normal folders and OneDrive-backed package locations and validates all manifest members. Installed application and data paths retain strict current-user ownership and containment checks. A blocked, incomplete or internally linked package fails closed rather than bypassing verification.
 
-- The client receives one prepared ZIP with a bundled desktop runtime and built frontend assets.
-- After complete extraction, installation works from a relocated normal folder and a OneDrive-backed package folder.
-- Ordinary Windows 10/11 use requires no Windows administrator access, Python, Node.js, Git, Docker, PostgreSQL, or command-line work.
-- The bootstrap stages and verifies package content before writing the per-user installation.
-- Installed application paths remain restricted to `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer` and runtime data remains restricted to `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-- A truly fresh install uses the starter administrator credential supplied by R3 and requires immediate replacement with a personal password.
-- The starter credential is device-independent and embedded in the application bootstrap. Saved local credentials are never copied into the package; passwords are excluded from screenshots, logs, and validation receipts.
-- Upgrade and reinstall preserve existing accounts, passwords, password state, settings, encrypted uploads, audit history, and supported local data.
+A truly fresh install uses the device-independent R3 starter account and requires immediate personal password change and recovery-code setup. Each fresh instance creates its own password hash. The ZIP contains bootstrap defaults, not the development computer's saved accounts, database or credentials. Upgrade and data-preserving reinstall keep existing accounts, passwords, settings, encrypted uploads and supported local data. A previously changed password therefore remains necessary after upgrade. The specifically authorized reset of this development laptop is a separate verified action.
 
-## Required build evidence
+Fresh API configurations default to 30 seconds. An upgrade preserves an explicitly saved timeout; the client should verify the request timeout is 30 seconds if the older connection used 10 seconds. Fresh Alleva sync remains disabled until authorized tenant configuration is supplied.
 
-| Criterion | Status | Evidence |
-| --- | --- | --- |
-| Clean source revision recorded | Pending | Commit SHA: pending |
-| Backend tests pass | Pending | Count/log: pending |
-| Frontend tests pass | Pending | Count/log: pending |
-| Frontend production build passes | Pending | Log: pending |
-| Bundled desktop runtime builds | Pending | Log: pending |
-| Release-folder required-file validation passes | Pending | Receipt field: pending |
-| Release-folder and ZIP forbidden-file scans pass | Pending | Receipt field: pending |
-| Final package identity matches version/build/revision above | Pending | Manifest/receipt: pending |
-| Final ZIP SHA-256 recorded | Pending | SHA-256: pending |
+## Observed build and lifecycle evidence
 
-## Required portability and lifecycle evidence
+Host: Windows 11 Home, build 10.0.26200, standard-user execution, 8 GB RAM. Fresh and P02 package tests used isolated synthetic component profiles. They ran the actual packaged EXE and HTTP/browser surfaces without touching the real clinical profile. They do not represent separate Windows sign-ins or an actual-default-profile CMD double-click test.
 
-Use synthetic data only. Record Windows edition/build, standard-user status, source package path class, exact result code, and receipt location for every run.
+| Check | Result and evidence |
+| --- | --- |
+| Normal clean-source build, no skipped gates | 617 backend and 182 frontend tests passed; frontend build and frozen runtime passed. All seven build/safety gates passed. `production-1-0/full-build-4-result.json` and detached build receipt. |
+| Final ZIP integrity and bootstrap | 340 entries passed CRC; frozen bootstrap defaults verified; no local `.env`; exact SHA and size verified after client-folder copy. `production-1-0/final-zip-password-verification.json` and `client-copy-verification.json`. |
+| Two independent fresh profiles | Starter login, workspace 403 before change, forced change, recovery setup/save, starter rejection after change, new password after managed restart all passed. `production-1-0-fresh-profile-qa/runs/cmd-62e30b5c1f6e/fresh-profile-qa-receipt.json`. |
+| Packaged upgrade and removal lifecycle | P02 nine steps passed: beta.3 upgrade, actual EXE/HTTP/Edge, API roundtrip, data-preserving uninstall/reinstall, password rotation, typed complete purge and cleanup. `windows-cmd-maintenance/cmd-c4dcc5bdf8fe/maintenance-run-receipt.json`. |
+| Normal/OneDrive source handling and relocation | 13 source-controller assertions passed against the final payload; original cloud-source rejection reproduced and corrected; staged hashes/file set verified. `production-1-0/final-package-portability.json`. This is source staging evidence, not a full OneDrive default-profile double-click run. |
+| Long installation paths | 268-character staged file copied/verified; injected junction rejected as `PATH_REPARSE_POINT`, outside sentinel preserved. `windows-cmd-maintenance/install/component/transaction-cae617f3cb6b/task-09-upgrade.json`. |
+| Destination, transitions and failure safety | 50 strict-path assertions, 23 production-version bridge assertions, and six installer regression cases passed; internal links/tamper/missing/extra package members fail closed. |
+| Browser and forensic visibility | Both profiles displayed Production 1.0 / build .2, timeout 30, account/help and redacted verified forensic chain; zero browser page errors. All 18 masked screenshots inspected; two independent reviews recorded in `production-1-0/final-ui-review.json`. |
+| Clinical profile preservation | Authorized local reset passed after authenticated encrypted DB/environment snapshot; 45 clinical-table counts preserved. Live final sync passed with 401 vendor clients / 591 vendor plans, zero errors/warnings or duplicate writes. |
 
-| Scenario | Windows 10 | Windows 11 | Acceptance condition |
-| --- | --- | --- | --- |
-| Fresh install from a relocated normal local folder | Pending | Pending | Install succeeds without elevation; installed and data roots are exact and package-source-independent. |
-| Fresh install from a OneDrive-backed package folder | Pending | Pending | Cloud-source handling stages and verifies the complete package; install succeeds without loosening destination checks. |
-| Launch from Start Menu or Desktop shortcut | Pending | Pending | Installed launcher starts the local app and `/api/version` reports the candidate identity. |
-| Truly fresh administrator sign-in | Pending | Pending | The R3-supplied starter credential works consistently and forces a personal password change before workspace use. |
-| Upgrade from a supported beta.3/beta.4 install | Pending | Pending | Existing account password and password state remain valid; supported local data is preserved. |
-| Data-preserving uninstall and reinstall | Pending | Pending | Application files are replaced while the existing account password and local data remain usable. |
-| Typed complete purge | Pending | Pending | Exact confirmation is required and only the current user's owned application/data roots are removed. |
-| Relocated package after extraction | Pending | Pending | Moving the extracted package to another allowed source folder does not bind installation to the original extraction path. |
-| Incomplete or unavailable cloud files | Pending | Pending | Installation fails closed with a stable safe result and does not commit a partial install. |
-| Invalid installed/data destination attempt | Pending | Pending | Strict canonical destination validation rejects the attempt. |
+Evidence paths in the table are relative to the build worktree's ignored `.omo/evidence/`. Complete provenance and retry details are in [production validation](production-1-0-2026-09-21.md). Full frontend verification used two Vitest workers; no assertions were relaxed.
 
-## Security and privacy evidence
+## Privacy and cleanup
 
-| Criterion | Status | Evidence |
-| --- | --- | --- |
-| No PHI, local database, uploads, logs, `.env`, tokens, or encryption material in the release folder or ZIP | Pending | Scan receipt: pending |
-| No saved local credentials in release files; no passwords in logs, screenshots, or receipts | Pending | Search result: pending |
-| Diagnostics remain redacted and exclude clinical content and access material | Pending | Lifecycle evidence: pending |
-| Existing password hashes and sessions follow the documented upgrade contract | Pending | Focused test/lifecycle evidence: pending |
-| Rollback or recovery leaves no unverified partial install | Pending | Failure-path evidence: pending |
+Release folder and ZIP safety scans passed. Saved tenant material, local databases, uploads, logs and encryption keys are excluded. Diagnostic additions record safe categories, timings and counts without clinical narrative or credentials. Screenshot masks intentionally hide temporary passwords and recovery codes. Focused authentication/recovery tests verify session and recovery-code invalidation; packaged tests verify the account lifecycle.
 
-## Clinical and integration boundaries
+Owned synthetic profiles were purged and owned test processes/listeners stopped. Three local temporary full-profile backup staging directories remain because automatic approval review rejected deletion as blocked by policy; they are not in the package. The actual-account reset backup was independently verified as an encrypted database/environment snapshot; full-profile backup is not claimed.
 
-Deterministic clinical rules are unchanged. Production 1.0 also corrects unlinked-placeholder lifecycle handling and expands safe authentication and Alleva forensic diagnostics. The LOC-change treatment-plan update window remains configurable and visibly unvalidated. Missing or conflicting evidence must continue to produce deterministic `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` outcomes. Alleva treatment-plan sync remains off by default and gated by the existing tenant authorization, mapping, compliance, and PHI approvals.
+## Qualification limits
+
+- The client laptop was not connected; deployment there has not been observed.
+- Windows 10, actual-default-profile install/shortcut double-click, separate Windows sign-ins, the broader Home/browser matrix and VM power-loss boundaries were not qualified for this archive. Component-profile evidence must not be represented as those tests.
+- A 1.0 version label does not establish code signing, credential rotation or R3 retention/legal-hold approval. These organizational decisions remain open.
+- LOC-change timing stays configurable and visibly unvalidated. Deterministic missing/conflicting evidence outcomes remain unchanged. Authorized live tenant configuration is still required; startup sync is disabled.
 
 ## Final determination
 
-Client-ready decision: **Pending**
-
-Final package path: pending
-
-Final ZIP SHA-256: pending
-
-Build receipt: pending
-
-Validation owner/date: pending
-
-Known limits or deferred scenarios: pending
+The exact archive is the completed handoff artifact for the tested core scope. It contains portable starter-account initialization and updated password management, and passes the available local package/lifecycle checks. Full platform and client-site qualification remain limited as stated above; no promise that every Windows environment was tested is made.
