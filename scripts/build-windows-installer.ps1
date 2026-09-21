@@ -633,7 +633,7 @@ function New-LegacyProgramInventory {
 
 function Assert-ReleaseMetadata {
     if ($VersionMetadata.version -cne $Version -or $Version -cne '1.0.0' -or
-        $Build -cne '2026.09.21.1' -or $ReleaseChannel -cne 'stable-local-desktop') {
+        $Build -cne '2026.09.21.2' -or $ReleaseChannel -cne 'stable-local-desktop') {
         throw 'Release version metadata is inconsistent.'
     }
 }

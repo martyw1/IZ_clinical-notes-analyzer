@@ -1,6 +1,6 @@
 # Windows CMD Maintenance
 
-> **Production 1.0 candidate under validation.** Current build: `2026.09.21.1`, version `2.0.0-beta.4`, installer revision `1`. See the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The verified September 15 package remains immutable historical evidence.
+> **Production 1.0 candidate under validation.** Current build: `2026.09.21.2`, version `1.0.0`, installer revision `1`. See the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The verified September 15 package remains immutable historical evidence.
 
 This page describes the Windows CMD contract implemented for Task 17. It is an operator draft for the candidate build. It does not certify a package, a target laptop, or a client deployment.
 
@@ -64,7 +64,7 @@ The underlying maintenance dispatcher exposes these actions: `AutoInstall`, `Rep
 
 ## Qualification and clinical boundaries
 
-Build `2026.09.21.1` remains under validation. Its ZIP hash, final build receipt, relocated normal-folder and OneDrive-backed package tests, fresh-install credential behavior, upgrade password preservation, and Windows 10/11 lifecycle evidence must be recorded in [the current validation document](validation/installer-portability-2026-09-21.md) before any client-ready claim.
+Build `2026.09.21.2` remains under validation. Its ZIP hash, final build receipt, relocated normal-folder and OneDrive-backed package tests, fresh-install credential behavior, upgrade password preservation, and Windows 10/11 lifecycle evidence must be recorded in [the current validation document](validation/installer-portability-2026-09-21.md) before any client-ready claim.
 
 Historical build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test in its recorded scope. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. Its immutable package identity and remaining limits are recorded in [the September 15 validation report](validation/windows-cmd-maintenance-2026-09-15.md); those results are not evidence for the current candidate.
 

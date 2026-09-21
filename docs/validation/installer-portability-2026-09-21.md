@@ -4,7 +4,7 @@
 
 Version: `1.0.0`
 
-Build: `2026.09.21.1`
+Build: `2026.09.21.2`
 
 Installer revision: `1`
 

@@ -19,7 +19,11 @@ function json(target, value) {
   writeFileSync(target, JSON.stringify(value), 'utf8')
 }
 
-function fixture() {
+function fixture({
+  version = '2.0.0-beta.4',
+  build = '2026.09.14.1',
+  releaseChannel = 'beta-local-desktop-v2',
+} = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'iz-maintenance-attachment-'))
   sandboxes.push(root)
   const localAppData = path.join(root, 'LocalAppData')
@@ -37,7 +41,7 @@ function fixture() {
   mkdirSync(path.dirname(packageMarker), { recursive: true })
   writeFileSync(packageMarker, '')
   const executableHash = sha256(executable)
-  const candidate = path.join(buildRoot, 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.14.1-installer-r1.zip')
+  const candidate = path.join(buildRoot, `IZ-Clinical-Notes-Analyzer-v${version}-build-${build}-installer-r1.zip`)
   writeFileSync(candidate, 'synthetic-candidate-bytes', 'utf8')
   const candidateHash = sha256(candidate)
   const manifest = path.join(packageRoot, 'release-manifest.json')
@@ -55,8 +59,8 @@ function fixture() {
     .update(packageRecords.map((record) => `${record.path}\t${record.length}\t${record.sha256}\n`).join(''), 'utf8').digest('hex')
   json(manifest, {
     schema: 'iz-cna-release-manifest-v1', product_id: 'r3.iz-clinical-notes-analyzer.desktop',
-    version: '2.0.0-beta.4', build: '2026.09.14.1', installer_revision: 1,
-    release_channel: 'beta-local-desktop-v2',
+    version, build, installer_revision: 1,
+    release_channel: releaseChannel,
     compatibility: {
       source_version_minimum: '2.0.0-beta.3', source_version_maximum: '2.0.0-beta.4',
       source_build_minimum: '2026.09.03.1', source_build_maximum: '2026.09.14.1',
@@ -75,7 +79,7 @@ function fixture() {
   })
   const buildReceipt = {
     schema: 'iz-cna-build-receipt-v1', product_id: 'r3.iz-clinical-notes-analyzer.desktop',
-    version: '2.0.0-beta.4', build: '2026.09.14.1', installer_revision: 1,
+    version, build, installer_revision: 1,
     source_revision: sourceRevision, package_directory: packageRoot, zip_path: candidate,
     zip_length: Buffer.byteLength('synthetic-candidate-bytes'), zip_sha256: candidateHash,
     manifest_sha256: sha256(manifest), payload_identity: payloadIdentity, gates,
@@ -91,7 +95,7 @@ function fixture() {
     owner_sid: 'S-1-5-21-1000', scope_id: 'c'.repeat(64), data_identity: 'd'.repeat(64),
     instance_id: '1234567890abcdef1234567890abcdef', transaction_id: committedTransaction, process_id: 4242,
     process_started_utc: new Date().toISOString(), executable_path: executable,
-    executable_sha256: executableHash, version: '2.0.0-beta.4', build: '2026.09.14.1',
+    executable_sha256: executableHash, version, build,
     installer_revision: 1, port: 18765, pipe_name: `iz-cna-runtime-v1-${'c'.repeat(32)}`,
     gate: 'open', draining: false, created_utc: new Date().toISOString(),
   }
@@ -131,6 +135,21 @@ test('accepts an exact candidate, runtime identity, install receipt and evidence
   assert.equal(result.runtime.executable_sha256, input.identity.executable_sha256)
   assert.equal(result.attachment.candidate_zip_sha256, sha256(input.candidate))
   assert.equal(result.evidencePath, input.attachment.evidence_path)
+})
+
+test('accepts an exact Production 1.0 candidate with the same immutable authority checks', () => {
+  const input = fixture({ version: '1.0.0', build: '2026.09.21.2', releaseChannel: 'stable-local-desktop' })
+  const result = loadMaintenanceAttachment(input.environment)
+  assert.equal(result.build.version, '1.0.0')
+  assert.equal(result.build.build, '2026.09.21.2')
+  assert.equal(result.manifest.release_channel, 'stable-local-desktop')
+  assert.equal(result.runtime.executable_sha256, input.identity.executable_sha256)
+  assert.equal(result.attachment.candidate_zip_sha256, sha256(input.candidate))
+})
+
+test('rejects a release version outside the frozen beta 4 and Production 1.0 contract', () => {
+  const input = fixture({ version: '1.0.1', build: '2026.09.21.2', releaseChannel: 'stable-local-desktop' })
+  assert.throws(() => loadMaintenanceAttachment(input.environment), { code: 'BUILD_RECEIPT_INVALID' })
 })
 
 test('accepts a marked validation-only artifact without treating it as a release build', () => {

@@ -1,10 +1,10 @@
 # Release Notes
 
-## Production 1.0 candidate - build 2026.09.21.1
+## Production 1.0 candidate - build 2026.09.21.2
 
 Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
 
-Current candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
+Current candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
 
 The candidate ZIP, build receipt, Windows 10/11 lifecycle evidence, and client-ready determination remain pending. See [installer portability validation](validation/installer-portability-2026-09-21.md). No clinical rules, LOC-change validation status, or live Alleva gates changed.
 
@@ -45,7 +45,7 @@ See [password management](password-management-beta4.md). Validation is recorded 
 - Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
 - This checkout help update does not rebuild or revalidate the prepared installer.
 
-Current source candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1`.
+Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`.
 
 Current release channel: `stable-local-desktop`.
 

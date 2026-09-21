@@ -1,8 +1,8 @@
-> Production 1.0 candidate build `2026.09.21.1` is under validation. It targets installation from relocated normal folders and OneDrive-backed package locations while preserving strict installed-app and local-data path checks. See [current validation criteria](docs/validation/installer-portability-2026-09-21.md). The verified September 15 package remains immutable historical evidence.
+> Production 1.0 candidate build `2026.09.21.2` is under validation. It targets installation from relocated normal folders and OneDrive-backed package locations while preserving strict installed-app and local-data path checks. See [current validation criteria](docs/validation/installer-portability-2026-09-21.md). The verified September 15 package remains immutable historical evidence.
 
 # IZ Clinical Notes Analyzer
 
-Current source version: `1.0.0` / build `2026.09.21.1` / installer revision `1` on the `stable-local-desktop` channel. The candidate ZIP and portability lifecycle are under validation; no client-ready claim is made yet.
+Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The candidate ZIP and portability lifecycle are under validation; no client-ready claim is made yet.
 
 ## Client handoff and quick start
 
@@ -171,10 +171,10 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`1.0.0` / build `2026.09.21.1` / installer revision `1`) writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`1.0.0` / build `2026.09.21.2` / installer revision `1`) writes:
 
 - `dist\windows-release\IZ-CNA-337308272cfbf7e6`
-- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-2026.09.21.1-installer-r1.zip`
+- `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip`
 
 The candidate folder and ZIP are not a release until the final build receipt and detached qualification evidence exist. The `2.0.0-beta.1`, beta.2, beta.3, and original beta.4 output names recorded in earlier validation reports are historical evidence, not current candidate installation instructions.
 
@@ -439,7 +439,7 @@ The current source candidate version is:
 2.0.0-beta.4
 ```
 
-Build `2026.09.21.1` / installer revision `1`; portable-installer candidate under validation.
+Build `2026.09.21.2` / installer revision `1`; portable-installer candidate under validation.
 
 Checklist content version is separate and remains:
 

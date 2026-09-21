@@ -12,7 +12,7 @@ from v2_test_runtime import fresh_client as _fresh_client
 def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
     expected_version = "1.0.0"
-    expected_build = "2026.09.21.1"
+    expected_build = "2026.09.21.2"
     expected_channel = "stable-local-desktop"
 
     metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))

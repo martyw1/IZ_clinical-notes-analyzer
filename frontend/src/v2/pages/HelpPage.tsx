@@ -3,7 +3,7 @@ export function HelpPage() {
     <section className='panel'>
       <p className='eyebrow'>Help</p>
       <h2>Production 1.0 workflow</h2>
-      <p>App 1.0.0 · build 2026.09.21.1 · stable-local-desktop. Production 1.0 uses the local-client runtime. Full production qualification remains pending. Checklist content remains version 1.2.0.</p>
+      <p>App 1.0.0 · build 2026.09.21.2 · stable-local-desktop. Production 1.0 uses the local-client runtime. Full production qualification remains pending. Checklist content remains version 1.2.0.</p>
       <h3>Passwords and recovery</h3>
       <p>Open Account to change your password or create a replacement recovery code. Save the code privately; it is shown once and works once. Use Forgot password on the sign-in screen with your username and saved code, then sign in and save a replacement code. Authorized administrators can reset staff passwords from Users. Initial and administrator-issued temporary passwords must be replaced before using the workspace.</p>
       <h3>Find and review the exact saved plan</h3>

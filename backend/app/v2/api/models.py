@@ -155,7 +155,7 @@ class ApiConfigurationUpdate(V2Model):
     pagination_limit: int | None = Field(default=None, ge=1, le=5000)
     sync_limit: int | None = Field(default=None, ge=1, le=5000)
     requests_per_minute: int | None = Field(default=None, ge=1, le=10000)
-    timeout_seconds: int = 10
+    timeout_seconds: int = 30
     api_enabled: bool = False
     treatment_plan_sync_enabled: bool = False
     treatment_plan_sync_approved: bool = False

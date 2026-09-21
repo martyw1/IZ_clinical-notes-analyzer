@@ -10,6 +10,54 @@ function New-IzTransactionError {
     $exception=[IO.InvalidDataException]::new($Reason);$exception.Data['iz_reason']=$Reason;$exception.Data['iz_exit_code']=$Code;return $exception
 }
 
+function ConvertTo-IzTransactionNativePath {
+    param([Parameter(Mandatory)][string]$Path)
+    $full=[IO.Path]::GetFullPath($Path)
+    if($full -notmatch '^[A-Za-z]:\\'){throw(New-IzTransactionError 'PATH_NOT_LOCAL_ABSOLUTE' 20)}
+    return '\\?\'+$full
+}
+
+function Assert-IzTransactionPathNoReparse {
+    param([Parameter(Mandatory)][string]$Root,[Parameter(Mandatory)][string]$Path,[switch]$AllowMissingTail)
+    $rootPath=[IO.Path]::GetFullPath($Root).TrimEnd('\')
+    $fullPath=[IO.Path]::GetFullPath($Path)
+    if(-not $fullPath.Equals($rootPath,[StringComparison]::OrdinalIgnoreCase) -and
+       -not $fullPath.StartsWith($rootPath+'\',[StringComparison]::OrdinalIgnoreCase)){
+        throw(New-IzTransactionError 'PATH_OUTSIDE_SCOPE' 20)
+    }
+    $cursor=$rootPath
+    foreach($segment in $fullPath.Substring($rootPath.Length).TrimStart('\').Split('\')){
+        if(-not $segment){continue}
+        $cursor=Join-Path $cursor $segment
+        try{$attributes=[IO.File]::GetAttributes((ConvertTo-IzTransactionNativePath $cursor))}
+        catch{
+            $failure=$_.Exception
+            while($failure.InnerException){$failure=$failure.InnerException}
+            if($AllowMissingTail -and ($failure -is [IO.FileNotFoundException] -or $failure -is [IO.DirectoryNotFoundException])){return}
+            throw
+        }
+        if(($attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0){throw(New-IzTransactionError 'PATH_REPARSE_POINT' 20)}
+    }
+}
+
+function Get-IzTransactionNativeTreeFiles {
+    param([Parameter(Mandatory)][string]$Root)
+    $nativeRoot=ConvertTo-IzTransactionNativePath $Root
+    $pending=[Collections.Generic.Stack[string]]::new()
+    $files=[Collections.Generic.List[string]]::new()
+    $pending.Push($nativeRoot)
+    while($pending.Count){
+        $directory=$pending.Pop()
+        foreach($entry in [IO.Directory]::EnumerateFileSystemEntries($directory)){
+            $attributes=[IO.File]::GetAttributes($entry)
+            if(($attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0){throw(New-IzTransactionError 'PATH_REPARSE_POINT' 20)}
+            if(($attributes-band[IO.FileAttributes]::Directory)-ne 0){$pending.Push($entry)}
+            else{$files.Add($entry.Substring($nativeRoot.Length+1).Replace('\','/'))}
+        }
+    }
+    return @($files.ToArray())
+}
+
 function Write-IzTransactionJson {
     param([object]$Context,[string]$RelativePath,[object]$Value)
     $path=Assert-IzContainedPath (Join-Path $Context.transaction_root $RelativePath) $Context.transaction_root -AllowMissingLeaf
@@ -44,12 +92,15 @@ function Test-IzProgramFiles {
     $canonical=Get-IzCanonicalPath $Root
     $expected=@{}
     foreach($file in @($Files)){
-        $path=Assert-IzContainedPath (Join-Path $canonical ([string]$file.path).Replace('/','\')) $canonical
-        if (-not (Test-Path $path -PathType Leaf) -or (Get-Item $path).Length -ne [long]$file.length -or
-            (Get-IzFileSha256 $path) -cne [string]$file.sha256) { throw (New-IzTransactionError 'PROGRAM_INVENTORY_MISMATCH') }
+        $path=Assert-IzContainedPath (Join-Path $canonical ([string]$file.path).Replace('/','\')) $canonical -AllowMissingLeaf
+        Assert-IzTransactionPathNoReparse $canonical $path
+        $nativePath=ConvertTo-IzTransactionNativePath $path
+        $item=[IO.FileInfo]::new($nativePath)
+        if (-not $item.Exists -or $item.Length -ne [long]$file.length -or
+            (Get-IzFileSha256 $nativePath) -cne [string]$file.sha256) { throw (New-IzTransactionError 'PROGRAM_INVENTORY_MISMATCH') }
         $expected[[string]$file.path.ToUpperInvariant()]=$true
     }
-    $actual=@(Get-ChildItem -LiteralPath $canonical -File -Recurse -Force|ForEach-Object{$_.FullName.Substring($canonical.Length+1).Replace('\','/')}|Where-Object{-not ($AllowMarker -and $_ -ceq '.iz-cna-owned-root.json')})
+    $actual=@(Get-IzTransactionNativeTreeFiles $canonical|Where-Object{-not ($AllowMarker -and $_ -ceq '.iz-cna-owned-root.json')})
     if ($actual.Count -ne $expected.Count -or @($actual|Where-Object{-not $expected.ContainsKey($_.ToUpperInvariant())}).Count) { throw (New-IzTransactionError 'PROGRAM_FILE_SET_MISMATCH') }
     return $true
 }
@@ -72,9 +123,15 @@ function Copy-IzStagedProgram {
         foreach($file in $files){
             $source=Assert-IzContainedPath (Join-Path $Context.package_root $file.source_path.Replace('/','\')) $Context.package_root
             $target=Assert-IzContainedPath (Join-Path $Context.stage_root $file.path.Replace('/','\')) $Context.stage_root -AllowMissingLeaf
-            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))|Out-Null
-            [IO.File]::Copy($source,$target,$false)
-            if ((Get-Item $target).Length -ne $file.length -or (Get-IzFileSha256 $target) -cne $file.sha256) { throw (New-IzTransactionError 'STAGE_COPY_MISMATCH' 20) }
+            $nativeSource=ConvertTo-IzTransactionNativePath $source
+            $nativeTarget=ConvertTo-IzTransactionNativePath $target
+            Assert-IzTransactionPathNoReparse $Context.stage_root ([IO.Path]::GetDirectoryName($target)) -AllowMissingTail
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($nativeTarget))|Out-Null
+            Assert-IzTransactionPathNoReparse $Context.stage_root ([IO.Path]::GetDirectoryName($target))
+            [IO.File]::Copy($nativeSource,$nativeTarget,$false)
+            Assert-IzTransactionPathNoReparse $Context.stage_root $target
+            $targetItem=[IO.FileInfo]::new($nativeTarget)
+            if (-not $targetItem.Exists -or $targetItem.Length -ne $file.length -or (Get-IzFileSha256 $nativeTarget) -cne $file.sha256) { throw (New-IzTransactionError 'STAGE_COPY_MISMATCH' 20) }
         }
         $marker=Write-IzOwnedRootMarker $Context $Context.stage_root stage ([Guid]$Context.transaction_id)
         $inventoryFiles=@($files|ForEach-Object{[pscustomobject][ordered]@{path=$_.path;length=$_.length;sha256=$_.sha256;owned=$true}})

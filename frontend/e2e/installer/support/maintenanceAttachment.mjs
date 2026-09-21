@@ -3,8 +3,10 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSyn
 import path from 'node:path'
 
 const PRODUCT_ID = 'r3.iz-clinical-notes-analyzer.desktop'
+const SUPPORTED_RELEASE_VERSIONS = new Set(['2.0.0-beta.4', '1.0.0'])
 const SHA256 = /^[a-f0-9]{64}$/
 const SOURCE_REVISION = /^[a-f0-9]{40}$/
+const BUILD_ID = /^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$/
 const RUN_ID = /^cmd-[a-f0-9]{12}$/
 const GUID_N = /^[a-f0-9]{32}$/
 const BUILD_GATE_NAMES = [
@@ -118,10 +120,10 @@ function validateBuildReceipt(candidatePath, expectedHash, expectedSource) {
   const { value } = readJsonFile(receiptPath, BUILD_RECEIPT_KEYS, 'BUILD_RECEIPT_INVALID')
   const packageRoot = plainPath(value.package_directory, { directory: true })
   const manifest = plainPath(path.join(packageRoot, 'release-manifest.json'), { file: true })
-  const expectedLeaf = `IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4-build-${value.build}-installer-r1.zip`
+  const expectedLeaf = `IZ-Clinical-Notes-Analyzer-v${value.version}-build-${value.build}-installer-r1.zip`
   const gateNames = Array.isArray(value.gates) ? value.gates.map((gate) => gate?.name) : []
   if (value.schema !== 'iz-cna-build-receipt-v1' || value.product_id !== PRODUCT_ID ||
-      value.version !== '2.0.0-beta.4' || value.installer_revision !== 1 ||
+      !SUPPORTED_RELEASE_VERSIONS.has(value.version) || !BUILD_ID.test(value.build) || value.installer_revision !== 1 ||
       !SOURCE_REVISION.test(value.source_revision) || value.source_revision !== expectedSource ||
       !samePath(value.zip_path, candidatePath) || value.zip_length !== statSync(candidatePath).size ||
       value.zip_sha256 !== expectedHash || value.zip_sha256 !== sha256(candidatePath) ||
@@ -148,7 +150,7 @@ function validateManifest(packagePath, expectedHash, expectedPayload) {
   const { value } = readJsonFile(manifestPath, MANIFEST_KEYS, 'MANIFEST_INVALID')
   exactKeys(value.compatibility, COMPATIBILITY_KEYS, 'MANIFEST_COMPATIBILITY_INVALID')
   if (value.schema !== 'iz-cna-release-manifest-v1' || value.product_id !== PRODUCT_ID ||
-      value.version !== '2.0.0-beta.4' || value.installer_revision !== 1 ||
+      !SUPPORTED_RELEASE_VERSIONS.has(value.version) || !BUILD_ID.test(value.build) || value.installer_revision !== 1 ||
       value.payload_identity !== requireHash(expectedPayload, 'PAYLOAD_IDENTITY_INVALID') ||
       !Array.isArray(value.files) || value.files.length === 0) refuse('MANIFEST_INVALID')
   const listed = new Set()

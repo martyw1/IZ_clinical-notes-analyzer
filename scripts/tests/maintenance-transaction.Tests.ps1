@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('transaction-transitions', 'transaction-recovery', 'install-routing', 'install-negative', 'All')]
+    [ValidateSet('transaction-transitions', 'transaction-recovery', 'transaction-long-path', 'install-routing', 'install-negative', 'All')]
     [string]$Case = 'All',
     [string]$EvidenceRoot = ''
 )
@@ -142,6 +142,7 @@ function New-SyntheticManifest {
 }
 
 function New-TransactionFixture {
+    param([switch]$IncludeLongGuidePath)
     $modulePath = Join-Path $repoRoot 'scripts\installer\maintenance-transaction.psm1'
     Import-Module $modulePath -Force
     Import-Module (Join-Path $repoRoot 'scripts\installer\maintenance-common.psm1') -Force
@@ -159,6 +160,11 @@ function New-TransactionFixture {
     [IO.File]::WriteAllText((Join-Path $package 'app\config\checklists\treatment-plan-v1.json'), '{"schema":"synthetic"}', [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $package 'app\VERSION'), '2.0.0-beta.4', [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $package 'app\VERSION.json'), '{"version":"2.0.0-beta.4","build":"2026.09.10.2"}', [Text.UTF8Encoding]::new($false))
+    if ($IncludeLongGuidePath) {
+        $guide = Join-Path $package 'app\docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\long-path-regression'
+        [IO.Directory]::CreateDirectory($guide) | Out-Null
+        [IO.File]::WriteAllText((Join-Path $guide '02. Start Up Screen.png'), 'synthetic-long-path-guide', [Text.UTF8Encoding]::new($false))
+    }
     foreach($name in @(
         'Backup-IZ-Clinical-Notes-Analyzer.cmd','Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd',
         'Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd','Install-IZ-Clinical-Notes-Analyzer.cmd',
@@ -197,6 +203,54 @@ function New-TransactionFixture {
     $journal = New-IzMaintenanceJournal -Context $context -Action AutoInstall -SourceRelease $source -TargetRelease $target -DataIdentity $dataIdentity.data_identity -PayloadIdentity $manifest.payload_identity -PriorReceiptSha256 $priorHash
     Write-IzMaintenanceJournal -Context $context -Journal $journal -ExpectedSequence -1 | Out-Null
     return [pscustomobject]@{ context=$context; manifest=$manifest; source=$source; target=$target; receipt=$receipt; journal=$journal; database=$database }
+}
+
+function Invoke-LongStagePathCase {
+    $fixture = New-TransactionFixture -IncludeLongGuidePath
+    $relative = 'docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\long-path-regression\02. Start Up Screen.png'
+    $target = Join-Path $fixture.context.stage_root $relative
+    $stage = $null
+    $errorReason = ''
+    try {
+        try { $stage = Copy-IzStagedProgram -Context $fixture.context -Manifest $fixture.manifest }
+        catch { $errorReason = [string]$_.Exception.Message }
+        $extendedTarget = '\\?\' + $target
+        $targetPresent = Test-Path -LiteralPath $extendedTarget -PathType Leaf
+        $targetHashMatches = $targetPresent -and
+            (Get-FileHash -LiteralPath $extendedTarget -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+            (Get-FileHash -LiteralPath (Join-Path $fixture.context.package_root ('app\' + $relative)) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $outside = Join-Path $fixture.context.local_app_data_root 'transaction-long-path-outside'
+        [IO.Directory]::CreateDirectory($outside) | Out-Null
+        $outsideSentinel = Join-Path $outside 'sentinel.txt'
+        [IO.File]::WriteAllText($outsideSentinel, 'outside-safe', [Text.UTF8Encoding]::new($false))
+        $junction = Join-Path $fixture.context.stage_root 'long-path-reparse-probe'
+        New-Item -ItemType Junction -Path $junction -Target $outside | Out-Null
+        $reparseReason = ''
+        try {
+            $transactionModule = Get-Module maintenance-transaction | Select-Object -Last 1
+            & $transactionModule { param($root,$files) Test-IzProgramFiles $root $files -AllowMarker } $fixture.context.stage_root $stage.files | Out-Null
+        } catch {
+            $reparseReason = if ($_.Exception.Data.Contains('iz_reason')) { [string]$_.Exception.Data['iz_reason'] } else { [string]$_.Exception.Message }
+        } finally {
+            if ([IO.Directory]::Exists($junction)) { [IO.Directory]::Delete($junction, $false) }
+        }
+        $outsidePreserved = (Get-Content -LiteralPath $outsideSentinel -Raw) -ceq 'outside-safe'
+        $passed = $target.Length -gt 259 -and $null -ne $stage -and $targetPresent -and $targetHashMatches -and
+            $reparseReason -ceq 'PATH_REPARSE_POINT' -and $outsidePreserved
+        Add-Result -Name 'staged_payload_copies_and_verifies_manifest_file_beyond_max_path' -Status $(if ($passed) { 'passed' } else { 'failed' }) -Observable @{
+            target_length = $target.Length
+            stage_binding_returned = ($null -ne $stage)
+            target_present = $targetPresent
+            target_hash_matches = $targetHashMatches
+            reparse_reason = $reparseReason
+            outside_sentinel_preserved = $outsidePreserved
+            error_reason = $errorReason
+        }
+    } finally {
+        if ([IO.Directory]::Exists('\\?\' + $fixture.context.stage_root)) {
+            [IO.Directory]::Delete(('\\?\' + $fixture.context.stage_root), $true)
+        }
+    }
 }
 
 function Invoke-TransactionTransitionCase {
@@ -298,6 +352,7 @@ function Invoke-TransactionRecoveryCase {
 
 if ($Case -eq 'transaction-transitions') { Invoke-TransactionTransitionCase | Out-Null }
 if ($Case -in @('transaction-recovery', 'All')) { Invoke-TransactionRecoveryCase }
+if ($Case -in @('transaction-long-path', 'All')) { Invoke-LongStagePathCase }
 if ($Case -in @('install-routing', 'All')) {
     Invoke-StatusCase
 }

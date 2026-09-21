@@ -1,12 +1,12 @@
 # Client release packages
 
-Current candidate: **1.0.0**, build **2026.09.21.1**, installer revision **1**.
+Current candidate: **1.0.0**, build **2026.09.21.2**, installer revision **1**.
 
 Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
 
 ## Candidate package under validation
 
-Expected filename: `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.1-installer-r1.zip`.
+Expected filename: `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip`.
 
 The portable ZIP, clean-source build receipt, hash, relocated normal-folder and OneDrive-backed package tests, fresh-install credential check, upgrade password-preservation check, and Windows 10/11 lifecycle evidence are pending. Track them in [installer portability validation](validation/installer-portability-2026-09-21.md). Do not distribute this candidate as client-ready until those criteria are filled with passing evidence.
 

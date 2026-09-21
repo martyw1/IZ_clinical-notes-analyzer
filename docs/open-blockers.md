@@ -2,7 +2,7 @@
 
 Date: 2026-09-21
 
-Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.1` / installer revision `1` on the `stable-local-desktop` channel. The portable ZIP and target-platform qualification are pending.
+Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The portable ZIP and target-platform qualification are pending.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -87,7 +87,7 @@ Required resolution evidence:
 
 Status: **candidate under validation; no client-ready claim.**
 
-Build `2026.09.21.1` must pass a clean full build and exact-package lifecycle from relocated normal folders and OneDrive-backed package locations on the available Windows 10/11 matrix. Evidence must confirm that bootstrap staging and verification succeeds without Windows administrator access or client-side Python, Node.js, Git, Docker, or PostgreSQL; installed-app and local-data root checks remain strict; a truly fresh install accepts the R3-supplied starter administrator credential and requires immediate change; and upgrades or reinstalls preserve existing account passwords and password state.
+Build `2026.09.21.2` must pass a clean full build and exact-package lifecycle from relocated normal folders and OneDrive-backed package locations on the available Windows 10/11 matrix. Evidence must confirm that bootstrap staging and verification succeeds without Windows administrator access or client-side Python, Node.js, Git, Docker, or PostgreSQL; installed-app and local-data root checks remain strict; a truly fresh install accepts the R3-supplied starter administrator credential and requires immediate change; and upgrades or reinstalls preserve existing account passwords and password state.
 
 The pending criteria and evidence slots are in [installer portability validation](validation/installer-portability-2026-09-21.md). Until they are filled, do not publish the September 21 ZIP as client-ready.
 

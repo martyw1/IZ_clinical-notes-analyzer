@@ -89,7 +89,7 @@ function mapApiConfiguration(record: JsonRecord): ApiConfiguration {
     paginationLimit: readNumber(record, 'pagination_limit', 500),
     syncLimit: readNumber(record, 'sync_limit', 5000),
     requestsPerMinute: readNumber(record, 'requests_per_minute', 600),
-    timeoutSeconds: readNumber(record, 'timeout_seconds', 10),
+    timeoutSeconds: readNumber(record, 'timeout_seconds', 30),
     apiEnabled: readBoolean(record, 'api_enabled'),
     treatmentPlanSyncEnabled: readBoolean(record, 'treatment_plan_sync_enabled'),
     treatmentPlanSyncApproved: readBoolean(record, 'treatment_plan_sync_approved'),

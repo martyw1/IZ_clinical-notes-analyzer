@@ -1,6 +1,6 @@
 ## 1.0.0 production candidate - 2026-09-21
 
-Build: 2026.09.21.1; installer revision: 1; channel: stable-local-desktop.
+Build: 2026.09.21.2; installer revision: 1; channel: stable-local-desktop.
 
 - Stage and verify a prepared package before installation when the extracted package is relocated to a normal local folder or a OneDrive-backed folder.
 - Preserve strict validation of the installed application root and local data root.
@@ -37,7 +37,7 @@ See [password management](docs/password-management-beta4.md). Validation is reco
 
 # Changelog
 
-Current source candidate: `1.0.0` / build `2026.09.21.1` / installer revision `1` / channel `stable-local-desktop`. The portable ZIP, final receipt, and target-platform qualification remain pending.
+Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1` / channel `stable-local-desktop`. The portable ZIP, final receipt, and target-platform qualification remain pending.
 
 ## Unreleased - Documentation and help alignment (2026-09-08)
 
