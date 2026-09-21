@@ -85,9 +85,47 @@ DEFAULT_ENDPOINT_FIELD_MAPPINGS: Final = {
 
 
 class AllevaSyncError(Exception):
-    def __init__(self, detail: str) -> None:
+    def __init__(
+        self,
+        detail: str,
+        *,
+        failure_stage: str = "sync_processing",
+        endpoint_key: str | None = None,
+        http_status: int | None = None,
+        request_duration_ms: int | None = None,
+        attempt_count: int | None = None,
+        retry_count: int | None = None,
+        retry_outcome: str | None = None,
+        cause_class: str | None = None,
+    ) -> None:
         super().__init__(detail)
         self.detail = detail
+        self.failure_stage = failure_stage
+        self.endpoint_key = endpoint_key
+        self.http_status = http_status
+        self.request_duration_ms = request_duration_ms
+        self.attempt_count = attempt_count
+        self.retry_count = retry_count
+        self.retry_outcome = retry_outcome
+        self.cause_class = cause_class
+
+    def audit_details(self) -> dict[str, str | int]:
+        details: dict[str, str | int] = {
+            "error_class": type(self).__name__,
+            "failure_stage": self.failure_stage,
+        }
+        for key, value in (
+            ("endpoint_key", self.endpoint_key),
+            ("http_status", self.http_status),
+            ("request_duration_ms", self.request_duration_ms),
+            ("attempt_count", self.attempt_count),
+            ("retry_count", self.retry_count),
+            ("retry_outcome", self.retry_outcome),
+            ("cause_class", self.cause_class),
+        ):
+            if value is not None:
+                details[key] = value
+        return details
 
 
 class AllevaSyncCancelled(AllevaSyncError):
@@ -125,6 +163,7 @@ class AllevaSyncResult:
     unchanged_treatment_plan_count: int
     failed_detail_count: int
     updated_treatment_plan_ids: tuple[str, ...]
+    detail_failure_diagnostics: tuple[dict[str, str | int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +174,7 @@ class SyncImportSummary:
     skipped_count: int
     failed_detail_count: int
     updated_plan_ids: tuple[str, ...]
+    detail_failure_diagnostics: tuple[dict[str, str | int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +198,11 @@ def run_treatment_plan_sync(
     resumed_from_job_id: str | None = None,
 ) -> AllevaSyncResult:
     if is_cancelled():
-        raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before it started.")
+        raise AllevaSyncCancelled(
+            "Alleva treatment-plan sync was cancelled before it started.",
+            failure_stage="job_start",
+            retry_outcome="cancelled",
+        )
     token = _oauth_token(profile, contract, is_cancelled)
     protocol = AllevaReadProtocol(
         profile.alleva_api_version,
@@ -216,6 +260,7 @@ def run_treatment_plan_sync(
         unchanged_treatment_plan_count=summary.unchanged_count,
         failed_detail_count=summary.failed_detail_count,
         updated_treatment_plan_ids=summary.updated_plan_ids,
+        detail_failure_diagnostics=summary.detail_failure_diagnostics,
     )
 
 
@@ -224,7 +269,7 @@ def _oauth_token(profile: AppSetting, contract: ApprovedAllevaContract, is_cance
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled before OAuth.")
     if not profile.api_client_secret:
         raise AllevaSyncError("Encrypted Alleva client secret is not configured.")
-    _, token = request_client_credentials(
+    result, token = request_client_credentials(
         token_url=contract.payload.oauth.token_url,
         client_id=decrypt_api_client_id(profile.api_client_id),
         client_secret=decrypt_text_secret(profile.api_client_secret),
@@ -235,7 +280,17 @@ def _oauth_token(profile: AppSetting, contract: ApprovedAllevaContract, is_cance
     if is_cancelled():
         raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled after OAuth.")
     if not token:
-        raise AllevaSyncError("OAuth verification failed before treatment-plan sync could start.")
+        raise AllevaSyncError(
+            "OAuth verification failed before treatment-plan sync could start.",
+            failure_stage=result.failure_stage or "oauth_response",
+            endpoint_key=result.endpoint_key or "oauth_token",
+            http_status=result.http_status,
+            request_duration_ms=result.duration_ms,
+            attempt_count=result.attempt_count,
+            retry_count=result.retry_count,
+            retry_outcome=result.retry_outcome,
+            cause_class=result.cause_class,
+        )
     return token
 
 
@@ -266,7 +321,12 @@ def _paged_records(
         offset = latest_checkpoint.page_number + len(latest_checkpoint.records)
     while len(records) < limit:
         if is_cancelled():
-            raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
+            raise AllevaSyncCancelled(
+                "Alleva treatment-plan sync was cancelled.",
+                failure_stage="collection_request",
+                endpoint_key=endpoint_key,
+                retry_outcome="cancelled",
+            )
         requested_page_size = min(page_size, limit - len(records))
         response = _get_with_retry(
             client,
@@ -291,18 +351,46 @@ def _paged_records(
             contract.payload.rate_limit.retry_after_seconds,
             rate_limiter,
             contract.payload.pagination.maximum_response_bytes,
+            endpoint_key=endpoint_key,
+            failure_stage="collection_request",
         )
-        response_size = int(response.headers.get("content-length", "0"))
+        try:
+            response_size = int(response.headers.get("content-length", "0"))
+        except ValueError as exc:
+            raise _response_failure(
+                response,
+                failure_stage="collection_response",
+                endpoint_key=endpoint_key,
+            ) from exc
         if response_size > pagination.maximum_response_bytes:
-            raise ValueError("API page exceeded the approved response-size limit.")
-        page = _records(response.json())
+            raise _response_failure(
+                response,
+                failure_stage="collection_response",
+                endpoint_key=endpoint_key,
+            )
+        try:
+            page = _records(response.json())
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise _response_failure(
+                response,
+                failure_stage="collection_response",
+                endpoint_key=endpoint_key,
+            ) from exc
         vendor_exceeded_requested_page = len(page) > requested_page_size
         if vendor_exceeded_requested_page:
             if len(records) + len(page) > limit:
-                raise ValueError("Approved endpoint returned more records than the bounded collection permits.")
+                raise _response_failure(
+                    response,
+                    failure_stage="collection_response",
+                    endpoint_key=endpoint_key,
+                )
         page_hash = hashlib.sha256(json.dumps(page, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         if page_hash in seen_pages:
-            raise ValueError("Approved endpoint returned a repeated page.")
+            raise _response_failure(
+                response,
+                failure_stage="collection_response",
+                endpoint_key=endpoint_key,
+            )
         seen_pages.add(page_hash)
         records.extend(page)
         if on_page:
@@ -426,6 +514,7 @@ def _save_client_aggregates(
     unchanged = 0
     skipped = 0
     failed_details = 0
+    detail_failure_diagnostics: list[dict[str, str | int]] = []
     updated_plan_ids: list[str] = []
     candidates: list[PlanImportCandidate] = []
     api_base_url = str(profile.api_base_url)
@@ -492,8 +581,18 @@ def _save_client_aggregates(
             for index, future in enumerate(futures):
                 try:
                     details[index] = future.result()
-                except (httpx.HTTPError, json.JSONDecodeError, ValueError, ResponseTooLarge):
+                except AllevaSyncError as exc:
                     failed_details += 1
+                    detail_failure_diagnostics.append(exc.audit_details())
+                except (httpx.HTTPError, json.JSONDecodeError, ValueError, ResponseTooLarge) as exc:
+                    failed_details += 1
+                    detail_failure_diagnostics.append(
+                        {
+                            "error_class": type(exc).__name__,
+                            "failure_stage": "detail_processing",
+                            "endpoint_key": "treatment_plan_detail",
+                        }
+                    )
 
     for candidate, detail in zip(candidates, details, strict=True):
         if detail is None:
@@ -559,7 +658,11 @@ def _save_client_aggregates(
             actor,
             sync_provenance=sync_provenance,
             source_patient_id=candidate.source_patient_id,
-            lifecycle_state="active" if candidate.linked_to_mrn else "unlinked",
+            lifecycle_state=(
+                _client_lifecycle(candidate.client_payload, contract)
+                if candidate.linked_to_mrn
+                else "unlinked"
+            ),
         )
         match saved.disposition:
             case TreatmentPlanSaveDisposition.CREATED:
@@ -571,7 +674,15 @@ def _save_client_aggregates(
                 unchanged += 1
             case unreachable:
                 assert_never(unreachable)
-    return SyncImportSummary(created, updated, unchanged, skipped, failed_details, tuple(updated_plan_ids))
+    return SyncImportSummary(
+        created,
+        updated,
+        unchanged,
+        skipped,
+        failed_details,
+        tuple(updated_plan_ids),
+        tuple(detail_failure_diagnostics),
+    )
 
 
 def _unlinked_patient_key(plan_id: str) -> str:
@@ -726,10 +837,23 @@ def _plan_detail(
         contract.payload.rate_limit.retry_after_seconds,
         rate_limiter,
         contract.payload.pagination.maximum_response_bytes,
+        endpoint_key="treatment_plan_detail",
+        failure_stage="detail_request",
     )
-    payload = response.json()
+    try:
+        payload = response.json()
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise _response_failure(
+            response,
+            failure_stage="detail_response",
+            endpoint_key="treatment_plan_detail",
+        ) from exc
     if not isinstance(payload, dict):
-        raise ValueError("Expected an API treatment-plan detail object.")
+        raise _response_failure(
+            response,
+            failure_stage="detail_response",
+            endpoint_key="treatment_plan_detail",
+        )
     diagnoses = _endpoint_records(
         client, api_base_url, contract, "diagnoses", headers, is_cancelled, rate_limiter,
         api_version=api_version, plan_id=plan_id,
@@ -772,30 +896,186 @@ def _endpoint_json(
         contract.payload.rate_limit.retry_after_seconds,
         rate_limiter,
         contract.payload.pagination.maximum_response_bytes,
+        endpoint_key=endpoint_key,
+        failure_stage="detail_request",
     )
-    return response.json()
+    try:
+        return response.json()
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise _response_failure(
+            response,
+            failure_stage="detail_response",
+            endpoint_key=endpoint_key,
+        ) from exc
 
 
-def _get_with_retry(client: httpx.Client, url: str, params: dict[str, str | int] | None, headers: dict[str, str], is_cancelled: Callable[[], bool], retry_after_seconds: int, rate_limiter: ApprovedRequestRateLimiter | None = None, maximum_response_bytes: int = 5 * 1024 * 1024) -> httpx.Response:
+def _get_with_retry(
+    client: httpx.Client,
+    url: str,
+    params: dict[str, str | int] | None,
+    headers: dict[str, str],
+    is_cancelled: Callable[[], bool],
+    retry_after_seconds: int,
+    rate_limiter: ApprovedRequestRateLimiter | None = None,
+    maximum_response_bytes: int = 5 * 1024 * 1024,
+    *,
+    endpoint_key: str = "clients",
+    failure_stage: str = "collection_request",
+) -> httpx.Response:
+    started_at = time.monotonic()
     for attempt in range(3):
         if is_cancelled():
-            raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled.")
+            raise AllevaSyncCancelled(
+                "Alleva treatment-plan sync was cancelled.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt,
+                retry_count=max(0, attempt - 1),
+                retry_outcome="cancelled",
+            )
         if rate_limiter:
-            rate_limiter.acquire(is_cancelled)
-        response = get_bounded(
-            client,
-            url,
-            maximum_bytes=maximum_response_bytes,
-            params=params,
-            headers=headers,
-        )
+            try:
+                rate_limiter.acquire(is_cancelled)
+            except AllevaSyncCancelled as exc:
+                raise AllevaSyncCancelled(
+                    exc.detail,
+                    failure_stage=failure_stage,
+                    endpoint_key=endpoint_key,
+                    request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                    attempt_count=attempt,
+                    retry_count=max(0, attempt - 1),
+                    retry_outcome="cancelled",
+                ) from None
+        try:
+            response = get_bounded(
+                client,
+                url,
+                maximum_bytes=maximum_response_bytes,
+                params=params,
+                headers=headers,
+            )
+        except ResponseTooLarge as exc:
+            raise AllevaSyncError(
+                "Approved API request failed before a safe response was available.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt + 1,
+                retry_count=attempt,
+                retry_outcome="not_retryable",
+                cause_class=type(exc).__name__,
+            ) from exc
+        except ValueError as exc:
+            raise AllevaSyncError(
+                "Approved API request URL is invalid.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt + 1,
+                retry_count=attempt,
+                retry_outcome="not_retryable",
+                cause_class=type(exc).__name__,
+            ) from exc
+        except httpx.InvalidURL as exc:
+            raise AllevaSyncError(
+                "Approved API request URL is invalid.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt + 1,
+                retry_count=attempt,
+                retry_outcome="not_retryable",
+                cause_class=type(exc).__name__,
+            ) from exc
+        except httpx.RequestError as exc:
+            retryable_transport_error = isinstance(exc, (httpx.TimeoutException, httpx.NetworkError))
+            if retryable_transport_error and attempt < 2:
+                try:
+                    _wait_for_retry(min(retry_after_seconds, 2), is_cancelled)
+                except AllevaSyncCancelled as cancelled:
+                    raise AllevaSyncCancelled(
+                        cancelled.detail,
+                        failure_stage=failure_stage,
+                        endpoint_key=endpoint_key,
+                        request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                        attempt_count=attempt + 1,
+                        retry_count=attempt,
+                        retry_outcome="cancelled",
+                    ) from None
+                continue
+
+            raise AllevaSyncError(
+                "Approved API request failed before a safe response was available.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt + 1,
+                retry_count=attempt,
+                retry_outcome=(
+                    "exhausted" if retryable_transport_error else "not_retryable"
+                ),
+                cause_class=type(exc).__name__,
+            ) from exc
         if response.status_code not in {429, 500, 502, 503, 504}:
-            response.raise_for_status()
+            if response.is_error:
+                raise AllevaSyncError(
+                    "Approved API request returned an unsuccessful response.",
+                    failure_stage=failure_stage,
+                    endpoint_key=endpoint_key,
+                    http_status=response.status_code,
+                    request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                    attempt_count=attempt + 1,
+                    retry_count=attempt,
+                    retry_outcome="not_retryable",
+                )
+            response.extensions["alleva_attempt_count"] = attempt + 1
+            response.extensions["alleva_retry_count"] = attempt
+            response.extensions["alleva_retry_outcome"] = "succeeded_after_retry" if attempt else "not_needed"
+            response.extensions["alleva_duration_ms"] = int((time.monotonic() - started_at) * 1000)
             return response
         if attempt == 2:
-            response.raise_for_status()
-        _wait_for_retry(min(retry_after_seconds, 2), is_cancelled)
+            raise AllevaSyncError(
+                "Approved API request exhausted its retry budget.",
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                http_status=response.status_code,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=3,
+                retry_count=2,
+                retry_outcome="exhausted",
+            )
+        try:
+            _wait_for_retry(min(retry_after_seconds, 2), is_cancelled)
+        except AllevaSyncCancelled as exc:
+            raise AllevaSyncCancelled(
+                exc.detail,
+                failure_stage=failure_stage,
+                endpoint_key=endpoint_key,
+                request_duration_ms=int((time.monotonic() - started_at) * 1000),
+                attempt_count=attempt + 1,
+                retry_count=attempt,
+                retry_outcome="cancelled",
+            ) from None
     raise AllevaSyncError("Approved API request retry budget was exhausted.")
+
+
+def _response_failure(
+    response: httpx.Response,
+    *,
+    failure_stage: str,
+    endpoint_key: str,
+) -> AllevaSyncError:
+    return AllevaSyncError(
+        "Approved API response could not be processed safely.",
+        failure_stage=failure_stage,
+        endpoint_key=endpoint_key,
+        http_status=response.status_code,
+        request_duration_ms=int(response.extensions.get("alleva_duration_ms", 0)),
+        attempt_count=int(response.extensions.get("alleva_attempt_count", 1)),
+        retry_count=int(response.extensions.get("alleva_retry_count", 0)),
+        retry_outcome=str(response.extensions.get("alleva_retry_outcome", "not_needed")),
+    )
 
 
 def _wait_for_retry(delay_seconds: int, is_cancelled: Callable[[], bool]) -> None:

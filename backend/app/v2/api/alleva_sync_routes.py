@@ -46,13 +46,6 @@ def run_alleva_sync(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
     if blockers:
         _record_blocked_sync(db, actor, blockers)
         raise HTTPException(status_code=409, detail=f"Alleva treatment-plan sync is blocked: {', '.join(blockers)}")
-    record_audit_event(
-        db,
-        action="alleva.treatment_plan_sync.job.started",
-        actor=actor,
-        target_entity_type="integration_sync",
-        target_entity_id="alleva_treatment_plan_sync",
-    )
     try:
         return job_service.create_treatment_plan_sync_job(actor.id, actor.role, contract)
     except ValueError as exc:
@@ -101,10 +94,6 @@ def run_patient_roster_pull(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
             outcome_status="blocked", details={"blocker_count": len(blockers)},
         )
         raise HTTPException(status_code=409, detail="Patient-roster pull is blocked by the approved Alleva mapping")
-    record_audit_event(
-        db, action="alleva.patient_roster_pull.job.started", actor=actor,
-        target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
-    )
     try:
         return job_service.create_roster_pull_job(actor.id, actor.role, contract)
     except ValueError as exc:

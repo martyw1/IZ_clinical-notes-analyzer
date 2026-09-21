@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-plan-"
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +177,8 @@ def _mark_missing_patients(
         {"facility_id": facility_id},
     ).all()
     for row in rows:
+        if row[2] is None and str(row[1]).startswith(UNLINKED_PATIENT_KEY_PREFIX):
+            continue
         source_patient_id = str(row[2] or row[1])
         if source_patient_id in observed_source_patient_ids:
             continue

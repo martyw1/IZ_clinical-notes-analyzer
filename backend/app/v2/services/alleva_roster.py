@@ -98,9 +98,18 @@ def run_roster_pull(
                     complete_snapshot = True
             except AllevaSyncCancelled:
                 raise
-            except (httpx.HTTPError, json.JSONDecodeError, ValueError, AllevaSyncError):
+            except AllevaSyncError:
                 if not records:
-                    raise AllevaSyncError("Alleva patient-roster pull failed before any safe records were observed.") from None
+                    raise
+                warning_count = 1
+                break
+            except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+                if not records:
+                    raise AllevaSyncError(
+                        "Alleva patient-roster pull failed before any safe records were observed.",
+                        failure_stage="collection_response",
+                        endpoint_key="clients",
+                    ) from exc
                 warning_count = 1
                 break
 

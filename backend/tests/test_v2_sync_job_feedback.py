@@ -81,3 +81,58 @@ def test_sync_timeout_cause_survives_restart_without_sensitive_exception_text(
     assert response.json()["message"] == current["message"]
     assert "synthetic-private" not in response.text
     assert "patient-synthetic-detail" not in response.text
+
+
+def test_sync_failure_audit_has_job_correlation_and_safe_request_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a configured sync whose protected clients request fails after retry exhaustion.
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    _configure(client, headers, "https://mock.invalid")
+    from app.v2.services import jobs
+    from app.v2.services.alleva_sync import AllevaSyncError, AllevaSyncResult
+
+    def fail_sync(*_args: None, **_kwargs: None) -> AllevaSyncResult:
+        raise AllevaSyncError(
+            "Safe public failure.",
+            failure_stage="collection_request",
+            endpoint_key="clients",
+            http_status=503,
+            request_duration_ms=27,
+            attempt_count=3,
+            retry_count=2,
+            retry_outcome="exhausted",
+        )
+
+    monkeypatch.setattr(jobs, "run_treatment_plan_sync", fail_sync)
+
+    # When: the background job reaches a terminal state.
+    started = client.post("/api/v2/alleva-sync/run", headers=headers)
+    assert started.status_code == 202
+    job_id = started.json()["job_id"]
+    current = _wait(client, headers, f"/api/v2/alleva-sync/jobs/{job_id}")
+    assert current["status"] == "failed"
+
+    # Then: both lifecycle events correlate to the job and failure fields are structured and safe.
+    audit = client.get("/api/audit/logs", headers=headers).json()["items"]
+    lifecycle = {
+        item["action"]: item
+        for item in audit
+        if item["action"] in {
+            "alleva.treatment_plan_sync.job.started",
+            "alleva.treatment_plan_sync.failed",
+        }
+    }
+    assert lifecycle["alleva.treatment_plan_sync.job.started"]["details"]["job_correlation_id"] == job_id
+    failed = lifecycle["alleva.treatment_plan_sync.failed"]["details"]
+    assert failed["job_correlation_id"] == job_id
+    assert failed["failure_stage"] == "collection_request"
+    assert failed["endpoint_key"] == "clients"
+    assert failed["http_status"] == 503
+    assert failed["request_duration_ms"] == 27
+    assert failed["attempt_count"] == 3
+    assert failed["retry_count"] == 2
+    assert failed["retry_outcome"] == "exhausted"
+    assert failed["duration_ms"] >= 0
+    assert "mock.invalid" not in str(failed)

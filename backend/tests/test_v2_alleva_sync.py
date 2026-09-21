@@ -423,13 +423,16 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
-    assert completed["details"] == {
+    completed_details = completed["details"]
+    assert completed_details.pop("job_correlation_id") == job_id
+    assert completed_details.pop("duration_ms") >= 0
+    assert completed_details == {
         "created_treatment_plan_count": 1,
         "imported_patient_count": 1,
         "skipped_plan_count": 0,
         "unchanged_treatment_plan_count": 0,
         "updated_treatment_plan_count": 0,
-        "updated_treatment_plan_ids": [],
+        "updated_treatment_plan_id_count": 0,
     }
     assert "mock-secret" not in str(audit)
 
@@ -764,22 +767,29 @@ def test_repeated_sync_updates_same_plan_id_and_leaves_identical_replay_unchange
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completions = [item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed"]
-    assert completions[0]["details"] == {
+    latest_details = completions[0]["details"]
+    assert latest_details.pop("job_correlation_id") == third["job_id"]
+    assert latest_details.pop("duration_ms") >= 0
+    assert latest_details == {
         "created_treatment_plan_count": 0,
         "imported_patient_count": 1,
         "skipped_plan_count": 0,
         "unchanged_treatment_plan_count": 1,
         "updated_treatment_plan_count": 0,
-        "updated_treatment_plan_ids": [],
+        "updated_treatment_plan_id_count": 0,
     }
-    assert completions[1]["details"] == {
+    updated_details = completions[1]["details"]
+    assert updated_details.pop("job_correlation_id") == second["job_id"]
+    assert updated_details.pop("duration_ms") >= 0
+    assert updated_details == {
         "created_treatment_plan_count": 0,
         "imported_patient_count": 1,
         "skipped_plan_count": 0,
         "unchanged_treatment_plan_count": 0,
         "updated_treatment_plan_count": 1,
-        "updated_treatment_plan_ids": ["plan-912"],
+        "updated_treatment_plan_id_count": 1,
     }
+    assert "plan-912" not in str(completions[1]["details"])
 
 
 def _completed_sync(client, headers: dict[str, str]) -> dict[str, JsonValue]:
@@ -834,7 +844,9 @@ def test_approved_alleva_sync_job_can_be_cancelled_while_an_api_page_is_in_fligh
         assert state.paths == ["/token", "/clients?Limit=5000&Cursor=0&api-version=1.0"]
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
-    assert any(item["action"] == "alleva.treatment_plan_sync.cancelled" for item in audit)
+    cancelled_event = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.cancelled")
+    assert cancelled_event["details"]["job_correlation_id"] == job_id
+    assert cancelled_event["details"]["duration_ms"] >= 0
 
 
 def test_unexpected_sync_worker_failure_reaches_a_terminal_audited_state(tmp_path, monkeypatch) -> None:

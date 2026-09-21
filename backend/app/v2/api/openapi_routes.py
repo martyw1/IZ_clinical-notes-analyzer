@@ -25,7 +25,7 @@ router = APIRouter()
 @router.get("/api/api-configuration/sample-openapi.json")
 def sample_openapi() -> SampleOpenApiOut:
     return SampleOpenApiOut(
-        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version="2.0.0-beta.4"),
+        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version="1.0.0"),
         paths={"/clients": SampleOpenApiPathItem(get=SampleOpenApiOperation(operation_id="listClients"))},
     )
 
@@ -62,7 +62,18 @@ def test_connectivity(actor: AdminUser, db: DbSession) -> OAuthConnectivityOut:
     record_audit_event(
         db, action="api.oauth.connectivity.tested", actor=actor, target_entity_type="api_connection_profile",
         target_entity_id=profile.emr_vendor_name, outcome_status=result.status,
-        details={"token_auth_style": result.token_auth_style, "credentials_verified": result.status == "ok"},
+        details={
+            "token_auth_style": result.token_auth_style,
+            "credentials_verified": result.status == "ok",
+            "failure_stage": result.failure_stage,
+            "endpoint_key": result.endpoint_key,
+            "http_status": result.http_status,
+            "duration_ms": result.duration_ms,
+            "attempt_count": result.attempt_count,
+            "retry_count": result.retry_count,
+            "retry_outcome": result.retry_outcome,
+            "cause_class": result.cause_class,
+        },
     )
     return OAuthConnectivityOut(
         status=result.status, token_auth_style=result.token_auth_style, message=result.message,

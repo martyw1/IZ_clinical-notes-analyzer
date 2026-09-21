@@ -40,7 +40,7 @@ function Assert-LiveVerificationEvidence {
     )
     foreach ($key in $requiredTrue) {
         if (-not $Evidence.ContainsKey($key) -or -not [bool]$Evidence[$key]) {
-            throw 'LIVE_SYNC_FAILED: workflow verification invariant failed'
+            throw "LIVE_SYNC_FAILED: workflow verification invariant failed ($key)"
         }
     }
     $requiredCounts = @(
@@ -155,8 +155,30 @@ function Invoke-Api {
         return Invoke-RestMethod -Method $Method -Uri ($BaseUrl.TrimEnd('/') + $Path) -Headers $Headers -TimeoutSec 120
     }
     catch {
-        throw "Live workflow API request failed for $Method $Path."
+        $operation = switch -Regex ($Path) {
+            '^/api/api-configuration$' { 'configuration'; break }
+            '^/api/v2/alleva-sync' { 'sync_job'; break }
+            '^/api/v2/patient-roster' { 'patient_roster'; break }
+            '^/api/v2/treatment-plan-roster' { 'plan_roster'; break }
+            '^/api/v2/patients/' { 'patient_detail'; break }
+            '^/api/v2/treatment-plans/' { 'plan_detail'; break }
+            '^/api/audit/logs' { 'audit'; break }
+            default { 'unknown' }
+        }
+        $httpStatus = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        throw "LIVE_SYNC_API_FAILED operation=$operation status=$httpStatus"
     }
+}
+
+function Get-LivePlanDetailPath {
+    param([object]$Plan)
+    $versionId = [int]$Plan.plan_version_id
+    $recordId = [int]$Plan.patient_record_id
+    if ($versionId -le 0 -or $recordId -le 0) { throw 'LIVE_SYNC_FAILED: treatment-plan identity is missing' }
+    $patientKey = [Uri]::EscapeDataString([string]$Plan.patient_key)
+    $planKey = [Uri]::EscapeDataString([string]$Plan.treatment_plan_id)
+    $source = [Uri]::EscapeDataString([string]$Plan.source_mode)
+    return "/api/v2/treatment-plans/$patientKey/$planKey`?source_mode=$source&plan_version_id=$versionId&patient_record_id=$recordId"
 }
 
 function Get-UpdatedInstant {
@@ -188,6 +210,15 @@ if ($SelfTestBlockedChild) {
 }
 
 if ($SelfTest) {
+    $syntheticPlan = [pscustomobject]@{patient_key='synthetic/key';treatment_plan_id='plan #1';source_mode='alleva_rest_api';plan_version_id=11;patient_record_id=7}
+    $detailPath = Get-LivePlanDetailPath $syntheticPlan
+    if ($detailPath -cne '/api/v2/treatment-plans/synthetic%2Fkey/plan%20%231?source_mode=alleva_rest_api&plan_version_id=11&patient_record_id=7') {
+        throw 'Live workflow self-test failed exact plan selection transport.'
+    }
+    $syntheticPlan.plan_version_id = 0
+    $missingIdentityRejected = $false
+    try { [void](Get-LivePlanDetailPath $syntheticPlan) } catch { $missingIdentityRejected = $true }
+    if (-not $missingIdentityRejected) { throw 'Live workflow self-test accepted a missing plan version.' }
     if (-not (Test-DescendingUpdated @(
         [pscustomobject]@{ last_updated = '2026-01-02T00:00:00Z' },
         [pscustomobject]@{ last_updated = '2026-01-01T00:00:00Z' },
@@ -328,16 +359,16 @@ if ($job.status -ne 'completed') { throw 'LIVE_SYNC_FAILED: operational sync did
 $configuration = Invoke-Api -Method GET -Path '/api/api-configuration' -Headers $headers
 $gateMappingValid = -not [string]::IsNullOrWhiteSpace([string]$configuration.active_contract_version)
 
-$patientItems = @((Invoke-Api -Method GET -Path '/api/v2/patient-roster' -Headers $headers).items)
-$planItems = @((Invoke-Api -Method GET -Path '/api/v2/treatment-plan-roster' -Headers $headers).items)
+$patientItems = @((Invoke-Api -Method GET -Path '/api/v2/patient-roster?source_mode=alleva_rest_api' -Headers $headers).items)
+$planItems = @((Invoke-Api -Method GET -Path '/api/v2/treatment-plan-roster?source_mode=alleva_rest_api' -Headers $headers).items)
 $patientKeys = @{}
-foreach ($patient in $patientItems) { $patientKeys[[string]$patient.mrn] = $patient }
+foreach ($patient in $patientItems) { $patientKeys[[string]$patient.patient_record_id] = $patient }
 
 $linkedPlans = @($planItems | Where-Object { [bool]$_.linked_to_mrn })
 $unlinkedPlans = @($planItems | Where-Object { -not [bool]$_.linked_to_mrn })
 $plansByPatient = @{}
 foreach ($plan in $linkedPlans) {
-    $key = [string]$plan.mrn
+    $key = [string]$plan.patient_record_id
     if (-not $plansByPatient.ContainsKey($key)) { $plansByPatient[$key] = [System.Collections.Generic.List[object]]::new() }
     $plansByPatient[$key].Add($plan)
 }
@@ -345,7 +376,7 @@ foreach ($plan in $linkedPlans) {
 $linkageValid = $true
 $patientPlanOrderValid = $true
 foreach ($patient in $patientItems) {
-    $key = [string]$patient.mrn
+    $key = [string]$patient.patient_record_id
     $rosterPlans = @($patient.treatment_plans)
     $globalPlans = if ($plansByPatient.ContainsKey($key)) { @($plansByPatient[$key]) } else { @() }
     if (-not (Test-DescendingUpdated $rosterPlans)) { $patientPlanOrderValid = $false }
@@ -354,7 +385,7 @@ foreach ($patient in $patientItems) {
     if (($rosterIds -join '|') -ne ($globalIds -join '|')) { $linkageValid = $false }
 }
 foreach ($plan in $linkedPlans) {
-    if (-not $patientKeys.ContainsKey([string]$plan.mrn)) { $linkageValid = $false }
+    if (-not $patientKeys.ContainsKey([string]$plan.patient_record_id)) { $linkageValid = $false }
 }
 
 $patientDetailContractsValid = $true
@@ -370,12 +401,14 @@ if ($ReferenceMrn) {
 }
 $deduplicatedPatients = @{}
 foreach ($patient in $patientDetailCandidates) {
-    if ($null -ne $patient) { $deduplicatedPatients[[string]$patient.mrn] = $patient }
+    if ($null -ne $patient) { $deduplicatedPatients[[string]$patient.patient_record_id] = $patient }
 }
 foreach ($patient in $deduplicatedPatients.Values) {
     $encodedKey = [Uri]::EscapeDataString([string]$patient.mrn)
     $encodedMode = [Uri]::EscapeDataString([string]$patient.source_mode)
-    $detail = Invoke-Api -Method GET -Path ("/api/v2/patients/$encodedKey`?source_mode=$encodedMode") -Headers $headers
+    $patientRecordId = [int]$patient.patient_record_id
+    if ($patientRecordId -le 0) { throw 'LIVE_SYNC_FAILED: patient identity is missing' }
+    $detail = Invoke-Api -Method GET -Path ("/api/v2/patients/$encodedKey`?source_mode=$encodedMode&patient_record_id=$patientRecordId") -Headers $headers
     if ([string]$detail.mrn -ne [string]$patient.mrn -or $null -eq $detail.patient_record) { $patientDetailContractsValid = $false }
     if ([string]$detail.full_name -ne [string]$patient.full_name) { $displayLabelConsistencyValid = $false }
 }
@@ -391,15 +424,14 @@ $planDetailCandidates = @(
 $deduplicatedPlans = @{}
 foreach ($plan in $planDetailCandidates) {
     if ($null -ne $plan) {
-        $deduplicatedPlans[([string]$plan.patient_key + '|' + [string]$plan.treatment_plan_id)] = $plan
+        $deduplicatedPlans[[string]$plan.plan_version_id] = $plan
     }
 }
 foreach ($plan in $deduplicatedPlans.Values) {
-    $encodedKey = [Uri]::EscapeDataString([string]$plan.patient_key)
-    $encodedPlan = [Uri]::EscapeDataString([string]$plan.treatment_plan_id)
-    $encodedMode = 'alleva_rest_api'
-    $detail = Invoke-Api -Method GET -Path ("/api/v2/treatment-plans/$encodedKey/$encodedPlan`?source_mode=$encodedMode") -Headers $headers
-    if ([string]$detail.content_snapshot.plan_id -ne [string]$plan.treatment_plan_id) { $planDetailContractsValid = $false }
+    $planVersionId = [int]$plan.plan_version_id
+    $patientRecordId = [int]$plan.patient_record_id
+    $detail = Invoke-Api -Method GET -Path (Get-LivePlanDetailPath $plan) -Headers $headers
+    if ([string]$detail.content_snapshot.plan_id -ne [string]$plan.treatment_plan_id -or [int]$detail.plan_version_id -ne $planVersionId -or [int]$detail.patient_record_id -ne $patientRecordId) { $planDetailContractsValid = $false }
     if ([bool]$plan.linked_to_mrn -and [string]$detail.patient_full_name -ne [string]$plan.full_name) { $displayLabelConsistencyValid = $false }
 }
 
@@ -410,7 +442,7 @@ $auditText = $auditItems | ConvertTo-Json -Depth 20 -Compress
 $auditPrivacyValid = $true
 foreach ($patient in $patientItems) {
     foreach ($protectedValue in @([string]$patient.mrn, [string]$patient.full_name)) {
-        if ($protectedValue -and $auditText.Contains($protectedValue, [StringComparison]::Ordinal)) { $auditPrivacyValid = $false }
+        if ($protectedValue -and $auditText.IndexOf($protectedValue, [StringComparison]::Ordinal) -ge 0) { $auditPrivacyValid = $false }
     }
 }
 
@@ -419,14 +451,14 @@ $snapshotEnvelopesValid = $false
 $snapshotVersionsValid = $false
 $mappingHash = ''
 if ($DatabasePath -and $PythonPath) {
-    $databaseMetadata = & $PythonPath -c @'
+    $databaseMetadataScript = @'
 import json
 import sqlite3
 import sys
 
 connection = sqlite3.connect(sys.argv[1])
 rows = connection.execute(
-    "SELECT snapshot_schema_version,snapshot_encrypted FROM patient_snapshot_versions ORDER BY id"
+    "SELECT snapshot_schema_version,substr(snapshot_encrypted,1,7) FROM patient_snapshot_versions ORDER BY id"
 ).fetchall()
 mapping = connection.execute(
     "SELECT contract_sha256 FROM alleva_contract_approvals "
@@ -439,7 +471,10 @@ print(json.dumps({
     "versions_valid": bool(rows) and all(int(row[0]) == 1 for row in rows),
     "mapping_hash": str(mapping[0]) if mapping else "",
 }))
-'@ $DatabasePath | ConvertFrom-Json
+'@
+    $databaseMetadataJson = $databaseMetadataScript | & $PythonPath - $DatabasePath
+    if ($LASTEXITCODE -ne 0) { throw 'LIVE_SYNC_FAILED: encrypted snapshot verification failed' }
+    $databaseMetadata = $databaseMetadataJson | ConvertFrom-Json
     $snapshotCount = [int]$databaseMetadata.count
     $snapshotEnvelopesValid = [bool]$databaseMetadata.envelopes_valid
     $snapshotVersionsValid = [bool]$databaseMetadata.versions_valid
@@ -483,5 +518,6 @@ $evidence = @{
     audit_privacy_valid = $auditPrivacyValid
     duration_seconds = [int]([DateTimeOffset]::UtcNow - $startedAt).TotalSeconds
 }
-Assert-LiveVerificationEvidence $evidence
+try { Assert-LiveVerificationEvidence $evidence }
+catch { Write-SafeEvidence $evidence -Quiet; throw }
 Write-SafeEvidence $evidence

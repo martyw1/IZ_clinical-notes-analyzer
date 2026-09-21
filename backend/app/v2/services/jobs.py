@@ -59,20 +59,11 @@ def _now() -> str:
 
 
 def _safe_sync_failure_details(exc: AllevaSyncError) -> dict[str, JsonPrimitive]:
-    details: dict[str, JsonPrimitive] = {"error_class": type(exc).__name__}
+    details: dict[str, JsonPrimitive] = dict(exc.audit_details())
     cause = exc.__cause__
     if cause is None:
         return details
     details["cause_class"] = type(cause).__name__
-    trace = cause.__traceback__
-    while trace and trace.tb_next:
-        trace = trace.tb_next
-    if trace is not None:
-        details["cause_origin"] = trace.tb_frame.f_code.co_name
-    response = getattr(cause, "response", None)
-    status_code = getattr(response, "status_code", None)
-    if isinstance(status_code, int):
-        details["http_status"] = status_code
     return details
 
 
@@ -451,13 +442,36 @@ class ApiHarnessJobService:
                 assert_never(unreachable)
 
     def _run_treatment_plan_sync_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract, resume_source_job_id: str | None) -> None:
+        job_started_at = time.monotonic()
         self._set(job_id, status="running", started_at=_now(), progress_percent=5, current_endpoint="GET /clients")
         with SessionLocal() as db:
             profile = db.execute(select(AppSetting)).scalar_one()
             actor = db.get(User, actor_id)
             if actor is None:
+                record_audit_event(
+                    db,
+                    action="alleva.treatment_plan_sync.failed",
+                    actor=None,
+                    target_entity_type="integration_sync",
+                    target_entity_id=job_id,
+                    outcome_status="failure",
+                    details={
+                        "job_correlation_id": job_id,
+                        "failure_stage": "job_start",
+                        "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                        "error_class": "ActorUnavailable",
+                    },
+                )
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
+            record_audit_event(
+                db,
+                action="alleva.treatment_plan_sync.job.started",
+                actor=actor,
+                target_entity_type="integration_sync",
+                target_entity_id=job_id,
+                details={"job_correlation_id": job_id, "lifecycle_stage": "job_start", "duration_ms": 0},
+            )
             try:
                 result = run_treatment_plan_sync(
                     db,
@@ -469,22 +483,52 @@ class ApiHarnessJobService:
                     sync_job_id=job_id,
                     resumed_from_job_id=resume_source_job_id,
                 )
-            except AllevaSyncCancelled:
-                record_audit_event(db, action="alleva.treatment_plan_sync.cancelled", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="cancelled")
+            except AllevaSyncCancelled as exc:
+                cancellation_details: dict[str, JsonPrimitive] = dict(exc.audit_details())
+                cancellation_details.update({
+                    "job_correlation_id": job_id,
+                    "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                })
+                record_audit_event(
+                    db,
+                    action="alleva.treatment_plan_sync.cancelled",
+                    actor=actor,
+                    target_entity_type="integration_sync",
+                    target_entity_id=job_id,
+                    outcome_status="cancelled",
+                    details=cancellation_details,
+                )
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
                 return
             except AllevaSyncError as exc:
-                error_class = type(exc.__cause__).__name__ if isinstance(exc.__cause__, httpx.TimeoutException) else type(exc).__name__
+                error_class = (
+                    type(exc.__cause__).__name__
+                    if isinstance(exc.__cause__, httpx.TimeoutException)
+                    else exc.cause_class or type(exc).__name__
+                )
                 record_sync_failure(
                     db,
                     job_id,
                     error_class,
                     "Sync request failed before completion.",
                     False,
-                    1,
+                    exc.attempt_count or 1,
                     _now(),
                 )
-                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details=_safe_sync_failure_details(exc))
+                failure_details = _safe_sync_failure_details(exc)
+                failure_details.update({
+                    "job_correlation_id": job_id,
+                    "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                })
+                record_audit_event(
+                    db,
+                    action="alleva.treatment_plan_sync.failed",
+                    actor=actor,
+                    target_entity_type="integration_sync",
+                    target_entity_id=job_id,
+                    outcome_status="failure",
+                    details=failure_details,
+                )
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
             except Exception as exc:
@@ -501,7 +545,21 @@ class ApiHarnessJobService:
                     1,
                     _now(),
                 )
-                record_audit_event(db, action="alleva.treatment_plan_sync.failed", actor=actor, target_entity_type="integration_sync", target_entity_id="alleva_treatment_plan_sync", outcome_status="failure", details={"error_class": type(exc).__name__, "error_origin": error_origin})
+                record_audit_event(
+                    db,
+                    action="alleva.treatment_plan_sync.failed",
+                    actor=actor,
+                    target_entity_type="integration_sync",
+                    target_entity_id=job_id,
+                    outcome_status="failure",
+                    details={
+                        "job_correlation_id": job_id,
+                        "failure_stage": "sync_worker",
+                        "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                        "error_class": type(exc).__name__,
+                        "error_origin": error_origin,
+                    },
+                )
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
             audit_details: dict[str, JsonValue] = {
@@ -510,16 +568,25 @@ class ApiHarnessJobService:
                 "created_treatment_plan_count": result.created_treatment_plan_count,
                 "updated_treatment_plan_count": result.updated_treatment_plan_count,
                 "unchanged_treatment_plan_count": result.unchanged_treatment_plan_count,
-                "updated_treatment_plan_ids": list(result.updated_treatment_plan_ids),
+                "updated_treatment_plan_id_count": len(result.updated_treatment_plan_ids),
+                "job_correlation_id": job_id,
+                "duration_ms": int((time.monotonic() - job_started_at) * 1000),
             }
             if result.failed_detail_count:
                 audit_details["failed_detail_count"] = result.failed_detail_count
+            if result.detail_failure_diagnostics:
+                diagnostics = result.detail_failure_diagnostics
+                audit_details["detail_failure_stages"] = sorted({str(item["failure_stage"]) for item in diagnostics})
+                audit_details["detail_failure_endpoint_keys"] = sorted({str(item["endpoint_key"]) for item in diagnostics if "endpoint_key" in item})
+                audit_details["detail_failure_http_statuses"] = sorted({int(item["http_status"]) for item in diagnostics if "http_status" in item})
+                audit_details["detail_failure_retry_outcomes"] = sorted({str(item["retry_outcome"]) for item in diagnostics if "retry_outcome" in item})
+                audit_details["detail_failure_diagnostic_count"] = len(diagnostics)
             record_audit_event(
                 db,
                 action="alleva.treatment_plan_sync.completed",
                 actor=actor,
                 target_entity_type="integration_sync",
-                target_entity_id="alleva_treatment_plan_sync",
+                target_entity_id=job_id,
                 details=audit_details,
             )
         terminal_status = "completed_with_warnings" if result.failed_detail_count else "completed"
@@ -536,6 +603,7 @@ class ApiHarnessJobService:
         )
 
     def _run_roster_pull_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract) -> None:
+        job_started_at = time.monotonic()
         self._set(job_id, status="running", started_at=_now(), progress_percent=5, current_endpoint="GET /clients")
         with SessionLocal() as db:
             profile = db.execute(select(AppSetting)).scalar_one()
@@ -543,6 +611,14 @@ class ApiHarnessJobService:
             if actor is None:
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
+            record_audit_event(
+                db,
+                action="alleva.patient_roster_pull.job.started",
+                actor=actor,
+                target_entity_type="integration_sync",
+                target_entity_id=job_id,
+                details={"job_correlation_id": job_id, "lifecycle_stage": "job_start", "duration_ms": 0},
+            )
             try:
                 result = run_roster_pull(
                     db,
@@ -561,27 +637,40 @@ class ApiHarnessJobService:
                         last_heartbeat_at=_now(),
                     ),
                 )
-            except AllevaSyncCancelled:
+            except AllevaSyncCancelled as exc:
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
+                cancellation_details: dict[str, JsonPrimitive] = dict(exc.audit_details())
+                cancellation_details.update({
+                    "job_correlation_id": job_id,
+                    "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                })
                 record_audit_event(
                     db, action="alleva.patient_roster_pull.cancelled", actor=actor,
-                    target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+                    target_entity_type="integration_sync", target_entity_id=job_id,
                     outcome_status="cancelled",
+                    details=cancellation_details,
                 )
                 return
             except AllevaSyncError as exc:
                 self._set(job_id, status="failed", failed_at=_now(), progress_percent=100, errors_count=1)
+                failure_details = _safe_sync_failure_details(exc)
+                failure_details.update({
+                    "job_correlation_id": job_id,
+                    "duration_ms": int((time.monotonic() - job_started_at) * 1000),
+                })
                 record_audit_event(
                     db, action="alleva.patient_roster_pull.failed", actor=actor,
-                    target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
-                    outcome_status="failure", details={"error_class": type(exc).__name__},
+                    target_entity_type="integration_sync", target_entity_id=job_id,
+                    outcome_status="failure", details=failure_details,
                 )
                 return
             record_audit_event(
                 db, action=f"alleva.patient_roster_pull.{result.status}", actor=actor,
-                target_entity_type="integration_sync", target_entity_id="alleva_patient_roster",
+                target_entity_type="integration_sync", target_entity_id=job_id,
                 outcome_status="warning" if result.warning_count else "success",
                 details={
+                    "job_correlation_id": job_id,
+                    "duration_ms": int((time.monotonic() - job_started_at) * 1000),
                     "observed_patient_count": result.observed_count,
                     "complete_snapshot": result.complete_snapshot,
                 },

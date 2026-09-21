@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Final
 from pydantic import BaseModel, ConfigDict
 
 from sqlalchemy import text
@@ -15,6 +16,8 @@ from app.v2.services.patient_snapshot_store import (
     patient_source_snapshot_for_record,
     patient_current_level_of_care,
 )
+
+UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-plan-"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +69,7 @@ class PatientRow(BaseModel):
     model_config = ConfigDict(frozen=True)
     id: int
     canonical_client_id: str
+    source_patient_id: str | None = None
     source_system: SourceMode
     lifecycle_state: str
     first_seen_at: str
@@ -81,7 +85,7 @@ def list_patient_roster(
     for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode)):
         plans_by_patient.setdefault(plan.patient_record_id, []).append(plan)
     rows = db.execute(text(
-        "SELECT id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at "
+        "SELECT id,canonical_client_id,source_patient_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at "
         "FROM patients WHERE lifecycle_state<>'unlinked' AND (:source IS NULL OR source_system=:source) "
         "ORDER BY lifecycle_state,canonical_client_id,source_system,id"
     ), {"source": source_mode}).all()
@@ -89,6 +93,12 @@ def list_patient_roster(
     for raw in rows:
         row = PatientRow.model_validate(raw._mapping)
         if allowed_patient_record_ids is not None and row.id not in allowed_patient_record_ids:
+            continue
+        if (
+            row.source_system == "alleva_rest_api"
+            and row.source_patient_id is None
+            and row.canonical_client_id.startswith(UNLINKED_PATIENT_KEY_PREFIX)
+        ):
             continue
         snapshot = patient_source_snapshot_for_record(db, row.id, row.source_system)
         result.append(_roster_item(row, tuple(plans_by_patient.get(row.id, ())), snapshot))
@@ -130,10 +140,24 @@ def list_treatment_plan_roster(
     plans_by_patient: dict[tuple[int, str], list[StoredTreatmentPlan]] = {}
     for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode)):
         plans_by_patient.setdefault((plan.patient_record_id, plan.source_mode), []).append(plan)
+    placeholder_patient_record_ids = frozenset(
+        int(row[0])
+        for row in db.execute(
+            text(
+                "SELECT id FROM patients WHERE source_system='alleva_rest_api' "
+                "AND source_patient_id IS NULL "
+                "AND substr(canonical_client_id,1,:prefix_length)=:prefix"
+            ),
+            {
+                "prefix": UNLINKED_PATIENT_KEY_PREFIX,
+                "prefix_length": len(UNLINKED_PATIENT_KEY_PREFIX),
+            },
+        ).all()
+    )
     items: list[TreatmentPlanRosterItem] = []
     for plans in plans_by_patient.values():
         mrn = plans[0].patient_id
-        linked_to_mrn = not mrn.startswith("unlinked-")
+        linked_to_mrn = plans[0].patient_record_id not in placeholder_patient_record_ids
         ordered = tuple(sorted(plans, key=_lineage_sort_key))
         initial = ordered[0]
         for index, plan in enumerate(ordered):

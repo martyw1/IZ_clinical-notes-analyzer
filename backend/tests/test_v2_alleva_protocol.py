@@ -152,6 +152,7 @@ def test_operational_detail_uses_api_version_without_patient_query(monkeypatch) 
         _retry_after_seconds: int,
         _rate_limiter,
         _maximum_response_bytes: int,
+        **_diagnostic_context: object,
     ) -> httpx.Response:
         captured.append(params)
         return httpx.Response(200, request=httpx.Request("GET", "https://synthetic.invalid"), json={})
