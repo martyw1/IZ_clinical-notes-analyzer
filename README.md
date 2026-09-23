@@ -6,10 +6,10 @@ Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` 
 
 ## Client handoff and quick start
 
-Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. The [one-page Windows quick start](output/pdf/IZ-Clinical-Notes-Analyzer-Quick-Start.pdf) covers the prepared release. Use the final ZIP and `Production-1.0-START-HERE.txt` in `dist/windows-release`; the [package index](docs/client-release-packages.md) records the exact filename, checksum and acceptance limits.
+Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. Historical quick-start PDFs are now in the local non-deployment archive; see the [archive record](docs/validation/selected-folder-archive-2026-09-23.md). Use the final ZIP and `Production-1.0-START-HERE.txt` in `dist/windows-release`; the [package index](docs/client-release-packages.md) records the exact filename, checksum and acceptance limits.
 
 
-Production 1.0 retains the active V2 local desktop runtime and data schema. The pre-2.0 implementation is preserved under `deprecated/v1/` for historical reference, migration traceability, and regression comparison.
+Production 1.0 retains the active V2 local desktop runtime and data schema. The pre-2.0 implementation formerly under `deprecated/v1/` is preserved in Git history and the local non-deployment archive for historical reference, migration traceability, and regression comparison.
 
 IZ Clinical Notes Analyzer is a local-first clinical chart-review and Treatment Plan Timeliness Tracker app for Windows 10/11 desktop use. It helps R3 staff check clinical-note binders and treatment-plan tracking evidence before office-manager approval. The current app runs as one local FastAPI desktop service with a React/Vite browser interface at `http://localhost:8000`, SQLite under the user's local app-data folder, encrypted local uploaded-file storage, encrypted API configuration storage, role-based access control, deterministic treatment-plan rules, workflow profiles, readiness checks, optional LLM configuration disabled by default, and forensic audit logging.
 
@@ -137,7 +137,7 @@ flowchart TB
     click RuleYaml "config/rules/alleva_treatment_plan_completeness_rules.yaml" "Open deterministic rules"
     click VersionFiles "VERSION.json" "Open version metadata"
     click Builder "scripts/build-windows-installer.ps1" "Open release builder"
-    click Legacy "deprecated/v1/README.md" "Open V1 archive notes"
+    click Legacy "docs/validation/selected-folder-archive-2026-09-23.md" "Open archive record"
 ```
 
 Diagram boundaries:
