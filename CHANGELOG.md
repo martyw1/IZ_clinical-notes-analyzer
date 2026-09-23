@@ -1,5 +1,10 @@
 ## 1.0.0 production - 2026-09-21
 
+## Source script organization — 2026-09-23
+
+Build and source launch entry points now live in `scripts/`, with standalone Alleva tools in `scripts/diag-build-tools/` and the metadata verifier in `scripts/security/`. Callers, CI filters, tests and operator documentation follow the new paths. The developer builder accepts `-PreservedArchiveDirectory` and can use the locally archived immutable beta ZIPs without restoring them to the repo. Production 1.0 application behavior, version metadata and the previously published ZIP are unchanged. See [the script guide](scripts/README.md).
+
+
 Build: 2026.09.21.2; installer revision: 1; channel: stable-local-desktop.
 
 - Stage and verify a prepared package before installation when the extracted package is relocated to a normal local folder or a OneDrive-backed folder.

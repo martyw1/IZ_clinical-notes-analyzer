@@ -329,7 +329,7 @@ function Ensure-Frontend {
         if (Test-FrontendBuildValid) {
             Add-Check 'frontend_build' 'ok' 'Existing built browser UI is present.' (Join-Path $RootDir 'frontend\dist\index.html')
         } else {
-            Add-Check 'frontend_build' 'fail' 'Frontend build is missing or incomplete.' 'Run Build-IZ-Windows-Installer.cmd without -SkipFrontendBuild, or install Node.js LTS and rerun setup.'
+            Add-Check 'frontend_build' 'fail' 'Frontend build is missing or incomplete.' 'Run scripts\Build-IZ-Windows-Installer.cmd without -SkipFrontendBuild, or install Node.js LTS and rerun setup.'
         }
         return
     }

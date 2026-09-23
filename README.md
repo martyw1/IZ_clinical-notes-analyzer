@@ -4,6 +4,10 @@
 
 Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The immutable ZIP and detached receipt passed the documented local core checks; full platform and client-site qualification remain open.
 
+## Script organization
+
+All source-checkout build, launch, maintenance and diagnostic entry points live under [`scripts/`](scripts/README.md). Windows: double-click `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` to start, or `scripts/Build-IZ-Windows-Installer.cmd` to build. macOS source launcher: `scripts/Start-IZ-Clinical-Notes-Analyzer.command`. Alleva operator tools are under `scripts/diag-build-tools/`; metadata verification is under `scripts/security/`. Prepared client ZIP entry points remain at the package root.
+
 ## Client handoff and quick start
 
 Use the [client handoff checklist](docs/client-handoff-checklist.md) for the exact copy/exclusion lists and Windows dependency review. Historical quick-start PDFs are now in the local non-deployment archive; see the [archive record](docs/validation/selected-folder-archive-2026-09-23.md). Use the final ZIP and `Production-1.0-START-HERE.txt` in `dist/windows-release`; the [package index](docs/client-release-packages.md) records the exact filename, checksum and acceptance limits.
@@ -171,7 +175,7 @@ Historical validation reports keep the original version they validated. Use `doc
 
 ## Quick Start for a Prepared Windows Release Folder
 
-A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` from the repo root. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`1.0.0` / build `2026.09.21.2` / installer revision `1`) writes:
+A release folder is created by double-clicking `Build-IZ-Windows-Installer.cmd` inside the repository’s `scripts` folder. The detailed build/install guide is `docs\windows-installer-build-and-install.md`. The intended current candidate (`1.0.0` / build `2026.09.21.2` / installer revision `1`) writes:
 
 - `dist\windows-release\IZ-CNA-337308272cfbf7e6`
 - `dist\windows-release\IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip`
@@ -319,7 +323,7 @@ Two standalone scripts exist and have different safety profiles:
 | Script | Purpose | Secret behavior |
 | --- | --- | --- |
 | `scripts\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted reports; still review output before sharing. |
-| `Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, and detailed request/response capture. | Sensitive by default: it prints/saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
+| `scripts/diag-build-tools/Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, and detailed request/response capture. | Sensitive by default: it prints/saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
 
 Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API output out of Git, tickets, screenshots, chat, and email unless an approved secure workflow says otherwise. Do not use real PHI in API tests.
 

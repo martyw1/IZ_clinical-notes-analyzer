@@ -1,5 +1,10 @@
 # Release Notes
 
+## Source script organization — 2026-09-23
+
+Build and source launch entry points now live in `scripts/`, with standalone Alleva tools in `scripts/diag-build-tools/` and the metadata verifier in `scripts/security/`. Callers, CI filters, tests and operator documentation follow the new paths. The developer builder accepts `-PreservedArchiveDirectory` and can use the locally archived immutable beta ZIPs without restoring them to the repo. Production 1.0 application behavior, version metadata and the previously published ZIP are unchanged. See [the script guide](../scripts/README.md).
+
+
 ## Production 1.0 - build 2026.09.21.2
 
 Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).

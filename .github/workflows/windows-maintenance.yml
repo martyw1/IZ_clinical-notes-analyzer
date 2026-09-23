@@ -5,7 +5,6 @@ on:
     paths:
       - "VERSION"
       - "VERSION.json"
-      - "Build-IZ-Windows-Installer.cmd"
       - "backend/**"
       - "config/**"
       - "frontend/**"
@@ -15,7 +14,6 @@ on:
     paths:
       - "VERSION"
       - "VERSION.json"
-      - "Build-IZ-Windows-Installer.cmd"
       - "backend/**"
       - "config/**"
       - "frontend/**"

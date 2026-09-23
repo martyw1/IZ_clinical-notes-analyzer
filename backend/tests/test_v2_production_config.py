@@ -366,7 +366,7 @@ def test_windows_cmd_launcher_quotes_path_assignments() -> None:
     # Given: the user-facing CMD launcher may run from a path containing shell metacharacters.
     repository_root = Path(__file__).resolve().parents[2]
     launcher = repository_root / "scripts" / "Start-IZ-Clinical-Notes-Analyzer.cmd"
-    build_launcher = repository_root / "Build-IZ-Windows-Installer.cmd"
+    build_launcher = repository_root / "scripts" / "Build-IZ-Windows-Installer.cmd"
 
     # When: its environment-variable assignments are inspected.
     launcher_contents = launcher.read_text(encoding="utf-8")
@@ -377,7 +377,8 @@ def test_windows_cmd_launcher_quotes_path_assignments() -> None:
     assert 'set "ROOT_DIR=%SCRIPT_DIR%.."' in launcher_contents
     assert "set SCRIPT_DIR=" not in launcher_contents
     assert "set ROOT_DIR=" not in launcher_contents
-    assert 'set "ROOT_DIR=%~dp0"' in build_launcher_contents
+    assert 'set "SCRIPT_DIR=%~dp0"' in build_launcher_contents
+    assert 'set "ROOT_DIR=%SCRIPT_DIR%.."' in build_launcher_contents
     assert 'echo "%ROOT_DIR%"' in build_launcher_contents
     assert "echo %ROOT_DIR%" not in build_launcher_contents
 

@@ -2,7 +2,8 @@
 param(
     [switch]$SkipTests,
     [switch]$SkipFrontendBuild,
-    [switch]$ValidationOnly
+    [switch]$ValidationOnly,
+    [string]$PreservedArchiveDirectory = ''
 )
 
 Set-StrictMode -Version Latest
@@ -104,6 +105,7 @@ function Copy-RepoContent {
         (Join-Path $RootDir 'frontend\e2e'), (Join-Path $RootDir 'node_modules'),
         (Join-Path $RootDir 'pip'), (Join-Path $RootDir 'dist'), (Join-Path $RootDir 'output'),
         (Join-Path $RootDir 'black-hole-lab'), (Join-Path $RootDir 'scripts\admin_recovery'),
+        (Join-Path $RootDir 'scripts\diag-build-tools'), (Join-Path $RootDir 'scripts\security'),
         (Join-Path $RootDir 'scripts\installer'), (Join-Path $RootDir 'scripts\tests'),
         (Join-Path $RootDir 'uploads'), (Join-Path $RootDir 'exports'), (Join-Path $RootDir 'logs'),
         (Join-Path $RootDir 'api-connectivity-reports'), (Join-Path $RootDir 'alleva-api-test-logs'),
@@ -510,13 +512,21 @@ function Inspect-FrozenBundle {
 }
 
 function Assert-PreservedArchives {
+    $archiveDirectory = $PreservedArchiveDirectory
+    if ([string]::IsNullOrWhiteSpace($archiveDirectory)) {
+        $archiveDirectory = $ReleaseRoot
+        if (-not (Test-Path -LiteralPath (Join-Path $archiveDirectory 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip')) -and $env:USERPROFILE) {
+            $archivedDirectory = Join-Path $env:USERPROFILE 'not-required-for-deployment/repo/dist/windows-release'
+            if (Test-Path -LiteralPath $archivedDirectory -PathType Container) { $archiveDirectory = $archivedDirectory }
+        }
+    }
     $expected = @(
         [pscustomobject]@{ name = 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3.zip'; length = 43716351L; sha256 = '9c5fd47203242e1a21df612f719f1c14fa4240c86ba869f924ec4690834fc89c'; version = '2.0.0-beta.3'; build = '2026.09.03.1' },
         [pscustomobject]@{ name = 'IZ-Clinical-Notes-Analyzer-v2.0.0-beta.4.zip'; length = 43873389L; sha256 = '67b83eea402566658dea6d64ac6cba37a192a7d1bd670cf560541324c0092b14'; version = '2.0.0-beta.4'; build = '2026.09.10.2' }
     )
     $verified = [Collections.Generic.List[object]]::new()
     foreach ($item in $expected) {
-        $path = Join-Path $ReleaseRoot $item.name
+        $path = Join-Path $archiveDirectory $item.name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
             (Get-Item -LiteralPath $path).Length -ne $item.length -or
             (Get-IzFileSha256 $path) -cne $item.sha256) { throw "PRESERVED_ARCHIVE_CHANGED:$($item.name)" }

@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$productionScript = Join-Path $repoRoot 'diag-build-tools\Invoke-AllevaEndUserTools.ps1'
+$productionScript = Join-Path $repoRoot 'scripts\diag-build-tools\Invoke-AllevaEndUserTools.ps1'
 . $productionScript -NoRun -NoPause -SettingsPath (Join-Path $env:TEMP 'alleva-synthetic-settings-not-used.json') -LogDirectory (Join-Path $env:TEMP 'alleva-synthetic-logs-not-used') -ExportDirectory (Join-Path $env:TEMP 'alleva-synthetic-exports-not-used')
 
 Describe 'Alleva retained-script baseline behavior' {
@@ -104,7 +104,7 @@ Describe 'Todo 1 noninteractive entry-point contract' {
     }
 
     It 'forwards CMD arguments, preserves the PowerShell exit code, and gates pause behavior' {
-        $cmdPath = Join-Path $repoRoot 'diag-build-tools\Run-AllevaEndUserTools.cmd'
+        $cmdPath = Join-Path $repoRoot 'scripts\diag-build-tools\Run-AllevaEndUserTools.cmd'
         $cmd = Get-Content -LiteralPath $cmdPath -Raw
 
         $cmd | Should Match '-File\s+"%PS_SCRIPT%"\s+%\*'
@@ -114,7 +114,7 @@ Describe 'Todo 1 noninteractive entry-point contract' {
     }
 
     It 'does not pause and propagates exit 1 for an invalid Action even without NoPause' {
-        $cmdPath = Join-Path $repoRoot 'diag-build-tools\Run-AllevaEndUserTools.cmd'
+        $cmdPath = Join-Path $repoRoot 'scripts\diag-build-tools\Run-AllevaEndUserTools.cmd'
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = 'cmd.exe'
         $startInfo.Arguments = ('/d /c call "{0}" -Action InvalidSyntheticAction' -f $cmdPath)
@@ -1222,7 +1222,7 @@ Describe 'Todo 4 complete roster and treatment-plan export integration' {
             $script:DetailProvider = $null
         }
 
-        $cmdPath = Join-Path $repoRoot 'diag-build-tools\Run-AllevaEndUserTools.cmd'
+        $cmdPath = Join-Path $repoRoot 'scripts\diag-build-tools\Run-AllevaEndUserTools.cmd'
         $cmdOutput = Join-Path $TestDrive 'cmd-complete-export'
         $cmdLogs = Join-Path $TestDrive 'cmd-complete-logs'
         $cmdSettings = Join-Path $TestDrive 'cmd-missing-settings.json'
@@ -1236,7 +1236,7 @@ Describe 'Todo 4 complete roster and treatment-plan export integration' {
     }
 
     It 'returns exit 1 without hanging when the CMD launcher is copied without its PowerShell script' {
-        $sourceCmd = Join-Path $repoRoot 'diag-build-tools\Run-AllevaEndUserTools.cmd'
+        $sourceCmd = Join-Path $repoRoot 'scripts\diag-build-tools\Run-AllevaEndUserTools.cmd'
         $isolatedRoot = Join-Path $TestDrive 'isolated launcher path with spaces'
         New-Item -ItemType Directory -Path $isolatedRoot -Force | Out-Null
         $isolatedCmd = Join-Path $isolatedRoot 'Run-AllevaEndUserTools.cmd'

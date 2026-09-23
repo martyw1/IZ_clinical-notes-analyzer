@@ -20,10 +20,10 @@ The historical prerelease metadata recorded by this validation procedure is `2.0
 
 ### Normal build
 
-From the repository root, double-click:
+Open the repository’s scripts folder and double-click `Build-IZ-Windows-Installer.cmd`, or run from the repository root:
 
 ```text
-Build-IZ-Windows-Installer.cmd
+scripts/Build-IZ-Windows-Installer.cmd
 ```
 
 The command runs `scripts\build-windows-installer.ps1` with:
@@ -70,7 +70,7 @@ https://www.python.org/downloads/windows/
 ```
 
 Check `Add python.exe to PATH` during install, then double-click
-`Build-IZ-Windows-Installer.cmd` again.
+`scripts/Build-IZ-Windows-Installer.cmd` again.
 
 ### If Node.js or npm is missing
 
@@ -86,15 +86,23 @@ Advanced users may install it with:
 winget install OpenJS.NodeJS.LTS --scope user
 ```
 
-Then double-click `Build-IZ-Windows-Installer.cmd` again.
+Then double-click `scripts/Build-IZ-Windows-Installer.cmd` again.
+
+### Preserved upgrade-test inputs
+
+The builder verifies the immutable beta.3 and beta.4 ZIPs used to identify older installations. It checks `dist/windows-release` first, then the current user’s `not-required-for-deployment/repo/dist/windows-release` archive. To use a different storage location, pass `-PreservedArchiveDirectory "C:/path/to/preserved-zips"`. Both original files must be present and pass their pinned size/SHA-256 checks. These are development build inputs, not client runtime requirements. Existing production ZIPs are immutable; a normal build refuses to overwrite an existing release identity.
+
+### Developer checkout location
+
+Use a local checkout outside OneDrive for packaging. The current builder rejects reparse points in safe-data trees; the September 23 validation passed all 799 application tests but packaging stopped on the OneDrive `config/checklists` directory. This developer-build limitation is separate from the already-validated client ZIP installation paths. See [the validation record](validation/script-organization-2026-09-23.md).
 
 ### Advanced build options
 
 Optional arguments are passed through to the PowerShell build script:
 
 ```text
-Build-IZ-Windows-Installer.cmd -SkipTests
-Build-IZ-Windows-Installer.cmd -SkipFrontendBuild
+scripts/Build-IZ-Windows-Installer.cmd -ValidationOnly -SkipTests
+scripts/Build-IZ-Windows-Installer.cmd -ValidationOnly -SkipFrontendBuild
 ```
 
 `-SkipTests` is for advanced troubleshooting only. The normal release build
@@ -115,7 +123,7 @@ Preflight and startup logs are written under:
 ### Rerun after a failure
 
 Read the message in the build window, fix the named missing dependency, failed
-test, or unsafe file, then double-click `Build-IZ-Windows-Installer.cmd` again.
+test, or unsafe file, then double-click `scripts/Build-IZ-Windows-Installer.cmd` again.
 
 ## End User
 

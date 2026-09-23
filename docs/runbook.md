@@ -68,7 +68,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.3` / build `2026.09.03.
 
 ## Alleva REST treatment-plan sync
 
-- `Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
+- `scripts/diag-build-tools/Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
 - App startup sync uses the same REST concept. It is disabled by default.
 - Manual retrieval is available from the API Testing Harness, Treatment Plans, and Patient Roster tabs. Each control uses the same automatic canonical Alleva v1 mapping and operational importer.
 - Admins can run the API-harness `patient_treatment_plan_aggregates` dry-run to compare `/clients`, `/treatment-plans`, and `/treatment-reviews` coverage without enabling live sync.

@@ -52,6 +52,7 @@ backend/.venv-*
 .alleva.local.ps1
 App Credentials Info.md
 Test-AllevaApi.ps1
+!/scripts/diag-build-tools/Test-AllevaApi.ps1
 alleva-api-test-logs/
 api-connectivity-reports/
 

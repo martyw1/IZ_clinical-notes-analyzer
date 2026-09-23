@@ -77,7 +77,7 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | `scripts/build-windows-installer.ps1` | Active | Builds release folder and zip with install, launch, diagnostics, backup, data-preserving uninstall, and complete-uninstall commands. |
 | `scripts/update-local-admin.ps1` | Active | Authorized local admin reset utility. |
 | `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
-| `Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
+| `scripts/diag-build-tools/Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
 | `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
 | `depricated/scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher moved out of active `scripts/`. Do not use for local desktop startup. |
 | `depricated/scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher moved out of active `scripts/`. |
@@ -188,7 +188,7 @@ The old Docker Compose smoke job is not current because the active root full-sta
 | Direct API harness remains test-only for live vendors | The harness supports offline OpenAPI, protected saved configuration, redacted result/report handling, timeouts, and audit redaction. | Real vendor probing still requires official tenant inputs and safe operator handling. |
 | Current audit/log messages include patient IDs | Patient IDs remain structured audit fields for workflow traceability; uploaded note text, protected values, and original filenames remain excluded. | Requires minimum-necessary logging review and PHI policy decision before pilot. |
 | Signed installer is not complete | Release folder builder exists, but no signed MSI/MSIX with repair/modify support exists. | Non-technical rollout still needs final target-machine packaged validation. |
-| Root diagnostic script can expose sensitive values | `Test-AllevaApi.ps1` is intentionally detailed by default. | Use only on approved private diagnostic machines; use redaction mode for shareable logs and still review output. |
+| Root diagnostic script can expose sensitive values | `scripts/diag-build-tools/Test-AllevaApi.ps1` is intentionally detailed by default. | Use only on approved private diagnostic machines; use redaction mode for shareable logs and still review output. |
 | Legacy Docker files were removed from the active tree | Old Docker/nginx archive and compose overlay were removed after S1 cleanup evidence; legacy startup/helper scripts are quarantined under `depricated/`. | Do not treat Docker/PostgreSQL as normal R3 desktop requirements or restore the old stack without an explicit R3/server decision. |
 
 ## Version Metadata

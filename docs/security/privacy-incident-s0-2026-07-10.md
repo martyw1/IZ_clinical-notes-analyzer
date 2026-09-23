@@ -86,7 +86,7 @@ No history rewrite, force-push, artifact deletion, or export-file removal occurr
 Run the repository-owned verifier from Windows PowerShell:
 
 ```powershell
-& .\docs\security\verify-s0-incident-metadata.ps1 -ExpectedHead (git rev-parse HEAD)
+& .\scripts\security\verify-s0-incident-metadata.ps1 -ExpectedHead (git rev-parse HEAD)
 ```
 
 The verifier:

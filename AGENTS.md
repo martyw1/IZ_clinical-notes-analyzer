@@ -22,7 +22,7 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - `docs/patient-treatment-plan-handling.md` - current implementation map for patient treatment-plan storage, manual upload sync, gated Alleva sync, aggregates, timeliness, checklist output, privacy boundaries, and UI/API code locations.
 
 ## How to run checks
-- Windows release build: double-click `Build-IZ-Windows-Installer.cmd` from the repo root. The script must install backend runtime requirements plus `backend/requirements-build.txt`, run backend tests, run frontend tests/build, validate `frontend/dist`, create `dist/windows-release`, and scan the release folder and zip.
+- Windows release build: double-click `Build-IZ-Windows-Installer.cmd` inside the repository’s `scripts` folder. The script must install backend runtime requirements plus `backend/requirements-build.txt`, run backend tests, run frontend tests/build, validate `frontend/dist`, create `dist/windows-release`, and scan the release folder and zip.
 - Backend: `python -m venv backend/.venv && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-windows-local.txt && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-build.txt && set PYTHONPATH=backend && backend/.venv/Scripts/python.exe -m pytest backend/tests -q`
 - Frontend: `cd frontend && npm install && npm run test -- --run && npm run build`
 - Windows launcher: inspect or run `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts\startup-windows-local.ps1`, `scripts\test-api-configuration-local.ps1`, `scripts\test-alleva-api-connectivity.ps1`, and `scripts\test-local-app-stack.ps1` on Windows PowerShell.

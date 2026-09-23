@@ -1,6 +1,6 @@
 # Alleva Diagnostic and Complete Export Tool
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../docs/current-documentation-state.md).
+> Historical diagnostic-tool reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../../docs/current-documentation-state.md).
 
 `Invoke-AllevaEndUserTools.ps1` and `Run-AllevaEndUserTools.cmd` are the supported diagnostic-tool pair. Keep the two files together in this folder.
 

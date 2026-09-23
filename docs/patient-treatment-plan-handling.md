@@ -230,7 +230,7 @@ Regression coverage should include source-document due-date disagreement, missin
 Packaging validation should use:
 
 ```powershell
-.\Build-IZ-Windows-Installer.cmd
+.\scripts\Build-IZ-Windows-Installer.cmd
 ```
 
 The release build must include `docs\patient-treatment-plan-handling.md`, `docs\beta-client-test-run-guide.md`, built frontend assets, install/launch/diagnostics/backup/uninstall commands, and must scan the folder and zip to exclude local `.env`, databases, uploads, logs, API tokens, raw vendor credentials, and other generated or sensitive files.

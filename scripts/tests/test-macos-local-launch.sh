@@ -43,7 +43,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$ROOT_DIR/Start-IZ-Clinical-Notes-Analyzer.command" ||
+if [[ ! -x "$ROOT_DIR/scripts/Start-IZ-Clinical-Notes-Analyzer.command" ||
       ! -x "$ROOT_DIR/scripts/start-macos-local.sh" ||
       ! -x "$ROOT_DIR/scripts/stop-macos-local.sh" ]]; then
     printf '%s\n' \
@@ -57,10 +57,10 @@ fi
 CHECKOUT="$RUN_ROOT/checkout with spaces"
 HOME_DIR="$RUN_ROOT/home"
 mkdir -p "$CHECKOUT/scripts" "$HOME_DIR"
-cp "$ROOT_DIR/Start-IZ-Clinical-Notes-Analyzer.command" "$CHECKOUT/"
+cp "$ROOT_DIR/scripts/Start-IZ-Clinical-Notes-Analyzer.command" "$CHECKOUT/scripts/"
 cp "$ROOT_DIR/scripts/start-macos-local.sh" "$CHECKOUT/scripts/"
 cp "$ROOT_DIR/scripts/stop-macos-local.sh" "$CHECKOUT/scripts/"
-chmod +x "$CHECKOUT/Start-IZ-Clinical-Notes-Analyzer.command" \
+chmod +x "$CHECKOUT/scripts/Start-IZ-Clinical-Notes-Analyzer.command" \
     "$CHECKOUT/scripts/start-macos-local.sh" "$CHECKOUT/scripts/stop-macos-local.sh"
 
 SERVER_SCRIPT="$RUN_ROOT/server.pl"
@@ -163,7 +163,7 @@ export IZ_CNA_ALLOW_SYNTHETIC_RECORD_MODE=1
 
 run_start() {
     set +e
-    bash "$CHECKOUT/Start-IZ-Clinical-Notes-Analyzer.command" > "$RUN_ROOT/start.out" 2> "$RUN_ROOT/start.err"
+    bash "$CHECKOUT/scripts/Start-IZ-Clinical-Notes-Analyzer.command" > "$RUN_ROOT/start.out" 2> "$RUN_ROOT/start.err"
     local status=$?
     set -e
     printf '%s\n' "$status"

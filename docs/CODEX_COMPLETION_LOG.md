@@ -1,5 +1,12 @@
 # Codex completion log - 2026-05-14
 
+## Source script organization — 2026-09-23
+
+Build and source launch entry points now live in `scripts/`, with standalone Alleva tools in `scripts/diag-build-tools/` and the metadata verifier in `scripts/security/`. Callers, CI filters, tests and operator documentation follow the new paths. The developer builder accepts `-PreservedArchiveDirectory` and can use the locally archived immutable beta ZIPs without restoring them to the repo. Production 1.0 application behavior, version metadata and the previously published ZIP are unchanged. See [the script guide](../scripts/README.md) and [validation evidence](validation/script-organization-2026-09-23.md).
+
+
+> Script-location update (2026-09-23): executable tools now live under `scripts/`, including `scripts/diag-build-tools/`. Historical paths below describe the original work; see the [current script guide](../scripts/README.md) for runnable commands.
+
 ## 2026-09-08 standalone beta.3 administrator recovery
 
 - Built `output/IZ-Admin-Recovery-beta.3.zip`: standalone x64 EXE and client instructions, no client developer runtime or elevation required.

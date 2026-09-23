@@ -98,7 +98,7 @@ Patient-centered treatment-plan responses show patient ID, status ID/label, exac
 
 ## Alleva REST treatment-plan sync
 
-Beta `2.0.0-beta.3` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the root `Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
+Beta `2.0.0-beta.3` keeps the separate Alleva REST treatment-plan sync configuration and removes active FHIR/SMART-on-FHIR fields, discovery, import-plan routes, scopes, defaults, and validation requirements from Alleva workflows. This is the path that matches the `scripts/diag-build-tools/Test-AllevaApi.ps1` script: it uses `https://api.allevasoft.com` as the REST API base URL, `https://api.allevasoft.com/swagger/v1/swagger.json` as the OpenAPI definition, and `https://authorization.allevasoft.com/connect/token` for OAuth client-credentials testing when credentials are provided.
 
 This sync path is intended to pull source data from Alleva, then run R3's local deterministic Treatment Plan Timeliness compliance checks inside this app. Alleva is the source system, not the compliance decision engine.
 
@@ -166,9 +166,9 @@ Two standalone scripts exist and should not be confused with each other.
 | Script | Purpose | Output and secret behavior |
 | --- | --- | --- |
 | `scripts\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted report evidence. Review every report before sharing. |
-| `Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, endpoint CSV support, detailed request/response capture, and multiple token-auth styles. | Sensitive by default. It prints and saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
+| `scripts/diag-build-tools/Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, endpoint CSV support, detailed request/response capture, and multiple token-auth styles. | Sensitive by default. It prints and saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
 
-Use the root `Test-AllevaApi.ps1` only on an approved private diagnostic machine. Do not screenshot or share its default output. For shareable diagnostics, use `-RedactSensitive -SaveLogs` and still review the resulting logs manually.
+Use `scripts/diag-build-tools/Test-AllevaApi.ps1` only on an approved private diagnostic machine. Do not screenshot or share its default output. For shareable diagnostics, use `-RedactSensitive -SaveLogs` and still review the resulting logs manually.
 
 `.alleva.local.ps1` and `alleva-api-test-logs/` are gitignored, but operators must still treat them as sensitive local files.
 
