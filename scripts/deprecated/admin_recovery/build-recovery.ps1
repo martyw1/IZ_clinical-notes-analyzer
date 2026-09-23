@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
-$RecoveryRepo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$RecoveryRepo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $RecoveryPython = Join-Path $RecoveryRepo 'backend\.venv\Scripts\python.exe'
 $RecoveryEvidence = Join-Path $RecoveryRepo '.omo\evidence\admin-recovery-build'
 $RecoveryOutput = Join-Path $RecoveryRepo 'output\admin-recovery'

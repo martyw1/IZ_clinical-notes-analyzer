@@ -1,4 +1,17 @@
-# Alleva Diagnostic and Complete Export Tool
+# Alleva diagnostics
+
+Choose one workflow:
+
+| Need | Tool |
+|---|---|
+| Guided diagnostic/export menu | `Run-AllevaEndUserTools.cmd` (delegates to `Invoke-AllevaEndUserTools.ps1`) |
+| Bounded connectivity report | `test-alleva-api-connectivity.ps1` |
+| Approved live workflow verification against the app | `test-alleva-patient-workflow-live.ps1`; existing approval/evidence gates remain mandatory |
+| Advanced raw endpoint/token troubleshooting | `Test-AllevaApi.ps1`; sensitive output requires private handling and redaction |
+
+These tools have different scopes; none replaces the others. Synthetic regression tests are in `../tests/`. This entire diagnostic directory is excluded from client release packages.
+
+## Guided diagnostic and export tool
 
 > Historical diagnostic-tool reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../../docs/current-documentation-state.md).
 

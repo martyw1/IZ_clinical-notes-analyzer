@@ -2,14 +2,14 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $BackupScript = Join-Path $RepositoryRoot 'scripts\backup-local-data.ps1'
 $RestoreScript = Join-Path $RepositoryRoot 'scripts\restore-local-data.ps1'
 $BuildScript = Join-Path $RepositoryRoot 'scripts\build-windows-installer.ps1'
 $PreflightScript = Join-Path $RepositoryRoot 'scripts\preflight-windows.ps1'
 $StopScript = Join-Path $RepositoryRoot 'scripts\stop-windows-local.ps1'
-$LocalStackSmokeScript = Join-Path $RepositoryRoot 'scripts\test-local-app-stack.ps1'
-$ApiConfigurationSmokeScript = Join-Path $RepositoryRoot 'scripts\test-api-configuration-local.ps1'
+$LocalStackSmokeScript = Join-Path $RepositoryRoot 'scripts\tests\test-local-app-stack.ps1'
+$ApiConfigurationSmokeScript = Join-Path $RepositoryRoot 'scripts\tests\test-api-configuration-local.ps1'
 $PythonPath = Join-Path $RepositoryRoot 'backend\.venv\Scripts\python.exe'
 $PasslibHook = Join-Path $RepositoryRoot 'scripts\installer\pyinstaller-hooks\hook-passlib.py'
 $CommonModule = Join-Path $RepositoryRoot 'scripts\installer\maintenance-common.psm1'

@@ -1,5 +1,7 @@
 # Validation Report - 2026-06-19 API Settings and Audit Repair
 
+> Script consolidation (2026-09-23): paths below record historical execution. For current startup, diagnostic and test commands, see [the script guide](../../scripts/README.md).
+
 > Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 Scope: Version `1.4.4` / build `2026.06.19.2` patch for legacy SQLite audit-log startup errors, detached audit actor hardening, API settings save/reload reliability, API harness OpenAPI URL save behavior, saved OAuth credential reuse, Alleva quick-pull harness buttons, Chart Audit manual daily check behavior, Help/operator docs, and normal Windows local startup.

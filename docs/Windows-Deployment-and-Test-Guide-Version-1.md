@@ -134,7 +134,7 @@ Removes app files, installer-created shortcuts, and `%LOCALAPPDATA%\IZ Clinical 
 Use this path only for development, validation, or support:
 
 ```powershell
-scripts\setup-windows.ps1 -AssumeYes
+scripts\preflight-windows.ps1 -AssumeYes
 scripts\preflight-windows.ps1 -AssumeYes
 scripts\start-windows-local.ps1 -AssumeYes
 ```
@@ -178,8 +178,8 @@ Windows smoke:
 
 ```powershell
 scripts\preflight-windows.ps1 -AssumeYes
-scripts\test-local-app-stack.ps1
-scripts\test-api-configuration-local.ps1
+scripts\tests\test-local-app-stack.ps1
+scripts\tests\test-api-configuration-local.ps1
 ```
 
 Version checks after local launch:

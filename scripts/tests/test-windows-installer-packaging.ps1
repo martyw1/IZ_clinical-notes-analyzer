@@ -52,7 +52,7 @@ function Assert-ExactJsonKeys {
     Assert-True -Condition (($actual -join "`n") -ceq ($wanted -join "`n")) -Label $Label
 }
 
-$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $packagingModule = Join-Path $repositoryRoot 'scripts\installer\build-windows-package.psm1'
 $templateRoot = Join-Path $repositoryRoot 'scripts\installer\templates'
 $requiredTemplates = @(

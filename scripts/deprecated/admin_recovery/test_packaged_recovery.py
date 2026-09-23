@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.v2.services.audit_store import verify_audit_chain
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = ROOT / 'dist/windows-release/IZ-Clinical-Notes-Analyzer-v2.0.0-beta.3/app'
 RECOVERY = ROOT / 'output/admin-recovery/Reset-IZ-Admin.exe'
 

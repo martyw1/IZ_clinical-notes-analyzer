@@ -1,5 +1,7 @@
 # Codex Build Goal: IZ Clinical Notes Analyzer — Clean Windows 11 Home Rebuild
 
+> Script consolidation (2026-09-23): paths below record historical execution. For current startup, diagnostic and test commands, see [the script guide](../scripts/README.md).
+
 > Script-location update (2026-09-23): executable tools now live under `scripts/`, including `scripts/diag-build-tools/`. Historical paths below describe the original work; see the [current script guide](../scripts/README.md) for runnable commands.
 
 > Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.

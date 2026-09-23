@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $PythonExe = Join-Path $RepositoryRoot 'backend\.venv\Scripts\python.exe'
 $StopLauncher = Join-Path $RepositoryRoot 'scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd'
 $TempRoot = Join-Path ([IO.Path]::GetTempPath()) "iz-cna-stop-$([Guid]::NewGuid().ToString('N'))"

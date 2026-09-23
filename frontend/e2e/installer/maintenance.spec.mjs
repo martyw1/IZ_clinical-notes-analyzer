@@ -40,7 +40,7 @@ async function signIn(page, username, password) {
 
 test.describe('marker-owned packaged maintenance runtime', () => {
   test.describe.configure({ mode: 'serial' })
-  test.skip(!enabled, 'Runs only through scripts/test-cmd-maintenance.ps1 with a verified candidate attachment.')
+  test.skip(!enabled, 'Runs only through scripts/tests/test-cmd-maintenance.ps1 with a verified candidate attachment.')
 
   test.beforeAll(async () => {
     context = loadMaintenanceAttachment()

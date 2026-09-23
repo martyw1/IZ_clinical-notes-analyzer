@@ -103,8 +103,8 @@ New issues:
 - Frontend Vitest: `npm run test -- --run` from `frontend` -> `11 passed`.
 - Frontend production build: `npm run build` from `frontend` -> passed, emitted `frontend/dist/assets/index-DVZMmkvw.css` and `frontend/dist/assets/index-SpASJW0H.js`.
 - Windows preflight: `scripts\preflight-windows.ps1 -AssumeYes` -> PASS.
-- Windows local stack smoke: `scripts\test-local-app-stack.ps1 -SkipDependencyInstall` -> PASS for health, readiness, version, login/profile, and workflow APIs using synthetic data.
-- Windows API configuration smoke: `scripts\test-api-configuration-local.ps1 -SkipDependencyInstall` -> PASS for focused API connectivity tests, encrypted placeholder save, sample OpenAPI pull, and page load.
+- Windows local stack smoke: `scripts\tests\test-local-app-stack.ps1 -SkipDependencyInstall` -> PASS for health, readiness, version, login/profile, and workflow APIs using synthetic data.
+- Windows API configuration smoke: `scripts\tests\test-api-configuration-local.ps1 -SkipDependencyInstall` -> PASS for focused API connectivity tests, encrypted placeholder save, sample OpenAPI pull, and page load.
 - Alleva external harness evidence: Swagger UI `https://api.allevasoft.com/swagger/index.html` HTTP 200; OpenAPI JSON `https://api.allevasoft.com/swagger/v1/swagger.json` HTTP 200 with 942906 bytes; token endpoint `https://authorization.allevasoft.com/connect/token` HTTP 400 for provided client credentials and HTTP Basic variant.
 - Sanitized API reports:
   - `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports\alleva-api-connectivity-20260612-104057.json`

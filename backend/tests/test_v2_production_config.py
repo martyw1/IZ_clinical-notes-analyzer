@@ -62,7 +62,7 @@ def test_windows_frozen_runtime_disables_uvicorn_default_logging_configuration()
 def test_windows_release_installer_renders_and_executes_versioned_wrapper(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     build_script = root / "scripts" / "build-windows-installer.ps1"
-    packaging_test = root / "scripts" / "test-windows-installer-packaging.ps1"
+    packaging_test = root / "scripts" / "tests" / "test-windows-installer-packaging.ps1"
 
     if os.name != "nt":
         build_source = build_script.read_text(encoding="utf-8")
@@ -327,7 +327,7 @@ def test_windows_checkout_launcher_waits_for_runtime_readiness_before_success() 
 
 def test_windows_checkout_launcher_opens_browser_only_after_runtime_readiness() -> None:
     # Given: the source-checkout runtime owns its server process and browser launch.
-    launcher = Path(__file__).resolve().parents[2] / "scripts" / "startup-windows-local.ps1"
+    launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
 
     # When: the browser and readiness operations are inspected in execution order.
     launcher_contents = launcher.read_text(encoding="utf-8")
@@ -347,7 +347,7 @@ def test_windows_checkout_launcher_opens_browser_only_after_runtime_readiness() 
 
 
 def test_windows_checkout_runtime_disables_access_logging_for_patient_routes() -> None:
-    runtime_launcher = Path(__file__).resolve().parents[2] / "scripts" / "startup-windows-local.ps1"
+    runtime_launcher = Path(__file__).resolve().parents[2] / "scripts" / "start-windows-local.ps1"
 
     assert "--no-access-log" in runtime_launcher.read_text(encoding="utf-8")
 
@@ -564,8 +564,8 @@ def test_local_client_fails_closed_for_default_or_missing_security_values(tmp_pa
 def test_windows_generated_secrets_always_include_password_policy_character_classes() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     generators = (
-        (repository_root / "scripts" / "test-api-configuration-local.ps1", "New-RandomSecret", ()),
-        (repository_root / "scripts" / "test-local-app-stack.ps1", "New-Secret", ("New-RandomBytes",)),
+        (repository_root / "scripts" / "tests" / "test-api-configuration-local.ps1", "New-RandomSecret", ()),
+        (repository_root / "scripts" / "tests" / "test-local-app-stack.ps1", "New-Secret", ("New-RandomBytes",)),
         (repository_root / "scripts" / "preflight-windows.ps1", "New-RandomSecret", ()),
     )
 

@@ -137,7 +137,7 @@ for (const [name, extra, password, code] of [
     const env = { ...inherited }
     if (password !== undefined) env.IZ_OM_INTERACTIVE_PASSWORD = password
     // When: the real wrapper parses the nonsecret switch and inherited input.
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-File', path.join(repo, 'scripts/test-office-manager-smoke.ps1'),
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-File', path.join(repo, 'scripts/tests/test-office-manager-smoke.ps1'),
       '-Scenario', 'harness', '-Case', 'edge', '-BrowserChannel', 'chrome', '-EvidenceDir', evidence,
       '-BaseUrl', 'https://example.org', ...extra], { cwd: repo, env, encoding: 'utf8', windowsHide: true, timeout: 20_000 })
     // Then: only the expected fixed error reaches output and neither target is mutated.

@@ -79,10 +79,10 @@ function Invoke-IzHarnessSourceVerification {
     )
     $gateStatus = @(Get-IzCandidateGateStatus -CandidateReceipt $CandidateReceipt)
     $commands = @(
-        [pscustomobject]@{ name = 'lifecycle'; script = 'scripts\test-windows-lifecycle.ps1'; arguments = @(); http = $false; port = 0 },
-        [pscustomobject]@{ name = 'stop'; script = 'scripts\test-windows-stop.ps1'; arguments = @(); http = $false; port = 0 },
-        [pscustomobject]@{ name = 'local_stack'; script = 'scripts\test-local-app-stack.ps1'; arguments = @('-Port', '0', '-SkipDependencyInstall'); http = $true; port = 0 },
-        [pscustomobject]@{ name = 'api_configuration'; script = 'scripts\test-api-configuration-local.ps1'; arguments = @('-Port', '0', '-SkipDependencyInstall'); http = $true; port = 0 }
+        [pscustomobject]@{ name = 'lifecycle'; script = 'scripts\tests\test-windows-lifecycle.ps1'; arguments = @(); http = $false; port = 0 },
+        [pscustomobject]@{ name = 'stop'; script = 'scripts\tests\test-windows-stop.ps1'; arguments = @(); http = $false; port = 0 },
+        [pscustomobject]@{ name = 'local_stack'; script = 'scripts\tests\test-local-app-stack.ps1'; arguments = @('-Port', '0', '-SkipDependencyInstall'); http = $true; port = 0 },
+        [pscustomobject]@{ name = 'api_configuration'; script = 'scripts\tests\test-api-configuration-local.ps1'; arguments = @('-Port', '0', '-SkipDependencyInstall'); http = $true; port = 0 }
     )
     foreach ($command in $commands | Where-Object http) {
         $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
@@ -144,7 +144,7 @@ function Invoke-IzHarnessPackagingVerification {
     $reportPath = Join-Path ([string]$Fixture.private_root) 'packaging-report.json'
     $logPath = Join-Path ([string]$Fixture.private_root) 'packaging-probe.txt'
     $moduleCache = Join-Path ([string]$Fixture.private_root) 'packaging-probe.module-analysis.cache'
-    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\test-windows-installer-packaging.ps1') `
+    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\tests\test-windows-installer-packaging.ps1') `
         -Arguments @('-EvidenceRoot', $probeRoot, '-ReportPath', $reportPath) -LogPath $logPath -ModuleCachePath $moduleCache
     $report = $null
     try { if (Test-Path -LiteralPath $reportPath -PathType Leaf) { $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json } }
@@ -177,7 +177,7 @@ function Invoke-IzHarnessPackagingVerification {
     return [pscustomobject][ordered]@{
         status = [string]$summary.status
         reason = if ($valid) { 'RENDERED_SOURCE_VERIFIED' } else { 'RENDERED_SOURCE_VERIFICATION_FAILED' }
-        invocation = 'scripts/test-windows-installer-packaging.ps1 -EvidenceRoot <fresh-owned-root> -ReportPath <private-report>'
+        invocation = 'scripts/tests/test-windows-installer-packaging.ps1 -EvidenceRoot <fresh-owned-root> -ReportPath <private-report>'
         observable = "exit_code=$($result.exit_code);rendered_variants=$($summary.rendered_variant_count);negative_boundaries=$($summary.negative_boundaries_passed);probe_cleaned=$(-not (Test-Path -LiteralPath $probeRoot))"
         artifact_path = $summaryPath
         actual_executable = $false
@@ -194,7 +194,7 @@ function Invoke-IzHarnessReleaseSafetyVerification {
     $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
     $probeRoot = Join-Path $qaParent ('prs-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
     $logPath = Join-Path ([string]$Fixture.private_root) 'release-safety.txt'
-    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\test-release-safety.ps1') `
+    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\tests\test-release-safety.ps1') `
         -Arguments @('-EvidenceDir', $probeRoot) -LogPath $logPath `
         -ModuleCachePath (Join-Path ([string]$Fixture.private_root) 'release-safety.module-analysis.cache')
     $reportPath = Join-Path $probeRoot 'private-report-result.json'
@@ -220,7 +220,7 @@ function Invoke-IzHarnessReleaseSafetyVerification {
     return [pscustomobject][ordered]@{
         status = [string]$summary.status
         reason = if ($valid) { 'RELEASE_SAFETY_NEGATIVES_PASSED' } else { 'RELEASE_SAFETY_NEGATIVES_FAILED' }
-        invocation = 'scripts/test-release-safety.ps1 -EvidenceDir <fresh-owned-root>; candidate build receipt ZIP/directory/frozen gates'
+        invocation = 'scripts/tests/test-release-safety.ps1 -EvidenceDir <fresh-owned-root>; candidate build receipt ZIP/directory/frozen gates'
         observable = "exit_code=$($result.exit_code);negative_checks=$($checks.Count);candidate_zip_sha256=$($CandidateReceipt.receipt.zip_sha256)"
         artifact_path = $summaryPath
         actual_executable = $false
@@ -237,7 +237,7 @@ function Invoke-IzHarnessArchiveVerification {
     $qaParent = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'
     $probeRoot = Join-Path $qaParent ('zlp-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
     $logPath = Join-Path ([string]$Fixture.private_root) 'archive-regression.txt'
-    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\test-windows-release-archive.ps1') `
+    $result = Invoke-IzVerificationPowerShell -ScriptPath (Join-Path $RepositoryRoot 'scripts\tests\test-windows-release-archive.ps1') `
         -Arguments @('-EvidenceRoot', $probeRoot, '-PreservedPackage', [string]$CandidateReceipt.receipt.package_directory) `
         -LogPath $logPath -ModuleCachePath (Join-Path ([string]$Fixture.private_root) 'archive-regression.module-analysis.cache')
     $reportPath = Join-Path $probeRoot 'result.json'
@@ -266,7 +266,7 @@ function Invoke-IzHarnessArchiveVerification {
     return [pscustomobject][ordered]@{
         status = [string]$summary.status
         reason = if ($valid) { 'PS51_ARCHIVE_REGRESSION_PASSED' } else { 'PS51_ARCHIVE_REGRESSION_FAILED' }
-        invocation = 'powershell.exe -NoProfile -File scripts/test-windows-release-archive.ps1 -EvidenceRoot <fresh-owned-root> -PreservedPackage <exact-candidate-package>'
+        invocation = 'powershell.exe -NoProfile -File scripts/tests/test-windows-release-archive.ps1 -EvidenceRoot <fresh-owned-root> -PreservedPackage <exact-candidate-package>'
         observable = "exit_code=$($result.exit_code);long_path_length=$($summary.synthetic_long_path_length);package_hashes_equal=$($summary.package_entry_hashes_equal)"
         artifact_path = $summaryPath
         actual_executable = $false

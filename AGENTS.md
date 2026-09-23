@@ -9,7 +9,7 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - Desktop runtime: `backend/app/desktop_main.py` mounts the built React app plus desktop-only rules/API pages for one-service localhost use.
 - Data: default SQLite, uploads, logs, reports, and user `.env` live in OS-local app data, not the repo. Relative runtime paths must resolve through `Settings.local_app_data_dir`.
 - Rules: deterministic YAML rules in `config/rules/` and the canonical 42-step checklist in `config/checklists/treatment-plan-v1.json` remain the primary workflow engine. Optional LLM behavior must stay disabled by default and must never be required for compliance or timeliness decisions.
-- Windows scripts: `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` and `scripts/startup-windows-local.ps1` are the ordinary Windows checkout launch path; PowerShell test scripts cover local stack and API configuration smoke flows. The beta.4 package maintenance contract is documented in [`docs/windows-cmd-maintenance.md`](docs/windows-cmd-maintenance.md); package-root Launch delegates to the current-user installed launcher and tells the user to run Install first when no install exists.
+- Windows scripts: `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` and `scripts/start-windows-local.ps1` are the ordinary Windows checkout launch path; PowerShell test scripts cover local stack and API configuration smoke flows. The beta.4 package maintenance contract is documented in [`docs/windows-cmd-maintenance.md`](docs/windows-cmd-maintenance.md); package-root Launch delegates to the current-user installed launcher and tells the user to run Install first when no install exists.
 
 ## Important directories
 - `backend/app/` - FastAPI API, auth/RBAC, audit logging, uploads, encrypted storage, rules execution, API connectivity boundary, workflow profiles, and timeliness services.
@@ -25,7 +25,7 @@ Local-first Windows 10/11 clinical-notes and Treatment Plan Timeliness Tracker a
 - Windows release build: double-click `Build-IZ-Windows-Installer.cmd` inside the repository’s `scripts` folder. The script must install backend runtime requirements plus `backend/requirements-build.txt`, run backend tests, run frontend tests/build, validate `frontend/dist`, create `dist/windows-release`, and scan the release folder and zip.
 - Backend: `python -m venv backend/.venv && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-windows-local.txt && backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-build.txt && set PYTHONPATH=backend && backend/.venv/Scripts/python.exe -m pytest backend/tests -q`
 - Frontend: `cd frontend && npm install && npm run test -- --run && npm run build`
-- Windows launcher: inspect or run `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts\startup-windows-local.ps1`, `scripts\test-api-configuration-local.ps1`, `scripts\test-alleva-api-connectivity.ps1`, and `scripts\test-local-app-stack.ps1` on Windows PowerShell.
+- Windows launcher: inspect or run `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd`, `scripts\start-windows-local.ps1`, `scripts\tests\test-api-configuration-local.ps1`, `scripts\diag-build-tools\test-alleva-api-connectivity.ps1`, and `scripts\tests\test-local-app-stack.ps1` on Windows PowerShell.
 - Before commits: check `git status --short --branch` and verify generated runtime data, local configuration files, uploads, logs, and databases are not staged.
 
 ## Security / PHI rules

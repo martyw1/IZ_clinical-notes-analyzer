@@ -122,7 +122,7 @@ Required resolution evidence:
 - Source checkout validation passes on the target Windows 10/11 laptop.
 - The historical beta.3 machine evidence showed `/api/version` and the UI footer at `2.0.0-beta.3`, build `2026.09.03.1`, and `beta-local-desktop-v2`.
 - That historical `Treatment Plans` validation showed the V2 evidence queue, selected-client 42-step checklist evidence, manager action controls, and footer version `Version 2.0 Beta | 2.0.0-beta.3 | build 2026.09.03.1 | beta-local-desktop-v2`.
-- `scripts\test-local-app-stack.ps1` and `scripts\test-api-configuration-local.ps1` pass with synthetic data only.
+- `scripts\tests\test-local-app-stack.ps1` and `scripts\tests\test-api-configuration-local.ps1` pass with synthetic data only.
 - The Diagnostics shortcut creates a redacted support zip that excludes uploads, SQLite databases, generated reports, and raw `.env` values.
 - The Backup shortcut creates a full local-data backup zip under the user's Documents folder and warns that it can contain clinical data and encryption material.
 - Normal uninstall removes app files and shortcuts while preserving `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.

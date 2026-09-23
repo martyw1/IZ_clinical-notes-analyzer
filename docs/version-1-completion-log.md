@@ -162,8 +162,8 @@ Commands run:
 - `npm test -- --run`
 - `npm run build`
 - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight-windows.ps1 -AssumeYes`
-- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-local-app-stack.ps1`
-- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-api-configuration-local.ps1`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\tests\test-local-app-stack.ps1`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\tests\test-api-configuration-local.ps1`
 - In-app browser walkthrough against temporary synthetic local runtime `http://127.0.0.1:8031`.
 - Full validation details are recorded in `docs\validation\validation-report-2026-06-11-treatment-plan-prd-42.md`.
 
@@ -285,8 +285,8 @@ Commands run:
 - `npm test -- --run`
 - `npm run build`
 - `scripts\build-windows-installer.ps1`
-- `scripts\test-local-app-stack.ps1 -SkipDependencyInstall`
-- `scripts\test-api-configuration-local.ps1 -SkipDependencyInstall`
+- `scripts\tests\test-local-app-stack.ps1 -SkipDependencyInstall`
+- `scripts\tests\test-api-configuration-local.ps1 -SkipDependencyInstall`
 - In-app browser smoke: sign in, dashboard, Checklist tab, upload form, synthetic local API upload, generated review queue/detail, reviewer decision save, Treatment Plan tracker, and 1366x768 viewport reachability checks.
 
 Pass/fail status:
@@ -321,7 +321,7 @@ Commands run:
 - `node .\node_modules\vitest\vitest.mjs run`
 - `node .\node_modules\vite\bin\vite.js build`
 - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\preflight-windows.ps1 -AssumeYes -Port 8017`
-- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test-local-app-stack.ps1 -Port 8018 -SkipDependencyInstall`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\tests\test-local-app-stack.ps1 -Port 8018 -SkipDependencyInstall`
 - Computer Use bootstrap/list-app retry; blocked by local native pipe unavailable.
 - In-app browser visible smoke against `http://127.0.0.1:8020` with synthetic data.
 

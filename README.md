@@ -6,7 +6,7 @@ Current source version: `1.0.0` / build `2026.09.21.2` / installer revision `1` 
 
 ## Script organization
 
-All source-checkout build, launch, maintenance and diagnostic entry points live under [`scripts/`](scripts/README.md). Windows: double-click `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` to start, or `scripts/Build-IZ-Windows-Installer.cmd` to build. macOS source launcher: `scripts/Start-IZ-Clinical-Notes-Analyzer.command`. Alleva operator tools are under `scripts/diag-build-tools/`; metadata verification is under `scripts/security/`. Prepared client ZIP entry points remain at the package root.
+Use the task-oriented [`scripts/` guide](scripts/README.md) to choose one entry point. Source startup is consolidated; regression tests are in `scripts/tests/` and historical tools are in `scripts/deprecated/`. Windows: double-click `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` to start, or `scripts/Build-IZ-Windows-Installer.cmd` to build. macOS source launcher: `scripts/Start-IZ-Clinical-Notes-Analyzer.command`. Alleva operator tools are under `scripts/diag-build-tools/`; metadata verification is under `scripts/security/`. Prepared client ZIP entry points remain at the package root.
 
 ## Client handoff and quick start
 
@@ -228,7 +228,7 @@ Double-click:
 scripts\Start-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-The launcher calls `scripts\startup-windows-local.ps1`, which runs preflight, creates local AppData folders and `.env` when missing, checks Python and backend packages, validates rules/checklists, detects missing or stale frontend assets, prompts before installing or rebuilding when needed, starts the local FastAPI desktop app, and opens the browser unless `-NoBrowser` is used.
+The launcher calls `scripts\start-windows-local.ps1`, which runs preflight, creates local AppData folders and `.env` when missing, checks Python and backend packages, validates rules/checklists, detects missing or stale frontend assets, prompts before installing or rebuilding when needed, starts the local FastAPI desktop app, and opens the browser unless `-NoBrowser` is used.
 
 If Windows says the app is already running, the local port is in use, or a previous console did not close cleanly, double-click:
 
@@ -285,7 +285,7 @@ Important local files and folders:
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\uploads` | Encrypted uploaded clinical files |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs` | Startup logs and fallback audit logs |
 | `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-reports` | Redacted app API harness reports |
-| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Reports from `scripts\test-alleva-api-connectivity.ps1` |
+| `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\api-connectivity-reports` | Reports from `scripts\diag-build-tools\test-alleva-api-connectivity.ps1` |
 | `%USERPROFILE%\Documents\IZ Clinical Notes Analyzer Backups` | Backup zips created by the backup helper |
 
 The local configuration, database, and uploads must be backed up together. If the local configuration is lost, encrypted uploads and saved API configuration may not be recoverable.
@@ -322,7 +322,7 @@ Two standalone scripts exist and have different safety profiles:
 
 | Script | Purpose | Secret behavior |
 | --- | --- | --- |
-| `scripts\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted reports; still review output before sharing. |
+| `scripts\diag-build-tools\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted reports; still review output before sharing. |
 | `scripts/diag-build-tools/Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, and detailed request/response capture. | Sensitive by default: it prints/saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
 
 Keep `.alleva.local.ps1`, generated logs, tokens, secrets, and any real API output out of Git, tickets, screenshots, chat, and email unless an approved secure workflow says otherwise. Do not use real PHI in API tests.
@@ -390,8 +390,8 @@ Windows preflight and local smoke:
 
 ```powershell
 .\scripts\preflight-windows.ps1 -AssumeYes
-.\scripts\test-local-app-stack.ps1
-.\scripts\test-api-configuration-local.ps1
+.\scripts\tests\test-local-app-stack.ps1
+.\scripts\tests\test-api-configuration-local.ps1
 ```
 
 ## Legacy Docker/PostgreSQL Status
@@ -410,7 +410,7 @@ Docker/PostgreSQL is not the active ordinary Windows desktop path, and the curre
 | `scripts\Stop-IZ-Clinical-Notes-Analyzer.cmd` | Double-click Windows cleanup and restart prompt |
 | `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd` | Double-click local-data backup helper |
 | `scripts\Complete-Uninstall-IZ-Clinical-Notes-Analyzer.cmd` | Double-click complete uninstall helper for app files plus local data |
-| `scripts\startup-windows-local.ps1` | Main Windows local startup script |
+| `scripts\start-windows-local.ps1` | Main Windows local startup script |
 | `scripts\stop-windows-local.ps1` | App-specific Windows process cleanup script |
 | `scripts\backup-local-data.ps1` | Backup zip creator for the local AppData folder |
 | `scripts\complete-uninstall-local-data.ps1` | Confirmed complete uninstall for installed app and local data |

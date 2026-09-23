@@ -1,5 +1,7 @@
 # Validation Report - Production Readiness Pass
 
+> Script consolidation (2026-09-23): paths below record historical execution. For current startup, diagnostic and test commands, see [the script guide](../../scripts/README.md).
+
 Date: 2026-06-16
 
 Current documentation status: historical validation report. This report validated Version `1.3.0` / build `2026.06.16.1`. The current app version is `2.0.0-beta.3` / build `2026.09.03.1`; use `docs/release-notes.md`, `VERSION`, and `VERSION.json` for current release status.

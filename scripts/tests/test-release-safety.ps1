@@ -17,7 +17,7 @@ function Assert-True {
     }
 }
 
-$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildScriptPath = Join-Path $repositoryRoot 'scripts\build-windows-installer.ps1'
 $buildScript = Get-Content -LiteralPath $buildScriptPath -Raw
 . (Join-Path $repositoryRoot 'scripts\release-safety.ps1')

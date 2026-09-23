@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $AppDataRoot = Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer Test'
 $DatabasePath = Join-Path $AppDataRoot 'test-clinical-notes-analyzer.sqlite3'
 $EnvFile = Join-Path $AppDataRoot '.env'

@@ -10,7 +10,7 @@ keeps only the owned runtime alive for a bounded hands-on verification session.
 InteractiveCredentialsFromEnvironment optionally accepts a fresh synthetic password
 from the native controller's child environment, only with a bounded session.
 .EXAMPLE
-powershell -NoProfile -File scripts/test-office-manager-smoke.ps1 -Scenario harness -Case all -BrowserChannel msedge -EvidenceDir .omo/evidence/office-manager-production-fixes
+powershell -NoProfile -File scripts/tests/test-office-manager-smoke.ps1 -Scenario harness -Case all -BrowserChannel msedge -EvidenceDir .omo/evidence/office-manager-production-fixes
 #>
 [CmdletBinding()]
 param(
@@ -28,7 +28,7 @@ param(
     [switch]$Headed
 )
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $runner = Join-Path $repoRoot 'frontend/e2e/office-manager/support/runner.mjs'
 $node = Get-Command node -ErrorAction Stop
 $arguments = @(

@@ -1,5 +1,9 @@
 ## 1.0.0 production - 2026-09-21
 
+## Script workflow consolidation — 2026-09-23
+
+Consolidated Windows source startup, grouped developer tests and Alleva diagnostics, and archived superseded startup/setup and beta support tools. Top-level scripts reduced from 42 to 25. Client package entry points and the published Production 1.0 ZIP remain unchanged. See [move inventory and validation](docs/validation/script-consolidation-2026-09-23.md).
+
 ## Source script organization — 2026-09-23
 
 Build and source launch entry points now live in `scripts/`, with standalone Alleva tools in `scripts/diag-build-tools/` and the metadata verifier in `scripts/security/`. Callers, CI filters, tests and operator documentation follow the new paths. The developer builder accepts `-PreservedArchiveDirectory` and can use the locally archived immutable beta ZIPs without restoring them to the repo. Production 1.0 application behavior, version metadata and the previously published ZIP are unchanged. See [the script guide](scripts/README.md).

@@ -144,7 +144,7 @@ try {
         # Read only the current builder's single static ZIP expression; never dot-source or run the builder.
         $result.phase = 'builder-archive-expression'
         $tokens = $null; $parseErrors = $null
-        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'build-windows-installer.ps1'), [ref]$tokens, [ref]$parseErrors)
+        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot '..\build-windows-installer.ps1'), [ref]$tokens, [ref]$parseErrors)
         if ($parseErrors.Count) { throw 'BUILDER_PARSE_FAILED' }
         $calls = @($ast.FindAll({ param($node)
             $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Static -and
@@ -182,7 +182,7 @@ try {
         $result.package_file_count = @($packageBefore | Where-Object { $null -ne $_.sha256 }).Count
         $result.package_zip = [ordered]@{ path = $packageZip; sha256 = (Get-FileHashValue $packageZip); entries = $packageArchive.Count }
         $result.phase = 'zip-safety-scan'
-        . (Join-Path $PSScriptRoot 'release-safety.ps1')
+        . (Join-Path $PSScriptRoot '..\release-safety.ps1')
         Assert-ZipHasNoForbiddenItems -ZipPath $packageZip
         $result.zip_forbidden_scan_passed = $true
         $result.status = 'passed'; $result.native_exit_code = 0; $result.phase = 'complete'

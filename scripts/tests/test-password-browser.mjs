@@ -7,9 +7,9 @@ import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// Standalone, finite smoke: node scripts/test-beta4-password-browser.mjs [--runtime EXE] [--evidence DIR].
+// Standalone, finite smoke: node scripts/tests/test-password-browser.mjs [--runtime EXE] [--evidence DIR].
 // Runtime data stays in a unique Windows-local directory; evidence never contains credentials.
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(path.join(root, 'frontend', 'package.json'))
 const { chromium } = require('@playwright/test')
 const option = name => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1] }

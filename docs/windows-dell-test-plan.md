@@ -30,7 +30,7 @@ Current repository state: Option A is the target, but the repo does **not** yet 
 
 Fallback path for validation: **Option B, source-checkout/dev setup script**.
 
-Option B is acceptable for the purchased Dell validation pass and internal development. It uses `scripts\startup-windows-local.ps1` and `scripts\test-local-app-stack.ps1`; it may install Python packages and build frontend assets from source.
+Option B is acceptable for the purchased Dell validation pass and internal development. It uses `scripts\start-windows-local.ps1` and `scripts\tests\test-local-app-stack.ps1`; it may install Python packages and build frontend assets from source.
 
 ## Dell Validation Prerequisites
 
@@ -65,21 +65,21 @@ Run the rerunnable local stack test:
 
 ```powershell
 Set-Location "$env:USERPROFILE\IZ Clinical Notes Analyzer Validation"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local-app-stack.ps1 -Port 8010
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\test-local-app-stack.ps1 -Port 8010
 ```
 
 Run the API configuration smoke test:
 
 ```powershell
 Set-Location "$env:USERPROFILE\IZ Clinical Notes Analyzer Validation"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-api-configuration-local.ps1 -Port 8021
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\test-api-configuration-local.ps1 -Port 8021
 ```
 
 Start the local app without opening a browser automatically:
 
 ```powershell
 Set-Location "$env:USERPROFILE\IZ Clinical Notes Analyzer Validation"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\startup-windows-local.ps1 -NoBrowser -AssumeYes
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-windows-local.ps1 -NoBrowser -AssumeYes
 ```
 
 In a browser on the Dell, open:
@@ -114,8 +114,8 @@ Save these outputs locally on the Dell, outside the repository if they might con
 
 - PowerShell transcript/log path printed by startup scripts.
 - `git rev-parse --short HEAD`
-- `.\scripts\test-local-app-stack.ps1 -Port 8010` final PASS output.
-- `.\scripts\test-api-configuration-local.ps1 -Port 8021` final PASS output.
+- `.\scripts\tests\test-local-app-stack.ps1 -Port 8010` final PASS output.
+- `.\scripts\tests\test-api-configuration-local.ps1 -Port 8021` final PASS output.
 - Screenshot of the app footer showing version `Beta v1.4.6-beta.1`.
 - Screenshot of the Status Dashboard with R3 logo and source cards.
 - Screenshot of the Treatment Plan Timeliness tab showing simplified primary navigation, bounded lookup status/results, the updated evidence queue, selected-client checklist evaluation with manager notes, and footer version `Beta v1.4.6-beta.1`.

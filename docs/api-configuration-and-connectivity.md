@@ -165,7 +165,7 @@ Two standalone scripts exist and should not be confused with each other.
 
 | Script | Purpose | Output and secret behavior |
 | --- | --- | --- |
-| `scripts\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted report evidence. Review every report before sharing. |
+| `scripts\diag-build-tools\test-alleva-api-connectivity.ps1` | Simple Swagger/OpenAPI/API reachability probe and JSON report writer. | Designed for redacted report evidence. Review every report before sharing. |
 | `scripts/diag-build-tools/Test-AllevaApi.ps1` | Full diagnostic tester with interactive endpoint selection, local settings, endpoint CSV support, detailed request/response capture, and multiple token-auth styles. | Sensitive by default. It prints and saves tokens, secrets, Authorization headers, request bodies, and response bodies unless `-RedactSensitive` is used. |
 
 Use `scripts/diag-build-tools/Test-AllevaApi.ps1` only on an approved private diagnostic machine. Do not screenshot or share its default output. For shareable diagnostics, use `-RedactSensitive -SaveLogs` and still review the resulting logs manually.
@@ -223,8 +223,8 @@ $env:PYTHONPATH = "$PWD\backend"
 Run the Windows stack smoke tests with:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local-app-stack.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-api-configuration-local.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\test-local-app-stack.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\test-api-configuration-local.ps1
 ```
 
 ## Boundary status language

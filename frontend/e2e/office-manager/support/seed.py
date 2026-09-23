@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pydantic", "sqlalchemy"]
 # ///
-# How to run: scripts/test-office-manager-smoke.ps1 invokes this with the
+# How to run: scripts/tests/test-office-manager-smoke.ps1 invokes this with the
 # already installed backend/.venv/Scripts/python.exe and isolated environment.
 # Do not run it against an existing app or install a separate dependency set.
 from __future__ import annotations

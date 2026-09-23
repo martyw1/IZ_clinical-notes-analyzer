@@ -68,21 +68,16 @@ Current frontend views are `dashboard`, `reviews`, `timeliness`, `checklist`, `u
 | File | Current status | Purpose |
 | --- | --- | --- |
 | `scripts/Start-IZ-Clinical-Notes-Analyzer.cmd` | Active | Double-click Windows launcher. |
-| `scripts/startup-windows-local.ps1` | Active | Main ordinary Windows source-checkout startup. |
+| `scripts/start-windows-local.ps1` | Active | Main ordinary Windows source-checkout startup. |
 | `scripts/preflight-windows.ps1` | Active | Windows preflight for env, dependencies, rules/checklists, frontend build, and report output. |
-| `scripts/setup-windows.ps1` | Active | Windows setup helper. |
-| `scripts/start-windows-local.ps1` | Active | Windows local startup wrapper used by release launch command. |
-| `scripts/test-local-app-stack.ps1` | Active | Windows local full-stack smoke test. |
-| `scripts/test-api-configuration-local.ps1` | Active | Windows API harness smoke test. |
+| `scripts/tests/test-local-app-stack.ps1` | Active | Windows local full-stack smoke test. |
+| `scripts/tests/test-api-configuration-local.ps1` | Active | Windows API harness smoke test. |
 | `scripts/build-windows-installer.ps1` | Active | Builds release folder and zip with install, launch, diagnostics, backup, data-preserving uninstall, and complete-uninstall commands. |
 | `scripts/update-local-admin.ps1` | Active | Authorized local admin reset utility. |
-| `scripts/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
+| `scripts/diag-build-tools/test-alleva-api-connectivity.ps1` | Active with caution | Simple redacted Alleva/OpenAPI reachability report script. |
 | `scripts/diag-build-tools/Test-AllevaApi.ps1` | Active diagnostic with high caution | Full diagnostic script; use redaction mode before creating shareable logs. |
-| `scripts/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
-| `depricated/scripts/startup-windows.ps1` | Deprecated legacy | Older Docker/PostgreSQL-oriented Windows launcher moved out of active `scripts/`. Do not use for local desktop startup. |
-| `depricated/scripts/startup-macos.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented macOS launcher moved out of active `scripts/`. |
-| `depricated/scripts/startup-ubuntu-24.04.sh` | Deprecated legacy | Older Docker/PostgreSQL-oriented Ubuntu launcher moved out of active `scripts/`. |
-| `depricated/scripts/lib/dedicated-postgres.sh` | Legacy helper | PostgreSQL helper moved out of active `scripts/`; retained only as deprecated history. |
+| `scripts/tests/smoke.sh` | Active generic smoke | Checks a running app through `BASE_URL`. |
+| `scripts/deprecated/` | Historical support only | Superseded startup/setup snapshots and beta recovery/upgrade tooling. Excluded from client packages. |
 
 ## Data storage paths
 
@@ -159,8 +154,8 @@ Windows source-checkout validation:
 
 ```powershell
 .\scripts\preflight-windows.ps1 -AssumeYes
-.\scripts\test-local-app-stack.ps1
-.\scripts\test-api-configuration-local.ps1
+.\scripts\tests\test-local-app-stack.ps1
+.\scripts\tests\test-api-configuration-local.ps1
 ```
 
 ## CI

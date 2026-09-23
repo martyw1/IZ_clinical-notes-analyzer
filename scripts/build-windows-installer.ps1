@@ -104,7 +104,7 @@ function Copy-RepoContent {
         (Join-Path $RootDir 'frontend\node_modules'), (Join-Path $RootDir 'frontend\src'),
         (Join-Path $RootDir 'frontend\e2e'), (Join-Path $RootDir 'node_modules'),
         (Join-Path $RootDir 'pip'), (Join-Path $RootDir 'dist'), (Join-Path $RootDir 'output'),
-        (Join-Path $RootDir 'black-hole-lab'), (Join-Path $RootDir 'scripts\admin_recovery'),
+        (Join-Path $RootDir 'black-hole-lab'), (Join-Path $RootDir 'scripts\deprecated'),
         (Join-Path $RootDir 'scripts\diag-build-tools'), (Join-Path $RootDir 'scripts\security'),
         (Join-Path $RootDir 'scripts\installer'), (Join-Path $RootDir 'scripts\tests'),
         (Join-Path $RootDir 'uploads'), (Join-Path $RootDir 'exports'), (Join-Path $RootDir 'logs'),

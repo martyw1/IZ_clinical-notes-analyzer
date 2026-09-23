@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $productionScript = Join-Path $repoRoot 'scripts\diag-build-tools\Invoke-AllevaEndUserTools.ps1'
 . $productionScript -NoRun -NoPause -SettingsPath (Join-Path $env:TEMP 'alleva-synthetic-settings-not-used.json') -LogDirectory (Join-Path $env:TEMP 'alleva-synthetic-logs-not-used') -ExportDirectory (Join-Path $env:TEMP 'alleva-synthetic-exports-not-used')
 

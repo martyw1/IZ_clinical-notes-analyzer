@@ -483,8 +483,8 @@ python --version
 node --version
 npm --version
 .\scripts\preflight-windows.ps1 -AssumeYes
-.\scripts\test-local-app-stack.ps1
-.\scripts\test-api-configuration-local.ps1
+.\scripts\tests\test-local-app-stack.ps1
+.\scripts\tests\test-api-configuration-local.ps1
 cd frontend
 npm install
 npm test -- --run

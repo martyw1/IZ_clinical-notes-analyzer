@@ -1,18 +1,38 @@
-# Scripts and entry points
+# Which script should I use?
 
-Production 1.0 uses this directory for source-checkout tools. Open the relevant CMD file in File Explorer or invoke it using its full path. Windows wrappers resolve their files relative to their own location, including paths containing spaces. Client ZIP entry points remain at the package root; those are generated from `installer/templates` and have not moved.
+For the development checkout, use the CMD entry points below. Their PowerShell files are implementations, not alternative workflows. For a client installation, use the Install/Launch/maintenance commands in the prepared ZIP instead. Client commands and installed paths have not changed.
+
+| I want to… | Use this |
+|---|---|
+| Start the source app | `Start-IZ-Clinical-Notes-Analyzer.cmd` |
+| Stop the source app | `Stop-IZ-Clinical-Notes-Analyzer.cmd` |
+| Build a Windows release | `Build-IZ-Windows-Installer.cmd` |
+| Back up / restore local data | `Backup-IZ-Clinical-Notes-Analyzer.cmd` / `Restore-IZ-Clinical-Notes-Analyzer.cmd` |
+| Collect support diagnostics | `Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd` |
+| Set up or check the development environment | `preflight-windows.ps1`; Start already runs it automatically |
+| Diagnose Alleva connectivity or run approved vendor checks | [diag-build-tools/](diag-build-tools/README.md) |
+| Run developer regression checks | [tests/](tests/README.md) |
+| Locate historical beta tooling | [deprecated/](deprecated/README.md); not for normal use |
+
+## How the files fit together
+
+Windows startup has one implementation: `start-windows-local.ps1`. By default it starts a hidden copy of itself with `-Foreground` and waits for readiness. That foreground process runs preflight once, starts and supervises the server, and opens the browser only after readiness. Port validation and readiness checking each have one implementation. Use `-Foreground` explicitly only when you need a supervised console session.
+
+The matching filenames in `installer/templates/` are necessary package templates. They delegate to installed commands; the root CMD files delegate to their PowerShell implementations. They are not older copies. Keep these package-contract filenames stable.
+
+## Directory map
 
 | Location | Purpose |
 |---|---|
-| `Start-IZ-Clinical-Notes-Analyzer.cmd` | Start the Windows source checkout through `start-windows-local.ps1` and `startup-windows-local.ps1` |
+| `Start-IZ-Clinical-Notes-Analyzer.cmd` | Start the Windows source checkout through the consolidated `start-windows-local.ps1` |
 | `Build-IZ-Windows-Installer.cmd` | Build through `build-windows-installer.ps1`; outputs remain in the repository's `dist/windows-release` |
 | `Start-IZ-Clinical-Notes-Analyzer.command` | macOS Finder launcher, delegating to sibling `start-macos-local.sh` |
 | `Backup-*.cmd`, `Restore-*.cmd`, `Stop-*.cmd`, `Collect-*.cmd`, `Complete-Uninstall-*.cmd` | Existing local data and maintenance workflows; use their documented safeguards |
 | `installer/` | Package construction, installed maintenance implementation and generated client-entry templates |
 | `diag-build-tools/` | Standalone Alleva diagnostics, guided exports and their operator README |
 | `security/verify-s0-incident-metadata.ps1` | Metadata-only historical privacy-incident verifier |
-| `admin_recovery/` | Historical standalone administrator recovery build utility; excluded from client releases |
-| `tests/`, `test-*.ps1`, `test-*.mjs` | Test harnesses and synthetic regression checks |
+| `deprecated/` | Superseded startup/setup snapshots and historical beta recovery/upgrade tools; excluded from client releases |
+| `tests/` | Test harnesses and synthetic regression checks, including `test-password-browser.mjs` |
 | `ci/`, `validate-maintenance-ci-receipt.py` | CI qualification support |
 | Other root PS1/SH files | Setup, preflight, platform launch, release safety and local maintenance helpers |
 
@@ -48,4 +68,4 @@ A released version/build cannot be overwritten. For a local validation build wit
 | `diag-build-tools/` | `scripts/diag-build-tools/` |
 | `docs/security/verify-s0-incident-metadata.ps1` | `scripts/security/verify-s0-incident-metadata.ps1` |
 
-Historical validation/removal reports retain their original file paths as evidence. The incident verifier’s pinned historical Git tree paths also remain unchanged.
+Historical validation/removal reports retain their original file paths as evidence. The incident verifier’s pinned historical Git tree paths also remain unchanged. The [consolidation record](../docs/validation/script-consolidation-2026-09-23.md) lists the subsequent moves and validation.

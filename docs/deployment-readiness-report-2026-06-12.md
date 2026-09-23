@@ -51,8 +51,8 @@ Commands and results captured on 2026-06-12:
 - Frontend tests: `npm run test -- --run` from `frontend` -> `11 passed`.
 - Frontend production build: `npm run build` from `frontend` -> PASS.
 - Windows preflight: `scripts\preflight-windows.ps1 -AssumeYes` -> PASS.
-- Windows local stack smoke: `scripts\test-local-app-stack.ps1 -SkipDependencyInstall` -> PASS.
-- Windows API configuration smoke: `scripts\test-api-configuration-local.ps1 -SkipDependencyInstall` -> PASS.
+- Windows local stack smoke: `scripts\tests\test-local-app-stack.ps1 -SkipDependencyInstall` -> PASS.
+- Windows API configuration smoke: `scripts\tests\test-api-configuration-local.ps1 -SkipDependencyInstall` -> PASS.
 - Release package build: `scripts\build-windows-installer.ps1` -> PASS. It reran Windows preflight, backend tests, `npm install`, frontend tests, frontend build, and created the `v1.1.1` release folder and ZIP.
 
 ## UI and Persona Validation

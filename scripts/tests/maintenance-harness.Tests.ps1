@@ -265,7 +265,7 @@ $previousGithubOutput = $env:GITHUB_OUTPUT
 try {
     $env:GITHUB_OUTPUT = $githubOutputPath
     $publicOutput = @(& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
-        -File (Join-Path $repositoryRoot 'scripts\test-cmd-maintenance.ps1') -Case B01 -Tier Component `
+        -File (Join-Path $repositoryRoot 'scripts\tests\test-cmd-maintenance.ps1') -Case B01 -Tier Component `
         -BaselineZip 'C:\not-read-before-root-guard\beta3.zip' -OriginalBeta4Zip 'C:\not-read-before-root-guard\beta4.zip' `
         -ExpectedSourceRevision $currentRevision -EvidenceRoot $unowned -BrowserChannel msedge 2>&1)
     $publicExit = [int]$LASTEXITCODE

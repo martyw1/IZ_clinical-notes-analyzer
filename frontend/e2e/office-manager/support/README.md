@@ -5,7 +5,7 @@
 Run from the repository root with existing installed dependencies:
 
 ```powershell
-powershell -NoProfile -File scripts/test-office-manager-smoke.ps1 -Scenario harness -Case all -BrowserChannel msedge -EvidenceDir .omo/evidence/office-manager-production-fixes
+powershell -NoProfile -File scripts/tests/test-office-manager-smoke.ps1 -Scenario harness -Case all -BrowserChannel msedge -EvidenceDir .omo/evidence/office-manager-production-fixes
 ```
 
 Use `chrome` for the installed Google Chrome executable. `-Scenario all` discovers every `frontend/e2e/office-manager/*.spec.mjs`; otherwise the scenario selects its matching filename. Tests use `@happy` or `@edge` in their titles. `-Case all` runs both. Zero discovered tests, failures, skipped tests, timeouts, and teardown failures make the invocation fail.
@@ -90,7 +90,7 @@ The environment explicitly disables inherited app configuration by clearing `IZ_
 ## Bounded hands-on runtime
 
 ```powershell
-powershell -NoProfile -File scripts/test-office-manager-smoke.ps1 -Scenario harness -Case happy -BrowserChannel chrome -InteractiveSeconds 300 -InteractiveRole admin -EvidenceDir .omo/evidence/office-manager-production-fixes
+powershell -NoProfile -File scripts/tests/test-office-manager-smoke.ps1 -Scenario harness -Case happy -BrowserChannel chrome -InteractiveSeconds 300 -InteractiveRole admin -EvidenceDir .omo/evidence/office-manager-production-fixes
 ```
 
 After automated checks, this opens a separate headed installed browser, signs in to the chosen synthetic role, writes `interactive-ready.json` with exact URL/window title/executable/PIDs, and holds that owned runtime for at most 900 seconds. The file is the readiness signal; stdout announces dispatch before browser login settles. Record actual hands-on actions separately. `handsOnActionsClaimed` is always false in the harness receipt. The deadline closes this context and runtime automatically. `-Headed` only changes automated test visibility and does not hold a context open.

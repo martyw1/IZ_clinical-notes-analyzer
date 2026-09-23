@@ -117,6 +117,7 @@ function Test-IsStartupPowerShell {
     if ($Name -notin @('powershell.exe', 'pwsh.exe')) { return $false }
     if ($CommandLine -notmatch '(^|\s)-file(\s|$)') { return $false }
     $startWrapper = Join-Path $ScriptsDir 'start-windows-local.ps1'
+    # Retain recognition of a process started before the launcher consolidation.
     $startupScript = Join-Path $ScriptsDir 'startup-windows-local.ps1'
     return (
         (Test-CommandLineContainsPath -CommandLine $CommandLine -Path $startWrapper) -or
@@ -200,7 +201,7 @@ function Get-AppProcessTargets {
         }
 
         if (Test-IsStartupPowerShell -Name $name -CommandLine $commandLine) {
-            $reasons += 'startup PowerShell running start-windows-local.ps1 or startup-windows-local.ps1'
+            $reasons += 'source startup PowerShell (including a pre-consolidation process)'
             $priority = [Math]::Min($priority, 10)
         }
 
@@ -247,7 +248,7 @@ function Show-ProcessScope {
     Write-Host 'App-specific processes this cleanup targets:'
     Write-Host '  - cmd.exe running scripts\Start-IZ-Clinical-Notes-Analyzer.cmd'
     Write-Host '  - powershell.exe or pwsh.exe running scripts\start-windows-local.ps1'
-    Write-Host '  - powershell.exe or pwsh.exe running scripts\startup-windows-local.ps1'
+    Write-Host '  - an already-running legacy startup-windows-local.ps1 process'
     Write-Host '  - python.exe or pythonw.exe running Uvicorn for app.desktop_main:app from this repo backend'
     Write-Host '  - python.exe or pythonw.exe running Uvicorn for app.main:app from this repo backend smoke tests'
     Write-Host '  - IZClinicalNotesAnalyzer.exe running from this app installation runtime folder'

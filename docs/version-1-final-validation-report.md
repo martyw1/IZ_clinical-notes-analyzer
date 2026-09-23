@@ -29,8 +29,8 @@ Generated release artifacts are intentionally ignored by Git.
 - `npm run build`
 - `scripts\preflight-windows.ps1 -AssumeYes`
 - `scripts\build-windows-installer.ps1`
-- `scripts\test-local-app-stack.ps1 -SkipDependencyInstall`
-- `scripts\test-api-configuration-local.ps1 -SkipDependencyInstall`
+- `scripts\tests\test-local-app-stack.ps1 -SkipDependencyInstall`
+- `scripts\tests\test-api-configuration-local.ps1 -SkipDependencyInstall`
 
 ## Results
 

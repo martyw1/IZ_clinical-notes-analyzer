@@ -1,5 +1,7 @@
 # Windows Startup Note
 
+> Script consolidation (2026-09-23): paths below record historical execution. For current startup, diagnostic and test commands, see [the script guide](../scripts/README.md).
+
 Status: resolved and retained in current Version `2.0.0-beta.3` / build `2026.09.03.1`.
 
 Historical resolution version: `1.1.1` / build `2026.06.12.1`.

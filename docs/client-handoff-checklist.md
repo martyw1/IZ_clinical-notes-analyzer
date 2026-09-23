@@ -73,7 +73,6 @@ config/
 scripts/
   Start-IZ-Clinical-Notes-Analyzer.cmd
   start-windows-local.ps1
-  startup-windows-local.ps1
   preflight-windows.ps1
   Stop-IZ-Clinical-Notes-Analyzer.cmd
   stop-windows-local.ps1
@@ -103,7 +102,7 @@ With complete, prebuilt `frontend/dist` and no frontend sources to rebuild, Node
 - `.env`, `.env.*`, `.alleva.local.ps1`, local configuration files, `App Credentials Info.md`, `scripts/diag-build-tools/Test-AllevaApi.ps1`, credentials, tokens, encryption keys or saved vendor settings. The client must generate its own configuration and keys locally.
 - Databases (`*.db`, `*.sqlite`, `*.sqlite3`), uploads, exports, patient examples, raw logs, diagnostics created on your machine, reports, backups (`*.izcnabackup`) or browser traces/screenshots containing private data.
 - `.venv/`, `backend/.venv/`, `node_modules/`, Python caches, test/build caches and test reports.
-- `scripts/diag-build-tools/`, `scripts/security/`, `deprecated/`, `depricated/`, old release folders/ZIPs, video extraction/walkthrough material, `black-hole-lab/`, local client-testing evidence, generic `tmp/` and unrelated `output/`. Historical `output/pdf/` material is now in the local non-deployment archive; use the current package instructions for client handoff.
+- `scripts/deprecated/`, `scripts/tests/`, `scripts/diag-build-tools/`, `scripts/security/`, `deprecated/`, `depricated/`, old release folders/ZIPs, video extraction/walkthrough material, `black-hole-lab/`, local client-testing evidence, generic `tmp/` and unrelated `output/`. Historical `output/pdf/` material is now in the local non-deployment archive; use the current package instructions for client handoff.
 - For client-only use: backend/frontend tests, E2E tooling, build/installer authoring scripts, developer analysis, PRDs, Git history and frontend source/build dependencies. Keep these on the development/support machine.
 
 Never copy `%LOCALAPPDATA%/IZ Clinical Notes Analyzer` from your machine as a fresh-client install. That is runtime data and access material, not application distribution content.

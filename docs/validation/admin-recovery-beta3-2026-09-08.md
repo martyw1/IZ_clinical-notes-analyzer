@@ -1,5 +1,7 @@
 # Standalone admin recovery validation
 
+> Script consolidation (2026-09-23): paths below record historical execution. For current startup, diagnostic and test commands, see [the script guide](../../scripts/README.md).
+
 App: 2.0.0-beta.3 / build 2026.09.03.1 / beta-local-desktop-v2.
 Recovery utility: 2026-09-08, original Windows x64 package only.
 

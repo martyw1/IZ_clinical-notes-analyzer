@@ -19,7 +19,7 @@ $previousModuleCachePath = $env:PSModuleAnalysisCachePath
 $moduleCachePath = $null
 $receiptPath = $null
 $exitCode = 1
-$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $startedUtc = [DateTime]::UtcNow.ToString('o')
 try {
     $qaParent = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('UserProfile')) 'IZ-CNA-QA'))
@@ -29,7 +29,7 @@ try {
     }
     $moduleCachePath = Join-Path $qaParent ('.iz-cna-module-analysis-' + $PID + '-' + [Guid]::NewGuid().ToString('N') + '.cache')
     $env:PSModuleAnalysisCachePath = $moduleCachePath
-    $runnerModule = Join-Path $PSScriptRoot 'tests\maintenance-harness-runner.psm1'
+    $runnerModule = Join-Path $PSScriptRoot 'maintenance-harness-runner.psm1'
     Import-Module -Name $runnerModule -Force -ErrorAction Stop
 
     $result = Invoke-IzMaintenanceHarness `

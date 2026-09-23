@@ -22,7 +22,7 @@ for (const [name, extra, code] of [
     const before = runs()
     const evidence = path.join(sandbox, name)
     // When: the actual wrapper receives an unsafe target.
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-File', path.join(repo, 'scripts/test-office-manager-smoke.ps1'),
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-File', path.join(repo, 'scripts/tests/test-office-manager-smoke.ps1'),
       '-Scenario', 'harness', '-Case', 'edge', '-BrowserChannel', 'chrome', '-EvidenceDir', evidence, ...extra],
     { cwd: repo, encoding: 'utf8', windowsHide: true, timeout: 20_000 })
     // Then: the precise refusal occurs without a process/data run or evidence write.
