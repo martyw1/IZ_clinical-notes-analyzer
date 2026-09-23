@@ -19,8 +19,10 @@ Client installer templates and installed launcher filenames are preserved. Simil
 - Changed PowerShell files parsed; both moved Node scripts and Bash smoke passed syntax checks.
 - Actual source CMD startup, health/version, fresh temporary-password login, duplicate-start refusal, background stop, foreground readiness and foreground stop passed in a fresh isolated local profile. No existing user database was used.
 - Stop regression passed, including idempotence and preserving an unrelated Python listener.
-- Release-safety regression passed. Executing the builder's actual copy function against synthetic fixtures confirmed exclusion of `deprecated`, `diag-build-tools`, `tests` and installer authoring inputs while retaining required config data.
+- Clean-index repository safety and release-safety regression passed. Executing the builder's actual copy function against synthetic fixtures confirmed exclusion of `deprecated`, `diag-build-tools`, `tests` and installer authoring inputs while retaining required config data.
 - The relocated broader lifecycle test reached its profile/WAL setup checks, then stopped at the pre-existing OneDrive `PATH_REPARSE_POINT` guard in `maintenance-paths.psm1`. Its full result is not claimed as passing. The earlier full-build limitation in this checkout remains documented in [the preceding validation](script-organization-2026-09-23.md); no new installer ZIP was built.
+
+Independent code/path review found no blockers. The moved Bash smoke retains its executable Git mode. Python language-server diagnostics were unavailable because the configured server is not installed; the executable Python checks listed above passed.
 
 Local execution evidence and baseline hashes are under `.omo/evidence/script-consolidation/`, excluded from Git. No live vendor API calls were made. macOS and client-machine qualification were not performed by this Windows source-script refactor.
 
