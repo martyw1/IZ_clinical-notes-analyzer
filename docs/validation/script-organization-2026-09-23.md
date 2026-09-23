@@ -22,6 +22,7 @@ The earlier archive cleanup had moved the builder's pinned beta.3/beta.4 inputs 
 | Actual Windows build CMD, missing pinned archive input | Expected exit 1 and `PRESERVED_ARCHIVE_CHANGED` |
 | macOS wrapper | Bash syntax and synthetic sibling forwarding/exit propagation passed from a path containing spaces |
 | Independent active caller/path review | No broken active references or package-exclusion gaps found |
+| Release-safety regression suite after relocation commit | PASS, including forbidden-category, malformed-input, misleading-success, privacy, directory, ZIP and private-report canaries; moved tester remains tracked, private state remains ignored |
 
 The actual moved CMD was run with `-ValidationOnly`, without either skip flag: **617 backend tests passed** (three dependency deprecation warnings), **182 frontend tests passed**, and the TypeScript/Vite frontend build passed. Packaging then exited 1 at the existing `Copy-SafeDataTree` guard: `config/checklists` in this OneDrive checkout carries reparse tag `0x9000e01a`. The failing function is byte-equivalent after newline normalization to pre-change main. This is a pre-existing OneDrive developer-build limitation, not a moved-script caller failure; no new package or passing package-safety result is claimed. The guard was not weakened.
 
