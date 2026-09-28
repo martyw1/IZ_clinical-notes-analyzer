@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { test, expect, login, capture, fixtureContract, apiFor, writeEvidence } from './support/fixtures.mjs'
 
-test('real office-manager login and beta version agree @happy', async ({ page, request }) => {
+test('real office-manager login and release metadata agree @happy', async ({ page, request }) => {
   // Given: an owned fresh runtime with two facilities and four synthetic roles.
   const fixture = fixtureContract()
   const health = await request.get('/api/health')
@@ -26,8 +26,8 @@ test('real office-manager login and beta version agree @happy', async ({ page, r
   const expected = JSON.parse(readFileSync(path.join(process.env.IZ_OM_REPO_ROOT, 'VERSION.json'), 'utf8'))
   expect(version.version).toBe(expected.version)
   expect(version.build).toBe(expected.build)
-  expect(version.release_channel).toBe('beta-local-desktop-v2')
-  expect(version.stability).toBe('beta')
+  expect(version.release_channel).toBe(expected.release_channel)
+  expect(version.stability).toBe(expected.stability)
   await expect(page.locator('.v2-footer')).toContainText(version.version)
   await expect(page.getByLabel('Signed-in role', { exact: true })).toHaveText('office manager')
   await capture(page, 'task-1-authenticated.png')
