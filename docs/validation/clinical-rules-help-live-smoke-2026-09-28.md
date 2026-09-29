@@ -22,8 +22,9 @@ The Treatment Plans Roster visibly displayed the saved completed job after the f
 
 ## Verification
 
+- Final quiet full backend suite after the source commit: **619 passed**, three dependency deprecation warnings, exit 0 in 899.64 seconds.
 - Backend full suite, first run: 618 passed; one Help release-text consistency failure. Restored the required version and qualification text; that file then passed both cases.
-- Backend full suite, second run: 618 passed; one unrelated packaged-launcher test exceeded its fixed 90-second subprocess timeout while concurrent app/browser/build work was active. The exact test passed alone in 20.79 seconds. All 619 backend cases have passed, though no single full-suite run finished without a timing or then-corrected Help failure.
+- Backend full suite, second run: 618 passed; one unrelated packaged-launcher test exceeded its fixed 90-second subprocess timeout while concurrent app/browser/build work was active. The exact test passed alone in 20.79 seconds before the final full-suite pass.
 - Frontend: 184 tests across 28 files passed; TypeScript check and production Vite build passed.
 - Isolated Windows Edge office-manager smoke: three scenarios passed, with synthetic data and a separate runtime.
 - Manual local UI checks: admin sign-in, Help navigation/content, read-only Settings values, live patient and plan pulls, and restoration of the completed plan job card after reopening.

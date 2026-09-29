@@ -2,7 +2,7 @@
 
 ## Clinical timing, Help, and live import smoke — 2026-09-28
 
-Corrected overall treatment-plan status for an otherwise evaluable late master signature, made active clinical timing values read-only in Settings, kept LOC-change readiness unvalidated, and replaced in-app Help with task-based operator guidance. The treatment-plan roster now restores its latest saved import job after reopening. Current operator documentation and historical-guide pointers were updated. Live Alleva patient and treatment-plan pulls completed with zero reported failures or warnings; see [validation, counts, and verification limits](validation/clinical-rules-help-live-smoke-2026-09-28.md). The published installer was not rebuilt.
+Corrected overall treatment-plan status for an otherwise evaluable late master signature, made active clinical timing values read-only in Settings, kept LOC-change readiness unvalidated, and replaced in-app Help with task-based operator guidance. The treatment-plan roster now restores its latest saved import job after reopening. Current operator documentation and historical-guide pointers were updated. Live Alleva patient and treatment-plan pulls completed with zero reported failures or warnings. The final full backend suite passed 619 tests; frontend passed 184 tests, type checking, and build. See [validation, counts, and verification limits](validation/clinical-rules-help-live-smoke-2026-09-28.md). The published installer was not rebuilt.
 
 ## Script workflow consolidation — 2026-09-23
 
