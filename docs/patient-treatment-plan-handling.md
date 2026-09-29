@@ -1,5 +1,7 @@
 # Patient Treatment Plan Handling
 
+> Historical beta.3 implementation map. For the current `1.0.0` / `2026.09.21.2` source candidate and its read-only clinical timing settings, use [operator help](operator-help-current.md), [open blockers](open-blockers.md), and the V2 evaluator in `backend/app/v2/services/deterministic_evaluator.py`. The legacy timeliness section below describes its dated implementation.
+
 Date: 2026-09-04
 
 Applies to: IZ Clinical Notes Analyzer Beta Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.

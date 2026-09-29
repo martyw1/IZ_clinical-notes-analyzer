@@ -46,7 +46,7 @@ describe('V2 session lifecycle', () => {
     // When: the user signs in.
     await signIn()
     // Then: authorized navigation is visible and the session is retained.
-    expect(screen.getByRole('navigation')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
     expect(sessionStorage.getItem(storageKey) === 'new-session').toBe(true)
   })
 
@@ -75,7 +75,7 @@ describe('V2 session lifecycle', () => {
     // When: a protected operation fails without 401.
     await act(async () => { await Promise.allSettled([request('/api/failure', { token: 'new-session' })]) })
     // Then: the navigation and stored session survive.
-    expect(screen.getByRole('navigation')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
     expect(sessionStorage.getItem(storageKey) === 'new-session').toBe(true)
   })
 

@@ -1,3 +1,9 @@
+## Unreleased source changes — clinical timing and operator help
+
+- Include a late signed master plan in the overall overdue result when required evidence is otherwise resolved.
+- Show active versioned 30/60-day rules and the provisional seven-day LOC-change candidate as read-only Settings information. Reject clinical-rule edits through the Settings API; keep LOC-change readiness unresolved even if a legacy profile stored a validation flag.
+- Replace the short in-app Help page with task-based operator guidance, restore the latest treatment-plan pull result when its roster reopens, and add the [current operator guide](docs/operator-help-current.md). The published Production 1.0 package remains a separate historical artifact until a new package is built and qualified.
+
 ## 1.0.0 production - 2026-09-21
 
 ## Script workflow consolidation — 2026-09-23

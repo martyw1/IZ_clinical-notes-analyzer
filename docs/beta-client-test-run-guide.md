@@ -1,5 +1,7 @@
 # Beta Client Test Run Guide
 
+> Historical beta.4 test guide. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md). The steps below retain their original test scope.
+
 Date: 2026-09-14
 
 Applies to the source candidate: IZ Clinical Notes Analyzer Version `2.0.0-beta.4` / build `2026.09.14.1` / installer revision `1` on the `beta-local-desktop-v2` Windows desktop runtime. The final package, hash, and target-platform qualification are pending; this guide is not a client-ready release notice. The beta.3 validation records retain their original tested identity.

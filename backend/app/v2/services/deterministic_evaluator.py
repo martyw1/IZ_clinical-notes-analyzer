@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
 from app.v2.services.criterion_source_support import ObservedSource, criterion_source_support
 from app.v2.services.evaluation_evidence import EvaluationEvidence, collect_evidence, known
-from app.v2.services.rule_package import ChecklistStep, DeterministicRulePackage
+from app.v2.services.rule_package import MASTER_PLAN_DUE_DAYS, ChecklistStep, DeterministicRulePackage
 
 EvaluationStatus = Literal[
     "Present", "Missing Data", "Needs Review", "Conflicting Evidence", "Unable to Evaluate",
@@ -117,6 +117,8 @@ def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
         return "Needs Review", "Initial treatment-plan signature evidence is not on admission Day 1."
     if context.loc_changed:
         return "Needs Review", "The seven-day LOC-change candidate is display-only and unvalidated; the recurring rule remains active."
+    if context.master_signature > context.admission + timedelta(days=MASTER_PLAN_DUE_DAYS):
+        return "Overdue", "The signed master plan exceeds the 30-day deadline after admission."
     return context.timing_status, f"Calculated recurring due date is {context.calculated_due.isoformat()}."
 
 
@@ -172,7 +174,7 @@ def _day_one(step: ChecklistStep, context: EvaluationContext) -> CriterionEvalua
 def _master(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
     if context.admission is None or context.master_signature is None:
         return CriterionEvaluation(step.key, step.title, "Missing Data", "admission_date + signatures[*].signature_datetime", "missing", "Master-plan timing evidence is incomplete.")
-    deadline = context.admission + timedelta(days=30)
+    deadline = context.admission + timedelta(days=MASTER_PLAN_DUE_DAYS)
     compliant = context.master_signature <= deadline
     return CriterionEvaluation(step.key, step.title, "Compliant" if compliant else "Overdue", context.master_signature_path,
                                context.master_signature.isoformat(), "Signed master-plan evidence is within 30 days." if compliant else "Signed master-plan evidence exceeds 30 days.")

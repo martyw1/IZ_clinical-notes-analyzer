@@ -1,6 +1,6 @@
 # Windows User Guide Version 1
 
-> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> Historical Version 1 reference. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 This guide is for R3 staff using a normal Windows 10 or Windows 11 laptop.
 

@@ -4,11 +4,14 @@ import json
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from typing import Final
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import REPO_ROOT
+
+MASTER_PLAN_DUE_DAYS: Final = 30
 
 
 class RuleModel(BaseModel):

@@ -1,5 +1,6 @@
+import { useEffect } from 'react'
 import { approvedImportBlockers } from '../api/apiReadiness'
-import { getApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSync } from '../api/allevaJobsClient'
+import { getApprovedAllevaTreatmentPlanSyncJob, getLatestApprovedAllevaTreatmentPlanSyncJob, runApprovedAllevaTreatmentPlanSync } from '../api/allevaJobsClient'
 import type { ApiConfiguration, ApiHarnessJob } from '../api/types'
 import { useJobAction } from '../hooks/useJobAction'
 import { JobStatusPanel } from './JobStatusPanel'
@@ -29,6 +30,14 @@ export function ApprovedQueueImportCard({
     failureMessage: 'Unable to pull and evaluate treatment plans. Review Settings and try again.',
     successMessage: queueCompletionMessage,
   })
+
+  useEffect(() => {
+    let active = true
+    void getLatestApprovedAllevaTreatmentPlanSyncJob(token).then((job) => {
+      if (active) action.setLastJob(job)
+    }).catch(() => null)
+    return () => { active = false }
+  }, [action.setLastJob, token])
 
   return (
     <section className='panel' aria-label='Treatment Plans roster import'>

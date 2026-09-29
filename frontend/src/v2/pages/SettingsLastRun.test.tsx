@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsPage } from './SettingsPage'
 
@@ -24,6 +24,34 @@ describe('Settings persisted sync status', () => {
     expect(screen.getByText('Updated').parentElement).toHaveTextContent('3')
     expect(screen.getByText('Warnings').parentElement).toHaveTextContent('2')
     await waitFor(() => expect(fetchMock).not.toHaveBeenCalledWith('/api/v2/alleva-sync/run', expect.anything()))
+  })
+
+  it('saves organization settings without sending versioned clinical rules', async () => {
+    // Given: Settings has loaded active clinical-rule values from the API.
+    const patches: Record<string, unknown>[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost').pathname
+      if (path === '/api/settings' && init?.method === 'PATCH') {
+        patches.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+        return response(settings())
+      }
+      if (path === '/api/settings') return response(settings())
+      if (path === '/api/api-configuration') return response(configuration())
+      if (path === '/api/v2/api-harness/jobs') return response([])
+      return response({ detail: `Unexpected ${init?.method ?? 'GET'} ${path}` }, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SettingsPage token='token' />)
+    await screen.findByText('Save settings')
+
+    // When: an administrator saves the ordinary local settings.
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    // Then: only writable fields are submitted and clinical timing has no edit controls.
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(Object.keys(patches[0] ?? {}).sort()).toEqual(['facility_timezone', 'organization_name'])
+    expect(screen.queryByRole('spinbutton', { name: 'LOC-change window days' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'LOC-change window validated' })).not.toBeInTheDocument()
   })
 })
 
@@ -54,7 +82,7 @@ function settings() {
   return {
     organization_name: 'R3 Recovery Services', facility_timezone: 'America/New_York',
     treatment_plan_master_due_days: 30, treatment_plan_php_review_interval_days: 30,
-    treatment_plan_iop_op_review_interval_days: 90, treatment_plan_loc_change_window_days: 7,
+    treatment_plan_iop_op_review_interval_days: 60, treatment_plan_loc_change_window_days: 7,
     treatment_plan_loc_change_window_validated: false,
   }
 }

@@ -444,10 +444,11 @@ def test_startup_and_rule_setting_updates_trigger_all_version_reevaluation(tmp_p
         lambda _db, trigger: setting_triggers.append(trigger),
     )
 
-    # When: startup runs, a non-rule setting changes, and then a rule setting changes.
+    # When: startup runs, an organization setting changes, and then the facility timezone changes.
     db_module.init_database()
     assert client.patch("/api/settings", headers=headers, json={"organization_name": "Synthetic Organization"}).status_code == 200
-    assert client.patch("/api/settings", headers=headers, json={"treatment_plan_master_due_days": 31}).status_code == 200
+    assert client.patch("/api/settings", headers=headers, json={"facility_timezone": "America/New_York"}).status_code == 200
+    assert client.patch("/api/settings", headers=headers, json={"treatment_plan_master_due_days": 31}).status_code == 409
 
     # Then: startup and rule-config triggers run exactly at their owned boundaries.
     assert startup_triggers == ["startup"]

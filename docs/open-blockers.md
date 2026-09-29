@@ -19,11 +19,11 @@ Current V2 treatment-plan handling is documented in `docs\v2-beta\`, including p
 
 ## LOC-Change Treatment-Plan Update Window
 
-Status: unvalidated for Version 2.0 Beta.
+Status: unvalidated in the current source candidate.
 
-The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The active V2 implementation must keep this value configurable and must visibly mark it as unvalidated in readiness, settings UI, Treatment Plans/checklist evidence, and operator documentation.
+The required treatment-plan update window after a level-of-care change is not confirmed by R3/Marleigh. The current source keeps the seven-day value as a provisional, versioned display candidate and visibly marks it as unvalidated in readiness, Settings, Treatment Plan Detail/checklist evidence, and [operator help](operator-help-current.md). It cannot be validated or edited from Settings.
 
-Current implementation state: Version 2.0 Beta keeps the LOC-change update window visibly unresolved in Settings, Treatment Plans, checklist evidence, V2 docs, and validation notes. The placeholder remains 7 calendar days and must stay configurable until R3/Marleigh confirms the final rule. When an imported aggregate has more than one LOC history entry while the setting is unvalidated, the V2 evaluator returns `Needs Review`; missing required evidence returns `Missing Data` and malformed dates return `Unable to Evaluate`.
+Current source implementation: the versioned rule package supplies a seven-calendar-day display candidate. A detected LOC change returns `Needs Review`; missing required evidence returns `Missing Data` and malformed dates return `Unable to Evaluate`. A previously saved local `validated` flag does not clear readiness or change evaluation. R3/Marleigh's decision will require a reviewed rule-package update and focused clinical tests.
 
 Until R3 confirms the rule, do not hard-code a final number of days and do not silently treat a LOC-change case as compliant. If source evidence is incomplete or conflicting, return `Needs Review` or `Missing Data` according to the deterministic rules.
 

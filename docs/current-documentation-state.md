@@ -1,4 +1,4 @@
-> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
+> Historical beta.3 alignment tracker. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md), [README](../README.md), and [open blockers](open-blockers.md). Beta.4 password changes are documented in [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
 
 # Current Documentation State
 

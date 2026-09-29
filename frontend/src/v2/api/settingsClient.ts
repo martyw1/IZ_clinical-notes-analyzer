@@ -14,11 +14,6 @@ export async function saveSettings(token: string, settings: AppSettings): Promis
     body: {
       organization_name: settings.organizationName,
       facility_timezone: settings.facilityTimezone,
-      treatment_plan_master_due_days: settings.treatmentPlanMasterDueDays,
-      treatment_plan_php_review_interval_days: settings.treatmentPlanPhpReviewIntervalDays,
-      treatment_plan_iop_op_review_interval_days: settings.treatmentPlanIopOpReviewIntervalDays,
-      treatment_plan_loc_change_window_days: settings.treatmentPlanLocChangeWindowDays,
-      treatment_plan_loc_change_window_validated: settings.treatmentPlanLocChangeWindowValidated,
     },
   })))
 }

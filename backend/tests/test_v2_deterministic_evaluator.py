@@ -183,6 +183,27 @@ def test_initial_and_master_signature_roles_are_evaluated_independently() -> Non
     assert _criterion_status(bundle, "master_plan_within_30_days") == "Compliant"
 
 
+def test_late_master_signature_prevents_overall_compliance() -> None:
+    # Given: a Day-1 initial signature and a master signature after the 30-day deadline.
+    package = load_rule_package()
+    aggregate = _aggregate(due="2026-03-03")
+    signatures = (
+        _signature("initial_plan", "2026-01-01", "treatment_plans.initial.signatures[0]"),
+        _signature("master_plan", "2026-02-01", "treatment_plans.master.signatures[0]"),
+    )
+    aggregate = aggregate.model_copy(update={
+        "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),
+        "treatment_reviews": ({"review_date": "2026-02-01", "signature_date": "2026-02-01"},),
+    })
+
+    # When: the saved plan is evaluated after signature but before its recurring review date.
+    bundle = evaluate_plan_version(aggregate, package, date(2026, 2, 2), "America/New_York")
+
+    # Then: the overall badge and the master criterion both flag the late signature.
+    assert _criterion_status(bundle, "master_plan_within_30_days") == "Overdue"
+    assert bundle.overall_status == "Overdue"
+
+
 def test_untyped_signature_evidence_never_satisfies_initial_or_master_criteria() -> None:
     # Given
     package = load_rule_package()

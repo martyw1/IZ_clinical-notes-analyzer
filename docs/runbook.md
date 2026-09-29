@@ -1,5 +1,7 @@
 # Operations Runbook
 
+> Current source candidate (1.0.0 / build 2026.09.21.2): use [operator help](operator-help-current.md) for client-facing steps. Timing values come from the versioned rule package; Settings displays them read-only. The late master-plan signature criterion is included in the overall status. The rest of this runbook retains beta.3 operational history where explicitly dated.
+
 Date: 2026-09-04
 
 Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
@@ -51,7 +53,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.3` / build `2026.09.03.
 - `Manual Upload` remains the fallback for synthetic or R3-approved files when the gated Alleva pull is not ready or authorized.
 - Manual overrides are restricted to admins and office managers and must be audited with a reason.
 - Counselors do not have Treatment Plans queue access because that table does not have explicit counselor ownership; they continue to use role-scoped review, upload, and account workflows.
-- The LOC-change treatment-plan update window is still unvalidated and must stay configurable and visibly marked as unresolved.
+- The LOC-change treatment-plan update window remains unvalidated. Its seven-day candidate is display-only; readiness and the evaluator keep the case unresolved until R3/Marleigh confirms the policy.
 
 ## API readiness checks
 
@@ -86,7 +88,7 @@ For the active V2 local desktop runtime, use `2.0.0-beta.3` / build `2026.09.03.
 - The recurring update clock starts from the latest valid treatment-plan review/update date, or from admission date when no later valid review/update exists.
 - PHP levels use 30 calendar days; other configured treatment levels use 60 calendar days.
 - Due today and one day before due are `Urgent`; two through seven days before due are `Due Soon`; eight or more days before due are `Compliant`; only dates before the evaluation date are `Overdue`.
-- LOC changes use a separate manager-editable 7-calendar-day preset. The setting remains unvalidated until R3/Marleigh confirms the final rule.
+- LOC changes show a seven-calendar-day candidate for review. It cannot be validated from Settings or used to mark compliance until R3/Marleigh confirms the final rule and a versioned implementation is tested.
 - Every timeliness analysis result is audited with patient ID, status, due date, rule used, current date, and active workflow key/version/checklist context.
 - Exports include both the legacy checklist/domain rows and active workflow-step statuses.
 

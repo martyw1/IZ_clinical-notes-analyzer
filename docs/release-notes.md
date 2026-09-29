@@ -1,5 +1,9 @@
 # Release Notes
 
+## Unreleased source candidate — clinical timing and Help
+
+The active evaluator now carries a late master-plan signature into the overall `Overdue` result when higher-priority unresolved evidence does not control it. Settings reads active 30/60-day timing values from the versioned rules and shows the seven-day LOC-change date only as an unvalidated candidate. Clinical-rule edits through Settings are rejected; previously saved validation flags cannot clear the LOC-change readiness blocker. The Treatment Plans Roster restores its last saved import result after reopening. In-app Help and [current operator help](operator-help-current.md) explain the exact-plan workflow, status meanings, imports, account recovery, and support steps. This source change is not a new qualified installer or a clinical approval of the LOC-change deadline.
+
 ## Script workflow consolidation — 2026-09-23
 
 Consolidated Windows source startup, grouped developer tests and Alleva diagnostics, and archived superseded startup/setup and beta support tools. Top-level scripts reduced from 42 to 25. Client package entry points and the published Production 1.0 ZIP remain unchanged. See [move inventory and validation](validation/script-consolidation-2026-09-23.md).

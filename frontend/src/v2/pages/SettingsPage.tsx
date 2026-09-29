@@ -183,9 +183,9 @@ export function SettingsPage({ token }: SettingsPageProps) {
     <div className='page-grid'>
       <section className='panel settings-form'>
         <p className='eyebrow'>Settings</p>
-        <h2>Local V2 controls</h2>
+        <h2>Local settings</h2>
         <div className='warning-band'>
-          LOC-change update window remains unvalidated by R3/Marleigh. Keep this configurable until the blocker is resolved.
+          The LOC-change deadline has not been confirmed by R3/Marleigh. Its seven-day candidate is for review only and cannot establish compliance.
         </div>
         <label>
           Organization
@@ -195,22 +195,16 @@ export function SettingsPage({ token }: SettingsPageProps) {
           Facility timezone
           <input value={settings.facilityTimezone} onChange={(event) => setSettings({ ...settings, facilityTimezone: event.target.value })} />
         </label>
-        <label>
-          LOC-change window days
-          <input
-            type='number'
-            value={settings.treatmentPlanLocChangeWindowDays ?? ''}
-            onChange={(event) => setSettings({ ...settings, treatmentPlanLocChangeWindowDays: Number(event.target.value) })}
-          />
-        </label>
-        <label className='checkbox-row'>
-          <input
-            type='checkbox'
-            checked={settings.treatmentPlanLocChangeWindowValidated}
-            onChange={(event) => setSettings({ ...settings, treatmentPlanLocChangeWindowValidated: event.target.checked })}
-          />
-          LOC-change window validated
-        </label>
+        <section aria-labelledby='active-clinical-rules'>
+          <h3 id='active-clinical-rules'>Active clinical timing rules</h3>
+          <p>These values come from the versioned rule package. Changing organization settings does not change treatment-plan deadlines.</p>
+          <dl className='plan-fact-grid'>
+            <div><dt>Master plan after admission</dt><dd>{settings.treatmentPlanMasterDueDays} calendar days</dd></div>
+            <div><dt>PHP review interval</dt><dd>{settings.treatmentPlanPhpReviewIntervalDays} calendar days</dd></div>
+            <div><dt>IOP and outpatient review interval</dt><dd>{settings.treatmentPlanIopOpReviewIntervalDays} calendar days</dd></div>
+            <div><dt>LOC-change candidate</dt><dd>{settings.treatmentPlanLocChangeWindowDays === null ? 'Unavailable · unvalidated' : `${settings.treatmentPlanLocChangeWindowDays} calendar days · unvalidated`}</dd></div>
+          </dl>
+        </section>
         <div className='button-row settings-actions'>
           <button type='button' onClick={handleSaveSettings}>Save settings</button>
         </div>

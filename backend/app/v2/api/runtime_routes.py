@@ -61,7 +61,7 @@ def readiness(db: DbSession) -> ReadinessOut:
             ReadinessCheck(name="database", status="ok"),
             ReadinessCheck(name="build_channel", status="ok", value=BUILD_CHANNEL),
             ReadinessCheck(name="api_profile", status=api_status, message=api_message),
-            ReadinessCheck(name="loc_change_blocker", status="ok" if profile.treatment_plan_loc_change_window_validated else "warn", message="LOC-change update window remains unvalidated." if not profile.treatment_plan_loc_change_window_validated else "LOC-change update window is validated."),
+            ReadinessCheck(name="loc_change_blocker", status="warn", message="LOC-change update window remains unvalidated; the seven-day candidate is display-only."),
         ),
     )
 
@@ -102,7 +102,7 @@ def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
         api_enabled=profile.emr_api_enabled,
         sync_enabled=profile.alleva_treatment_plan_sync_enabled,
         sync_authorized=profile.alleva_treatment_plan_sync_approved,
-        loc_change_window_validated=profile.treatment_plan_loc_change_window_validated,
+        loc_change_window_validated=False,
         returned_count=sum(1 for correction in open_correction_dicts(db) if correction["patient_record_id"] in allowed_ids),
     )
 

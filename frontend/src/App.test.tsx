@@ -202,7 +202,7 @@ describe('V2 active app shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(await screen.findByDisplayValue('R3 Recovery Services')).toBeInTheDocument()
-    expect(screen.getByText(/unvalidated by R3\/Marleigh/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Active clinical timing rules' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(/client secret/i), { target: { value: 'new-secret-value' } })
     fireEvent.click(screen.getByRole('button', { name: /save api configuration/i }))
     expect(await screen.findByText(/saved in encrypted local storage and remains hidden/i)).toBeInTheDocument()

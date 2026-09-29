@@ -230,7 +230,7 @@ def test_loc_change_checkbox_cannot_activate_compliance(tmp_path, monkeypatch) -
     settings_response = client.patch(
         "/api/settings", headers=headers, json={"treatment_plan_loc_change_window_validated": True},
     )
-    assert settings_response.status_code == 200
+    assert settings_response.status_code == 409
     aggregate = _with_typed_plan_signatures(_aggregate("948")).model_copy(update={"loc_history": (
         {"level_of_care": "IOP", "effective_date": "2026-01-01"},
         {"level_of_care": "PHP", "effective_date": "2026-02-01"},

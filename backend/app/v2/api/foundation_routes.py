@@ -24,11 +24,11 @@ from app.v2.authorization import facility_ids_for_user
 from app.v2.security import create_access_token, hash_password, password_policy_error, verify_password
 from app.v2.services.audit_store import JsonValue, record_audit_event
 from app.v2.services.evaluation_store import reevaluate_all_plan_versions
+from app.v2.services.rule_package import MASTER_PLAN_DUE_DAYS, load_rule_package
 
 router = APIRouter()
-RULE_SETTING_FIELDS = frozenset(
+CLINICAL_RULE_SETTING_FIELDS = frozenset(
     {
-        "facility_timezone",
         "treatment_plan_master_due_days",
         "treatment_plan_php_review_interval_days",
         "treatment_plan_iop_op_review_interval_days",
@@ -104,14 +104,15 @@ def _settings_row(db: DbSession) -> AppSetting:
 
 
 def _settings_out(row: AppSetting) -> AppSettingsOut:
+    rules = load_rule_package().rules
     return AppSettingsOut(
         organization_name=row.organization_name,
         facility_timezone=row.facility_timezone,
-        treatment_plan_master_due_days=row.treatment_plan_master_due_days,
-        treatment_plan_php_review_interval_days=row.treatment_plan_php_review_interval_days,
-        treatment_plan_iop_op_review_interval_days=row.treatment_plan_iop_op_review_interval_days,
-        treatment_plan_loc_change_window_days=row.treatment_plan_loc_change_window_days,
-        treatment_plan_loc_change_window_validated=row.treatment_plan_loc_change_window_validated,
+        treatment_plan_master_due_days=MASTER_PLAN_DUE_DAYS,
+        treatment_plan_php_review_interval_days=rules.levels_of_care["PHP"].treatment_plan_update_interval_days,
+        treatment_plan_iop_op_review_interval_days=rules.levels_of_care["IOP"].treatment_plan_update_interval_days,
+        treatment_plan_loc_change_window_days=rules.loc_change_blocker.default_preset_calendar_days,
+        treatment_plan_loc_change_window_validated=False,
     )
 
 
@@ -402,13 +403,15 @@ def get_settings(_: AdminUser, db: DbSession) -> AppSettingsOut:
 
 @router.patch("/api/settings", response_model=AppSettingsOut)
 def save_settings(payload: AppSettingsUpdate, actor: AdminUser, db: DbSession) -> AppSettingsOut:
+    if CLINICAL_RULE_SETTING_FIELDS.intersection(payload.model_fields_set):
+        raise HTTPException(status_code=409, detail="Clinical timing rules are versioned and cannot be changed in Settings.")
     row = _settings_row(db)
     for field in payload.model_fields_set:
         setattr(row, field, getattr(payload, field))
     row.updated_at = _utc_now()
     db.commit()
     db.refresh(row)
-    if RULE_SETTING_FIELDS.intersection(payload.model_fields_set):
+    if "facility_timezone" in payload.model_fields_set:
         reevaluate_all_plan_versions(db, "rule_config")
     record_audit_event(db, action="settings.saved", actor=actor, target_entity_type="app_settings", target_entity_id=str(row.id), details={"fields": sorted(payload.model_fields_set)})
     return _settings_out(row)

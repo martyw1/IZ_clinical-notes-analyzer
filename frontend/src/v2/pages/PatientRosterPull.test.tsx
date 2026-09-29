@@ -81,6 +81,26 @@ describe('Patient roster pull', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster/pull', expect.objectContaining({ method: 'POST' }))
     await waitFor(() => expect(rosterReads).toBeGreaterThanOrEqual(2))
   })
+
+  it('shows the latest completed treatment-plan pull when the roster is reopened', async () => {
+    // Given: a completed import is saved while the roster page is not open.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(typeof input === 'string' ? input : input.toString(), 'http://localhost').pathname
+      if (path === '/api/v2/treatment-plan-roster') return response({ items: [] })
+      if (path === '/api/api-configuration') return response(configuredProfile())
+      if (path === '/api/v2/api-harness/jobs') return response([{ ...job('completed', 100), job_type: 'approved_treatment_plan_sync', records_seen: 598, records_written: 5 }])
+      return response({}, 404)
+    }))
+
+    // When: the administrator returns to the treatment-plan roster.
+    render(<TreatmentPlansRosterPage token='token' user={adminUser} onNavigate={vi.fn()} onSelectPatient={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
+
+    // Then: the saved job outcome is visible without starting another live pull.
+    expect(await screen.findByText(/last run completed/i)).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Job progress' })).toHaveAttribute('aria-valuenow', '100')
+    expect(screen.getByText('598')).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
+  })
 })
 
 function configuredProfile() {
