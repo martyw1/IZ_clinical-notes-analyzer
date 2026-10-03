@@ -66,3 +66,6 @@ api-connectivity-reports/
 *.mpg
 *.webm
 *.wmv
+
+# Approved synthetic administrator help video.
+!/docs/help/R3-Treatment-Plan-Audit-Quick-Start.mp4

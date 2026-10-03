@@ -1,4 +1,6 @@
-# IZ Clinical Notes Analyzer Design System
+# R3 Treatment Plan Audit Application Design System
+
+The current browser-facing product name is R3 Treatment Plan Audit Application. Existing storage paths and installed shortcut names retain their legacy identifiers for compatibility.
 
 Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1` / channel `stable-local-desktop`. Package qualification is pending; the existing V2 design system remains in use.
 

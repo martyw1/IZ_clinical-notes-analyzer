@@ -186,7 +186,7 @@ export function AppV2() {
       <main className='login-page'>
         <section className='login-card'>
           <p className='eyebrow'>Production 1.0</p>
-          <h1>IZ Clinical Notes Analyzer</h1>
+          <h1>R3 Treatment Plan Audit Application</h1>
           <p>Review treatment plans, track deadlines, and follow up on corrections.</p>
           {authMessage && <p role='status'>{authMessage}</p>}
           <form onSubmit={handleSubmit}>

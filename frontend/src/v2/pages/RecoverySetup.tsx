@@ -39,7 +39,7 @@ export function RecoverySetup({ token, configured, onSaved }: RecoverySetupProps
   }
 
   function download() {
-    const url = URL.createObjectURL(new Blob([`IZ Clinical Notes Analyzer recovery code\n\n${code}\n\nKeep this private. Use Forgot password on this installation to recover your account. This code works once.\n`], { type: 'text/plain' }))
+    const url = URL.createObjectURL(new Blob([`R3 Treatment Plan Audit Application recovery code\n\n${code}\n\nKeep this private. Use Forgot password on this installation to recover your account. This code works once.\n`], { type: 'text/plain' }))
     const link = document.createElement('a')
     link.href = url
     link.download = 'IZ-account-recovery-code.txt'

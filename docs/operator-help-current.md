@@ -2,6 +2,10 @@
 
 Applies to the `1.0.0` / `2026.09.21.2` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
 
+## Video introduction
+
+[Watch the administrator introduction and help video](help/R3-Treatment-Plan-Audit-Quick-Start.mp4) (6 minutes 13 seconds). It uses example records and shows all administrator tabs and numbered desktop tools. [Video help and transcript](help/README.md).
+
 ## Start and sign in
 
 1. Double-click the prepared IZ Clinical Notes Analyzer desktop or Start Menu shortcut. If the launcher is already running, open `http://localhost:8000` on this laptop.

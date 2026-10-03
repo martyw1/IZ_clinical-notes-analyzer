@@ -1,0 +1,97 @@
+[
+  {
+    "name": "sign-in",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "dashboard",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "patient-roster",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "patient-record",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "plans-roster",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "manual-upload",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "file-selected",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "upload-result",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "plan-detail",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "checklist",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "review-action",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "settings",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "api-testing",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "users",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "forensic-logs",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "account",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "help",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "finished",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  },
+  {
+    "name": "forgot-password",
+    "title": "R3 Treatment Plan Audit Application",
+    "syntheticDataOnly": true
+  }
+]

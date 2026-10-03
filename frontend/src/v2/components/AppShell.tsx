@@ -17,7 +17,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
       <header className='v2-topbar'>
         <div>
           <p className='eyebrow'>R3 Recovery Services</p>
-          <h1>IZ Clinical Notes Analyzer</h1>
+          <h1>R3 Treatment Plan Audit Application</h1>
         </div>
         <div className='topbar-actions'>
           <button type='button' className='secondary-button' aria-pressed={activeView === 'Account'} onClick={() => onNavigate('Account')}>Account</button>

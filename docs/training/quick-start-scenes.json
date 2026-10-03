@@ -1,0 +1,587 @@
+[
+  {
+    "title": "Your administrator walkthrough.",
+    "label": "WELCOME",
+    "tabs": [],
+    "lines": [
+      "A practical tour for an app administrator. Example records only."
+    ],
+    "shots": [
+      {
+        "file": "dashboard",
+        "crop": [
+          0,
+          0,
+          1440,
+          585
+        ]
+      }
+    ],
+    "speech": "Hi. Let's take a practical tour of the R3 Treatment Plan Audit Application, with you in the administrator seat. We'll start on the desktop, work through the tabs, and finish with the tools to use if something gets stuck. No need to memorize the menu. We'll give each screen a job."
+  },
+  {
+    "title": "Start here, then take a quick look around.",
+    "label": "START & STATUS DASHBOARD",
+    "tabs": [
+      "Status Dashboard"
+    ],
+    "lines": [
+      "Desktop: (1) Start IZ Clinical Notes Analyzer",
+      "Status Dashboard: check the day's workload and attention counts."
+    ],
+    "shots": [
+      {
+        "file": "sign-in",
+        "crop": [
+          485,
+          170,
+          470,
+          560
+        ],
+        "box": [
+          512,
+          425,
+          416,
+          220
+        ]
+      },
+      {
+        "file": "dashboard",
+        "crop": [
+          0,
+          0,
+          1440,
+          585
+        ],
+        "box": [
+          20,
+          95,
+          125,
+          45
+        ],
+        "cue": "Start each visit"
+      }
+    ],
+    "speech": "On your desktop, double click number one, Start I Z Clinical Notes Analyzer. The shortcut still has the older I Z name, but it opens this application. Give it a moment, then sign in with your administrator account. Follow any first time password or recovery prompts. Start each visit on Status Dashboard. That's your quick look at the workload: saved records, missing information, and items needing attention. From here, let's find one patient."
+  },
+  {
+    "title": "Find the patient before choosing the plan.",
+    "label": "PATIENT ROSTER & PATIENT RECORD DETAIL",
+    "tabs": [
+      "Patient Roster",
+      "Patient Record Detail"
+    ],
+    "lines": [
+      "Patient Roster: search by name or medical record number.",
+      "MRN means medical record number. Confirm the correct source and location.",
+      "Patient Record Detail: see that patient's information and saved plans."
+    ],
+    "shots": [
+      {
+        "file": "patient-roster",
+        "crop": [
+          20,
+          555,
+          1400,
+          565
+        ],
+        "box": [
+          35,
+          680,
+          1367,
+          66
+        ]
+      },
+      {
+        "file": "patient-roster",
+        "crop": [
+          20,
+          675,
+          1400,
+          450
+        ],
+        "box": [
+          43,
+          858,
+          154,
+          53
+        ],
+        "cue": "Search, then click"
+      },
+      {
+        "file": "patient-record",
+        "crop": [
+          20,
+          155,
+          1400,
+          490
+        ],
+        "box": [
+          35,
+          548,
+          613,
+          85
+        ],
+        "cue": "Patient Record Detail"
+      }
+    ],
+    "speech": "Patient Roster is your patient list. Use it when you're starting with a person's name or medical record number. That's what M R N means. Search, then click the matching record number. Patient Record Detail shows that person's information and linked plans. Check the person, source, and location before choosing a saved plan. Some patients won't have a plan yet. The patient list and the plan list aren't the same thing."
+  },
+  {
+    "title": "Start with the plan when that's what you need.",
+    "label": "TREATMENT PLANS ROSTER & TREATMENT PLAN DETAIL",
+    "tabs": [
+      "Treatment Plans Roster",
+      "Treatment Plan Detail"
+    ],
+    "lines": [
+      "Treatment Plans Roster: find saved plans, refresh the list, or export selected results.",
+      "Treatment Plan Detail: check the exact saved version and its evidence.",
+      "A status tells you where to look. Compare it with the original document."
+    ],
+    "shots": [
+      {
+        "file": "plans-roster",
+        "crop": [
+          20,
+          475,
+          1400,
+          580
+        ],
+        "box": [
+          990,
+          536,
+          263,
+          47
+        ]
+      },
+      {
+        "file": "plan-detail",
+        "crop": [
+          20,
+          155,
+          1400,
+          635
+        ],
+        "cue": "Click a plan"
+      },
+      {
+        "file": "checklist",
+        "crop": [
+          20,
+          398,
+          1400,
+          490
+        ],
+        "cue": "A status is"
+      }
+    ],
+    "speech": "If you're starting with a plan instead, use Treatment Plans Roster. Search for the plan, choose the source you want, refresh the list, or export the matching results when needed. Click a plan to open Treatment Plan Detail. This is where you inspect the selected saved version, dates, signatures, and checklist evidence. A status is a starting point. Missing Data means something is missing; Overdue means a confirmed deadline has passed. Compare the findings with the original document before deciding."
+  },
+  {
+    "title": "Add documents, then check what happened.",
+    "label": "MANUAL UPLOAD",
+    "tabs": [
+      "Manual Upload"
+    ],
+    "lines": [
+      "Manual Upload: Choose Files under Treatment-plan binder files.",
+      "Upload and securely process binder. Check the message and warnings.",
+      "Review in Patient Roster: find the saved plan and inspect it."
+    ],
+    "shots": [
+      {
+        "file": "manual-upload",
+        "crop": [
+          20,
+          530,
+          750,
+          365
+        ],
+        "box": [
+          35,
+          535,
+          718,
+          77
+        ]
+      },
+      {
+        "file": "file-selected",
+        "crop": [
+          20,
+          745,
+          750,
+          280
+        ],
+        "cue": "Click Upload"
+      },
+      {
+        "file": "upload-result",
+        "crop": [
+          30,
+          803,
+          730,
+          160
+        ],
+        "box": [
+          556,
+          895,
+          198,
+          45
+        ],
+        "cue": "Read the result"
+      }
+    ],
+    "speech": "Have approved documents on your computer? Manual Upload is their doorway. In the lower section, Treatment-plan binder files, click Choose Files and select the documents for one plan. Click Upload and securely process binder, then give it a moment. Read the result and any warnings. Stored without parsing means the app couldn't read that file, even though it saved it. A finished upload isn't an all clear. Click Review in Patient Roster and inspect the saved plan. Only correct a patient number after checking the source."
+  },
+  {
+    "title": "Make your review easy to follow.",
+    "label": "CHECKLIST & ADMINISTRATOR ACTIONS",
+    "tabs": [],
+    "lines": [
+      "Select a checklist item, inspect its evidence, and record your decision.",
+      "Approve criterion, Save comment, Return for correction, or Save override.",
+      "An override needs a reason. It records a decision; it does not rewrite the source."
+    ],
+    "shots": [
+      {
+        "file": "checklist",
+        "crop": [
+          20,
+          398,
+          1400,
+          490
+        ],
+        "box": [
+          35,
+          465,
+          1368,
+          53
+        ]
+      },
+      {
+        "file": "review-action",
+        "crop": [
+          20,
+          375,
+          1400,
+          240
+        ],
+        "cue": "As the administrator"
+      },
+      {
+        "file": "review-action",
+        "crop": [
+          20,
+          375,
+          1400,
+          240
+        ],
+        "box": [
+          450,
+          550,
+          150,
+          49
+        ],
+        "cue": "An override records"
+      }
+    ],
+    "speech": "While you're in Treatment Plan Detail, scroll to Checklist Evidence and select an item. As the administrator, you can approve a criterion you've verified, save a clear comment, return an item for correction, or record an override with a reason. Choose the action that fits the evidence. An override records your decision; it doesn't rewrite the source. Keep care level changes under review until R3 confirms that policy. Now let's look at the tabs that keep the team working."
+  },
+  {
+    "title": "Give staff the access they need.",
+    "label": "USERS",
+    "tabs": [
+      "Users"
+    ],
+    "lines": [
+      "Users: create staff accounts and choose the correct role.",
+      "Assign the facility first, then assign patients to a counselor.",
+      "Use Reset password when a staff member needs account recovery."
+    ],
+    "shots": [
+      {
+        "file": "users",
+        "crop": [
+          20,
+          155,
+          1400,
+          450
+        ]
+      },
+      {
+        "file": "users",
+        "crop": [
+          20,
+          620,
+          1400,
+          605
+        ],
+        "cue": "Assign the facility"
+      },
+      {
+        "file": "users",
+        "crop": [
+          20,
+          1230,
+          1400,
+          310
+        ],
+        "cue": "For a locked out"
+      }
+    ],
+    "speech": "Use Users when someone joins the team, needs access to a facility, or forgets a password. Create their account and choose the appropriate role. Assign the facility before assigning patients to a counselor. For a locked out staff member, use Reset password on their row. Give each person their own account, with the access their work requires. For your own password, we'll use Account in a moment."
+  },
+  {
+    "title": "Keep the setup consistent.",
+    "label": "SETTINGS",
+    "tabs": [
+      "Settings"
+    ],
+    "lines": [
+      "Settings: organization name, facility timezone, and approved Alleva connection.",
+      "Clinical timing values are shown for reference; this screen does not change deadlines."
+    ],
+    "shots": [
+      {
+        "file": "settings",
+        "crop": [
+          20,
+          155,
+          750,
+          690
+        ]
+      },
+      {
+        "file": "settings",
+        "crop": [
+          20,
+          520,
+          750,
+          325
+        ],
+        "cue": "The clinical timing"
+      }
+    ],
+    "speech": "Settings is for setup and approved changes: your organization, facility timezone, and the Alleva connection. Use the connection details provided through R3's approved setup process. Don't guess at those fields. The clinical timing values are shown here for reference; changing organization settings doesn't change treatment plan deadlines. Once setup is ready, there's a separate place to check the connection."
+  },
+  {
+    "title": "Check the connection before relying on a pull.",
+    "label": "API TESTING HARNESS",
+    "tabs": [
+      "API Testing Harness"
+    ],
+    "lines": [
+      "API Testing Harness: check the approved connection during setup or troubleshooting.",
+      "Patient Roster: Pull patient roster. Treatment Plans Roster: Pull full treatment plans.",
+      "Wait for an approved pull to finish. Review warnings and the resulting list."
+    ],
+    "shots": [
+      {
+        "file": "api-testing",
+        "crop": [
+          20,
+          155,
+          1400,
+          680
+        ]
+      },
+      {
+        "file": "patient-roster",
+        "crop": [
+          20,
+          155,
+          1400,
+          395
+        ],
+        "box": [
+          36,
+          490,
+          152,
+          48
+        ],
+        "cue": "After connection setup"
+      },
+      {
+        "file": "plans-roster",
+        "crop": [
+          20,
+          155,
+          1400,
+          315
+        ],
+        "box": [
+          163,
+          408,
+          195,
+          46
+        ],
+        "cue": "If a pull is blocked"
+      }
+    ],
+    "speech": "A P I Testing Harness sounds technical. Think of it as the connection checking page. Use it during approved setup or when a connection isn't working, following R3 support's instructions. A successful test, or a diagnostic preview, doesn't mean records have been added. After connection setup and import approval, use Pull patient roster in Patient Roster, or Pull full treatment plans in Treatment Plans Roster. If a pull is blocked, resolve the message before continuing. Let a running pull finish, review its warnings, and check the resulting list."
+  },
+  {
+    "title": "See the history when you need it.",
+    "label": "FORENSIC LOGS",
+    "tabs": [
+      "Forensic Logs"
+    ],
+    "lines": [
+      "Forensic Logs: review recorded app activity during an audit or troubleshooting.",
+      "Look for who took an action, when it happened, and whether it succeeded."
+    ],
+    "shots": [
+      {
+        "file": "forensic-logs",
+        "crop": [
+          20,
+          155,
+          1400,
+          600
+        ]
+      },
+      {
+        "file": "forensic-logs",
+        "crop": [
+          20,
+          302,
+          1400,
+          455
+        ],
+        "cue": "It's useful"
+      }
+    ],
+    "speech": "Forensic Logs is the app's activity history. Open it when you need to understand who took an action, when it happened, or whether it succeeded. It's useful for an audit or for tracing a problem. It isn't where you review clinical notes. That stays in the patient and plan screens."
+  },
+  {
+    "title": "Your account, and a little help close by.",
+    "label": "ACCOUNT & HELP",
+    "tabs": [
+      "Account",
+      "Help"
+    ],
+    "lines": [
+      "Account: change your own password or replace your private recovery code.",
+      "Help: screen explanations, everyday instructions, and troubleshooting."
+    ],
+    "shots": [
+      {
+        "file": "account",
+        "crop": [
+          20,
+          180,
+          1400,
+          545
+        ]
+      },
+      {
+        "file": "help",
+        "crop": [
+          20,
+          155,
+          750,
+          340
+        ],
+        "box": [
+          76,
+          439,
+          179,
+          23
+        ],
+        "cue": "Help is your reference"
+      }
+    ],
+    "speech": "Account, at the top right, is for your own password and recovery code. Keep that code private; you'll need it if you forget your password. Help is your reference when you want a reminder of a screen, a step, or a troubleshooting tip. You don't need to remember this whole tour. That's why Help is there."
+  },
+  {
+    "title": "When it gets stuck, use the desktop tools.",
+    "label": "STOP, RESTART & GET SUPPORT",
+    "tabs": [],
+    "lines": [
+      "(2) Stop IZ Clinical Notes Analyzer: stop the app before a clean restart.",
+      "(1) Start IZ Clinical Notes Analyzer: start it again and sign back in.",
+      "(3) Collect IZ Diagnostics: create a support report when R3 requests one.",
+      "(4) Quick Assist - R3 Support: open assisted support with someone you trust."
+    ],
+    "shots": [
+      {
+        "file": "sign-in",
+        "crop": [
+          485,
+          170,
+          470,
+          560
+        ]
+      },
+      {
+        "file": "sign-in",
+        "crop": [
+          485,
+          170,
+          470,
+          560
+        ],
+        "cue": "Follow its restart"
+      },
+      {
+        "file": "help",
+        "crop": [
+          20,
+          155,
+          750,
+          340
+        ],
+        "cue": "Still having trouble"
+      },
+      {
+        "file": "help",
+        "crop": [
+          20,
+          155,
+          750,
+          340
+        ],
+        "cue": "Number four"
+      }
+    ],
+    "speech": "If a list looks empty, clear the search, choose All sources, and refresh it first. If the app won't open or seems stuck, finish any active work, then use desktop shortcut number two, Stop I Z Clinical Notes Analyzer. Follow its restart prompt, or use number one, Start I Z Clinical Notes Analyzer, to open it again. Still having trouble? Number three, Collect I Z Diagnostics, creates a support report. Send it only through R3's approved support channel. Number four, Quick Assist, R3 Support, opens assisted support. Use it when you're working with a trusted R3 support person, and review the permission request before allowing access."
+  },
+  {
+    "title": "One plan at a time.",
+    "label": "FINISH SAFELY",
+    "tabs": [],
+    "lines": [
+      "Click Sign out when you're finished, then lock your computer.",
+      "To shut down the app itself, use (2) Stop IZ Clinical Notes Analyzer."
+    ],
+    "shots": [
+      {
+        "file": "dashboard",
+        "crop": [
+          1080,
+          0,
+          360,
+          145
+        ],
+        "box": [
+          1330,
+          19,
+          90,
+          47
+        ]
+      },
+      {
+        "file": "sign-in",
+        "crop": [
+          485,
+          170,
+          470,
+          560
+        ],
+        "cue": "If you also want"
+      }
+    ],
+    "speech": "That's the administrator's route: check the dashboard, find the record, review the plan, and use the setup and support tools when needed. When you're finished, click Sign out and lock your computer. If you also want to shut down the app itself, use desktop shortcut number two, Stop I Z Clinical Notes Analyzer. Signing out and stopping the app do different jobs. One plan at a time. You've got a place to start."
+  }
+]

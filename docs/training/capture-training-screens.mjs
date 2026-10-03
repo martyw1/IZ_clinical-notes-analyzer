@@ -1,0 +1,87 @@
+import { createRequire } from 'node:module'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+
+const directory = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(path.join(directory, '../../frontend/package.json'))
+const { chromium } = require('playwright')
+const { expect } = require('@playwright/test')
+const screenshots = path.join(directory, 'screenshots')
+await mkdir(screenshots, { recursive: true })
+const browser = await chromium.launch({ channel: 'msedge', headless: true })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
+const manifest = []
+async function capture(name) {
+  await page.evaluate(() => document.fonts.ready)
+  await expect(page.locator('body')).not.toContainText(/Loading patient roster|Loading treatment plans roster|Loading selected treatment-plan detail|Loading saved API configuration|Loading settings|Loading logs/)
+  await page.screenshot({ path: path.join(screenshots, `${name}.png`), fullPage: ['patient-roster', 'plans-roster', 'file-selected', 'upload-result', 'settings', 'users', 'account'].includes(name) })
+  manifest.push({ name, title: await page.title(), syntheticDataOnly: true })
+}
+async function navigate(name) {
+  await page.getByRole('button', { name, exact: true }).click()
+  await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true')
+}
+try {
+  const username = process.env.IZ_CNA_BOOTSTRAP_ADMIN_USERNAME
+  const auth = await page.request.post('http://127.0.0.1:8767/api/auth/login', { data: { username, password: process.env.IZ_OM_PASSWORD } })
+  if (!auth.ok()) throw new Error('Synthetic capture account could not sign in')
+  const { access_token: token } = await auth.json()
+  const recovery = await page.request.post('http://127.0.0.1:8767/api/users/me/recovery-code', { headers: { Authorization: `Bearer ${token}` }, data: { current_password: process.env.IZ_OM_PASSWORD } })
+  if (!recovery.ok()) throw new Error('Synthetic capture account setup failed')
+  await page.goto('http://127.0.0.1:8767', { waitUntil: 'networkidle' })
+  await capture('sign-in')
+  await page.getByLabel('Username', { exact: true }).fill(username)
+  await page.getByLabel('Password', { exact: true }).fill(process.env.IZ_OM_PASSWORD)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.getByRole('button', { name: 'Status Dashboard', exact: true }).waitFor()
+  await page.waitForLoadState('networkidle')
+  await capture('dashboard')
+  await navigate('Patient Roster')
+  await page.getByRole('heading', { name: 'Patient roster', exact: true }).waitFor()
+  await page.getByRole('combobox', { name: 'Source filter', exact: true }).selectOption('manual_upload')
+  await capture('patient-roster')
+  await page.getByRole('button', { name: /Open patient record/ }).first().click()
+  await page.getByRole('heading', { name: 'Treatment plans', exact: true }).waitFor()
+  await capture('patient-record')
+  await navigate('Treatment Plans Roster')
+  await page.locator('tr[data-plan-version-id]').first().waitFor()
+  await page.getByRole('combobox', { name: 'Source filter', exact: true }).selectOption('manual_upload')
+  await capture('plans-roster')
+  await navigate('Manual Upload')
+  await capture('manual-upload')
+  await page.getByLabel('Treatment-plan binder files', { exact: true }).setInputFiles(path.join(process.env.IZ_CNA_LOCAL_APP_DATA_DIR, 'synthetic-binder.txt'))
+  await capture('file-selected')
+  await page.getByRole('button', { name: 'Upload and securely process binder', exact: true }).click()
+  await page.getByRole('button', { name: 'Review in Patient Roster', exact: true }).waitFor()
+  await capture('upload-result')
+  await navigate('Treatment Plans Roster')
+  await page.getByRole('combobox', { name: 'Source filter', exact: true }).selectOption('manual_upload')
+  const planRow = page.locator('tr[data-plan-version-id][data-patient-record-id="1"]').first()
+  await planRow.waitFor()
+  await planRow.getByRole('button').first().click()
+  await page.getByRole('heading', { name: 'Plan timeline', exact: true }).waitFor()
+  await capture('plan-detail')
+  await page.getByRole('heading', { name: 'Checklist Evidence', exact: true }).scrollIntoViewIfNeeded()
+  await capture('checklist')
+  await page.getByLabel('Manager comment', { exact: true }).scrollIntoViewIfNeeded()
+  await capture('review-action')
+  for (const [tab, screenshot] of [['Settings','settings'],['API Testing Harness','api-testing'],['Users','users'],['Forensic Logs','forensic-logs'],['Account','account']]) {
+    await navigate(tab)
+    if (tab === 'Settings') await page.getByRole('heading', { name: 'Local settings', exact: true }).waitFor()
+    if (tab === 'Users') await page.getByRole('heading', { name: 'Role-based access', exact: true }).waitFor()
+    if (tab === 'Account') await page.getByRole('heading', { name: 'Account and password', exact: true }).waitFor()
+    await capture(screenshot)
+  }
+  await navigate('Help')
+  await capture('help')
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor()
+  await capture('finished')
+  await page.getByRole('button', { name: 'Forgot password?', exact: true }).click()
+  await capture('forgot-password')
+  await writeFile(path.join(screenshots, 'capture-manifest.json'), JSON.stringify(manifest, null, 2))
+  console.log(`Captured ${manifest.length} actual app screens using synthetic records.`)
+} finally {
+  await browser.close()
+}

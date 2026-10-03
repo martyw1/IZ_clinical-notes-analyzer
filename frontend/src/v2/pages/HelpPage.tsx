@@ -3,7 +3,7 @@ export function HelpPage() {
     <div className='page-grid'>
       <section className='panel'>
         <p className='eyebrow'>Help</p>
-        <h2>Using IZ Clinical Notes Analyzer</h2>
+        <h2>Using R3 Treatment Plan Audit Application</h2>
         <p>Use this local app to find an exact patient record and saved plan version, compare source evidence with calculated dates, and record an authorized review. Check the evidence behind a status before acting.</p>
         <nav aria-label='Help topics'>
           <ul>

@@ -1,0 +1,335 @@
+1
+00:00:00,050 --> 00:00:00,782
+Hi.
+
+2
+00:00:00,782 --> 00:00:07,247
+Let's take a practical tour of the R3 Treatment Plan Audit Application, with you in the administrator seat.
+
+3
+00:00:07,247 --> 00:00:12,992
+We'll start on the desktop, work through the tabs, and finish with the tools to use if something gets stuck.
+
+4
+00:00:12,992 --> 00:00:15,000
+No need to memorize the menu.
+
+5
+00:00:15,000 --> 00:00:16,931
+We'll give each screen a job.
+
+6
+00:00:18,050 --> 00:00:23,530
+On your desktop, double click number one, Start I Z Clinical Notes Analyzer.
+
+7
+00:00:23,530 --> 00:00:28,353
+The shortcut still has the older I Z name, but it opens this application.
+
+8
+00:00:28,353 --> 00:00:32,128
+Give it a moment, then sign in with your administrator account.
+
+9
+00:00:32,128 --> 00:00:35,727
+Follow any first time password or recovery prompts.
+
+10
+00:00:35,727 --> 00:00:38,757
+Start each visit on Status Dashboard.
+
+11
+00:00:38,757 --> 00:00:44,766
+That's your quick look at the workload: saved records, missing information, and items needing attention.
+
+12
+00:00:44,766 --> 00:00:47,608
+From here, let's find one patient.
+
+13
+00:00:48,750 --> 00:00:51,187
+Patient Roster is your patient list.
+
+14
+00:00:51,187 --> 00:00:55,253
+Use it when you're starting with a person's name or medical record number.
+
+15
+00:00:55,253 --> 00:00:58,384
+That's what M R N means.
+
+16
+00:00:58,384 --> 00:01:01,528
+Search, then click the matching record number.
+
+17
+00:01:01,528 --> 00:01:06,010
+Patient Record Detail shows that person's information and linked plans.
+
+18
+00:01:06,010 --> 00:01:10,417
+Check the person, source, and location before choosing a saved plan.
+
+19
+00:01:10,417 --> 00:01:12,677
+Some patients won't have a plan yet.
+
+20
+00:01:12,677 --> 00:01:15,922
+The patient list and the plan list aren't the same thing.
+
+21
+00:01:17,050 --> 00:01:20,989
+If you're starting with a plan instead, use Treatment Plans Roster.
+
+22
+00:01:20,989 --> 00:01:28,287
+Search for the plan, choose the source you want, refresh the list, or export the matching results when needed.
+
+23
+00:01:28,287 --> 00:01:31,154
+Click a plan to open Treatment Plan Detail.
+
+24
+00:01:31,154 --> 00:01:37,732
+This is where you inspect the selected saved version, dates, signatures, and checklist evidence.
+
+25
+00:01:37,732 --> 00:01:40,080
+A status is a starting point.
+
+26
+00:01:40,080 --> 00:01:45,901
+Missing Data means something is missing; Overdue means a confirmed deadline has passed.
+
+27
+00:01:45,901 --> 00:01:49,739
+Compare the findings with the original document before deciding.
+
+28
+00:01:50,916 --> 00:01:53,151
+Have approved documents on your computer?
+
+29
+00:01:53,151 --> 00:01:55,348
+Manual Upload is their doorway.
+
+30
+00:01:55,348 --> 00:02:02,002
+In the lower section, Treatment-plan binder files, click Choose Files and select the documents for one plan.
+
+31
+00:02:02,002 --> 00:02:06,055
+Click Upload and securely process binder, then give it a moment.
+
+32
+00:02:06,055 --> 00:02:08,542
+Read the result and any warnings.
+
+33
+00:02:08,542 --> 00:02:13,542
+Stored without parsing means the app couldn't read that file, even though it saved it.
+
+34
+00:02:13,542 --> 00:02:16,459
+A finished upload isn't an all clear.
+
+35
+00:02:16,459 --> 00:02:20,575
+Click Review in Patient Roster and inspect the saved plan.
+
+36
+00:02:20,575 --> 00:02:23,744
+Only correct a patient number after checking the source.
+
+37
+00:02:24,883 --> 00:02:30,363
+While you're in Treatment Plan Detail, scroll to Checklist Evidence and select an item.
+
+38
+00:02:30,363 --> 00:02:40,729
+As the administrator, you can approve a criterion you've verified, save a clear comment, return an item for correction, or record an override with a reason.
+
+39
+00:02:40,729 --> 00:02:43,279
+Choose the action that fits the evidence.
+
+40
+00:02:43,279 --> 00:02:47,396
+An override records your decision; it doesn't rewrite the source.
+
+41
+00:02:47,396 --> 00:02:52,130
+Keep care level changes under review until R3 confirms that policy.
+
+42
+00:02:52,130 --> 00:02:55,363
+Now let's look at the tabs that keep the team working.
+
+43
+00:02:56,483 --> 00:03:02,632
+Use Users when someone joins the team, needs access to a facility, or forgets a password.
+
+44
+00:03:02,632 --> 00:03:06,016
+Create their account and choose the appropriate role.
+
+45
+00:03:06,016 --> 00:03:09,766
+Assign the facility before assigning patients to a counselor.
+
+46
+00:03:09,766 --> 00:03:13,920
+For a locked out staff member, use Reset password on their row.
+
+47
+00:03:13,920 --> 00:03:18,352
+Give each person their own account, with the access their work requires.
+
+48
+00:03:18,352 --> 00:03:21,811
+For your own password, we'll use Account in a moment.
+
+49
+00:03:22,950 --> 00:03:29,857
+Settings is for setup and approved changes: your organization, facility timezone, and the Alleva connection.
+
+50
+00:03:29,857 --> 00:03:34,566
+Use the connection details provided through R3's approved setup process.
+
+51
+00:03:34,566 --> 00:03:36,220
+Don't guess at those fields.
+
+52
+00:03:36,220 --> 00:03:43,417
+The clinical timing values are shown here for reference; changing organization settings doesn't change treatment plan deadlines.
+
+53
+00:03:43,417 --> 00:03:47,344
+Once setup is ready, there's a separate place to check the connection.
+
+54
+00:03:48,483 --> 00:03:51,665
+A P I Testing Harness sounds technical.
+
+55
+00:03:51,665 --> 00:03:54,493
+Think of it as the connection checking page.
+
+56
+00:03:54,493 --> 00:04:00,579
+Use it during approved setup or when a connection isn't working, following R3 support's instructions.
+
+57
+00:04:00,579 --> 00:04:06,147
+A successful test, or a diagnostic preview, doesn't mean records have been added.
+
+58
+00:04:06,147 --> 00:04:15,188
+After connection setup and import approval, use Pull patient roster in Patient Roster, or Pull full treatment plans in Treatment Plans Roster.
+
+59
+00:04:15,188 --> 00:04:18,938
+If a pull is blocked, resolve the message before continuing.
+
+60
+00:04:18,938 --> 00:04:23,862
+Let a running pull finish, review its warnings, and check the resulting list.
+
+61
+00:04:25,016 --> 00:04:28,034
+Forensic Logs is the app's activity history.
+
+62
+00:04:28,034 --> 00:04:33,817
+Open it when you need to understand who took an action, when it happened, or whether it succeeded.
+
+63
+00:04:33,817 --> 00:04:36,998
+It's useful for an audit or for tracing a problem.
+
+64
+00:04:36,998 --> 00:04:39,322
+It isn't where you review clinical notes.
+
+65
+00:04:39,322 --> 00:04:42,137
+That stays in the patient and plan screens.
+
+66
+00:04:43,283 --> 00:04:47,740
+Account, at the top right, is for your own password and recovery code.
+
+67
+00:04:47,740 --> 00:04:51,705
+Keep that code private; you'll need it if you forget your password.
+
+68
+00:04:51,705 --> 00:04:57,551
+Help is your reference when you want a reminder of a screen, a step, or a troubleshooting tip.
+
+69
+00:04:57,551 --> 00:04:59,546
+You don't need to remember this whole tour.
+
+70
+00:04:59,546 --> 00:05:01,200
+That's why Help is there.
+
+71
+00:05:02,350 --> 00:05:07,767
+If a list looks empty, clear the search, choose All sources, and refresh it first.
+
+72
+00:05:07,767 --> 00:05:16,845
+If the app won't open or seems stuck, finish any active work, then use desktop shortcut number two, Stop I Z Clinical Notes Analyzer.
+
+73
+00:05:16,845 --> 00:05:23,726
+Follow its restart prompt, or use number one, Start I Z Clinical Notes Analyzer, to open it again.
+
+74
+00:05:23,726 --> 00:05:25,115
+Still having trouble?
+
+75
+00:05:25,115 --> 00:05:29,888
+Number three, Collect I Z Diagnostics, creates a support report.
+
+76
+00:05:29,888 --> 00:05:33,297
+Send it only through R3's approved support channel.
+
+77
+00:05:33,297 --> 00:05:38,322
+Number four, Quick Assist, R3 Support, opens assisted support.
+
+78
+00:05:38,322 --> 00:05:44,787
+Use it when you're working with a trusted R3 support person, and review the permission request before allowing access.
+
+79
+00:05:45,950 --> 00:05:53,955
+That's the administrator's route: check the dashboard, find the record, review the plan, and use the setup and support tools when needed.
+
+80
+00:05:53,955 --> 00:05:57,604
+When you're finished, click Sign out and lock your computer.
+
+81
+00:05:57,604 --> 00:06:04,788
+If you also want to shut down the app itself, use desktop shortcut number two, Stop I Z Clinical Notes Analyzer.
+
+82
+00:06:04,788 --> 00:06:08,248
+Signing out and stopping the app do different jobs.
+
+83
+00:06:08,248 --> 00:06:10,104
+One plan at a time.
+
+84
+00:06:10,104 --> 00:06:11,733
+You've got a place to start.
