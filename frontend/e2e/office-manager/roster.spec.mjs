@@ -143,13 +143,13 @@ test('same MRN source and facility rows stay distinct and assignment never grant
     await capture(page, 'task-7-assignment-exact.png')
     phase = 'help'
     await page.getByRole('button', { name: 'Help', exact: true }).click()
-    await expect(page.getByText(/a new import never silently replaces your selection/)).toBeVisible()
+    await expect(page.getByText('A new import does not silently replace your selection.', { exact: false })).toBeVisible()
     const helpViewport = page.viewportSize()
     const helpLayouts = []
     try {
       for (const width of [375, 768]) {
         await page.setViewportSize({ width, height: 900 })
-        await expect(page.getByText(/a new import never silently replaces your selection/)).toBeVisible()
+        await expect(page.getByText('A new import does not silently replace your selection.', { exact: false })).toBeVisible()
         const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
         await capture(page, `task-10-help-${width}.png`)
         helpLayouts.push({ width, fits })

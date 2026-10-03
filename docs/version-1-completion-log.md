@@ -333,3 +333,11 @@ Pass/fail status:
 - PASS: Local stack smoke passed.
 - PASS: Visible browser smoke confirmed `Updated evidence queue v1.0.3`, footer `v1.0.3`, synthetic timeliness client, `Needs Review`, evidence completeness, and source/staff/LOC due-date comparison.
 - BLOCKED: Computer Use native pipe was unavailable on this laptop during the validation attempt.
+
+## 2026-10-03 Final v1 source smoke and main sync
+
+- Verified local main, origin/main, and live GitHub main matched 21636e7 before testing.
+- Repaired two stale Help-copy assertions without changing application behavior.
+- Passed 33/33 isolated Edge scenarios, 184 frontend tests, build/TypeScript, and 21 focused backend tests.
+- Confirmed isolated runtime teardown and synthetic data removal; preserved existing untracked tmp/ files.
+- Full scope, evidence, and qualification boundaries: [final smoke report](validation/v1-final-smoke-2026-10-03.md).
