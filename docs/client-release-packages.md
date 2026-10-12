@@ -1,10 +1,12 @@
 # Client release packages
 
-Current production package: **1.0.0**, build **2026.09.21.2**, installer revision **1**.
+Current source candidate: **1.0.1**, build **2026.10.12.1**, installer revision **1**. New source validation/package status is recorded in [October 12 validation](validation/current-work-2026-10-12.md). Do not rename the older ZIP or transfer its acceptance results to a new package.
 
-## Verified core handoff package
+Most recent historical verified package listed below: **1.0.0**, build **2026.09.21.2**, revision **1**.
 
-Provide `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip` from `dist/windows-release` in the original project workspace. The final copy is 39,220,133 bytes and was verified against the tested archive.
+## Historical verified core handoff package: September 21
+
+Historical archive: `IZ-Clinical-Notes-Analyzer-v1.0.0-build-2026.09.21.2-installer-r1.zip` from `dist/windows-release` in the original project workspace. The final copy is 39,220,133 bytes and was verified against the tested archive.
 
 SHA-256: `91d08cd08d01dfff121a3823fd6a62cb93b91ef33e7d1ab7f3adc8cf78be17ec`.
 

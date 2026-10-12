@@ -104,6 +104,7 @@ function Copy-RepoContent {
         (Join-Path $RootDir 'frontend\node_modules'), (Join-Path $RootDir 'frontend\src'),
         (Join-Path $RootDir 'frontend\e2e'), (Join-Path $RootDir 'node_modules'),
         (Join-Path $RootDir 'pip'), (Join-Path $RootDir 'dist'), (Join-Path $RootDir 'output'),
+        (Join-Path $RootDir 'tmp'),
         (Join-Path $RootDir 'black-hole-lab'), (Join-Path $RootDir 'scripts\deprecated'),
         (Join-Path $RootDir 'scripts\diag-build-tools'), (Join-Path $RootDir 'scripts\security'),
         (Join-Path $RootDir 'scripts\installer'), (Join-Path $RootDir 'scripts\tests'),
@@ -430,7 +431,8 @@ function Assert-ReleaseRequiredItems {
         'app\backend', 'app\frontend', 'app\frontend\dist', 'app\frontend\dist\index.html',
         'app\VERSION', 'app\VERSION.json', 'app\runtime\IZClinicalNotesAnalyzer.exe',
         'app\config\rules', 'app\config\checklists\treatment-plan-v1.json',
-        'app\docs\patient-treatment-plan-handling.md', 'app\docs\beta-client-test-run-guide.md', 'app\scripts',
+        'app\docs\patient-treatment-plan-handling.md', 'app\docs\beta-client-test-run-guide.md',
+        'app\docs\guides\current\Marleigh-Setup-Install-and-User-Guide.html', 'app\scripts',
         'Install-IZ-Clinical-Notes-Analyzer.cmd', 'Launch-IZ-Clinical-Notes-Analyzer.cmd',
         'Stop-IZ-Clinical-Notes-Analyzer.cmd', 'Collect-IZ-Clinical-Notes-Analyzer-Diagnostics.cmd',
         'Backup-IZ-Clinical-Notes-Analyzer.cmd', 'Restore-IZ-Clinical-Notes-Analyzer.cmd',
@@ -642,8 +644,8 @@ function New-LegacyProgramInventory {
 }
 
 function Assert-ReleaseMetadata {
-    if ($VersionMetadata.version -cne $Version -or $Version -cne '1.0.0' -or
-        $Build -cne '2026.09.21.2' -or $ReleaseChannel -cne 'stable-local-desktop') {
+    if ($VersionMetadata.version -cne $Version -or $Version -cne '1.0.1' -or
+        $Build -cne '2026.10.12.1' -or $ReleaseChannel -cne 'stable-local-desktop') {
         throw 'Release version metadata is inconsistent.'
     }
 }

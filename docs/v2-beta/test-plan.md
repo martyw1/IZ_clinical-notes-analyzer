@@ -1,28 +1,22 @@
-# V2 Test Plan
+# Current V2 test and acceptance plan
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Use isolated synthetic profiles/users/records only. Never reuse a client's AppData, `.env`, database, upload, saved credential or vendor payload. [Current validation](../validation/current-work-2026-10-12.md) records actual results; beta `validation-report.md` and task coverage are historical evidence.
 
-Automated checks:
+## Automated boundaries
 
-- Backend V2 runtime tests verify version metadata, readiness, navigation, 42 criterion aggregate, manager override reason enforcement, redacted API configuration/sample OpenAPI contract, `ClientId` pull-definition flow, large job lifecycle artifacts, immutable same-ID treatment-plan updates, unchanged replay deduplication, exact updated-ID audit details, patient-roster scoping/name exclusion, and manager-only formula-safe status export.
-- Frontend tests verify login, V2 navigation, the Treatment Plans operational pull and automatic queue refresh, backend status-vocabulary preservation, treatment-plan IDs, patient-ID-only roster rendering, status export download, updated-ID forensic rendering, nested detail sections, override reason enforcement, and large job bounded artifacts.
-- Import scans verify active code does not import from `deprecated/v1/`.
-- Windows scripts verify preflight, local app stack, API configuration harness, bounded Pull ALL job preview/artifacts, and release package forbidden-file scans.
+- Backend: version/readiness/navigation, authentication/recovery and password epoch, role/facility authorization, source-scoped patient IDs and immutable plan versions, 42 criterion evidence, clinical missing/conflicting/LOC policy behavior, persisted evaluation provenance, manager reasons/corrections, encrypted manual storage and upload/extraction bounds, replay deduplication, job lifecycle, formula-safe exports and redacted audit verification.
+- Frontend: first-use password/recovery, login/session cleanup, authorized name display and missing-name fallback, exact `patientRecordId`/`planVersionId` selection across sources, saved-version history, Manual and Alleva roster filtering, nested evidence/checklist, manager actions, safe exports, bounded progress and Help responsiveness.
+- Windows/package: launcher/preflight, source and prepared-runtime version identity, maintenance/backup contracts, required guide/assets, package forbidden-file checks and exact ZIP receipt/hash. Historical package results cannot qualify a new build.
+- Run complete backend suite, frontend tests, TypeScript and frontend production build. Use the release builder's required gates; record exact blockers rather than disabling failing checks.
 
-Manual QA:
+## Manual synthetic workflow
 
-- Run the local app at `http://localhost:8000`.
-- Sign in as admin.
-- Open Treatment Plans and run the approved synthetic operational pull. Verify the queue populates without a manual refresh, shows treatment-plan IDs, and retains the current plan after an unchanged replay.
-- Change a synthetic source record without changing its treatment-plan ID, pull again, and verify the current detail changes while Forensic Logs list the exact updated ID.
-- Open Patient Roster and verify authorized patient/plan IDs and statuses appear without patient names.
-- Export treatment plans and verify the CSV includes treatment-plan ID and status.
-- Open API Testing Harness, run its approved operational pull, open the Treatment Plans queue, and verify the same populated list. Then start a synthetic large diagnostic job.
-- Verify the browser remains responsive and no full payload is rendered.
-- Use Computer Use or equivalent desktop capture for a real Windows screenshot pass on Dashboard, Treatment Plans, and API Testing Harness before release sign-off.
+1. Launch an isolated local service and use the real browser/API. Exercise temporary-password change when needed and recovery-code save acknowledgment before workspace access. Never capture credentials/codes.
+2. As office manager, open Dashboard, Patient Roster, Patient Record Detail and exact saved plan/version/checklist. Confirm authorized synthetic name appears when supplied, missing values remain unavailable and same MRN/plan IDs across sources cannot cross-select.
+3. Check Manual and Alleva saved plans in plan roster and source/status filters. Import changed/unchanged synthetic records, verify immutable history/replay behavior and that an open selection stays fixed.
+4. Upload approved synthetic formats; inspect warning/opaque outcomes and encrypted archive. Check permitted manager actions/corrections and filtered CSV identity/status; names/narrative must not leak into exports/audit.
+5. As administrator, inspect audit chain and safe job details. Verify unauthorized roles receive denied access to administrative functions. Exercise only synthetic/mock vendor contracts; no live production pull for release testing.
+6. Inspect current Help/login and key pages on desktop/narrow widths, sign out, stop/restart and verify identity. Check the offline guide and local assets separately; record file-policy/visual limitations honestly.
+7. Test backup/restore and install/upgrade/reinstall only in isolated disposable synthetic profiles; preserve real client data. Device-loss and power-loss qualification require separate appropriate environments.
 
-Current validation evidence is recorded in `validation-report.md`; task-list coverage is recorded in `task-coverage-audit.md`.
-
-## Beta.2 final validation environment
-
-Run release validation only against a freshly created, isolated `%TEMP%` local-app-data directory with synthetic users, Patient IDs, and fixtures. Do not point `IZ_CNA_LOCAL_APP_DATA_DIR` at an operator profile; do not load `.env`, credential profiles, production databases, clinical exports, saved harness reports, or uploads. Record only redacted command results and screenshots. See `release-readiness-2026-07-11.md` for the exact procedure and unresolved external gates.
+Expected appliance workload is app/browser plus OneDrive and normal Windows services; ChatGPT is excluded. Small-fixture latency is not capacity acceptance. Test realistic synthetic volumes/largest accepted documents before promising throughput. Preserve Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate outcomes and unresolved external gates.

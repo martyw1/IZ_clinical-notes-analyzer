@@ -2,7 +2,7 @@
 
 The current browser-facing product name is R3 Treatment Plan Audit Application. Existing storage paths and installed shortcut names retain their legacy identifiers for compatibility.
 
-Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1` / channel `stable-local-desktop`. Package qualification is pending; the existing V2 design system remains in use.
+Current source candidate: `1.0.1` / build `2026.10.12.1` / installer revision `1` / channel `stable-local-desktop`. Package qualification is pending; the existing V2 design system remains in use.
 
 ## 1. Atmosphere & Identity
 

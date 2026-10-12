@@ -1,132 +1,35 @@
-> Historical beta.3 alignment tracker. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md), [README](../README.md), and [open blockers](open-blockers.md). Beta.4 password changes are documented in [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
+# Current documentation state
 
-# Current Documentation State
+Updated October 12, 2026 for source **1.0.1**, build **2026.10.12.1**, installer revision **1**, channel **stable-local-desktop**. This identifies current source; it does not relabel an older installer or certify a new package. The footer and `/api/version` identify the app actually running.
 
-Date: 2026-09-08
+The browser product name is **R3 Treatment Plan Audit Application**. Existing shortcuts, packages and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` retain the established IZ name for compatibility.
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
+## Authoritative current instructions
 
-## Purpose
+| Need | Current document |
+| --- | --- |
+| Nontechnical offline guide | [Marleigh's HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) |
+| Daily work, clinical statuses, exact saved version | [Operator help](operator-help-current.md) |
+| Troubleshooting, logging, recovery and performance | [Operations runbook](runbook.md) |
+| Copy/install and first-use acceptance | [Client handoff](client-handoff-checklist.md) |
+| Builder and installer contract | [Windows build/install](windows-installer-build-and-install.md), [CMD maintenance](windows-cmd-maintenance.md) |
+| Password setup and recovery | [Password management](password-management-beta4.md), [administrator recovery](admin-access-reset.md) |
+| Data flow and source code map | [Patient treatment-plan handling](patient-treatment-plan-handling.md) |
+| Exact packages and historical hashes | [Package index](client-release-packages.md) |
+| Changes and unresolved owner decisions | [Release notes](release-notes.md), [open blockers](open-blockers.md) |
+| Laptop, HIPAA, security and performance assessment | [Assessment](security/appliance-assessment-2026-10-12.md) |
+| Complete inventory | [Documentation inventory](documentation-inventory.md) |
 
-This file is the current documentation alignment tracker. It summarizes what the active docs should say after the July 2026 patient-centered Alleva treatment-plan clarification and the current Swagger/OpenAPI mapping export review.
+## Current feature boundary
 
-Historical validation reports, PRD notes, and earlier implementation analyses may keep the version/date they originally validated. Do not reinterpret historical reports as current beta state unless they explicitly say they apply to `2.0.0-beta.3`.
+One localhost service serves the built browser UI and uses local SQLite, encrypted uploads, encrypted saved API settings, role-scoped access, password/recovery workflows, immutable saved plan versions, deterministic timing and a 42-step checklist. Administrators also have connection settings, API harness, users and forensic audit views. Office-manager permissions do not include administrator-only connection or log controls. Optional LLM configuration stays disabled by default and is unnecessary for clinical timing decisions.
 
-## Current Product State
+Initial signatures are checked on admission Day 1, the master signature within 30 calendar days, recurring PHP reviews at 30 calendar days and IOP/OP at 60 calendar days. Settings displays clinical intervals read-only. The LOC-change seven-day value is an unvalidated review candidate; cases remain Needs Review pending R3 policy. Source ambiguity or unavailable evidence must remain unresolved rather than guessed.
 
-- The app is a local-first Windows 10/11 desktop-style FastAPI + React/Vite app served from `http://localhost:8000`.
-- The normal non-technical R3 path is a prepared release folder with built frontend assets, no Windows administrator requirement, and no Docker, PostgreSQL, Git, Node.js, command-line work, cloud hosting, or database administrator requirement for ordinary use.
-- Local runtime data lives under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, not in the repo or installed app folder.
-- The prepared Windows release folder installs per user under `%LOCALAPPDATA%\Programs\IZ Clinical Notes Analyzer` and includes double-click install, launch, stop, diagnostics, backup, data-preserving uninstall, and complete-uninstall commands.
-- The current package is still a release-folder/zip package, not a signed MSI/MSIX with repair/modify support.
+Live Alleva use remains conditional on official tenant credentials, approved mapping/read-only authorization, pagination/rate-limit validation and compliance approval. A connectivity test is not import acceptance. No startup import is authorized by this documentation.
 
-## Current Treatment-Plan State
+## Evidence and archives
 
-- `config\checklists\treatment-plan-v1.json` remains the canonical 42-step checklist source.
-- Checklist content version remains `1.2.0`; app version remains separate at `2.0.0-beta.3`.
-- `Treatment Plans Roster` is the admin/office-manager operational pull and exact-plan work queue. `Patient Roster`, `Patient Record Detail`, and `Treatment Plan Detail` provide the MRN-centered review path.
-- The V2 administrator navigation exposes `Status Dashboard`, patient and treatment-plan work areas, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`; role restrictions still control which pages and actions each account can use.
-- The selected-plan detail includes deterministic timeliness status, source evidence, date-clock results, current-plan content facts, the 42-step checklist, manager actions, immutable plan lineage, audit context, and authorized export paths.
-- Office-manager roster/export preserves exact patient, source, plan and immutable plan-version identity. Source memberships, encrypted manual names and filtered exports are implemented with backend/frontend coverage. The metrics subgate includes 28/28 focused backend tests, five raw-source probes and a byte-identical 63-by-42 clinical replay; packaged-browser results are recorded in the final smoke report.
-- Exact raw-plan reads exclude standalone historical patient-wide treatment reviews when no reliable plan/version link exists. Embedded reviews that are bound to the selected plan remain preserved; deterministic rules are unchanged, and older projected recurrence dates may differ for excluded legacy reviews.
-- Structural v12 source-document associations use exact saved memberships; approved migration backfills only valid original `(source_document_id, plan_version_id)` pairs, and new or repeated imports attach the exact saved plan version. Existing ambiguous legacy rows remain missing/unlinked evidence rather than guessed associations. Detach/erase/removal behavior remains subject to the unanswered retention choice; no such behavior is claimed in this beta3 documentation state.
-- Alleva/API treatment-plan lookup status and lookup results should stay inside bounded scroll areas so long progress/diagnostic text does not push lower content below the viewport.
-- Source-document due-date disagreement without a validated LOC-change explanation remains a review/error outcome such as `Needs Review`, not silent compliance.
-- MRN/patient ID remains the identity key; exact UI selection uses the authorized `patient_record_id` together with source system, source record ID, plan ID, and immutable plan-version identity. Names are never identity or matching keys and are not emitted in CSV, query parameters, audit details, or logs. Authorized encrypted patient-name display is limited to permitted UI rows; original filenames, addresses, contact details, attachment URLs, and author/custodian labels remain excluded from CSV/audit/log/query surfaces.
-- Alleva patient-name import/display remains opt-in and off by default. Name-only matching remains disabled by default and validation-only.
-- The LOC-change treatment-plan update window remains unresolved. The app keeps the manager-editable 7-calendar-day preset, but docs and UI must continue marking the rule as unvalidated until R3/Marleigh confirms the exact rule.
+September 21 build `2026.09.21.2` and its 799-test receipt remain immutable historical package evidence. October 3 video/screenshots demonstrate that source workflow and branding; they do not prove a new installer. [October 12 verification](validation/current-work-2026-10-12.md) records new evidence separately.
 
-## Current beta3 validation boundary
-
-The beta3 metadata is aligned to build `2026.09.03.1`. The executable and embedded assets were rebuilt and verified; installed Edge and Chrome were exercised with synthetic data. See [final smoke results](validation/office-manager-final-smoke-2026-09-04.md) for exact automated/native coverage and runner warnings. Closeout documentation is a companion to application commit `f65b3b7`, not another binary rebuild. Live tenant approval, the LOC-change rule, credential remediation, signing and retention/legal hold remain external gates.
-
-## Current Alleva API State
-
-The current operational treatment-plan contract is:
-
-```text
-GET /clients
-GET /treatment-plans (bounded global pages)
-```
-
-Current contract rules:
-
-- `/clients.mrn` is the canonical local patient identity and the value exposed through the legacy `patient_id` property.
-- `/clients.id` is retained separately as the source patient ID used for treatment-plan relationship validation.
-- Treatment-plan ownership is validated from `client.id`, `client.route`, or a string `/clients/{id}`, then mapped to the matching MRN.
-- The operational pull collects older and newer plans across every lifecycle state; it does not issue one filtered list request per active client.
-- `chartId`, `externalId`, `clientName`, lowercase `clientId`, `uniqueId`, and `source_id` are not substitutes for MRN.
-- Active client status prefers `status.id` when available; observed/defined status IDs are `1049` for Active and `1356` for Discharged.
-- `dischargeDate` / `dischargeDateTime` from `GET /clients` is documented as planned/scheduled discharge, not actual system discharge.
-- `isActive` is treatment-plan active status. `isComplete` means EMR submission/completion and does not mean inactive, closed, superseded, or current.
-- The REST review-list path is not a reliable patient join source. Do not join treatment reviews by `clientName`.
-
-## Current Swagger/OpenAPI Mapping Evidence
-
-The current external mapping evidence available to documentation is the Alleva Swagger/OpenAPI field mapping export generated on 2026-06-21 at 14:59:49. It was derived from:
-
-```text
-Swagger UI: https://api.allevasoft.com/swagger/index.html
-Swagger JSON: https://api.allevasoft.com/swagger/v1/swagger.json
-Endpoint count: 424
-Unique field count: 2303
-```
-
-The export includes `alleva_api_mapping.metadata.txt`, `alleva_api_mapping.grid.tsv`, and `alleva_api_mapping.long.tsv`.
-
-This mapping evidence removes the old documentation-only blocker that those mapping files were unavailable. It does **not** clear the live-sync blocker. The export is Swagger/OpenAPI-derived only. Runtime responses may include fields not present in Swagger, and endpoints without response schemas may appear as `__NO_RESPONSE_SCHEMA_IN_ALLEVA_SWAGGER__`.
-
-## Current Live-Sync Boundary
-
-Live production sync remains gated. Do not enable or rely on live Alleva patient treatment-plan import until R3/Alleva confirms:
-
-- tenant/environment and credentials
-- token endpoint requirements, scope/audience/tenant parameters, and token auth style
-- active-client endpoint and active/discharged filtering
-- patient-centered treatment-plan endpoint behavior and exact `ClientId` casing
-- treatment-plan detail and diagnosis endpoint behavior
-- whether any trusted source can supply treatment-review IDs for `GET /treatment-reviews/{id}`
-- pagination, cursor behavior, date filters, rate limits, and retry expectations
-- authoritative signature/date/completion/LOC/admission/status fields
-- PHI handling and minimum-necessary logging/display policy
-- the unresolved LOC-change treatment-plan update window
-
-Until those items are resolved, the app may use the API harness and dry-run aggregate reports as readiness evidence only.
-
-## Current Primary Docs
-
-Use these as the active documentation set:
-
-- `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html`
-- `README.md`
-- `CHANGELOG.md`
-- `docs\release-notes.md`
-- `docs\beta-client-test-run-guide.md`
-- `docs\Windows-User-Guide-Version-1.md`
-- `docs\Windows-Deployment-and-Test-Guide-Version-1.md`
-- `docs\windows-installer-build-and-install.md`
-- `docs\UAT-Version-1-Marleigh.md`
-- `docs\patient-treatment-plan-handling.md`
-- `docs\alleva-patient-treatment-plan-data-contract.md`
-- `docs\alleva-patient-treatment-plan-aggregate.md`
-- `docs\alleva-treatment-plan-data-coverage.md`
-- `docs\api-configuration-and-connectivity.md`
-- `docs\treatment-plan-checklist-v1.md`
-- `docs\open-blockers.md`
-- `docs\architecture.md`
-- `docs\runbook.md`
-- `docs\codebase-map.md`
-- `docs\admin-access-reset.md`
-
-## 2026-09-08 help alignment
-
-The offline HTML guide now identifies beta.3/build 2026.09.03.1 and covers current source filters, exact saved-plan identity, filtered exports, manual processing outcomes, and session handling. Its beta.2 folder name remains a stable link; every retained screenshot is labeled as a historical Beta 2 illustration. In-app Help carries the same current version/build and workflow boundaries. Current source-checkout UI fixes since packaging are documented in the release notes; this documentation/help update does not change the prepared installer. Historical reports and legacy V1 procedures retain their original evidence with prominent current-release pointers.
-
-## Documentation Maintenance Rules
-
-- Keep current version references aligned with `VERSION`, `VERSION.json`, `frontend/package.json`, `frontend/package-lock.json`, `/api/version`, and the UI footer.
-- Keep historical validation reports historically accurate; add a new validation report when validating a new release instead of rewriting old evidence.
-- Keep Alleva mapping evidence separate from runtime-production proof.
-- Keep patient-centered treatment-plan retrieval separate from broad diagnostic endpoint pulls.
-- Keep all examples synthetic or redacted.
-- Do not add PHI, real credentials, raw tokens, real API response bodies, screenshots with real patient IDs, `.env` files, SQLite databases, uploads, logs, or generated reports to documentation.
+Dated validation, beta release notes, old PRDs, Version 1 guides and historical screenshots remain evidence of their original scope. The documentation inventory labels these explicitly. Follow current instructions above when they conflict. No older binary document or video substitutes for the current written guide or running version.

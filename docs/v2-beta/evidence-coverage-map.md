@@ -1,6 +1,6 @@
 # Evidence Coverage Map
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+> Current source: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
 
 The V2 evidence coverage map shows:
 
@@ -17,3 +17,6 @@ The V2 evidence coverage map shows:
 - Warnings.
 
 Managers use this panel to understand which treatment-plan content supported each checklist criterion and which available content remains unmapped.
+
+
+October 12 current boundary: [operator help](../operator-help-current.md), [rules contract](rules-contract.md), [runbook](../runbook.md) and [current validation](../validation/current-work-2026-10-12.md) govern current instructions. Clinical intervals are read-only in Settings; LOC timing remains unvalidated. Live Alleva use requires explicit external approval. Historical beta results do not qualify a new package.

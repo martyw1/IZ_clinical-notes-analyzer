@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
+from app.core.config import APP_VERSION
+
 from app.v2.api.deps import AdminUser, DbSession
 from app.v2.api.models import (
     DefinitionSummaryOut,
@@ -25,7 +27,7 @@ router = APIRouter()
 @router.get("/api/api-configuration/sample-openapi.json")
 def sample_openapi() -> SampleOpenApiOut:
     return SampleOpenApiOut(
-        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version="1.0.0"),
+        openapi="3.1.0", info=SampleOpenApiInfo(title="Connectivity Test Definition", version=APP_VERSION),
         paths={"/clients": SampleOpenApiPathItem(get=SampleOpenApiOperation(operation_id="listClients"))},
     )
 

@@ -1,8 +1,8 @@
 # Alleva REST / OpenAPI / HL7 Readiness
 
-Date: 2026-06-19
+Reviewed: 2026-10-12
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `2.0.0-beta.3` local Windows desktop runtime.
+Applies to: R3 Treatment Plan Audit Application `1.0.1` / build `2026.10.12.1` local Windows desktop runtime.
 
 ## Current vendor boundary
 
@@ -41,3 +41,6 @@ Before any live Alleva REST treatment-plan sync can be enabled, R3 must confirm:
 - Compliance approval for live patient data import.
 
 Until that gate is complete, the app remains local-first and upload-first. Readiness checks and operation tests are safe configuration workflows only.
+
+
+For current acceptance evidence and troubleshooting use [the runbook](runbook.md) and [October 12 validation](validation/current-work-2026-10-12.md). Connectivity tests and periodic checks do not authorize live PHI import. Use approved HTTPS vendor endpoints; do not disable TLS validation. Local HTTP is for localhost/synthetic harness testing. Preserve redacted detailed logs and inspect the safe failing phase rather than raw vendor responses.

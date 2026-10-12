@@ -1,6 +1,8 @@
 # Operator help: current local desktop app
 
-Applies to the `1.0.0` / `2026.09.21.2` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
+Applies to the `1.0.1` / `2026.10.12.1` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
+
+[Open the complete offline HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html). It includes installation, first-use recovery, daily work, backup and troubleshooting.
 
 ## Video introduction
 
@@ -9,7 +11,7 @@ Applies to the `1.0.0` / `2026.09.21.2` source candidate on `stable-local-deskto
 ## Start and sign in
 
 1. Double-click the prepared IZ Clinical Notes Analyzer desktop or Start Menu shortcut. If the launcher is already running, open `http://localhost:8000` on this laptop.
-2. Sign in with the assigned app account. Replace a temporary password when prompted.
+2. Sign in with the assigned app account. Replace a temporary password when prompted. Set up account recovery when required: save the one-time code privately and acknowledge that you saved it before entering the workspace.
 3. Open Status Dashboard. Check the version footer, source readiness, unresolved blockers, and counts before working on a plan.
 4. Sign out and lock Windows when finished.
 
@@ -70,3 +72,12 @@ Filtered CSV export includes all matching rows, including those below the visibl
 - For support, provide the app version, approximate time, screen, job phase, and a non-PHI error message through an approved R3 channel. Keep patient narratives, passwords, recovery codes, raw logs, and API credentials out of ordinary chat or email.
 
 For support staff updating this source checkout, consult `README.md`, `docs/runbook.md`, and `docs/open-blockers.md`. Ordinary client use does not require pulling Git or running scripts.
+
+
+## Backup and close
+
+Sign out, then use **(2) Stop IZ Clinical Notes Analyzer** when a full stop is needed. Closing a browser tab alone does not stop the local service. Back up through the supplied Backup command when instructed by R3; keep the complete `.izcnabackup` archive intact. It contains sensitive data and configuration even though encrypted. Current backup protection uses Windows CurrentUser DPAPI and is intended for the same Windows account and computer. OneDrive synchronization alone does not establish a tested, replacement-laptop recovery plan. Support must use the supplied Restore command and verify restoration; do not unzip, copy individual database files or overwrite `.env`.
+
+The numbered desktop tools retain their established names. **(1) Start IZ Clinical Notes Analyzer**, **(2) Stop IZ Clinical Notes Analyzer**, **(3) Collect IZ Diagnostics**, **(4) Quick Assist - R3 Support**, **(5) Short Intro Video**, and **(6) IZ Clinical Notes Analyzer User Guide** are the handoff naming convention. Shortcuts are machine-specific; the handoff checklist verifies which ones exist on the client laptop.
+
+For ordinary appliance use, the application, its localhost browser window and OneDrive are the expected workload. ChatGPT is not required and is excluded from steady-state performance estimates. Windows security and update services still run normally. Keep the laptop plugged in for large imports, wait for a job to finish before starting another, and lock Windows with **Windows+L** when stepping away.

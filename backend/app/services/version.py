@@ -57,7 +57,7 @@ def build_version_payload() -> dict[str, JsonValue]:
         "release_date": str(metadata.get("release_date") or ""),
         "stability": str(metadata.get("stability") or "stable"),
         "is_prerelease": bool(metadata.get("is_prerelease", False)),
-        "version_name": str(metadata.get("version_name") or "Production 1.0"),
+        "version_name": str(metadata.get("version_name") or f"Production {APP_VERSION}"),
         "environment": settings.environment,
         "git_commit": os.environ.get("IZ_CNA_GIT_COMMIT", "").strip()[:12]
         or _git_value("rev-parse", "--short=12", "HEAD"),

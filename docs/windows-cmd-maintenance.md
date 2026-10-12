@@ -1,6 +1,6 @@
 # Windows CMD Maintenance
 
-> **Production 1.0 core package acceptance passed.** Current build: `2026.09.21.2`, version `1.0.0`, installer revision `1`. See [portability evidence and platform limits](validation/installer-portability-2026-09-21.md) and the [exact client ZIP](client-release-packages.md). The September 15 package remains immutable historical evidence.
+> Current source: **1.0.1 / build 2026.10.12.1 / installer revision 1**. See [current verification](validation/current-work-2026-10-12.md). The September 21 1.0.0 package and its [799-test portability evidence](validation/installer-portability-2026-09-21.md) remain historical, exact-package evidence; see [package index](client-release-packages.md).
 
 This page describes the Windows CMD contract implemented for Task 17. It is the operator contract for the production build. It does not certify a package, a target laptop, or a client deployment.
 
@@ -62,12 +62,15 @@ The underlying maintenance dispatcher exposes these actions: `AutoInstall`, `Rep
 
 `Status` is read-only. A clean committed install returns code `0`; pending or recovery state returns `RECOVERY_REQUIRED` / `31`. The result contract keeps secrets, raw exception text, PHI, and absolute machine-specific paths out of support output.
 
-## Qualification and clinical boundaries
+## Historical qualification and current clinical boundaries
 
-Build `2026.09.21.2` passed all seven build gates and 799 tests. Its exact ZIP passed two fresh component-profile password/recovery/restart flows and nine-step packaged upgrade/reinstall acceptance; 13 normal/OneDrive source assertions also passed. [Current validation](validation/installer-portability-2026-09-21.md) records the exact hash/receipt and clearly identifies untested actual-client, Windows 10, default-profile and broader platform scenarios.
+Build `2026.09.21.2` passed all seven build gates and 799 tests. Its exact ZIP passed two fresh component-profile password/recovery/restart flows and nine-step packaged upgrade/reinstall acceptance; 13 normal/OneDrive source assertions also passed. [September 21 validation](validation/installer-portability-2026-09-21.md) records the exact hash/receipt and clearly identifies untested actual-client, Windows 10, default-profile and broader platform scenarios.
 
 Historical build `2026.09.15.2` passed all seven build gates and the exact-package live HTTP/Edge lifecycle test in its recorded scope. Actual Windows 11 Home standard-user fresh installation, running uninstall, reinstall, and first-call purge passed. Its immutable package identity and remaining limits are recorded in [the September 15 validation report](validation/windows-cmd-maintenance-2026-09-15.md); those results are not evidence for the current candidate.
 
 The clinical LOC-change timing rule remains configurable and visibly unvalidated. Missing or conflicting evidence must retain deterministic `Missing Data`, `Needs Review`, `Conflicting Evidence`, or `Unable to Evaluate` outcomes. Alleva REST treatment-plan sync remains an explicitly gated readiness path; live tenant import and startup sync remain disabled until the existing R3/Alleva authorization, mapping, compliance, and PHI approvals are complete.
 
 Read the [open blockers](open-blockers.md), [Windows build/install guide](windows-installer-build-and-install.md), and [client package index](client-release-packages.md) together with the detached final build receipt. The tested core handoff artifact is complete; these results do not establish full client-site or platform qualification.
+
+
+Current backup format is verified encrypted `.izcnabackup`, protected with Windows CurrentUser DPAPI for the same account/computer. Use the supplied Restore command; do not unzip or copy individual database/configuration files. [The runbook](runbook.md) covers recovery limitations and support. Clinical intervals are read-only; the LOC-change seven-day candidate remains unvalidated Needs Review.

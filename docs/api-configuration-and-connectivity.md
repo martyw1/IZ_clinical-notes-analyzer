@@ -1,12 +1,12 @@
 # API Configuration and Connectivity Test
 
-Date: 2026-09-04
+Reviewed: 2026-10-12
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` local Windows desktop runtime.
+Applies to: R3 Treatment Plan Audit Application `1.0.1` / build `2026.10.12.1` on `stable-local-desktop` local Windows desktop runtime.
 
-## V2 beta.3 contract and release boundary
+## Current V2 contract and release boundary
 
-The active V2 prerelease is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. Saved credentials remain write-only and encrypted at rest; release validation must use synthetic fixtures and an isolated temporary local-app-data directory. Do not enter a production secret during release validation. Supervised R3/Alleva validation using approved non-PHI/test records remains an external gate, so beta.3 does not claim a live production connection or sync approval. See `docs/v2-beta/api-contract-alleva.md` and `docs/validation/office-manager-production-fixes-2026-09-03.md`.
+The active source is `1.0.1` / build `2026.10.12.1` / channel `stable-local-desktop`; V2 is the internal architecture name. Saved credentials remain write-only and encrypted at rest; release validation must use synthetic fixtures and an isolated temporary local-app-data directory. Do not enter a production secret during release validation. Supervised R3/Alleva validation using approved non-PHI/test records remains an external gate, so this documentation does not claim a live production connection or sync approval. See `docs/v2-beta/api-contract-alleva.md` and `docs/validation/office-manager-production-fixes-2026-09-03.md`.
 
 ## Where to open it
 
@@ -207,7 +207,7 @@ The low-level connectivity service also emits standard Python logger warnings fo
 
 ## Windows 10 and 11 notes
 
-The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Beta 2.0.0-beta.3 preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
+The implementation is plain Python/FastAPI/SQLite/PowerShell and follows the current local Windows runtime design. It does not add Docker, PostgreSQL, or unusual end-user prerequisites. On a source checkout, the browser UI may still require Node.js/npm to build or refresh `frontend\dist`; Current source preflight keeps the stale-build warning behavior when the served React build may be stale. The API configuration page is served directly by the FastAPI desktop runtime and remains available even when the React build is missing.
 
 ## Offline validation path
 
@@ -254,3 +254,6 @@ The simpler standalone connectivity script writes below:
 ```
 
 These report files may include endpoint URLs, HTTP status codes, OpenAPI metadata, and redacted response summaries. They must not include saved API keys, one-time pasted keys, bearer tokens, passwords, external response secrets, or PHI.
+
+
+For current acceptance evidence and troubleshooting use [the runbook](runbook.md) and [October 12 validation](validation/current-work-2026-10-12.md). Connectivity tests and periodic checks do not authorize live PHI import. Use approved HTTPS vendor endpoints; do not disable TLS validation. Local HTTP is for localhost/synthetic harness testing. Preserve redacted detailed logs and inspect the safe failing phase rather than raw vendor responses.

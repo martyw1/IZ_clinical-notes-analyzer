@@ -1,11 +1,13 @@
-# Security, Privacy, And Audit
+# Security, privacy and audit contract
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+Current source 1.0.1 / build 2026.10.12.1 / stable-local-desktop. This is an implementation contract, not certification. See the [current assessment](../security/appliance-assessment-2026-10-12.md).
 
-V2 is local-first and keeps runtime data under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
+Runtime data remains under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, outside the repository. Uploaded sources and saved API configuration use encrypted envelopes. SQLite identity/date/status metadata is not fully encrypted by application storage; disk encryption, Windows access controls and approved backups remain necessary safeguards.
 
-Patient names are excluded by default and are never used for matching. Browser payloads use patient display labels such as `Patient ID 307`. Audit logs capture safe summaries only and must not include names, secrets, tokens, Authorization headers, raw upstream payloads, full uploaded files, clinical narrative text, or signature image/base64 data.
+Identity joins use MRN plus exact source/facility/plan/version scope, never name alone. Authorized patient-name display may be derived from encrypted patient source snapshots when enabled; names are not valid join keys and must not enter diagnostics or audit details. Browser clinical views can contain sensitive information, so a localhost boundary does not remove authentication, workstation or privacy requirements.
 
-The V2 audit service writes hash-chained JSONL events with action, actor, entity reference, outcome, safe details, previous hash, and event hash.
+Primary V2 audit records are in SQLite with safe structured details and a SHA-256 linked chain. The common wrapper supports JSONL fallback on logging failure. Events include actor/action/target/outcome/time and safe metadata. Audit verification reports current-format versus legacy scope. This is tamper evidence, not immutable independent storage against a host administrator. Redaction patterns are a backstop; event callers must omit clinical narrative, original filenames, raw vendor payloads, names, secrets/tokens/Authorization, passwords, recovery codes and signature images/base64.
 
-Release/incident evidence retains only redacted metadata. Retention, legal-hold, signing, and downstream credential/history-remediation decisions remain R3 owner approvals; beta.2 does not imply that any of those decisions is complete.
+Keep detailed authentication/recovery, review, settings, import/upload, export and error metadata without increasing PHI exposure. Do not claim every request is fully audited. Audit retention remains `local_policy_required`; R3 must define access review, retention, legal hold, protected off-device evidence and incident response. Current backup uses an encrypted `.izcnabackup` bound to the same Windows account/computer through CurrentUser DPAPI; device-loss recovery is an open operational requirement.
+
+Optional LLM stays disabled by default. Live Alleva import remains gated; configuration tests do not authorize production PHI. Credential incident containment/rotation and downstream history disposition remain owner gates in [open blockers](../open-blockers.md). Do not modify historical incident evidence or upload it to ordinary support channels.

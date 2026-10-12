@@ -81,7 +81,23 @@ def _decode_text_upload(raw_bytes: bytes) -> str:
 def _extract_pdf_text(raw_bytes: bytes) -> str:
     try:
         reader = PdfReader(BytesIO(raw_bytes))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        text = ""
+        trailing_whitespace = ""
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            if not text:
+                page_text = page_text.lstrip()
+            content = page_text.rstrip()
+            if content:
+                if len(text) + len(trailing_whitespace) + len(content) > MAX_EXTRACTED_TEXT_CHARS:
+                    raise ManualFileParseError("Manual treatment-plan extracted text is limited to 96 KiB.")
+                text += trailing_whitespace + content
+                trailing_whitespace = ""
+            if text:
+                # Bound deferred whitespace, too; another content page will reject an overflow.
+                trailing_whitespace = (
+                    trailing_whitespace + page_text[len(content):] + "\n"
+                )[:MAX_EXTRACTED_TEXT_CHARS + 1]
     except PdfReadError as exc:
         raise ManualFileParseError("Manual PDF treatment-plan file could not be read.") from exc
     return _bounded_non_empty_text(text, "Manual PDF treatment-plan file did not contain extractable text.")
@@ -157,7 +173,7 @@ def _bounded_non_empty_text(text: str, empty_message: str) -> str:
     if not stripped:
         raise ManualFileParseError(empty_message)
     if len(stripped) > MAX_EXTRACTED_TEXT_CHARS:
-        raise ManualFileParseError("Manual treatment-plan extracted text is limited to 96 KiB for the local desktop beta.")
+        raise ManualFileParseError("Manual treatment-plan extracted text is limited to 96 KiB for the local desktop.")
     return stripped
 
 

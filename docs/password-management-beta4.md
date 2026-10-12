@@ -1,6 +1,6 @@
-# Beta.4 password management
+# Password management and recovery
 
-Applies to 2.0.0-beta.4 / build 2026.09.10.2, both source checkout and prepared Windows distribution.
+Applies to current source 1.0.1 / build 2026.10.12.1 / stable-local-desktop, retaining the recovery workflow introduced in beta.4. Verify the actual delivered package/version.
 
 ## First use
 
@@ -24,9 +24,9 @@ Account recovery does not reactivate a disabled account. Invalid recovery attemp
 
 An administrator can use Users to assign a temporary password to a staff account. Give it to the user through an approved secure channel. The user changes it on their next sign-in. Staff can also use their own saved recovery code.
 
-## Upgrade from beta.3
+## Upgrade and historical beta.3 boundary
 
-Use the beta.4 installer from the new release folder. The installer preserves the existing local data and creates its existing pre-upgrade encrypted backup. Chosen passwords remain valid; the upgrade does not reset existing accounts to the starter password. On first sign-in after upgrading, users without a recovery code set one up in the app.
+Use the approved current installer from its verified release folder. The installer preserves the existing local data and creates its existing pre-upgrade encrypted backup. Chosen passwords remain valid; the upgrade does not reset existing accounts to the starter password. On first sign-in after upgrading, users without a recovery code set one up in the app.
 
 Previously distributed beta.3 executables cannot gain this feature without installing beta.4. Historical beta.3 archives remain unchanged. If an existing beta.3 account is already inaccessible and no other administrator can assist, contact R3 for authorized recovery before completing account recovery setup in beta.4. The new starter password does not unlock an already initialized account.
 
@@ -34,4 +34,4 @@ If both your password and recovery code are lost, contact your administrator or 
 
 ## Unchanged clinical boundary
 
-This update changes password management only. Deterministic clinical workflows remain in place. The LOC-change update window remains configurable and unvalidated pending R3/Marleigh confirmation; live Alleva sync remains gated.
+This update changes password management only. Deterministic clinical workflows remain in place. The LOC-change seven-day candidate remains unvalidated and Settings clinical intervals are read-only pending a reviewed R3/Marleigh rule update; live Alleva sync remains gated.

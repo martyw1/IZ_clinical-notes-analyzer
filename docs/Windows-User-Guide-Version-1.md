@@ -1,6 +1,6 @@
 # Windows User Guide Version 1
 
-> Historical Version 1 reference. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> Historical Version 1 reference. For the current `1.0.1` / `2026.10.12.1` source candidate, use [operator help](operator-help-current.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 This guide is for R3 staff using a normal Windows 10 or Windows 11 laptop.
 

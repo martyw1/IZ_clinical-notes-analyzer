@@ -418,8 +418,8 @@ if actual_steps != expected_steps:
     raise SystemExit("Treatment Plan Checklist steps must be numbered 1 through 42.")
 
 version = build_version_payload()
-if version.get("version") != "1.0.0" or version.get("release_channel") != "stable-local-desktop":
-    raise SystemExit("Active version metadata is not production 1.0.0.")
+if version.get("version") != "1.0.1" or version.get("build") != "2026.10.12.1" or version.get("release_channel") != "stable-local-desktop":
+    raise SystemExit("Active version metadata is not production 1.0.1 build 2026.10.12.1.")
 if not v2_router.routes:
     raise SystemExit("V2 router has no active routes.")
 print("backend configuration ok")

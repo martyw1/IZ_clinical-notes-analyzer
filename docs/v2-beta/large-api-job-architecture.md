@@ -1,6 +1,6 @@
 # Large API Job Architecture
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+> Current source: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
 
 Large Alleva pulls use backend jobs instead of long browser requests.
 
@@ -9,3 +9,6 @@ Large Alleva pulls use backend jobs instead of long browser requests.
 Required artifacts include run summary, progress JSON, redacted JSONL, flattened TSV/CSV, observed schema JSON, field frequency TSV, warning log, error log, and audit summary. Raw sensitive artifacts are off by default.
 
 Browser endpoints expose compact job state, artifact metadata, and bounded previews only.
+
+
+October 12 current boundary: [operator help](../operator-help-current.md), [rules contract](rules-contract.md), [runbook](../runbook.md) and [current validation](../validation/current-work-2026-10-12.md) govern current instructions. Clinical intervals are read-only in Settings; LOC timing remains unvalidated. Live Alleva use requires explicit external approval. Historical beta results do not qualify a new package.

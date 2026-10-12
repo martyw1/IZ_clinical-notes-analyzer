@@ -1,13 +1,13 @@
-# V2 Rules Contract
+# V2 rules contract
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](../current-documentation-state.md).
+Current source 1.0.1 / build 2026.10.12.1 / stable-local-desktop. V2 is the internal architecture name, not the app release number.
 
-The canonical checklist remains `config/checklists/treatment-plan-v1.json`, with exactly 42 ordered criteria.
+The canonical `config/checklists/treatment-plan-v1.json` retains 42 ordered criteria; checklist content version is separate from app version. Active evaluation is in `backend/app/v2/services/deterministic_evaluator.py`. Available plan content covers diagnoses, goals, objectives, interventions, evidence-based/template flags, typed signature/date evidence, needs and source field inventory. Missing content does not become a passing criterion.
 
-The completeness engine must evaluate the full treatment-plan content graph where available, including diagnoses, behavioral definitions, goals, objectives, interventions, evidence-based flags, Wiley/template flags, signature metadata, reason for admission, initial client needs, family education needs, observed field inventory, and source field paths.
+Initial signatures are checked on admission Day 1. A signed master plan is due within 30 calendar days of admission. Recurring PHP reviews use 30 calendar days; IOP variants and OP/Outpatient use 60 calendar days. The recurring anchor is the latest valid signed review or admission if no valid review exists. Calculated due dates are compared with source Next Review Due. A late master signature contributes to the overall status.
 
-Required statuses remain: Overdue, Urgent, Due Soon, Returned, Needs Review, Missing Data, Conflicting Evidence, Unable to Evaluate, Compliant, Approved, and Not Applicable.
+Overdue means an established deadline has passed. Urgent covers recurring due today/tomorrow; Due Soon covers two through seven days. Compliant timing does not establish that every completeness criterion passes. Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate must remain deterministic unresolved results. Review actions such as Approved/Returned record authorized workflow decisions.
 
-PHP cadence is 30 calendar days. IOP, IOP-5, IOP-19, IOP-3, OP, Outpatient, and configured non-PHP levels use 60 calendar days. The LOC-change update window remains unvalidated, configurable, and visibly blocked.
+Settings displays clinical intervals read-only from the versioned rule package. The LOC-change seven-calendar-day date is an unvalidated display candidate. It remains Needs Review pending R3/Marleigh confirmation of duration, calendar/business basis and clock start. A saved local validated flag does not clear this policy gate. Clinical changes require reviewed versioned rules, tests and release validation; manager overrides cannot establish that policy.
 
-The beta.2 release-readiness update does not change the checklist or rules versions and does not turn an unresolved LOC-change case into a compliance decision.
+See [operator help](../operator-help-current.md), [open blockers](../open-blockers.md) and [current validation](../validation/current-work-2026-10-12.md).

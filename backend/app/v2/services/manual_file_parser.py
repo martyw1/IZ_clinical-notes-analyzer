@@ -60,7 +60,7 @@ def aggregate_from_manual_file(
     confirm_patient_id_correction: bool = False,
 ) -> ManualFileAggregateSource:
     if len(raw_bytes) > MAX_UPLOAD_BYTES:
-        raise ManualFileParseError("Manual treatment-plan files are limited to 512 KiB for the local desktop beta.")
+        raise ManualFileParseError("Manual treatment-plan files are limited to 512 KiB for the local desktop.")
     suffix = Path(filename).suffix.lower()
     extracted = extract_manual_file(raw_bytes, filename)
     if extracted.is_opaque:

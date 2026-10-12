@@ -1,18 +1,69 @@
-# Patient Treatment Plan Handling
+# Patient treatment-plan handling
 
-> Historical beta.3 implementation map. For the current `1.0.0` / `2026.09.21.2` source candidate and its read-only clinical timing settings, use [operator help](operator-help-current.md), [open blockers](open-blockers.md), and the V2 evaluator in `backend/app/v2/services/deterministic_evaluator.py`. The legacy timeliness section below describes its dated implementation.
+Current source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. V2 denotes the internal architecture. This is the active source/API/storage map; dated evolution notes at the end retain historical scope. All verification uses synthetic data. Live vendor approval, retention and LOC policy remain external gates.
 
-Date: 2026-09-04
+## Exact identity and data flow
 
-Applies to: IZ Clinical Notes Analyzer Beta Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` channel.
+Alleva `/clients.mrn` is the clinical MRN represented by the compatibility field `patient_id`; `/clients.id` is a separate source relationship key. MRN alone cannot uniquely identify a record across sources/facilities. Authorization and detail selection use the exact `patient_record_id` and immutable `plan_version_id`, with source mode and treatment-plan ID. `backend/app/v2/authorization.py` resolves selectors and rejects ambiguous or mismatched scope instead of guessing.
 
-## V2 beta.3 note
+Manual parsing or an approved Alleva pull produces `TreatmentPlanAggregate` from `backend/app/v2/domain/schemas.py`. `services/treatment_plan_store.py` saves encrypted aggregates and clinical evidence, immutable plan versions and persisted evaluations. `services/treatment_plan_read_model.py` assembles authorized queue/detail projections. `services/deterministic_evaluator.py` and the canonical 42-step checklist produce timing/completeness outcomes. Manager actions and corrections attach to exact saved versions through their stores. Detail and roster APIs expose selected authorized evidence to the V2 browser.
 
-The active V2 implementation is `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. This document remains the shared implementation map; current synthetic-only validation status is in `docs/validation/office-manager-production-fixes-2026-09-03.md`, while the beta.2 procedure in `docs/v2-beta/` is historical. No live Alleva production validation is claimed. Do not use production patient data, exports, databases, credentials, or uploads when performing beta.3 release validation.
+Patient roster refresh is separate from full treatment-plan pull and retains patients with no plans. Names can be displayed to authorized users from encrypted patient snapshots; names are neither join keys nor audit detail. Both Manual and Alleva saved plans appear in current plan browsing. Missing original references, service dates or names remain unavailable rather than invented.
 
-The office-manager raw-plan review scope is exact-plan and plan-version bound. Standalone legacy patient-wide treatment reviews with no reliable plan/version link are excluded from selected raw-plan reads; embedded reviews that are bound to the selected plan remain preserved. This scope clarification does not change deterministic rules, and recurrence dates previously projected from excluded standalone reviews may differ.
+## Source input and storage
 
-Structural v12 source-document associations use exact saved memberships; the approved migration backfills only valid original `(source_document_id, plan_version_id)` pairs, and new or repeated imports attach the exact saved plan version. Existing ambiguous legacy rows remain missing/unlinked evidence rather than guessed associations. Detach/erase/removal behavior remains subject to the unanswered user retention choice, and this release makes no such claim.
+| Responsibility | Active source |
+| --- | --- |
+| Binder upload route and bounded reads | `backend/app/v2/api/manual_binder_routes.py` |
+| Aggregate API import and source download/delete authorization | `backend/app/v2/api/manual_upload_routes.py` |
+| Binder assembly and parsing | `backend/app/v2/services/manual_binder.py`, `manual_file_parser.py`, `manual_file_extractors.py`, `manual_file_aggregate.py` |
+| Atomic encrypted source archive | `backend/app/v2/services/manual_source_batch.py`, `manual_source_file_store.py` |
+| Operational Alleva plan and patient pulls | `backend/app/v2/services/alleva_sync.py`, `alleva_roster.py`, `alleva_patient_identity.py` |
+| Approved mapping/provenance and job persistence | `backend/app/v2/services/alleva_contracts.py`, `jobs.py`, `job_store.py`, `job_runner.py` |
+| Encrypted aggregate/patient source snapshots | `backend/app/v2/services/clinical_snapshot_codec.py`, `patient_snapshot_store.py` |
+| Exact source-document membership | `backend/app/v2/services/source_membership_store.py` |
+
+Manual uploads are point-in-time snapshots. Supported document extraction is bounded, and opaque source archival does not mean clinical parsing succeeded. Original filenames and clinical narratives must not enter forensic details. Live sync is off by default; approved tenant credentials, enablement, read-only authorization, endpoint/mapping and pagination/rate-limit validation and compliance approval are required. The operational collection reads `/clients` and bounded global `/treatment-plans` pages, rather than relying on a patient-name join or diagnostic ClientId-filtered preview. API harness operation tests and artifacts are readiness evidence, not authorization or a complete import.
+
+SQLAlchemy account/settings/audit/import/source/action/job models live in `backend/app/v2/models.py`: `User`, `AppSetting`, `AuditLog`, `TreatmentPlanImport`, `UploadedDocument`, `TreatmentPlanManagerAction` and `ApiHarnessJobRecord`. Structural clinical tables are defined/migrated under `backend/app/v2/migrations/`, including `patients`, `loc_history`, `treatment_plan_versions`, `treatment_review_versions`, `diagnosis_snapshots`, `source_documents`, `evaluation_runs`, `criterion_results` and `source_document_plan_memberships`. Do not confuse these tables with removed legacy ORM classes.
+
+Structural v12 membership backfill accepts only valid original source-document/plan-version pairs. Repeated/new imports attach exact saved memberships. Ambiguous legacy rows remain missing/unlinked evidence. Clinical detach/erase/retention choices remain owner-controlled; source deletion API existence is not a blanket data-destruction policy. Runtime SQLite, encrypted sources, logs and configuration remain under local AppData, outside the repository. SQLite identifiers/dates are sensitive metadata; application envelope encryption does not replace disk encryption.
+
+## Aggregate and deterministic evaluation
+
+The aggregate contains MRN/source, authorized display fields, LOC/admission/history, source update time, plan/review/signature content, due-date evidence, warnings, exactly 42 criterion results, manager reviews/overrides, audit references, evidence coverage, source-document references and checklist/rules/evaluation/timezone provenance. The detail API adds exact saved identity fields. Frontend types are `frontend/src/v2/types/treatmentPlan.ts` and `identity.ts`.
+
+Initial signatures are checked on admission Day 1; master signatures within 30 calendar days of admission. Recurring PHP reviews use 30 calendar days and IOP/OP 60, anchored to latest valid signed review or admission. Source Next Review Due is compared with computed due date. Late master signatures affect overall status. Settings clinical intervals are read-only. The seven-calendar-day LOC candidate is unvalidated; LOC cases remain Needs Review. Missing Data, Conflicting Evidence and Unable to Evaluate must not silently become compliance. [Current rules](v2-beta/rules-contract.md).
+
+## Active API and UI map
+
+Routes are composed by `backend/app/v2/api/routes.py`; `runtime_routes.py` includes the split plan-read/export routers.
+
+| Operation | Active API / route module |
+| --- | --- |
+| Dashboard | `GET /api/v2/dashboard` — `runtime_routes.py` |
+| Patient and plan rosters | `GET /api/v2/patient-roster`, `GET /api/v2/treatment-plan-roster` — `roster_routes.py` |
+| Patient source detail | `GET /api/v2/patients/{patient_id}` — `roster_routes.py` |
+| Plan list and exact selected detail | `GET /api/v2/treatment-plans`, `GET /api/v2/treatment-plans/{patient_id}/{treatment_plan_id}` — `plan_read_routes.py` |
+| Binder and aggregate import | `POST /api/v2/manual-uploads/treatment-plan-file`, `POST /api/v2/manual-uploads/treatment-plan-aggregate` — manual route modules |
+| Source archive | `GET` source download and `DELETE /api/v2/treatment-plans/{patient_id}/source-documents/{source_file_id}` — `manual_upload_routes.py` |
+| Manager action | `POST /api/v2/treatment-plans/{patient_id}/manager-actions` — `runtime_routes.py` |
+| Corrections and explicit reevaluation | `POST /api/v2/treatment-plans/{patient_id}/correction-submissions`, `POST /api/v2/treatment-plans/{patient_id}/evaluations/refresh` — correction/evaluation modules |
+| Plan and criterion CSV | `/api/v2/exports/treatment-plans.csv`, `/api/v2/exports/{patient_id}/checklist-evidence.csv` — `plan_export_routes.py` |
+| Gated operational pulls | `POST /api/v2/alleva-sync/run`, `POST /api/v2/patient-roster/pull` and associated job status routes — `alleva_sync_routes.py` |
+| Diagnostic jobs/artifacts | `/api/v2/api-harness/jobs` and job-specific status/cancel/artifact/preview routes — `runtime_routes.py` |
+
+Protected detail, source, manager, correction and export calls must carry the exact selector fields required by their contract, particularly `plan_version_id` and `patient_record_id`; route IDs alone are not sufficient proof of authorization. `services/manager_action_store.py`, `correction_work_item_store.py`, `evaluation_store.py` and `evaluation_projection.py` preserve exact decision/evidence context. `services/audit_store.py` writes safe metadata and verifies the chain.
+
+`frontend/src/v2/AppV2.tsx` owns session/selection routing. Current pages are `pages/DashboardPage.tsx`, `PatientRosterPage.tsx`, `PatientRecordDetailPage.tsx`, `TreatmentPlansRosterPage.tsx`, `TreatmentPlanDetailPage.tsx`, `ManualUploadPage.tsx`, `ApiHarnessPage.tsx`, `ForensicLogsPage.tsx` and `HelpPage.tsx`. `components/TreatmentPlanDetailViewer.tsx` renders clinical evidence. Both rosters show authorized source-scoped records, including names when available from encrypted snapshots; the plan roster includes saved Manual and Alleva plans. Importing a successor does not silently replace an already selected saved version.
+
+## Verification
+
+Use synthetic isolated profiles. Relevant existing suites include `backend/tests/test_v2_treatment_plan_rosters.py`, `test_v2_source_scoped_roster.py`, `test_v2_plan_version_authorization.py`, `test_v2_plan_version_actions.py`, `test_v2_plan_version_corrections.py`, `test_v2_evaluation_persistence.py`, `test_v2_manual_binder.py`, `test_v2_manual_upload_bounds.py` and `test_v2_audit_verification.py`. Run the complete backend suite and frontend tests/build for a release. Package safety must exclude runtime data/secrets and validate the exact ZIP. [Current verification](validation/current-work-2026-10-12.md) records results; old beta reports cannot qualify this build.
+
+## Historical evolution notes
+
+The following dated notes describe earlier implementations and UI arrangements. Current source, routes and controls are mapped above; historical navigation/order is not current instruction.
 
 ### 2026-07-13 V2 treatment-plan queue update
 
@@ -43,196 +94,3 @@ Structural v12 source-document associations use exact saved memberships; the app
 - Treatment Plans Roster preserves every valid global plan ID. Plans with a validated `/clients.id` relationship display the corresponding `/clients.mrn` and link to Patient Record Detail; plans without a resolvable MRN remain available as explicitly unlinked Treatment Plan Detail records.
 - Treatment Plan Detail composes the selected plan's identity, source dates, lineage, clinical hierarchy, diagnoses, behavioral definitions, goals, objectives, interventions, signatures, reviews, checklist evidence, warnings, source archive, and raw diagnostics into one document-like view.
 - Source-updated timestamps are preserved exactly. Valid values sort by their UTC instant, deterministic ties use plan ID, and missing or invalid values sort last; import, access, and capture times are not substituted.
-
-## Purpose
-
-This is the current implementation reference for how patient treatment plans are handled in the app. It covers the local database model, manual upload sync, gated Alleva REST sync, the patient-level aggregate, deterministic timeliness decisions, selected-client checklist results, privacy controls, and the user-facing Treatment Plans queue.
-
-Alleva and uploaded files are source evidence. The compliance decision remains local and deterministic. The app does not rely on an LLM and does not ask Alleva to decide whether a treatment plan is compliant.
-
-## Current Data Flow
-
-1. A treatment-plan client is created or refreshed from either a manual uploaded note set or an operator-triggered Alleva REST sync.
-2. The app stores local rows for the active patient key, level-of-care history, treatment-plan records, manual overrides, and manager checklist reviews.
-3. The timeliness evaluator calculates current status from local/facility date, admission date, current LOC, latest valid treatment-plan review/update date, source-document due date, signatures, and LOC-change evidence.
-4. The selected-client detail payload builds the 42-step checklist result from `config/checklists/treatment-plan-v1.json` and enriches each step with evidence, finding text, evaluated values, manager status, manager comments, and audit context.
-5. The Treatment Plans UI displays the work queue, evidence comparison, treatment-plan content summary, LOC history, treatment-plan evidence, rule results, checklist rows, manual overrides, and export actions.
-
-## Source Inputs
-
-Manual upload:
-
-- `backend/app/services/timeliness.py::sync_from_note_set` turns an uploaded `PatientNoteSet` into one local `TreatmentPlanClient`.
-- Uploaded document metadata creates local treatment-plan records when labels/types indicate Initial, Master, Review, or LOC update evidence.
-- Manual upload is a point-in-time snapshot. It does not imply live monitoring.
-
-Alleva REST readiness and sync:
-
-- `backend/app/services/alleva_treatment_plan_sync.py` defines the approved endpoint names: `/clients`, `/treatment-plans`, `/treatment-plans/{id}`, `/treatment-plans/{id}/diagnosis`, `/treatment-reviews`, and `/treatment-reviews/{id}`.
-- Live sync is blocked unless App settings provide encrypted credentials and explicitly enable API use and treatment-plan sync.
-- Startup sync remains off by default. When an administrator starts a pull, the app automatically records and binds the built-in versioned Alleva v1 mapping.
-- `/clients` and `/treatment-plans` are required for sync. `/treatment-reviews` is optional but warnings are surfaced when it is unavailable.
-- Optional current-plan detail fetch can pull nested clinical content from `/treatment-plans/{id}` and diagnosis detail from `/treatment-plans/{id}/diagnosis`, subject to the configured cap.
-
-API harness aggregate dry-run:
-
-- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_centered_treatment_plans"`, `"active_patient_centered_treatment_plans"`, or `"single_patient_treatment_plans"` remains a diagnostic flow: `GET /clients`, then `GET /treatment-plans?ClientId={source_patient_id}` using `/clients.id`. It does not define the canonical local patient identity; operational records use `/clients.mrn`.
-- `POST /api/api-configuration/alleva-quick-pull` with `report: "patient_treatment_plan_aggregates"` builds patient-level aggregate diagnostics from `/clients`, `/treatment-plans`, and `/treatment-reviews` without arming live sync.
-- This is readiness evidence only. It does not bypass the saved-credential, enablement, read-only, or PHI-handling requirements.
-
-## Local Storage Model
-
-The core tables live in `backend/app/models/models.py`:
-
-- `TreatmentPlanClient`: Patient-ID-keyed local client row, active flag, current LOC, admission date, counselor/primary clinician, Alleva ID aliases, join confidence, data-quality warnings, current-plan pointer, import timestamps, and display label.
-- `LevelOfCareHistory`: LOC, facility, effective date, discharge date, source evidence, and optional source note-set link.
-- `TreatmentPlanRecord`: Initial/Master/Review/LOC update record with document date, staff/client/reviewer/guardian signature dates, displayed next due date, source evidence, source document ID, validity/conflict fields, Alleva lifecycle flags, current-plan detail status, content counts, and PHI-minimized content facts.
-- `TreatmentPlanOverride`: admin/manager manual override with original value, new value, reason, affected rule, actor, and timestamp.
-- `TreatmentPlanCriterionReview`: one manager status/comment row per treatment-plan client and checklist criterion.
-
-Runtime SQLite, uploads, logs, reports, and `.env` stay under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, not in the repo or installed app folder.
-
-## Matching and Privacy
-
-Current V2 operational matching is strict:
-
-- `/clients.mrn` is the canonical patient identity.
-- `/clients.id` is the separate source relationship key.
-- each treatment-plan relationship must resolve to exactly one observed `/clients.id` before the plan can be attributed to that client's MRN.
-
-The alias list below applies only to historical/local-sync readiness paths:
-
-- For the diagnostic patient-centered API harness contract, treatment-plan joins use only `GET /clients.id` and treatment-plan `client: "/clients/{id}"`. The alias list below remains historical/local-sync readiness context, not the operational V2 MRN identity rule.
-- `clientId`
-- `leadId`
-- `patientId`
-- `chartId` / `chartNumber`
-- `luin`
-- `uniqueId`
-- `mrn`
-- source `id` / `href`
-
-Name-only joins are disabled by default and are for validation only when explicitly enabled. Ambiguous ID or name matches remain unmapped instead of guessed.
-
-The V2 MRN workflow derives authorized full-name display only from the latest encrypted patient source snapshot. Names are not stored in the `patients` identity row, are never used to join records, and are omitted from audit and diagnostic output.
-
-Treatment-plan element values are stored only after direct-identifier redaction and patient identifier fields are omitted before content snapshot storage. Detail capture stores counts, structured item kinds/labels, source paths, redacted text values, text-present flags, redacted text hashes, and non-name metadata.
-
-## Deterministic Timeliness Rules
-
-`backend/app/services/timeliness.py::evaluate_client` is the main decision path.
-
-The evaluator uses:
-
-- facility-local current date
-- admission date
-- current level of care
-- configured LOC cadence from `config/rules/alleva_treatment_plan_completeness_rules.yaml`
-- latest valid treatment-plan review/update staff signature date
-- current treatment-plan start/document/last-modified fallback when no review or admission anchor exists
-- source-document `Next Review Due`
-- LOC effective date and the App settings LOC-change window
-- conflict notes, missing signatures, and missing source evidence
-
-Current date-window behavior:
-
-- due date before current date: `Overdue`
-- due today or one day out: `Urgent`
-- two through seven days out: `Due Soon`
-- eight or more days out: `Compliant`
-
-Recurring cadence:
-
-- PHP: 30 calendar days
-- configured non-PHP levels: 60 calendar days
-
-The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The app keeps the manager-editable 7-calendar-day preset visible and unresolved. LOC-change cases must not be silently treated as compliant while the blocker is open.
-
-## Aggregate Shape
-
-There are two aggregate-related paths:
-
-- `backend/app/services/alleva_treatment_plan_aggregate.py` builds the API-harness dry-run `PatientTreatmentPlanAggregate` from raw Alleva payloads.
-- `backend/app/services/timeliness.py::treatment_plan_aggregate_payload` builds the stored selected-client aggregate returned by `GET /api/timeliness/clients/{client_id}/treatment-plan`.
-
-The stored selected-client aggregate preserves legacy fields for the current UI/export contract and adds source-confidence, endpoint-count, current treatment plan, treatment plans, reviews, diagnoses, content facts, computed status, data-quality warnings, and PHI-minimized source provenance.
-
-Raw upstream payloads, filenames, API keys, bearer tokens, client secrets, and patient direct identifiers are not returned as aggregate provenance. Redacted structured treatment-plan element values are returned so the app and completeness checker can inspect the actual plan contents.
-
-## User-Facing Surfaces
-
-Treatment Plans tab:
-
-- `frontend/src/App.tsx` renders the `timeliness` view.
-- Admins and office managers can open the Treatment Plans queue. Counselors do not have queue access because explicit counselor ownership is not modeled in the treatment-plan table.
-- Admins see `Pull / refresh treatment plans`, which calls the gated Alleva REST sync route.
-- The app shell keeps the daily work areas in the primary navigation: `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`. Less-frequent support/admin pages are secondary shortcuts.
-- The queue shows active clients, status, next due date, current LOC, evidence completeness, current-plan selection, and data-quality warnings.
-- Selected-client detail shows the current treatment-plan content summary, evidence comparison, LOC history, treatment-plan evidence, rule results, 42-step checklist evaluation, manager notes, manual overrides, audit history, and export actions.
-- Alleva/API lookup status and lookup result rows are bounded inside the treatment-plan lookup panel so progress messages and long diagnostics do not expand the page and hide lower treatment-plan details.
-- When source-document `Next Review Due` disagrees with the computed date-clock due date and no validated LOC-change cadence explains the difference, the evaluator should keep the item in a review/error state such as `Needs Review` with `TP-DUE-DATE-CONFLICT`; it must not silently treat the item as compliant.
-
-API routes:
-
-- `GET /api/timeliness/dashboard`: active-client work queue with counts and sorted status rows.
-- `GET /api/timeliness/clients/{client_id}`: selected-client detail and 42-step checklist evaluation.
-- `GET /api/timeliness/clients/{client_id}/treatment-plan`: stored selected-client treatment-plan aggregate.
-- `POST /api/timeliness/clients/{client_id}/overrides`: admin/manager manual override.
-- `PATCH /api/timeliness/clients/{client_id}/criterion-reviews`: saved manager status/comment notes for checklist rows.
-- `POST /api/alleva/treatment-plan-sync/run`: admin-only gated manual Alleva REST sync.
-- `POST /api/api-configuration/alleva-quick-pull`: admin-only API harness quick-pull and aggregate dry-run.
-- `GET /api/emr/alleva/id-mapping`: admin-only stored ID mapping diagnostic.
-- `POST /api/emr/alleva/sync/detail-sample`: admin-only current-plan detail/diagnosis sample tool for controlled mapping checks.
-
-## Code Location Map
-
-Backend model and storage:
-
-- `backend/app/models/models.py`: `TreatmentPlanClient`, `LevelOfCareHistory`, `TreatmentPlanRecord`, `TreatmentPlanOverride`, `TreatmentPlanCriterionReview`.
-- `backend/app/services/timeliness.py`: local upsert, manual-upload sync, evaluation, summary/detail payloads, selected-client aggregate payload, and checklist results.
-- `backend/app/services/treatment_plan_content_safety.py`: safe content-item normalization and metadata redaction.
-
-Alleva/API handling:
-
-- `backend/app/services/alleva_treatment_plan_sync.py`: gated live sync, endpoint retrieval, ID matching, current-plan selection, detail fetch, content counts/facts, warnings, and sync audit events.
-- `backend/app/services/alleva_treatment_plan_aggregate.py`: API-harness aggregate dry-run builder and diagnostics.
-- `backend/app/services/alleva_retrieval.py`: shared Alleva response parsing helpers used by aggregate/readiness paths.
-- `backend/app/services/alleva_patient_linkage.py`: ID mapping summary helpers.
-- `backend/app/api/api_config_routes.py`: `patient_treatment_plan_aggregates` quick-pull route.
-- `backend/app/api/routes.py`: App settings, manual sync route, ID mapping diagnostic, and current-plan detail sample route.
-- `backend/app/api/timeliness_routes.py`: Treatment Plan Timeliness dashboard/detail/aggregate/override/manager-note routes.
-
-Frontend:
-
-- `frontend/src/App.tsx`: Treatment Plans queue, selected-client detail, sync button, exports, manager-note controls, App settings controls, and help text.
-- `frontend/src/components/TreatmentPlanContentSummary.tsx`: current treatment-plan content counts and safe captured facts.
-- `frontend/src/treatmentPlanContentSafety.ts`: frontend display helpers for safe content facts.
-
-Rules and canonical workflow:
-
-- `config/rules/alleva_treatment_plan_completeness_rules.yaml`: deterministic LOC cadence and treatment-plan tracking rules.
-- `config/checklists/treatment-plan-v1.json`: canonical 42-step checklist source.
-- `docs/treatment-plan-checklist-v1.md`: checklist/operator explanation.
-- `docs/open-blockers.md`: unresolved LOC-change and Alleva live-sync blockers.
-
-## Verification
-
-Focused synthetic validation should include:
-
-```powershell
-$env:PYTHONPATH = "$PWD\backend"
-.\backend\.venv\Scripts\python.exe -m pytest .\backend\tests\test_treatment_plan_timeliness.py .\backend\tests\test_api_connectivity.py -q
-cd .\frontend
-npm run test -- --run
-npm run build
-```
-
-Regression coverage should include source-document due-date disagreement, missing admission or LOC evidence, LOC-change unresolved behavior, selected-client checklist payloads, manager criterion notes, bounded lookup status display, and release-package doc inclusion.
-
-Packaging validation should use:
-
-```powershell
-.\scripts\Build-IZ-Windows-Installer.cmd
-```
-
-The release build must include `docs\patient-treatment-plan-handling.md`, `docs\beta-client-test-run-guide.md`, built frontend assets, install/launch/diagnostics/backup/uninstall commands, and must scan the folder and zip to exclude local `.env`, databases, uploads, logs, API tokens, raw vendor credentials, and other generated or sensitive files.

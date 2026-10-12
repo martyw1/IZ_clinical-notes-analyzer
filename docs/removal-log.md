@@ -2,7 +2,7 @@
 
 > Script-location update (2026-09-23): executable tools now live under `scripts/`, including `scripts/diag-build-tools/`. Historical paths below describe the original work; see the [current script guide](../scripts/README.md) for runnable commands.
 
-> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> Historical reference: current source is `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 Initial date: 2026-06-04
 
@@ -122,3 +122,13 @@ Removed only `C:\Users\r3developer\AppData\Local\Temp\IZ Todo6 verifier c5c7960d
 | Backend tests | Passed: `54 passed` using Python 3.11 from `/tmp/iz-cna-backend-venv-311`. |
 | Frontend build | Passed after repairing missing local optional native packages in ignored `node_modules`. |
 | Frontend tests | Blocked locally at the time of this historical cleanup note: Vitest worker pool timed out before importing tests under both Node 24 and Node 25. Later current docs track the supported frontend Vitest/build workflow for Version 1.4.2. |
+
+## October 12, 2026 — owner-requested USB archive, S0/S1
+
+S0: existing current-work ledger records 629 backend/184 frontend passes and successful build; fresh focused verification passed 26 tests. Git diff whitespace check passed. No active app listener on 8000 was found. Desktop links were inventoried before cleanup.
+
+S1 scope: move only generated repo `tmp`, `output`, `.tmp`, `.pytest_cache`, `.omo` and `dist` to a timestamped directory under `D:/08 Development archives`. No tracked source is removed. `tmp` contains document-generation intermediates; `output` contains generated artwork/PDF copies (shipping PDF first retained in current docs); `.tmp` contains old QA artifacts; caches/developer state are ignored; `dist` contains historical generated packaging/QA outputs. Preserve package bytes and receipts. Developer builds can locate relocated historical ZIPs with `-PreservedArchiveDirectory`; do not overwrite them. Keep backend/.venv, frontend/node_modules and frontend/dist for current checkout launch/development. Keep active AppData and OneDrive data backups in place. Do not archive a live codegraph database or unrelated Windows/user files.
+
+Per-file SHA-256 manifest and verified relocation results reside with the USB archive. This records evidence paths only, never data contents. Machine-local sensitive artifacts are excluded from Git and the source ZIP.
+
+Additional S1 items: moved the unreferenced local credential-reference note to the timestamped IZ subfolder under D:/10 Credentials without displaying its contents. Its bytes were SHA-256 verified. Moved the unused ChatGPT installer and local debug journal to the USB archive's local-only folder; both hashes verified. Fresh release-safety evidence (26 files) and shortcut validation links are retained with the USB archive. The ignored .alleva.local.ps1 remains local because the diagnostic harness explicitly uses it; no vendor settings or client profile were changed. Source dependency directories remain available for development and checkout launch.

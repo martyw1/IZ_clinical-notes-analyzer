@@ -121,7 +121,9 @@ function Test-IzProductionVersionTransition {
     [CmdletBinding()]
     param([Parameter(Mandatory)][object]$SourceRelease,[Parameter(Mandatory)][object]$Manifest)
     $source=Assert-IzReleaseIdentityObject $SourceRelease
-    if ($Manifest.version -cne '1.0.0' -or $Manifest.build -cne '2026.09.21.2' -or
+    $supportedTarget = ($Manifest.version -ceq '1.0.0' -and $Manifest.build -ceq '2026.09.21.2') -or
+        ($Manifest.version -ceq '1.0.1' -and $Manifest.build -ceq '2026.10.12.1')
+    if (-not $supportedTarget -or
         $Manifest.installer_revision -ne 1 -or $Manifest.release_channel -cne 'stable-local-desktop' -or
         $source.version -cnotin @('2.0.0-beta.3','2.0.0-beta.4') -or $source.installer_revision -gt 1) { return $false }
     $build=ConvertTo-IzBuildVersion $source.build

@@ -1,12 +1,12 @@
 {
   "app_name": "IZ Clinical Notes Analyzer",
-  "version": "1.0.0",
-  "build": "2026.09.21.2",
+  "version": "1.0.1",
+  "build": "2026.10.12.1",
   "release_channel": "stable-local-desktop",
-  "release_date": "2026-09-21",
-  "git_branch": "codex/production-1-0",
+  "release_date": "2026-10-12",
+  "git_branch": "main",
   "stability": "stable",
   "is_prerelease": false,
-  "version_name": "Production 1.0",
-  "description": "Stable local-client release identity for Production 1.0. Full production qualification remains pending; existing clinical workflows and live Alleva approval gates are preserved."
+  "version_name": "Production 1.0.1",
+  "description": "Local desktop maintenance release with current operator guidance, response privacy safeguards and bounded upload processing. Full production qualification remains pending; clinical policy and live Alleva approval gates are preserved."
 }

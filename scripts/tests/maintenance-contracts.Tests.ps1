@@ -141,6 +141,21 @@ function Invoke-IdentityAndVersionTests {
     Assert-Contract (Test-IzReleaseCompatibility $lastBeta 12 $production) 'production_bridge_retains_schema_compatibility'
     Assert-ContractError { Test-IzReleaseCompatibility $lastBeta 13 $production | Out-Null } 'SOURCE_NOT_COMPATIBLE' 'production_bridge_rejects_wrong_schema'
 
+    $patchRelease = [pscustomobject]@{version='1.0.1';build='2026.10.12.1';installer_revision=1;release_channel='stable-local-desktop';compatibility=$stableCompatibility}
+    Assert-Contract (Test-IzProductionVersionTransition $beta3 $patchRelease) 'production_patch_bridge_accepts_beta3'
+    Assert-Contract (Test-IzProductionVersionTransition $beta4 $patchRelease) 'production_patch_bridge_accepts_beta4'
+    Assert-Contract (Test-IzProductionVersionTransition $lastBeta $patchRelease) 'production_patch_bridge_accepts_last_supported_beta'
+    Assert-Contract (-not(Test-IzProductionVersionTransition $laterBeta $patchRelease)) 'production_patch_bridge_rejects_unqualified_beta'
+    Assert-Contract (-not(Test-IzProductionVersionTransition $stable $patchRelease)) 'production_patch_uses_normal_stable_ordering'
+    $patchIdentity = New-IzReleaseIdentity -Version '1.0.1' -Build '2026.10.12.1' -InstallerRevision 1 -PayloadIdentity ('1'*64)
+    Assert-Contract ((Compare-IzReleaseIdentity $stable $patchIdentity) -lt 0) 'production_patch_follows_verified_stable'
+    Assert-Contract (Test-IzReleaseCompatibility $stable 12 $patchRelease) 'production_patch_accepts_verified_stable_schema'
+    Assert-Contract (Test-IzReleaseCompatibility $lastBeta 12 $patchRelease) 'production_patch_accepts_supported_beta_schema'
+    Assert-ContractError { Test-IzReleaseCompatibility $stable 13 $patchRelease | Out-Null } 'SOURCE_NOT_COMPATIBLE' 'production_patch_rejects_unknown_schema'
+    $unsupportedPatch=$patchRelease.PSObject.Copy()
+    $unsupportedPatch.build='2026.10.13.1'
+    Assert-Contract (-not(Test-IzProductionVersionTransition $lastBeta $unsupportedPatch)) 'production_patch_bridge_rejects_unqualified_target'
+
 }
 
 function Invoke-SystemOwnedProfileTests {
@@ -197,7 +212,9 @@ function Invoke-DispatcherArgumentTests {
 
     . (Join-Path $repoRoot 'scripts\installer\templates\Remove-IZ-Clinical-Notes-Analyzer.bootstrap.ps1') -NoRun -SourceRoot $repoRoot
     $transactionId = [Guid]::NewGuid()
-    $transactionContext = Get-IzMaintenanceContext -ComponentTestRoot $Fixture.component_root -TransactionId $transactionId
+    $dispatcherRoot = Join-Path $Fixture.run_root ('iz-cna-component-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
+    [IO.Directory]::CreateDirectory($dispatcherRoot) | Out-Null
+    $transactionContext = Get-IzMaintenanceContext -ComponentTestRoot $dispatcherRoot -TransactionId $transactionId
     Initialize-IzMaintenanceStorage -Context $transactionContext | Out-Null
     Assert-Contract (Remove-IzBootstrapTransactionScaffold -Context $transactionContext -TransactionId $transactionId) 'bootstrap_owned_empty_transaction_scaffold_removed'
     Initialize-IzMaintenanceStorage -Context $transactionContext | Out-Null
@@ -610,15 +627,30 @@ try {
     Assert-Contract (@($childProcessesAfter | Where-Object { $_ -notin $childProcessesBefore }).Count -eq 0) 'import_starts_no_child_process'
     if ($Case -in @('All', 'contracts', 'identity', 'version')) { Invoke-IdentityAndVersionTests }
     if ($Case -in @('All', 'contracts', 'paths')) { Invoke-SystemOwnedProfileTests -Fixture $fixture }
-    if ($Case -in @('All', 'contracts', 'dispatcher')) { Invoke-DispatcherArgumentTests -Fixture $fixture }
+    if ($Case -in @('All', 'contracts', 'dispatcher')) {
+        Invoke-DispatcherArgumentTests -Fixture $fixture
+        # Controller imports replace module instances; restore caller dependencies after this isolated test.
+        Import-Module $modulePath -Force
+        Import-Module (Join-Path $repoRoot 'scripts\installer\maintenance-paths.psm1') -Force
+    }
     if ($Case -in @('All', 'contracts', 'paths', 'receipt')) {
         $context = Invoke-ContextReceiptAndResultTests -Fixture $fixture
+        # Shortcut-controller module removal must not unload dependencies for later contract tests.
+        Import-Module $modulePath -Force
+        Import-Module (Join-Path $repoRoot 'scripts\installer\maintenance-paths.psm1') -Force
     } else {
         $context = Get-IzMaintenanceContext -TransactionId ([Guid]::NewGuid()) -ComponentTestRoot $fixture.component_root
         Initialize-IzMaintenanceStorage -Context $context | Out-Null
     }
     if ($Case -in @('All', 'contracts', 'manifest')) { Invoke-ManifestTests -Fixture $fixture -Context $context -Positive -Negative:($Case -in @('All','manifest')) }
-    if ($Case -in @('All', 'contracts', 'lock', 'journal')) { Invoke-LockAndJournalTests -Context $context }
+    if ($Case -in @('All', 'contracts', 'lock', 'journal')) {
+        # Rollback validates an exact program inventory, so do not inherit shortcut fixture files.
+        $journalRoot = Join-Path $fixture.run_root ('iz-cna-component-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
+        [IO.Directory]::CreateDirectory($journalRoot) | Out-Null
+        $journalContext = Get-IzMaintenanceContext -TransactionId ([Guid]::NewGuid()) -ComponentTestRoot $journalRoot
+        Initialize-IzMaintenanceStorage -Context $journalContext | Out-Null
+        Invoke-LockAndJournalTests -Context $journalContext
+    }
     if ($Case -in @('All', 'contracts-negative', 'manifest')) {
         if ($Case -eq 'contracts-negative') { Invoke-ManifestTests -Fixture $fixture -Context $context -Negative }
         Invoke-NegativeTests -Fixture $fixture

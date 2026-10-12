@@ -74,6 +74,17 @@ function New-TestFixture {
     return [pscustomobject]@{ qa_parent = $qaParent; run_root = $runRoot; component_root = $componentRoot }
 }
 
+function New-TestSourceRoot {
+    param([object]$Fixture)
+    # SourceTest enforces ordinary package paths; stage source dependencies outside cloud-reparse checkouts.
+    $sourceRoot = Join-Path $Fixture.run_root 'source'
+    $backendRoot = Join-Path $sourceRoot 'backend'
+    [IO.Directory]::CreateDirectory($backendRoot) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'VERSION.json') -Destination $sourceRoot
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'backend\app') -Destination $backendRoot -Recurse
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'backend\.venv') -Destination $backendRoot -Recurse
+    return $sourceRoot
+}
 function Remove-TestFixture {
     param([object]$Fixture)
     $full = [IO.Path]::GetFullPath($Fixture.run_root).TrimEnd('\')
@@ -214,7 +225,7 @@ $fixture=$null;$lock=$null;$savedEnvironment=@{}
 try{
     foreach($name in @('IZ_CNA_ENV_FILE','IZ_CNA_LOCAL_APP_DATA_DIR','IZ_CNA_LOCAL_SQLITE_DB_PATH','IZ_CNA_DATA_ENCRYPTION_KEY','LOCAL_SQLITE_DB_PATH','DATA_ENCRYPTION_KEY','SECRET_KEY','PSModuleAnalysisCachePath')){$savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process');[Environment]::SetEnvironmentVariable($name,$null,'Process')}
     foreach($path in @($backupModulePath,$commonModulePath,$pythonPath)){if(-not(Test-Path $path -PathType Leaf)){throw'BACKUP_TEST_DEPENDENCY_MISSING'}}
-    $fixture=New-TestFixture;[Environment]::SetEnvironmentVariable('PSModuleAnalysisCachePath',(Join-Path $fixture.run_root 'module-analysis-cache'),'Process');Import-Module $commonModulePath -Force;Import-Module $backupModulePath -Force;$transaction=[Guid]::NewGuid();$context=Get-IzMaintenanceContext -PackageRoot $repositoryRoot -TransactionId $transaction -ComponentTestRoot $fixture.component_root;Initialize-IzMaintenanceStorage $context|Out-Null;$profile=New-SyntheticProfile $context;$lock=Enter-IzMaintenanceLock -Context $context -Action Backup -TransactionId $transaction
+    $fixture=New-TestFixture;$sourceRoot=New-TestSourceRoot $fixture;[Environment]::SetEnvironmentVariable('PSModuleAnalysisCachePath',(Join-Path $fixture.run_root 'module-analysis-cache'),'Process');Import-Module $commonModulePath -Force;Import-Module $backupModulePath -Force;$transaction=[Guid]::NewGuid();$context=Get-IzMaintenanceContext -PackageRoot $sourceRoot -TransactionId $transaction -ComponentTestRoot $fixture.component_root;Initialize-IzMaintenanceStorage $context|Out-Null;$profile=New-SyntheticProfile $context;$lock=Enter-IzMaintenanceLock -Context $context -Action Backup -TransactionId $transaction
     if($Case-in@('backup-roundtrip','All')){Invoke-RoundtripTests $fixture $context $profile}
     if($Case-in@('backup-negative','All')){Invoke-NegativeTests $fixture $context $profile}
     Write-Evidence 'passed' 'COMPLETED';Write-Host "[pass] maintenance backup case=$Case assertions=$($script:Assertions.Count)";exit 0

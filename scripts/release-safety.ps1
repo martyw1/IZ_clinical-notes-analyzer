@@ -16,7 +16,7 @@ function Get-ForbiddenReleaseCategory {
 
     foreach ($part in $parts) {
         if ($part -in @('.git', '.codegraph', '.codex', '.github', '.agents')) { return 'repository_metadata' }
-        if ($part -eq '.omo') { return 'local_evidence' }
+        if ($part -eq '.omo' -or ($Distribution -and $part -eq 'tmp')) { return 'local_evidence' }
         if ($part -eq 'node_modules') { return 'dependencies' }
         if ($part -eq 'venv' -or $part -like '.venv*') { return 'environment' }
         if ($part -in @('.pytest_cache', '.mypy_cache', '.ruff_cache', '__pycache__', '.tmp', '.cache')) { return 'cache' }

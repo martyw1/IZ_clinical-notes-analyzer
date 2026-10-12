@@ -1,140 +1,73 @@
-# Operations Runbook
+# Operations runbook
 
-> Current source candidate (1.0.0 / build 2026.09.21.2): use [operator help](operator-help-current.md) for client-facing steps. Timing values come from the versioned rule package; Settings displays them read-only. The late master-plan signature criterion is included in the overall status. The rest of this runbook retains beta.3 operational history where explicitly dated.
+Current source: **1.0.1**, build **2026.10.12.1**, revision **1**, `stable-local-desktop`; reviewed October 12, 2026. [Operator help](operator-help-current.md) and [HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) are client instructions. [Current validation](validation/current-work-2026-10-12.md) is separate from historical package receipts.
 
-Date: 2026-09-04
+## Safe support sequence
 
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
+1. Obtain non-PHI symptom, approximate time, screen and running footer version. Establish installed package versus source checkout.
+2. Inspect health/version/readiness. Do not change secrets, policy, live API enablement or client data to hide a warning.
+3. Clear filters, check source/exact saved version, inspect job progress and reproduce using an isolated synthetic profile when necessary.
+4. Collect redacted diagnostics only when needed. Review before sending through approved R3 support. Never send raw logs, `.env`, uploads, database or patient screenshots.
+5. Preserve data/recovery material before authorized repair. Stop the owned app cleanly; never kill unrelated processes or delete a lock/database file blindly.
 
-## V2 beta.3 release boundary
+## Health and identity
 
-For the active V2 local desktop runtime, use `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`. This operational runbook remains useful for shared Windows operations, but current V2 release validation must follow `docs/validation/office-manager-production-fixes-2026-09-03.md` and the isolated synthetic-data procedure. Do not use a production operator profile, clinical export, saved API report, local credential, or upload for release testing. Live Alleva synchronization remains gated pending supervised approved validation; beta.3 is not a production declaration.
+At `http://127.0.0.1:8000`, `/health` and `/api/health` check health; `/api/version` reports identity; `/api/readiness` gives readiness; authenticated administrator `/api/system/readiness` supplies details. Readiness is not HIPAA certification. Authentication/role errors are expected on protected routes.
 
-## Health endpoints
+If another app owns port 8000, identify it before stopping anything. For old assets, refresh and compare footer/API with the package receipt. Source support can rebuild frontend and restart; clients should receive a rebuilt prepared package instead of installing build tools.
 
-- Backend direct: `GET /health`
-- Backend API alias: `GET /api/health`
-- Runtime readiness: `GET /api/readiness`
-- Admin readiness details: `GET /api/system/readiness`
-- Version metadata: `GET /api/version`
+## Detailed logging and privacy
 
-## Forensic log handling
+The active V2 audit store records structured actor, action, target, outcome, UTC time and redacted details in SQLite with a SHA-256 linked hash chain. Administrator Forensic Logs and the audit verification API support review. Authentication/recovery, settings, patient/plan detail, review/export, upload/import and job actions have their own events. Do not claim every HTTP request or roster read is a separate clinical access event.
 
-- Primary forensic logs are stored in the `audit_logs` table.
-- Each record includes request metadata, actor identity, source IP, event category, CEF payload, and a tamper-evident hash chain.
-- If database persistence fails during logging, the app writes JSONL fallback records under the local app-data log directory.
-- Admin access to forensic logs is available through `GET /api/audit/logs` and the `Forensic logs` screen.
-- Preserve UTC timestamps during exports, use the app-provided local timestamp for operator review, and correlate events using `request_id` and `correlation_id`.
-- Audit snapshots must not expose uploaded note text, original filenames, storage paths, vendor connection material, local access material, encryption material, or PHI-like clinical content.
+The common audit wrapper supports local JSONL fallback on database logging failure. Startup/preflight logs and job artifacts are separate evidence. Preserve timestamps, event IDs and request/correlation identifiers where present. A valid chain shows consistency of covered records; it is not independent proof against an administrator controlling the host/database. Legacy records may have narrower verification scope.
 
-## Patient note set handling
+Privacy mode is `redacted_minimum_necessary`; retention remains `local_policy_required`. Redaction blocks selected secret/content keys and patterns, not all possible PHI. Callers must supply safe metadata. Never add note text, raw responses, names, original filenames, passwords, recovery codes or encryption material for verbosity. Identifiers/dates remain sensitive. Follow R3 retention/legal hold; do not truncate audit history ad hoc.
 
-- Patient note uploads are keyed by `patient_id` and stored under the encrypted local upload directory.
-- Patient ID is the only patient identifier used for local upload/import/display/export/log workflows. Patient names, addresses, source filenames, attachment URLs, author/custodian labels, and contact-style direct identifiers are not used as local display labels or matching keys.
-- Initial uploads use `POST /api/patient-note-sets` with `upload_mode=initial`; later changes use `upload_mode=update`, which creates a new immutable version instead of replacing the prior set.
-- Current and historical binders can be listed with `GET /api/patient-note-sets` and inspected with `GET /api/patient-note-sets/{id}`.
-- Stored source files can be retrieved with `GET /api/patient-note-sets/{note_set_id}/documents/{document_id}/download` after authentication and authorization checks.
-- Uploaded binders can be deleted with `DELETE /api/patient-note-sets/{id}` by an authorized user. Deletion removes the selected note set, linked generated review charts, upload-derived timeliness records, and encrypted stored files. If the deleted binder was the current active version and an older version remains, the latest remaining version is reactivated and resynced into the timeliness tracker.
-- Admins can clear all local patient/chart/treatment-plan/manual-upload/review data with `DELETE /api/patient-data` by supplying the exact confirmation phrase `CLEAR ALL PATIENT DATA`. This preserves app settings, API credentials, user accounts, audit logs, rules, and docs.
-- Every stored file has a SHA-256 digest in the database; use that hash when validating backup integrity or investigating file tampering.
-- Forensic audit logs are retained after binder deletion.
+## Troubleshooting
 
-## Treatment Plan Timeliness operations
+| Symptom | Client first step | Support checks |
+| --- | --- | --- |
+| Page will not open | Start once, wait, try localhost:8000 | Owned listener, preflight/startup log, shortcut target and maintenance state |
+| Missing tab/access denied | Confirm assigned account | Role/facility scope; 401 authentication, 403 permission |
+| Password changed, workspace blocked | Save and acknowledge recovery code | Forced-password/recovery state; do not edit `.env` |
+| Forgotten password | Forgot password and saved one-time code | Authorized Users reset; compatible recovery procedure only |
+| Empty/stale roster | Clear filters and Source; inspect last job | Patient and plan pulls differ; inspect failures/pagination |
+| Wrong plan/evidence | Check source, MRN, plan ID/version | Exact source/facility identity; ambiguity remains unresolved |
+| Unexpected due date | Compare signatures and checklist | Timezone/Windows clock, rule version, unvalidated LOC candidate |
+| Upload warning | Read warning and saved result | Format/extraction bounds; opaque storage is not parsed success |
+| API authorization failure | Record safe phase; contact R3 | Tenant permission, audience/scope, endpoint/version and mapping |
+| Slow import | Wait; avoid duplicate jobs | File sizes/counts, parser allocation, job load, memory and OneDrive |
+| Recovery required | Stop; contact R3 | Documented Recover workflow; no manual directory replacement |
 
-- Admins begin on `Status Dashboard` and use `Treatment Plans Roster` for the operational Alleva pull and exact-plan queue.
-- The V2 administrator navigation should expose `Status Dashboard`, `Patient Roster`, `Patient Record Detail`, `Treatment Plan Detail`, `Treatment Plans Roster`, `Manual Upload`, `API Testing Harness`, `Users`, `Forensic Logs`, `Settings`, and `Help`; role restrictions still govern individual pages and actions.
-- Use `docs\patient-treatment-plan-handling.md` as the implementation map for treatment-plan storage, sync, aggregate, deterministic evaluation, selected-client checklist results, and UI code locations.
-- The queue uses deterministic Version 2.0 Beta rules and text-labeled statuses for overdue, urgent, due soon, returned, needs review, missing data, conflicting evidence, unable-to-evaluate, approved, and compliant records.
-- `Treatment Plan Detail` compares source-document `Next Review Due`, staff-signature cadence due date, and LOC-effective cadence due date for the selected exact plan.
-- If source-document next-due evidence disagrees with the date-clock due date and there is no validated LOC-change anchor, the expected result is a review/error state such as `Needs Review`, not silent compliance.
-- `Treatment Plan Detail` also shows current treatment-plan content counts/facts, data-quality warnings, source confidence, immutable plan lineage, LOC history, treatment-plan evidence, rule results, 42-step checklist rows, and manager actions.
-- Alleva/API lookup status and result details should remain inside bounded scroll areas so lookup progress does not expand the page and hide lower controls.
-- Managers can use the selected plan's 42-step checklist and authorized status/export actions without treating missing or conflicting evidence as compliant.
-- `Manual Upload` remains the fallback for synthetic or R3-approved files when the gated Alleva pull is not ready or authorized.
-- Manual overrides are restricted to admins and office managers and must be audited with a reason.
-- Counselors do not have Treatment Plans queue access because that table does not have explicit counselor ownership; they continue to use role-scoped review, upload, and account workflows.
-- The LOC-change treatment-plan update window remains unvalidated. Its seven-day candidate is display-only; readiness and the evaluator keep the case unresolved until R3/Marleigh confirms the policy.
+## Accounts and clinical workflow
 
-## API readiness checks
+Use [password management](password-management-beta4.md) and [admin recovery](admin-access-reset.md). Password change/recovery invalidate prior sessions through password epoch. Sign out and lock Windows unattended; have IT configure automatic locking. Browser sign-out is not host access control.
 
-- The admin API harness is available at `/api-configuration` in the Windows desktop runtime.
-- When opened from App settings, the harness uses the current admin session; it should not prompt for a second admin login inside the harness.
-- App settings holds the single active Alleva/API connection. The harness loads and tests that active connection; saved endpoint profiles are optional presets that must be activated before they affect readiness checks or sync.
-- Pasting the R3/Alleva client ID and client secret is expected for OAuth client-credentials setup. Stored secrets are encrypted locally and are never returned to the browser after save.
-- The harness supports API-key auth, no-auth probes, and OAuth client credentials using body credentials, Basic auth, URL-encoded Basic auth, or try-both/try-all fallback modes.
-- Operation-test responses are capped before returning to the UI. Large responses are marked as truncated and summarized instead of rendering the full payload.
-- Periodic API readiness checks can be enabled in App settings after saving REST API base URL, OpenAPI URL, token URL, client ID, encrypted client secret, token auth style, and interval.
-- Alleva has confirmed it does not currently support FHIR. Active integration uses REST/OpenAPI for testing plus explicit tenant-authorized read-only treatment-plan import; HL7 remains a readiness boundary.
-- Stored API endpoint profiles are admin-only and can be activated for the current readiness/API test configuration without returning stored secrets to the browser.
-- Periodic checks authenticate and pull/summarize API definitions only. They do not import live Alleva patient data until the live-import compliance gate is cleared.
+Office managers review authorized exact saved plans. Administrator controls include connection settings, Users and Forensic Logs. Follow actual role behavior rather than historical screenshots. Optional LLM stays disabled and is unnecessary for deterministic decisions.
 
-## Alleva REST treatment-plan sync
+The 42-step checklist and versioned rules govern Day-1 initial signatures, 30-calendar-day master signatures, PHP 30-day and IOP/OP 60-day recurring reviews. Settings shows intervals read-only. The LOC seven-day candidate cannot establish compliance; [R3 policy remains open](open-blockers.md). Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate remain valid results.
 
-- `scripts/diag-build-tools/Test-AllevaApi.ps1` uses Alleva REST API base URL, token URL, and Swagger/OpenAPI definitions.
-- App startup sync uses the same REST concept. It is disabled by default.
-- Manual retrieval is available from the API Testing Harness, Treatment Plans, and Patient Roster tabs. Each control uses the same automatic canonical Alleva v1 mapping and operational importer.
-- Admins can run the API-harness `patient_treatment_plan_aggregates` dry-run to compare `/clients`, `/treatment-plans`, and `/treatment-reviews` coverage without enabling live sync.
-- To arm an operator-triggered sync, App settings must have the Alleva REST API base URL, token URL, client ID, encrypted client secret, API and sync enabled, and live read-only tenant import authorized. The canonical mapping is applied automatically.
-- Configure pagination, total-record, and requests-per-minute ceilings to match tenant guidance. Treatment-review evidence stays missing/unknown unless a trusted review-to-plan identifier is available.
-- Patient-name import/display is off by default. When it is off, Alleva-sourced Treatment Plan clients keep generated `no-name-found_YYYY-MM-DD_HHMMSS` display labels; saving App settings with the control off redacts existing Alleva-sourced names again.
-- Name-fallback matching is a separate validation-only setting. Keep it off unless R3 is actively validating endpoint ID mapping.
-- When sync runs, Alleva is only the source system. The app normalizes the REST payloads into local timeliness records and runs R3's deterministic compliance logic.
-- Current-plan detail fetch is optional and capped. When enabled it stores counts and PHI-minimized content facts, not raw narrative text.
-- If credentials, enablement, or tenant import authorization are missing, the sync records a blocked status and imports no live patient treatment-plan data.
+## Integration boundary
 
-## Treatment-plan date clock
-
-- The timeliness evaluator uses the laptop/facility-local current date on startup and during runtime.
-- The recurring update clock starts from the latest valid treatment-plan review/update date, or from admission date when no later valid review/update exists.
-- PHP levels use 30 calendar days; other configured treatment levels use 60 calendar days.
-- Due today and one day before due are `Urgent`; two through seven days before due are `Due Soon`; eight or more days before due are `Compliant`; only dates before the evaluation date are `Overdue`.
-- LOC changes show a seven-calendar-day candidate for review. It cannot be validated from Settings or used to mark compliance until R3/Marleigh confirms the final rule and a versioned implementation is tested.
-- Every timeliness analysis result is audited with patient ID, status, due date, rule used, current date, and active workflow key/version/checklist context.
-- Exports include both the legacy checklist/domain rows and active workflow-step statuses.
-
-## Roles and workflow controls
-
-- Admins can use every screen and action, including all user roles, App settings, API/EMR, LLM, workflow profiles, logs, uploads, reviews, overrides, and exports.
-- Office managers can manage counselor accounts and Workflow profiles, approve/return reviews, and record treatment-plan overrides. They cannot open App settings, API/EMR setup, LLM setup, forensic logs, or manage admin/manager accounts.
-- Counselors can upload/update their own work, review returned work, view permitted details, export permitted work lists, and manage only their own account.
-- Workflow profile create/version/edit-draft/publish/archive/delete attempts are audited. Published/archived workflow history must remain available for interpreting historical metrics.
-- Exact treatment-plan review uses source and immutable plan-version identity. Standalone historical patient-wide reviews without a reliable plan/version link are not included in exact raw-plan reads; embedded plan-bound reviews remain available. Reused encrypted source-document retention remains pending the user's unanswered choice.
-
-## Windows desktop runtime
-
-- Use the illustrated Marleigh guide at `docs\guides\Version 2.0 Beta  2.0.0-beta.2  beta-local-desktop-v2\Marleigh-Setup-Install-and-User-Guide.html` for the non-technical clinical-manager installation, Alleva readiness, daily audit, and troubleshooting workflow.
-- The ordinary Windows path runs one local FastAPI desktop service at `http://localhost:8000`.
-- The default database is SQLite under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-- Uploads, logs, API reports, and `.env` also live under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-- Use `scripts\Start-IZ-Clinical-Notes-Analyzer.cmd` for double-click launch.
-- Ordinary launch prompts before installing missing dependencies or rebuilding frontend assets.
-- Use `scripts\preflight-windows.ps1 -AssumeYes` only for unattended support validation.
-- Use `scripts\collect-diagnostics.ps1` or the `IZ Clinical Notes Analyzer Diagnostics` shortcut to collect a redacted support bundle. The bundle excludes uploads, local databases, generated reports, and raw `.env` values.
-- Use `scripts\Backup-IZ-Clinical-Notes-Analyzer.cmd` or the `Backup IZ Clinical Notes Analyzer` shortcut to create a full local-data backup zip.
-- Use normal uninstall to preserve local data for reinstall/upgrade; use complete uninstall only after backup or an explicit R3 data-destruction decision.
-- Do not move runtime data into the OneDrive-backed source repository.
-
-## Recovery
-
-- If the Windows app will not start, inspect `%LOCALAPPDATA%\IZ Clinical Notes Analyzer\logs\preflight-windows-latest.json` and the startup logs in the same AppData tree.
-- If no local admin can sign in, follow `docs\admin-access-reset.md`.
-- If the browser shows an old UI, rebuild `frontend\dist` or use a freshly built release folder.
-- If API readiness fails, use `docs\api-configuration-and-connectivity.md` and keep live treatment-plan reads off until tenant credentials, API/sync enablement, and explicit live-read authorization are configured. The built-in Alleva v1 mapping does not require a separate approval form.
+Live Alleva import remains off by default and requires approved tenant credentials, read-only authorization, endpoint/mapping and pagination/rate-limit validation and compliance approval. Startup import stays disabled. Connection tests/dry runs and bounded harness previews are readiness evidence only. Do not place raw vendor data or tokens in diagnostics. See [API configuration](api-configuration-and-connectivity.md) and [patient data handling](patient-treatment-plan-handling.md).
 
 ## Backup and restore
 
-For ordinary Windows desktop installs:
+Current scripts create an encrypted `.izcnabackup` containing local data, configuration and encryption material, with semantic verification before publication. Protection uses AES-256-CBC plus HMAC and Windows CurrentUser DPAPI-wrapped random key material. It is intended for the same Windows account/computer. Do not promise replacement-device restoration until R3 tests a separate recovery method.
 
-1. Stop the app.
-2. Run `Backup IZ Clinical Notes Analyzer` from the Start Menu, or run `scripts\backup-local-data.ps1`.
-3. Confirm the backup zip is written under `%USERPROFILE%\Documents\IZ Clinical Notes Analyzer Backups`.
-4. Keep the backup encrypted and access-controlled because it can contain local SQLite data, encrypted uploads, audit logs, configuration, saved API configuration, and encryption material.
-5. Restore by stopping the local app, replacing the AppData directory from the approved backup, and restarting the app.
+Stop the app, run the supplied Backup command and retain the complete verified archive in an approved location. Default destination is current user's Documents/IZ Clinical Notes Analyzer Backups; Documents may be redirected, so verify actual location and OneDrive policy. Use the supplied Restore command (source support: `scripts/restore-local-data.ps1 -BackupPath <approved archive>`), follow confirmations and verify the restored runtime. Never unzip or replace only the database. Keep `.env`, SQLite and encrypted sources together. Rehearse only in an isolated synthetic profile.
 
-The `.env` file, SQLite database, and encrypted uploads must stay together. If the `.env` file is lost, encrypted uploads and saved API configuration may not be recoverable.
+Normal uninstall preserves data. Complete purge requires `REMOVE IZ DATA` and authorized destruction; it is not repair or upgrade. See [CMD maintenance](windows-cmd-maintenance.md).
 
-## Legacy Docker/PostgreSQL artifacts
+## Performance operating envelope
 
-Docker/PostgreSQL is not the current supported R3 Windows desktop path. The root full-stack `docker-compose.yml` is not active in this branch. The old Docker/nginx archive folder and database-expose compose overlay were removed on 2026-06-17 after cleanup evidence; later legacy startup/helper scripts were moved under `depricated/` and must not be used as launch instructions.
+Expected steady state is local service/browser plus OneDrive and normal Windows services. ChatGPT is excluded. Small synthetic October 12 measurements are smoke evidence, not capacity qualification. Full rosters are materialized/rendered; large extraction and concurrent jobs can pressure an 8 GB laptop. Keep one large operation active, avoid unnecessary tabs and schedule major synchronization outside review time. Measure realistic synthetic dataset sizes before promising throughput.
 
-Do not present Docker, PostgreSQL, nginx, Git, Node.js, or command-line work as ordinary Windows desktop-user requirements. Do not restore the old Docker stack to active paths unless R3 explicitly reintroduces Docker/server deployment and updates README, Windows docs, CI, tests, and release instructions together.
+## Developer verification
+
+Use the existing environment; avoid reinstalling dependencies on a client profile for diagnosis. Backend: set `PYTHONPATH=backend`, then `backend/.venv/Scripts/python.exe -m pytest backend/tests -q`. Frontend: from `frontend`, `npm run test -- --run`, `npm run build`; direct TypeScript `npx tsc --noEmit`. Windows build: `scripts/Build-IZ-Windows-Installer.cmd` with all required gates, prepared-folder validation and ZIP forbidden-file checks. Fixtures must be synthetic. A source test does not qualify a ZIP; bind checks to the exact archive. Results belong in the [October 12 ledger](validation/current-work-2026-10-12.md).
+
+## Configured source laptop: portable OneDrive ZIP workflow (October 12, 2026)
+
+At the owner's explicit request, `scripts/backup-onedrive-zip.ps1` and `scripts/restore-onedrive-zip.ps1` provide a separate unencrypted portable profile ZIP workflow. Do not feed these ZIPs to the encrypted `.izcnabackup` restore tool. Full create/check/restore/rollback and replacement-device instructions are in the current HTML guide, Backup section, and the app Help page. The archive includes `.env` and encryption material; possession gives access to sensitive records and settings. Keep it private in R3 OneDrive. No physical replacement-device or cloud-upload validation is implied by local verification. Backup directories, diagnostics and transient SQLite journals are excluded. App code/runtime must be prepared separately.

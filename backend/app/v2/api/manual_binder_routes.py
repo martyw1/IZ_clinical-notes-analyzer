@@ -165,7 +165,9 @@ def _read_binder_files(files: tuple[UploadFile, ...]) -> tuple[ManualBinderFile,
     binder_files: list[ManualBinderFile] = []
     total_bytes = 0
     for upload in files:
-        raw_bytes = upload.file.read(DEFAULT_BINDER_LIMITS.max_file_bytes + 1)
+        remaining_bytes = DEFAULT_BINDER_LIMITS.max_total_bytes - total_bytes
+        read_limit = min(DEFAULT_BINDER_LIMITS.max_file_bytes, remaining_bytes)
+        raw_bytes = upload.file.read(read_limit + 1)
         total_bytes += len(raw_bytes)
         if len(raw_bytes) > DEFAULT_BINDER_LIMITS.max_file_bytes:
             raise ManualFileParseError("One manual treatment-plan source exceeds the per-file limit.", 413)

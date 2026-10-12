@@ -69,3 +69,9 @@ api-connectivity-reports/
 
 # Approved synthetic administrator help video.
 !/docs/help/R3-Treatment-Plan-Audit-Quick-Start.mp4
+
+# Generated local QA and document intermediates
+/tmp/
+/.tmp/
+/.debug-journal.md
+/.codegraph/

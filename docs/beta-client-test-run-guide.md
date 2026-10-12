@@ -1,6 +1,6 @@
 # Beta Client Test Run Guide
 
-> Historical beta.4 test guide. For the current `1.0.0` / `2026.09.21.2` source candidate, use [operator help](operator-help-current.md). The steps below retain their original test scope.
+> Historical beta.4 test guide. For the current `1.0.1` / `2026.10.12.1` source candidate, use [operator help](operator-help-current.md). The steps below retain their original test scope.
 
 Date: 2026-09-14
 

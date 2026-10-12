@@ -1,8 +1,8 @@
 # Open Blockers
 
-Date: 2026-09-21
+Updated: 2026-10-12
 
-Applies to the current source candidate: IZ Clinical Notes Analyzer Version `1.0.0` / build `2026.09.21.2` / installer revision `1` on the `stable-local-desktop` channel. The exact portable ZIP passed local core acceptance. Client-site and full target-platform qualification remain open.
+Applies to current source **R3 Treatment Plan Audit Application 1.0.1 / build 2026.10.12.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-12.md) records this patch. September 21 exact-ZIP acceptance remains historical and does not qualify the new release.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -13,9 +13,12 @@ Status: **open external gates; no production claim.**
 - R3 and Alleva must approve and supervise a live contract and end-to-end sync validation using approved non-PHI/test records.
 - The exposed credential must be rotated, all downstream copies inventoried, and the required history-remediation procedure explicitly approved before any destructive rewrite or force push.
 - R3 IT/records owners must decide whether code signing is required and define retention/legal-hold handling for release, diagnostic, backup, and incident records.
-- Final beta3 validation must run in a clean isolated local-app-data environment using synthetic data only. The current evidence boundary is `docs/validation/office-manager-production-fixes-2026-09-03.md`; `docs/v2-beta/release-readiness-2026-07-11.md` is the historical beta2 procedure.
+- Every new release must pass isolated synthetic source and exact-package validation. The current evidence ledger is [October 12 validation](validation/current-work-2026-10-12.md); beta release reports retain historical scope.
+- R3 IT must verify whole-device encryption/recovery-key escrow, intended Windows account/sign-in and automatic lock, reliable clock and protected backup restoration. October 12 unelevated checks did not establish encryption state.
+- R3 must confirm OneDrive business agreement/BAA and tenant sharing/access/retention controls before cloud storage of regulated data.
+- Replacement-device/account recovery is not established by the CurrentUser-DPAPI same-account backup; R3 must test the device-loss recovery plan.
 
-Current V2 treatment-plan handling is documented in `docs\v2-beta\`, including product scope, data contract, Alleva/API contract, rules contract, UI workflows, security/privacy/audit notes, validation evidence, and task coverage audit. Version 1 treatment-plan handling remains archived for historical reference under `deprecated\v1\`. The blockers below remain active boundaries for the V2 beta runtime.
+Current V2 treatment-plan handling is documented in `docs\v2-beta\`, including product scope, data contract, Alleva/API contract, rules contract, UI workflows, security/privacy/audit notes, validation evidence, and task coverage audit. Version 1 treatment-plan handling remains archived for historical reference under `deprecated\v1\`. The owner gates remain active for the current V2 architecture. Dated package/test sections below retain their original evidence scope.
 
 ## LOC-Change Treatment-Plan Update Window
 
@@ -40,7 +43,7 @@ Owner: R3
 
 Status: Mapping accepted for operator-triggered use; supervised live validation remains open.
 
-Current implementation state: Version 2.0 Beta includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires a client ID, encrypted secret, API and sync enablement, and explicit live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and stored as an encrypted versioned contract when a pull begins; there is no separate mapping-approval form. Startup sync remains disabled. Supervised validation against R3's live tenant, credential rotation, and compliance release approval remain open production-readiness tasks.
+Current implementation state: the V2 architecture includes encrypted saved OAuth configuration, bounded OpenAPI/operation testing, and an admin-only read-only treatment-plan sync job. The sync remains off by default and requires a client ID, encrypted secret, API and sync enablement, and explicit live read-only tenant authorization. The published Alleva v1 mapping is applied automatically and stored as an encrypted versioned contract when a pull begins; there is no separate mapping-approval form. Startup sync remains disabled. Supervised validation against R3's live tenant, credential rotation, and compliance release approval remain open production-readiness tasks.
 
 Current operational import contract:
 
@@ -83,7 +86,7 @@ Required resolution evidence:
 - Required signature/date/completion fields are present or documented as unavailable with deterministic missing-data behavior.
 - A documented decision exists for treatment-review due-date availability through a trusted review ID or an explicit unavailable state.
 
-## Production 1.0 package validation
+## Historical September 21 production 1.0 package validation
 
 Status: **core package acceptance passed; external client/platform qualification remains open.**
 
@@ -129,7 +132,7 @@ Required resolution evidence:
 - Complete uninstall requires typing `REMOVE IZ DATA` and removes app files, shortcuts, and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
 - A signed installer or MSI/MSIX exists, bundles runtime/assets, supports repair/modify/uninstall, and preserves `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` by default.
 
-## Alleva Client-Credentials Token Request
+## Historical Alleva client-credentials evidence and remaining approval
 
 Status: live OAuth and initial protected endpoint reads passed on September 21, 2026. Full operational pull validation is in progress; older failed token attempts below are historical.
 
@@ -149,11 +152,11 @@ Required resolution evidence:
 - R3/Alleva confirms the exact tenant/client values and token request requirements.
 - A token request succeeds with an approved non-PHI operation test against a synthetic or vendor-approved test patient.
 
-## Frontend Vitest and Direct TypeScript Check
+## Historical frontend tool availability; current checks
 
 Status: resolved for Vitest on this Windows 11 laptop.
 
-Frontend Vitest and production build completed locally on 2026-07-08 for Version 2.0 Beta. Direct `tsc --noEmit` is not a defined package script; use the supported Vitest/build workflow unless a future TypeScript-only script is added.
+Frontend Vitest and production build completed locally on 2026-07-08 for Version 2.0 Beta. Direct TypeScript checking is supported with `npx tsc --noEmit` from frontend; Vitest/build remain required. Current results are in the October 12 ledger.
 
 Required resolution evidence:
 

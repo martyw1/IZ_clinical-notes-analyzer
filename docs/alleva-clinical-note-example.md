@@ -1,6 +1,6 @@
 # Example clinical-note intake bundle for Alleva-style downloads
 
-> Release reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md).
+> Current source reference: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). Dated examples and beta test results retain their original scope. See the [current documentation index](current-documentation-state.md).
 
 This is a synthetic example for development and testing only. It is based on the app's existing upload model, the R3 Recovery Services workflow discussion, and screenshots showing an Alleva-style **Document Manager** with tabs such as **Custom Forms**, **Uploaded Documents**, and **Portal Documents**. It is not official Alleva documentation and must not be treated as a confirmed vendor API contract.
 
@@ -222,3 +222,6 @@ The first rules profile should pay special attention to whether the note set con
 - Do not assume Alleva endpoint names until confirmed through official vendor/client documentation or tested OpenAPI definitions.
 - Keep manual upload and API lookup as separate intake methods but converge them into the same review workflow.
 - Preserve source metadata so the manager can trace each completeness finding back to a source document.
+
+
+For current operational behavior and release acceptance use [operator help](operator-help-current.md), [rules contract](v2-beta/rules-contract.md), [runbook](runbook.md) and [current validation](validation/current-work-2026-10-12.md). Live vendor approval remains external and all test records must be synthetic.

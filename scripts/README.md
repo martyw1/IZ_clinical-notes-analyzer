@@ -54,9 +54,15 @@ The guided Alleva tool retains its settings, `logs` and `exports` next to its sc
 
 ## Build inputs and immutability
 
+The active source candidate is `1.0.1`, build `2026.10.12.1`, installer revision `1`, channel `stable-local-desktop`. Normal stable upgrade ordering accepts the verified `1.0.0` source; the explicitly bounded beta-to-production bridge also accepts the previously supported beta.3/beta.4 builds through `2026.09.15.2`. The database schema remains `12`; unknown schemas are rejected. Historical ZIPs and their pinned hashes are unchanged.
+
+The package includes the current offline guide at `app/docs/guides/current/Marleigh-Setup-Install-and-User-Guide.html`. Local `tmp/` evidence is excluded from the package and rejected by release safety validation.
+
 The builder still verifies the original beta.3 and beta.4 ZIPs before creating an upgrade-compatible package. It uses `dist/windows-release`, or the current user's `not-required-for-deployment/repo/dist/windows-release` archive when the old ZIPs have been moved. Supply `-PreservedArchiveDirectory "C:/path/to/preserved-zips"` for another location. Pinning and hash verification are unchanged. These ZIPs are needed by the developer build, not the installed client.
 
 A released version/build cannot be overwritten. For a local validation build without publishing a replacement release, use `-ValidationOnly`; any skip flags are limited to that diagnostic mode. See [the full build guide](../docs/windows-installer-build-and-install.md).
+
+Release mode requires a clean, reviewed Git checkout. Do not delete unrelated files or bypass that gate to publish. From a working checkout, `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-windows-installer.ps1 -ValidationOnly` produces a separately marked `NOT-RELEASE-READY` package and ZIP under a marker-owned `IZ-CNA-QA/build-*` folder. It retains test, frontend build, frozen-runtime and package validation unless explicit diagnostic skip flags are supplied. This output is developer evidence, not a client release.
 
 ## Relocation map
 
@@ -69,3 +75,11 @@ A released version/build cannot be overwritten. For a local validation build wit
 | `docs/security/verify-s0-incident-metadata.ps1` | `scripts/security/verify-s0-incident-metadata.ps1` |
 
 Historical validation/removal reports retain their original file paths as evidence. The incident verifier’s pinned historical Git tree paths also remain unchanged. The [consolidation record](../docs/validation/script-consolidation-2026-09-23.md) lists the subsequent moves and validation.
+
+## Owner-requested portable OneDrive ZIP backup
+
+Source checkout only: `backup-onedrive-zip.ps1 -Destination <OneDrive backup folder>` creates and verifies a complete unencrypted profile ZIP, excluding prior backup directories, diagnostics and SQLite journals. Add `-InstallSchedule` to register the current-user limited task every three days at 6 PM; it needs an interactive signed-in session. `restore-onedrive-zip.ps1` opens a ZIP picker and requires RESTORE, preserves existing data, and activates a validated staged profile. Python stdlib implementation: `portable_data_zip.py`; synthetic tests: `backend/tests/test_portable_data_zip.py`. These are separate from the encrypted supported installer backup format and are not added to historical release archives. See the current HTML guide for precise operator instructions.
+
+## Recreate source desktop links
+
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-source-desktop-shortcuts.ps1` as the intended Windows user. It creates tools (1)–(9) using the current checkout location (backup requires an available OneDrive folder), without starting the service, resetting passwords, restoring records or registering a task. `-WhatIf` previews changes; `-DesktopPath` supports a test directory. Credentials are never embedded. The one-page shipping insert is tracked at `docs/guides/current/Getting-Started-Guide.pdf`.

@@ -4,9 +4,9 @@ This guide covers the Windows release workflow for IZ Clinical Notes Analyzer.
 The build and install scripts are designed for Windows 10/11 users without
 administrator rights.
 
-## Production 1.0
+## Current source and package boundary
 
-The current candidate is `1.0.0` / build `2026.09.21.2` / installer revision `1`. Its prepared ZIP, full build and core component-profile lifecycle passed; client-site and full platform qualification remain open. Read the [installer portability validation criteria](validation/installer-portability-2026-09-21.md) before deployment. The September 15 package and [its validation report](validation/windows-cmd-maintenance-2026-09-15.md) remain immutable historical evidence.
+Current source is **1.0.1 / build 2026.10.12.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-12.md) records source and exact-package results. September 21 `1.0.0` build `2026.09.21.2` and September 15 receipts remain immutable historical evidence; their passing results do not qualify the new source. Use [package index](client-release-packages.md), [current HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) and [handoff checklist](client-handoff-checklist.md).
 
 The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and earlier beta.4 builds for smart upgrade in place, preserves current-user data and existing account passwords on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
 
@@ -193,8 +193,7 @@ Before uninstalling or making major changes, run:
 Backup-IZ-Clinical-Notes-Analyzer.cmd
 ```
 
-The backup may contain regulated clinical data and local access material. Store
-it securely according to R3 policy.
+The verified encrypted `.izcnabackup` may contain regulated clinical data, configuration and encryption material. CurrentUser DPAPI protects its key for the same Windows account/computer. Keep the archive intact and use the supplied Restore command; replacement-device recovery requires a separate tested plan. Store it securely according to R3 policy.
 
 ### Uninstall
 

@@ -1,94 +1,29 @@
-# Architecture Overview
+# Current local desktop architecture
 
-> Current app: `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). This document preserves the V1 architecture, including legacy binder models and routes. Use the [V2 architecture overview](v2-beta/README.md), [current treatment-plan handling map](patient-treatment-plan-handling.md), and [documentation index](current-documentation-state.md) for the active runtime.
+Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**, October 12, 2026. The browser product is **R3 Treatment Plan Audit Application**; legacy IZ storage/shortcut/package identifiers remain stable. V2 names internal modules, not the app release version.
 
-Date: 2026-06-30
+## Runtime and data flow
 
-Historical architecture scope: IZ Clinical Notes Analyzer Beta Version `1.4.6-beta.1` / build `2026.06.30.1`.
+The Windows launcher starts one FastAPI desktop service bound to localhost, ordinarily port 8000. `backend/app/desktop_main.py` mounts built React/Vite assets and desktop-only readiness/API pages. `backend/app/main.py` constructs the shared application. Normal prepared-package users need no build tools, administrator privileges, Docker, PostgreSQL, Git, Python or Node installation.
 
-## Current architecture
+The React entry renders `frontend/src/v2/AppV2.tsx`. Role-scoped pages include Dashboard, Patient Roster/detail, Treatment Plans Roster/detail, Manual Upload and Help; administrators also have Users, Settings, API Testing Harness and Forensic Logs. Account provides password and recovery workflows. Current clinical/identity behavior is described in [operator help](operator-help-current.md), [UI contract](v2-beta/ui-workflows.md) and [patient handling](patient-treatment-plan-handling.md).
 
-IZ Clinical Notes Analyzer is a local-first React + FastAPI desktop-style app for Windows chart review workflows. The normal Windows 10/11 path is one local FastAPI service at `http://localhost:8000`, a built React/Vite browser UI, SQLite in the user's local app-data folder, encrypted local uploads, protected API configuration storage, role-based access control, deterministic Treatment Plan Tracking rules, workflow profiles, readiness checks, and forensic audit logging.
+Active API routes are composed under `backend/app/v2/api/`. Auth validates active accounts, role/facility scope, session expiration and password epoch. Initial temporary-password change and recovery-code setup protect entry to the workspace. Password recovery is one-time and does not reactivate a disabled user. Do not assume browser sign-out substitutes for Windows locking.
 
-The active Beta 1.4.6-beta.1 product path is local Windows desktop use. Docker, PostgreSQL, and nginx container serving are not ordinary runtime requirements and are not the current supported R3 desktop deployment path.
+Default runtime paths resolve through `Settings.local_app_data_dir` to `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, outside repository/OneDrive. SQLite stores accounts, local patient/plan/version/evaluation metadata and forensic records. Generated-name source uploads and saved API configuration use encrypted storage. Immutable saved versions keep exact source/facility/identity associations; ambiguous or missing relationships are not guessed. Clinical identifiers and dates in SQLite still need OS/disk protection.
 
-The deprecated Docker/nginx archive and unused Compose overlay were removed on 2026-06-17 after reference scans proved no active launch, test, backend, frontend, config, or CI path used them. Legacy startup/helper scripts and historical UI reference code that are not part of the active Windows local path were later moved under `depricated/`. Do not restore those files to active paths unless R3 explicitly reintroduces Docker/server deployment or requests that historical reference code be active again, with README, Windows docs, CI, tests, and release instructions updated together.
+## Deterministic evaluation
 
-## Runtime components
+The canonical 42-step checklist and versioned rules feed `backend/app/v2/services/deterministic_evaluator.py`. Initial signatures are checked on admission Day 1, master signatures within 30 calendar days, recurring PHP reviews at 30 calendar days and IOP/OP at 60. The recurring anchor is latest valid signed review or admission; source Next Review Due is compared with calculated dates. Settings shows clinical intervals read-only. The seven-calendar-day LOC date remains an unvalidated candidate and Needs Review. Optional LLM configuration is disabled by default and unnecessary for timing/completeness decisions.
 
-- **Desktop runtime**: `backend/app/desktop_main.py` serves the built React app and API configuration page from the same localhost service without floating shortcut buttons.
-- **Frontend**: React/Vite app in `frontend/src`, built to `frontend/dist` and served by the desktop runtime.
-- **Backend**: FastAPI app with JWT auth, RBAC, workflow state controls, encrypted uploads, deterministic rule execution, API readiness harnesses, and audit logging.
-- **Database**: SQLite by default for Windows desktop installs, stored under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`.
-- **Local data**: encrypted clinical source files, API reports, startup logs, fallback audit logs, and `.env` live under OS-local app data, not in the OneDrive-backed repository.
-- **Version metadata**: `VERSION` and `VERSION.json` are exposed through `/api/version` and shown in the UI footer when available.
+## Import and readiness boundary
 
-## Local security model
+Manual upload parses supported text/document formats within file/aggregate/extraction bounds and archives source material encrypted. Some legacy/image/archive formats remain opaque; storage success is not extraction or clinical acceptance. Authorized Alleva operations use approved tenant/read-only credentials and canonical mapping with pagination/rate ceilings, checkpoints and bounded detail workers. Patient roster and treatment-plan pulls are distinct jobs. Startup import stays disabled. API configuration, OAuth/connectivity tests and bounded OpenAPI/operation previews do not establish live import approval.
 
-- Windows startup scripts bind the app to localhost and keep runtime data outside the source checkout.
-- Startup/preflight creates local AppData folders and a local `.env` when missing.
-- Backend startup runs dependency/readiness checks before the app is considered ready.
-- Uploaded clinical files are encrypted before they are written to disk and decrypted only for authorized downloads or local analysis.
-- Saved API configuration values are protected and are not returned to the browser.
-- Relative upload, log, database, and API-report paths resolve through `Settings.local_app_data_dir`.
-- Managed users with a required reset can only read their own profile and complete the reset flow until that requirement is complete.
+## Logging, backup and packaging
 
-## Forensic audit logging
+V2 audits use safe structured metadata in SQLite with a SHA-256 linked chain; the common audit wrapper supports local JSONL fallback on persistence failure. Startup logs, redacted diagnostics and job artifacts serve separate support purposes. Preserve detailed events without note text, raw vendor payloads, names, original filenames or secret values. Chain verification is consistency evidence, not independent immutable storage against a host administrator. Retention/legal hold remains an R3 policy requirement.
 
-- Every HTTP request is assigned a request ID and correlation ID and is logged on completion, including status code, route, latency, source IP, forwarded IP chain, and user-agent.
-- Authenticated actions bind actor identity into the request context so committed database changes can be tied back to the requesting user.
-- Committed inserts, updates, and deletes for tracked domain models are captured with before-state, after-state, and field-level diff payloads.
-- Explicit domain events are emitted for sensitive reads and workflow actions such as login, reset flows, chart transitions, audit log access, UI button events, blocked workflow clicks, API harness activity, and safe review-source checks.
-- Patient note-set uploads and downloads emit explicit file activity events, and each stored file carries a persisted SHA-256 hash plus byte count for forensic validation.
-- Audit records are tamper-evident through hash chaining and carry CEF-style payloads for downstream compliance integrations.
-- If the audit log cannot be written to the database, records are spooled to the local app-data log directory so evidence is not silently lost.
-- Audit snapshots redact uploaded filenames, storage paths, document labels, descriptions, and source attachment/author metadata.
+Backup tooling produces semantically verified encrypted `.izcnabackup` archives containing related data and configuration. AES/HMAC and CurrentUser DPAPI bind key recovery to the same Windows account/computer. Replacement-device recovery requires separate testing. Prepared Windows packaging bundles runtime/assets and applies required-file and forbidden-file gates; exact receipts/hashes belong to the actual ZIP, never a renamed historical release.
 
-## Patient note binders
-
-- The app tracks work by `patient_id`; patient names, addresses, original filenames, attachment URLs, author/custodian labels, and contact-style direct identifiers are not local display labels or matching keys.
-- Alleva-compatible document uploads are grouped into immutable `patient_note_sets`, with each update creating a new version and marking the previous active version as superseded.
-- Individual uploaded files are stored as encrypted `patient_note_documents` with Alleva bucket metadata, completion state, signature flags, document dates, size, content type, and SHA-256 digest.
-- The frontend presents note sets as a document-manager-style binder so counselors and office managers can upload, update, inspect, delete, and download source documents without overwriting historical evidence.
-- Authorized binder deletion removes the selected note set, linked generated review charts, upload-derived timeliness records, and encrypted stored files while retaining forensic audit logs.
-- PDF uploads retain page-level extracted text when available so deterministic findings can cite manual source locations such as `manual upload page 2` without logging raw clinical note text.
-
-## Treatment-plan timeliness model
-
-- The Treatment Plans view is the default landing work queue for admins and office managers when no explicit view is requested.
-- `docs/patient-treatment-plan-handling.md` is the current implementation reference for treatment-plan storage, sync, aggregate, timeliness, checklist, and UI code locations.
-- Local treatment-plan state is stored in `TreatmentPlanClient`, `LevelOfCareHistory`, `TreatmentPlanRecord`, `TreatmentPlanOverride`, and `TreatmentPlanCriterionReview` rows in the local SQLite database.
-- The timeliness evaluator uses the local/facility current date, admission date, latest valid treatment-plan review/update date, current LOC, and LOC history to calculate status.
-- PHP levels use a 30-calendar-day recurring update interval; other configured treatment levels use 60 calendar days.
-- LOC changes use a separate manager-editable 7-calendar-day preset that remains unvalidated until R3/Marleigh confirms the final rule.
-- Treatment Plans records display Patient ID only. Name-only API records remain unmapped rather than being guessed from patient names.
-- Alleva current-plan detail capture stores counts, structured content facts, text-present flags, redacted text hashes, and non-name metadata only; treatment-plan narrative text and direct patient identifiers are not stored as content facts.
-- The stored selected-client aggregate route preserves current UI/export compatibility while exposing source confidence, current-plan selection, content capture state, data-quality warnings, and PHI-minimized provenance.
-- Timeliness analysis results are audited with workflow definition key/version/checklist context, and CSV/JSON exports include both checklist/domain rows and active workflow-step statuses.
-
-## EMR/API integration boundary
-
-- The current production-style path remains local file upload from an EMR export.
-- Alleva has confirmed it does not currently support FHIR. Active integration is Alleva REST/OpenAPI/HL7-readiness only.
-- Admin App settings capture the one active Alleva/API connection: vendor label, REST API base URL, OpenAPI URL, OAuth token URL, API client ID, encrypted API client secret, token auth style, timeout, and encrypted direct-API credential state.
-- Stored API endpoint profiles capture optional Alleva REST/OpenAPI endpoint presets with encrypted client secrets. Activating a profile copies it into the active App settings connection used by readiness checks.
-- The backend no longer exposes active FHIR/SMART discovery or FHIR import-plan routes.
-- The direct API harness can discover OpenAPI/Swagger definitions and test selected operations with API-key or client-credentials auth, while redacting tokens/secrets from browser payloads, reports, and audit details.
-- The gated Alleva REST treatment-plan sync path uses the Alleva REST API base URL/OpenAPI mapping to normalize approved active-client, treatment-plan, and treatment-review payloads into the local R3 timeliness engine.
-- Ungated Alleva live patient import is intentionally disabled until R3/Alleva supplies approved tenant credentials, endpoint mapping, pagination/rate limits, attachment/signature behavior, vendor documentation, and compliance approval.
-
-## Database connectivity model
-
-Configuration is explicit and deterministic:
-
-- `DATABASE_BACKEND=sqlite` is the normal Windows local-desktop setting.
-- `DATABASE_URL` defaults to a SQLite file under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` for the local desktop path.
-- Relative SQLite, upload, log, and report paths are resolved through the configured local app-data directory.
-- PostgreSQL environment keys can remain in `.env.example` for historical/developer reference, but the active Beta 1.4.6-beta.1 Windows product path does not require a PostgreSQL container.
-
-## Health model
-
-- `/health` for direct infra probes.
-- `/api/health` for API/proxy-friendly probes.
-- `/api/readiness` for unauthenticated runtime readiness.
-- `/api/system/readiness` for admin-visible readiness checks with audit logging.
+See [runbook](runbook.md), [assessment](security/appliance-assessment-2026-10-12.md), [open blockers](open-blockers.md) and [current validation](validation/current-work-2026-10-12.md). The supported appliance workload is app/browser plus OneDrive and Windows services; ChatGPT is excluded. Whole-device encryption, secure Windows account/locking, approved OneDrive business controls, incident disposition and tested disaster recovery remain deployment controls outside source-code correctness.

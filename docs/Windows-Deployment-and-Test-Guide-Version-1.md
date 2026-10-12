@@ -1,6 +1,6 @@
 # Windows Deployment and Test Guide Version 1
 
-> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> Historical reference: current source is `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 Historical V1 beta version: `1.4.6-beta.1` / build `2026.06.30.1`.
 

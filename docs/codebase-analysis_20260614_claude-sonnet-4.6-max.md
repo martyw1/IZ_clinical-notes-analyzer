@@ -4,7 +4,7 @@
 
 > Script-location update (2026-09-23): executable tools now live under `scripts/`, including `scripts/diag-build-tools/`. Historical paths below describe the original work; see the [current script guide](../scripts/README.md) for runnable commands.
 
-> Historical reference: the current app is `2.0.0-beta.3` / build `2026.09.03.1` (`beta-local-desktop-v2`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
+> Historical reference: current source is `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
 **Target model:** GPT-5.5 Extra High  
 **Target platform:** OpenAI Codex App on macOS  

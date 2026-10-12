@@ -1,6 +1,18 @@
 # Release Notes
 
-## Unreleased source candidate — clinical timing and Help
+## 1.0.1 — build 2026.10.12.1 — October 12, 2026
+
+Source patch, installer revision 1, channel stable-local-desktop. Current browser name is R3 Treatment Plan Audit Application; IZ storage/shortcut names stay compatible. Version metadata and release assertions align with the source patch. Detailed privacy-safe audit logging remains part of the runtime contract.
+
+Current operator/technical documentation now includes a canonical offline HTML guide, first-use recovery-code setup, role-scoped workflows, exact patient/plan/version identity, parsing-versus-opaque-storage warnings, read-only clinical timing, safe support and verified encrypted same-account backup limitations. The documentation inventory separates current instructions from historical beta/PRD/video/package evidence.
+
+Source hardening addresses sensitive response cache/security headers and manual-upload/extraction bounds; exact code/test/package/browser evidence is in [October 12 validation](validation/current-work-2026-10-12.md). Do not apply the September 21 ZIP's hash or 799-test receipt to this patch. [Package index](client-release-packages.md).
+
+Unchanged release gates: LOC-change seven-day candidate remains unvalidated Needs Review and clinical intervals are read-only; live Alleva approval remains external; credential incident disposition, device encryption verification, OneDrive business controls, retention/legal hold, signing and replacement-device recovery remain owner decisions. Optional LLM stays disabled by default. Intended workload is app/browser plus OneDrive; ChatGPT is excluded.
+
+## Earlier source changes and historical releases
+
+## Earlier source changes — clinical timing and Help
 
 The active evaluator now carries a late master-plan signature into the overall `Overdue` result when higher-priority unresolved evidence does not control it. Settings reads active 30/60-day timing values from the versioned rules and shows the seven-day LOC-change date only as an unvalidated candidate. Clinical-rule edits through Settings are rejected; previously saved validation flags cannot clear the LOC-change readiness blocker. The Treatment Plans Roster restores its last saved import result after reopening. In-app Help and [current operator help](operator-help-current.md) explain the exact-plan workflow, status meanings, imports, account recovery, and support steps. This source change is not a new qualified installer or a clinical approval of the LOC-change deadline.
 
@@ -17,7 +29,7 @@ Build and source launch entry points now live in `scripts/`, with standalone All
 
 Production qualification evidence: [production 1.0 validation](validation/production-1-0-2026-09-21.md).
 
-Current candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
+Historical candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`. The installer stages and verifies a prepared package when it is run from a relocated normal folder or a OneDrive-backed folder, while retaining strict installed-app and local-data path checks. A truly fresh install uses the same R3-supplied starter administrator credential on supported devices and requires an immediate personal password change; upgrades and reinstalls preserve existing account passwords and password state.
 
 The final ZIP passed 799 tests, seven build gates, two fresh-profile browser password/recovery/restart flows, packaged upgrade/reinstall and 13 normal/OneDrive source checks on the Windows 11 host. The client laptop, Windows 10 and full platform qualification remain unverified. See [installer portability validation](validation/installer-portability-2026-09-21.md). No clinical rules, LOC-change validation status, or live Alleva gates changed.
 
@@ -58,7 +70,7 @@ See [password management](password-management-beta4.md). Validation is recorded 
 - Earlier screenshots and V1 procedures are labeled historical and linked to current guidance. Existing guide paths remain valid.
 - This checkout help update does not rebuild or revalidate the prepared installer.
 
-Current source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`.
+Historical source candidate: `1.0.0` / build `2026.09.21.2` / installer revision `1`.
 
 Current release channel: `stable-local-desktop`.
 
@@ -250,10 +262,10 @@ Summary:
 ## Current implementation boundaries
 
 - Operator-triggered read-only Alleva treatment-plan import is off by default and requires saved tenant credentials, API/sync enablement, and explicit live-read authorization. The published Alleva v1 mapping is applied automatically; supervised validation of real tenant response shapes and broader production/compliance rollout remain external release gates.
-- The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The app ships a manager-editable 7-calendar-day preset, but this must stay configurable and visibly unresolved until confirmed.
+- The LOC-change treatment-plan update window remains unvalidated by R3/Marleigh. The versioned rules display a seven-calendar-day provisional candidate, Settings clinical values are read-only, and cases remain Needs Review until R3 confirms a tested rule update.
 - Manual upload remains an upload-time snapshot. Use the monthly compliance-check fallback when API refresh is unavailable.
 - Optional LLM setup exists but is disabled by default and is not the primary review path.
-- Docker, PostgreSQL, and nginx are not ordinary Windows desktop requirements for the current R3 beta-local-desktop path.
+- Docker, PostgreSQL, and nginx are not ordinary Windows desktop requirements for the current stable-local-desktop path.
 - The package is still not a signed MSI/MSIX with repair/modify support; the release-folder builder is the current packaging path.
 
 ## Version metadata files
@@ -284,3 +296,7 @@ Current version values must stay aligned in:
 - `docs\admin-access-reset.md`
 
 Historical validation reports keep their original tested version numbers and should not be read as the current app version unless they explicitly say they were updated for `2.0.0-beta.1`.
+
+### October 12 local maintenance — owner-requested portable ZIP backup
+
+Added a source-laptop portable profile ZIP workflow, current-user three-day task setup, backup/restore shortcuts and exact instructions in Help and the current HTML guide. ZIPs intentionally have no password at the owner's request and include sensitive settings/encryption material. Consistent SQLite snapshots, hash verification, extraction rehearsal, corrupted/unsafe archive rejection and preserved-profile restore support recovery; matching app/runtime must be supplied separately. Prior encrypted backup and immutable historical artifacts remain separate. LOC-change policy remains unresolved and live Alleva sync remains gated. Physical replacement-device and OneDrive cloud-upload verification remain open.

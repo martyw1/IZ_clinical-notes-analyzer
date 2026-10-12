@@ -11,8 +11,8 @@ from v2_test_runtime import fresh_client as _fresh_client
 
 def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     root = Path(__file__).resolve().parents[2]
-    expected_version = "1.0.0"
-    expected_build = "2026.09.21.2"
+    expected_version = "1.0.1"
+    expected_build = "2026.10.12.1"
     expected_channel = "stable-local-desktop"
 
     metadata = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
@@ -23,10 +23,10 @@ def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monk
     assert metadata["version"] == expected_version
     assert metadata["build"] == expected_build
     assert metadata["release_channel"] == expected_channel
-    assert metadata["release_date"] == "2026-09-21"
+    assert metadata["release_date"] == "2026-10-12"
     assert metadata["stability"] == "stable"
     assert metadata["is_prerelease"] is False
-    assert metadata["version_name"] == "Production 1.0"
+    assert metadata["version_name"] == "Production 1.0.1"
     assert package["version"] == expected_version
     assert lockfile["version"] == expected_version
     assert lockfile["packages"][""]["version"] == expected_version
@@ -40,7 +40,7 @@ def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monk
     assert version_payload["release_channel"] == expected_channel
     assert version_payload["stability"] == "stable"
     assert version_payload["is_prerelease"] is False
-    assert version_payload["version_name"] == "Production 1.0"
+    assert version_payload["version_name"] == "Production 1.0.1"
     assert version_payload["active_runtime"] == "v2"
 
     sample_openapi_response = client.get("/api/api-configuration/sample-openapi.json")
@@ -62,13 +62,13 @@ def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monk
     main_source = (root / "backend" / "app" / "main.py").read_text(encoding="utf-8")
     desktop_source = (root / "backend" / "app" / "desktop_main.py").read_text(encoding="utf-8")
 
-    assert "Production 1.0" in app_source
+    assert "Production 1.0.1" in app_source
     assert f"{expected_version} | build {expected_build} | {expected_channel}" in shell_source
     assert f"{expected_version} · build {expected_build} · {expected_channel}" in help_source
     assert "Full production qualification remains pending." in help_source
-    assert "IZ Clinical Notes Analyzer Production 1.0" in index_source
-    assert 'title=f"{settings.app_name} Production 1.0"' in main_source
-    assert "IZ Clinical Notes Analyzer Production 1.0" in desktop_source
+    assert "<title>R3 Treatment Plan Audit Application</title>" in index_source
+    assert 'title=f"{settings.app_name} Production {settings.app_version}"' in main_source
+    assert "R3 Treatment Plan Audit Application" in desktop_source
 
 
 def test_production_version_fallbacks_are_stable(monkeypatch: MonkeyPatch) -> None:
@@ -78,9 +78,9 @@ def test_production_version_fallbacks_are_stable(monkeypatch: MonkeyPatch) -> No
     monkeypatch.setattr(version_service, "_git_value", lambda *_args: version_service.UNKNOWN)
     payload = version_service.build_version_payload()
 
-    assert payload["version"] == "1.0.0"
+    assert payload["version"] == "1.0.1"
     assert payload["release_channel"] == "stable-local-desktop"
     assert payload["stability"] == "stable"
     assert payload["is_prerelease"] is False
-    assert payload["version_name"] == "Production 1.0"
+    assert payload["version_name"] == "Production 1.0.1"
     assert payload["active_runtime"] == "v2"

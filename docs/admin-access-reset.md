@@ -1,10 +1,6 @@
-> Beta.4 update (2026-09-10): password setup, changes, and one-time recovery are now in the app. See [password management and beta.3 upgrades](password-management-beta4.md). Earlier version-specific instructions below remain historical.
+# Administrator access recovery
 
-# Admin Access Reset Guide
-
-Date: 2026-09-08
-
-Applies to: IZ Clinical Notes Analyzer Version `2.0.0-beta.3` / build `2026.09.03.1` on the `beta-local-desktop-v2` Windows desktop runtime.
+Current source: **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. First use, password changes and one-time recovery are in the app; see [password management](password-management-beta4.md). Use Forgot password with the saved code first. Historical beta.3 standalone recovery below is compatible only with its original validated package, not a universal current reset tool.
 
 ## Purpose
 
@@ -16,20 +12,20 @@ Use this path when at least one working admin account can sign in.
 
 1. Open `http://localhost:8000`.
 2. Sign in with an active admin account.
-3. Open `User management`.
+3. Open `Users`.
 4. Select the user who needs access reset.
 5. Use the user reset action.
 6. Require the user to choose a new credential at next sign-in when the UI offers that option.
 7. Communicate any one-time credential only through an R3-approved secure channel.
 8. Confirm the action appears in `Forensic logs` without exposing the credential value.
 
-Version 2.0 Beta role-scope reminder:
+Current role-scope reminder:
 
 - Admins can manage admin, manager, and counselor accounts.
 - Office managers can manage counselor accounts only.
 - Counselors can manage only their own account.
 
-## Client package: standalone recovery when locked out
+## Historical beta.3 package: standalone recovery when locked out
 
 For the original beta.3 Windows package, send the validated
 `output/IZ-Admin-Recovery-beta.3.zip`. It contains the standalone executable
@@ -48,9 +44,9 @@ the existing database locally, updates the account and audit chain together,
 and clears lockout. It refuses incompatible installations and disabled accounts.
 If Windows blocks the unsigned executable, contact R3 without disabling protection.
 
-## Developer checkout utility
+## Authorized current source-checkout recovery
 
-The existing script below requires `backend/.venv/Scripts/python.exe`; it is
+If no administrator or recovery code is available, R3 support must verify ownership and deployment compatibility before recovery. Do not use the historical executable on the current version. The existing source script below requires `backend/.venv/Scripts/python.exe`; it is
 not a standalone client-package recovery method. It prompts the operator to
 enter a temporary password securely.
 
@@ -60,7 +56,7 @@ enter a temporary password securely.
 
 ## Do not reset an existing account by editing .env
 
-The initial generated password is stored in:
+Local initialization configuration may be stored in:
 
 ```text
 %LOCALAPPDATA%\IZ Clinical Notes Analyzer\.env
@@ -89,4 +85,4 @@ Invoke-RestMethod http://127.0.0.1:8000/api/readiness
 Invoke-RestMethod http://127.0.0.1:8000/api/version
 ```
 
-Expected beta version: `2.0.0-beta.3` / build `2026.09.03.1` / channel `beta-local-desktop-v2`.
+Expected current source identity: `1.0.1` / build `2026.10.12.1` / channel `stable-local-desktop`; compare against the exact installed release receipt. Historical beta recovery procedures keep their original compatibility limits.

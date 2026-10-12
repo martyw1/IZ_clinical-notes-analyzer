@@ -6,6 +6,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.services.audit import log_event
+from app.response_privacy import ResponsePrivacyMiddleware, private_server_error
 from app.v2.db import init_database
 from app.v2.api.routes import router as v2_router
 from app.v2.route_registry import assert_routes_classified
@@ -17,7 +18,7 @@ def create_app() -> FastAPI:
     settings.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
     init_database()
     api = FastAPI(
-        title=f"{settings.app_name} Production 1.0",
+        title=f"{settings.app_name} Production {settings.app_version}",
         docs_url=None,
         openapi_url=None,
         redoc_url=None,
@@ -30,6 +31,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    api.add_middleware(ResponsePrivacyMiddleware)
+    api.add_exception_handler(500, private_server_error)
     api.include_router(v2_router)
     assert_routes_classified(api)
     log_event(action="app.start", entity_type="application", entity_reference="v2", details={"runtime": "v2"})
