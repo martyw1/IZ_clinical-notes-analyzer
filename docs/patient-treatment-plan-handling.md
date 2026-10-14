@@ -1,6 +1,14 @@
 # Patient treatment-plan handling
 
-Current source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. V2 denotes the internal architecture. This is the active source/API/storage map; dated evolution notes at the end retain historical scope. All verification uses synthetic data. Live vendor approval, retention and LOC policy remain external gates.
+Current source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. V2 denotes the internal architecture. This is the active source/API/storage map; dated evolution notes at the end retain historical scope. Automated fixtures and screenshots use synthetic data. Owner-authorized live read-only verification is recorded separately with counts/status only. Live vendor approval, retention and LOC policy remain external gates.
+
+## October 13 background update maintenance
+
+The administrator dashboard control starts `POST /api/v2/roster-update/run`; `GET /api/v2/roster-update/latest` restores its history. The parent `two_stage_roster_update` job runs a patient-roster child followed by an approved treatment-plan child on the backend. Navigation does not control stage execution. Incomplete stage-one results stop before stage two; existing import authorization/mapping is rechecked at each stage. Concurrent operational pulls are rejected. Local cancellation propagates to the active child and is checked before subsequent stages and between plan writes. Alleva's published API definition has no documented reset/cancel endpoint; no remote reset is implemented.
+
+Schema migration 13 adds `api_job_progress` with phase, completed/total counts, stage and child-job linkage. Its existing migration workflow creates an encrypted backup before atomic replacement. Collection totals remain unknown; detail retrieval and saving publish measured per-phase counts. Failed/cancelled jobs do not claim 100% completion. Restart retains completed history and credentials; in-flight daemon workers become `stale_or_interrupted` and require an explicit retry, rather than automatically continuing a possibly partial import.
+
+The UI polls active operational jobs once per second (five seconds in a background tab), keeps the still-running message after a minute, and reconnects when a saved active job is loaded. Dashboard metrics are grouped by timeliness, review/data quality and workload, with responsive grids. Its calculation timestamp is distinct from the successful two-stage pull timestamp. Patient snapshots are read in authorized batches; both roster tables use 75-row pages and retain prior rows during refresh. Search and treatment-plan exports still cover every filtered result. Unchanged plan saves now close their transaction consistently, preventing a progress write from waiting on the importing session's own write lock. Clinical evaluation and identity boundaries remain unchanged.
 
 ## Exact identity and data flow
 

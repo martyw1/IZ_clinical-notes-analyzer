@@ -85,7 +85,7 @@ def test_fresh_v12_and_exact_no_snapshot_patient_settle_successfully(runtime: Id
     from app.v2.db import SessionLocal
     from app.v2.migrations.runner import MigrationRequest, run_migrations
     with SessionLocal() as db:
-        assert db.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 12
+        assert db.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 13
         record_id = db.execute(text("INSERT INTO patients(facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at) "
             "SELECT id,'EMPTY-SYNTHETIC','manual_upload','active','2026-09-04','2026-09-04' FROM facilities WHERE facility_key='r3-default'")).lastrowid
         db.commit()

@@ -22,7 +22,8 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
   const [isStarting, setIsStarting] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const status = job?.status ?? 'idle'
-  const progress = job?.progressPercent ?? 0
+  const determinate = status === 'completed' || status === 'completed_with_warnings'
+  const progress = determinate ? 100 : 0
 
   useEffect(() => {
     isMounted.current = true
@@ -58,8 +59,8 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
 
   async function pollJob(started: ApiHarnessJob): Promise<ApiHarnessJob> {
     let current = started
-    for (let attempt = 0; attempt < 5_000 && !isTerminalStatus(current.status) && isMounted.current; attempt += 1) {
-      await sleep(120)
+    for (let attempt = 0; attempt < 86_400 && !isTerminalStatus(current.status) && isMounted.current; attempt += 1) {
+      if (attempt > 0) await sleep(1_000)
       current = await getApiHarnessJob(token, current.jobId)
       if (isMounted.current) setJob(current)
     }
@@ -94,8 +95,8 @@ export function JobProgressCard({ token }: JobProgressCardProps) {
         <h2>Diagnostic treatment-plan pull</h2>
         <p>Pulls available treatment-plan metadata into a redacted preview and secret-keyed identifier-hashed local artifacts. Direct patient and treatment-plan identifiers are not written. This diagnostic does not add records to the Treatment Plans Roster.</p>
       </div>
-      <div className='job-meter' role='progressbar' aria-label='API job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-        <span style={{ width: `${progress}%` }} />
+      <div className={`job-meter${determinate ? '' : ' job-meter--indeterminate'}`} role='progressbar' aria-label='API job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? progress : undefined}>
+        <span style={{ width: determinate ? `${progress}%` : '35%' }} />
       </div>
       <dl className='job-stats'>
         <div>

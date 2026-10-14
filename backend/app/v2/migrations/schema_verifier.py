@@ -110,6 +110,10 @@ def verify_connection(connection: sqlite3.Connection, expected_version: int) -> 
         required_columns["source_document_plan_memberships"] = {
             "source_document_id", "plan_version_id", "attached_at", "attached_by_user_id", "detached_at", "detached_by_user_id",
         }
+    if expected_version >= 13:
+        required_columns["api_job_progress"] = {
+            "job_id", "phase_name", "phase_completed", "phase_total", "stage_number", "child_job_id",
+        }
     if expected_version >= 2:
         required_columns["migration_reconciliation"] = {
             "migration_version", "category", "source_count", "target_count",

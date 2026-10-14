@@ -20,6 +20,11 @@ export type ApiHarnessJob = {
   readonly status: JobStatus
   readonly phase: string
   readonly message: string
+  readonly phaseCompleted?: number
+  readonly phaseTotal?: number
+  readonly progressDeterminate?: boolean
+  readonly stageNumber?: number
+  readonly childJobId?: string
   readonly progressPercent: number
   readonly currentEndpoint: string
   readonly currentPage: number

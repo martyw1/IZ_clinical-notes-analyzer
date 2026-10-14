@@ -18,6 +18,16 @@ def save_job(job: Any) -> None:
         else:
             for field, value in values.items():
                 setattr(row, field, value)
+        db.flush()
+        db.execute(text(
+            "INSERT INTO api_job_progress(job_id,phase_name,phase_completed,phase_total,stage_number,child_job_id) "
+            "VALUES(:job_id,:phase_name,:phase_completed,:phase_total,:stage_number,:child_job_id) "
+            "ON CONFLICT(job_id) DO UPDATE SET phase_name=excluded.phase_name,"
+            "phase_completed=excluded.phase_completed,phase_total=excluded.phase_total,"
+            "stage_number=excluded.stage_number,child_job_id=excluded.child_job_id"
+        ), {name: getattr(job, name) for name in (
+            "job_id", "phase_name", "phase_completed", "phase_total", "stage_number", "child_job_id"
+        )})
         db.commit()
 
 
@@ -26,7 +36,11 @@ def record_values(job: Any) -> dict[str, object]:
 
 
 def record_as_job_values(row: ApiHarnessJobRecord) -> dict[str, object]:
+    with SessionLocal() as db:
+        progress = db.execute(text("SELECT phase_name,phase_completed,phase_total,stage_number,child_job_id "
+                                   "FROM api_job_progress WHERE job_id=:job_id"), {"job_id": row.job_id}).mappings().first()
     return {
+        **(dict(progress) if progress else {}),
         "job_id": row.job_id, "job_type": row.job_type, "created_at": _as_iso(row.created_at),
         "started_at": _as_iso(row.started_at), "updated_at": _as_iso(row.updated_at), "completed_at": _as_iso(row.completed_at),
         "cancelled_at": _as_iso(row.cancelled_at), "failed_at": _as_iso(row.failed_at), "actor_id": row.actor_id,

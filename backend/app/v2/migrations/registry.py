@@ -17,6 +17,7 @@ from app.v2.migrations.schema_sync import SYNC_STATEMENTS
 from app.v2.migrations.schema_source_memberships import SOURCE_MEMBERSHIP_STATEMENTS
 from app.v2.migrations.schema_sync_provenance import SYNC_PROVENANCE_STATEMENTS
 from app.v2.migrations.schema_workflow import WORKFLOW_STATEMENTS
+from app.v2.migrations.schema_job_progress import JOB_PROGRESS_STATEMENTS
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ MIGRATIONS = (
     _migration(10, "upgrade_encrypted_patient_snapshots_to_append_only_versions", PATIENT_SNAPSHOT_STATEMENTS),
     _migration(11, "bind_legacy_manager_actions_to_immutable_plan_versions", MANAGER_ACTION_PLAN_LINK_STATEMENTS),
     _migration(12, "associate_manual_sources_with_exact_plan_versions", SOURCE_MEMBERSHIP_STATEMENTS),
+    _migration(13, "persist_background_roster_update_progress", JOB_PROGRESS_STATEMENTS),
 )
 
 APP_SETTINGS_MIGRATION_VERSION = 5

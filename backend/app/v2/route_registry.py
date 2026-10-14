@@ -55,6 +55,8 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/api-harness/jobs/{job_id}/artifacts/{artifact_id}"),
             ("GET", "/api/v2/api-harness/jobs/{job_id}/preview"),
             ("POST", "/api/v2/alleva-sync/run"),
+            ("POST", "/api/v2/roster-update/run"),
+            ("GET", "/api/v2/roster-update/latest"),
             ("GET", "/api/v2/alleva-sync/jobs/{job_id}"),
             ("GET", "/api/v2/alleva-sync-last-run"),
             ("POST", "/api/v2/alleva-sync/jobs/{job_id}/resume"),

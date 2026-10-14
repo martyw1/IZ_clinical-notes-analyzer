@@ -243,6 +243,11 @@ class ApiHarnessJob(V2Model):
     phase: str
     message: str
     artifacts: tuple[ApiHarnessArtifact, ...]
+    phase_completed: int = 0
+    phase_total: int = 0
+    progress_determinate: bool = False
+    stage_number: int = 0
+    child_job_id: str = ""
 
 
 class JobPreview(V2Model):

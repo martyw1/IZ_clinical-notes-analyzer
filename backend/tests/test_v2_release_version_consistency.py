@@ -53,7 +53,7 @@ def test_production_version_surfaces_match_release_metadata(tmp_path: Path, monk
     assert settings.app_version == expected_version
     assert settings.build_channel == expected_channel
     with SessionLocal() as db:
-        assert db.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 12
+        assert db.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 13
 
     app_source = (root / "frontend" / "src" / "v2" / "AppV2.tsx").read_text(encoding="utf-8")
     shell_source = (root / "frontend" / "src" / "v2" / "components" / "AppShell.tsx").read_text(encoding="utf-8")

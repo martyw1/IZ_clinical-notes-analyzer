@@ -25,6 +25,8 @@ from app.v2.services.alleva_sync import AllevaSyncCancelled, AllevaSyncError, ru
 from app.v2.services.alleva_roster import run_roster_pull
 from app.v2.services.alleva_contracts import (
     ApprovedAllevaContract,
+    active_contract,
+    contract_matches_profile,
     copy_sync_checkpoints,
     create_sync_ledger,
     record_sync_checkpoint,
@@ -94,6 +96,11 @@ class MutableJob:
     raw_sensitive_mode_used: bool
     cancel_requested: bool
     last_heartbeat_at: str
+    phase_name: str = ""
+    phase_completed: int = 0
+    phase_total: int = 0
+    stage_number: int = 0
+    child_job_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +188,7 @@ class ApiHarnessJobService:
         actor_role: str,
         contract: ApprovedAllevaContract,
         resumed_from_job_id: str | None = None,
+        parent_job_id: str | None = None,
     ) -> ApiHarnessJob:
         job_id = f"sync-{uuid4().hex[:12]}"
         output_dir = settings.api_harness_runs_dir / job_id
@@ -195,6 +203,7 @@ class ApiHarnessJobService:
             cancel_requested=False, last_heartbeat_at=created,
         )
         with self._lock:
+            self._assert_import_available(parent_job_id)
             if any(
                 existing.job_type == "approved_treatment_plan_sync"
                 and existing.status in {"queued", "running", "writing"}
@@ -220,6 +229,7 @@ class ApiHarnessJobService:
         actor_id: int,
         actor_role: str,
         contract: ApprovedAllevaContract,
+        parent_job_id: str | None = None,
     ) -> ApiHarnessJob:
         job_id = f"roster-{uuid4().hex[:12]}"
         output_dir = settings.api_harness_runs_dir / job_id
@@ -234,6 +244,7 @@ class ApiHarnessJobService:
             raw_sensitive_mode_used=False, cancel_requested=False, last_heartbeat_at=created,
         )
         with self._lock:
+            self._assert_import_available(parent_job_id)
             if any(
                 existing.job_type == "active_patient_roster_pull"
                 and existing.status in {"queued", "running", "writing"}
@@ -246,6 +257,97 @@ class ApiHarnessJobService:
         save_job(job)
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
+
+    def _assert_import_available(self, parent_job_id: str | None = None) -> None:
+        if any(job.job_id != parent_job_id and job.job_type in {
+            "two_stage_roster_update", "approved_treatment_plan_sync", "active_patient_roster_pull"
+        } and job.status in {"queued", "running", "writing"} for job in self._jobs.values()):
+            raise ValueError("A roster update is already running.")
+
+    def create_roster_update_job(self, actor_id: int, actor_role: str, contract: ApprovedAllevaContract) -> ApiHarnessJob:
+        job_id = f"update-{uuid4().hex[:12]}"
+        created = _now()
+        output_dir = settings.api_harness_runs_dir / job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        job = MutableJob(
+            job_id=job_id, job_type="two_stage_roster_update", created_at=created, started_at=None,
+            updated_at=created, completed_at=None, cancelled_at=None, failed_at=None,
+            actor_id=str(actor_id), actor_role=actor_role, status="queued", progress_percent=0,
+            current_endpoint="GET /clients", current_page=0, current_cursor="", records_seen=0,
+            records_written=0, records_failed=0, warnings_count=0, errors_count=0,
+            output_dir=str(output_dir), redaction_mode="redacted", raw_sensitive_mode_used=False,
+            cancel_requested=False, last_heartbeat_at=created, stage_number=1,
+        )
+        with self._lock:
+            self._assert_import_available()
+            self._jobs[job_id] = job
+        save_job(job)
+        self._audit_diagnostic_job(job_id, DiagnosticAuditEvent("alleva.roster_update.created", "success", {}))
+        threading.Thread(target=self._run_roster_update, args=(job_id, actor_id, actor_role, contract), daemon=True).start()
+        return self.get_job(job_id)
+
+    def _run_roster_update(self, job_id: str, actor_id: int, actor_role: str, contract: ApprovedAllevaContract) -> None:
+        self._set(job_id, status="running", started_at=_now())
+        try:
+            for stage in (1, 2):
+                if self.get_job(job_id).cancel_requested:
+                    self._set(job_id, status="cancelled", cancelled_at=_now())
+                    return
+                with SessionLocal() as db:
+                    profile = db.execute(select(AppSetting)).scalar_one()
+                    actor = db.get(User, actor_id)
+                    approved = active_contract(db)
+                    if (actor is None or not actor.is_active or actor.role != "admin"
+                            or not profile.emr_api_enabled or not profile.alleva_treatment_plan_sync_enabled
+                            or not profile.alleva_treatment_plan_sync_approved or approved is None
+                            or approved.contract_sha256 != contract.contract_sha256
+                            or not contract_matches_profile(contract, profile)):
+                        raise ValueError("Saved approval or configuration changed")
+                self._set(job_id, stage_number=stage, phase_name="receiving_patients", phase_total=0,
+                          phase_completed=0, progress_percent=0)
+                child = (self.create_roster_pull_job(actor_id, actor_role, contract, parent_job_id=job_id)
+                         if stage == 1 else self.create_treatment_plan_sync_job(actor_id, actor_role, contract, parent_job_id=job_id))
+                self._set(job_id, stage_number=stage, child_job_id=child.job_id)
+                previous = None
+                last_update = 0.0
+                while True:
+                    if self.get_job(job_id).cancel_requested and not child.cancel_requested:
+                        self.cancel_job(child.job_id)
+                    child = self.get_job(child.job_id)
+                    snapshot = (child.status, child.phase, child.phase_completed, child.phase_total,
+                                child.records_seen, child.records_written, child.warnings_count, child.errors_count)
+                    if snapshot != previous or time.monotonic() - last_update >= 5:
+                        self._set(job_id, phase_name=child.phase, phase_completed=child.phase_completed,
+                                  phase_total=child.phase_total, progress_percent=child.progress_percent,
+                                  records_seen=child.records_seen, records_written=child.records_written,
+                                  records_failed=child.records_failed, warnings_count=child.warnings_count,
+                                  errors_count=child.errors_count, current_endpoint=child.current_endpoint,
+                                  last_heartbeat_at=_now())
+                        previous, last_update = snapshot, time.monotonic()
+                    if child.status not in {"queued", "running", "writing"}:
+                        break
+                    time.sleep(0.5)
+                if child.status != "completed" or self.get_job(job_id).cancel_requested:
+                    status = "cancelled" if self.get_job(job_id).cancel_requested else child.status
+                    self._set(job_id, status=status, **{
+                        "completed_at" if status == "completed_with_warnings" else
+                        "cancelled_at" if status == "cancelled" else "failed_at": _now()
+                    })
+                    return
+            self._set(job_id, status="completed", progress_percent=100, completed_at=_now())
+        except Exception:
+            self._set(job_id, status="failed", errors_count=1, failed_at=_now())
+        finally:
+            current = self.get_job(job_id)
+            self._audit_diagnostic_job(job_id, DiagnosticAuditEvent(
+                "alleva.roster_update.finished", "success" if current.status == "completed" else "warning",
+                {"stage_number": current.stage_number, "status": current.status},
+            ))
+
+    def _phase_progress(self, job_id: str, phase: str, completed: int, total: int) -> None:
+        self._set(job_id, phase_name=phase, phase_completed=completed, phase_total=total,
+                  progress_percent=min(99, completed * 100 // total) if total else 0,
+                  last_heartbeat_at=_now())
 
     def resume_treatment_plan_sync_job(
         self,
@@ -357,6 +459,21 @@ class ApiHarnessJobService:
         )
 
     def _run_job(self, job_id: str) -> None:
+        try:
+            self._execute_job(job_id)
+        except Exception as exc:
+            # A worker exception must not leave a parent waiting on a running child forever.
+            with self._lock:
+                current = self._jobs[job_id]
+            if current.status in {"queued", "running", "writing"}:
+                try:
+                    self._set(job_id, status="failed", failed_at=_now(), errors_count=1)
+                finally:
+                    self._audit_diagnostic_job(job_id, DiagnosticAuditEvent(
+                        "api_harness.job.worker_failed", "failure", {"error_class": type(exc).__name__},
+                    ))
+
+    def _execute_job(self, job_id: str) -> None:
         with self._lock:
             sync_actor_id = self._sync_actor_ids.pop(job_id, None)
             sync_contract = self._sync_contracts.pop(job_id, None)
@@ -482,6 +599,7 @@ class ApiHarnessJobService:
                     on_page=lambda endpoint_key, page_number, cursor_hash, response_hash, records: self._record_checkpoint(job_id, endpoint_key, page_number, cursor_hash, response_hash, records),
                     sync_job_id=job_id,
                     resumed_from_job_id=resume_source_job_id,
+                    on_progress=lambda phase, done, total: self._phase_progress(job_id, phase, done, total),
                 )
             except AllevaSyncCancelled as exc:
                 cancellation_details: dict[str, JsonPrimitive] = dict(exc.audit_details())
@@ -629,13 +747,14 @@ class ApiHarnessJobService:
                     is_cancelled=lambda: self.get_job(job_id).cancel_requested,
                     on_page=lambda page, cursor, records: self._set(
                         job_id,
-                        status="writing",
+                        status="running",
                         current_page=page + 1,
                         current_cursor=f"offset-{cursor}",
                         records_seen=self.get_job(job_id).records_seen + len(records),
-                        progress_percent=min(90, 10 + (page + 1) * 15),
+                        progress_percent=0,
                         last_heartbeat_at=_now(),
                     ),
+                    on_progress=lambda phase, done, total: self._phase_progress(job_id, phase, done, total),
                 )
             except AllevaSyncCancelled as exc:
                 self._set(job_id, status="cancelled", cancelled_at=_now(), progress_percent=100)
@@ -689,6 +808,8 @@ class ApiHarnessJobService:
     def _set(self, job_id: str, **changes: JsonValue) -> None:
         with self._lock:
             job = self._jobs[job_id]
+            if changes.get("status") in {"failed", "cancelled", "stale_or_interrupted"}:
+                changes.pop("progress_percent", None)
             updated = replace(job, updated_at=_now(), **changes)
             self._jobs[job_id] = updated
         save_job(updated)
@@ -707,7 +828,9 @@ class ApiHarnessJobService:
             current_endpoint=f"GET /{endpoint_key}",
             current_page=page_number,
             records_seen=current.records_seen + len(records),
-            progress_percent=min(90, max(current.progress_percent, 10 + current.records_seen + len(records))),
+            progress_percent=0,
+            phase_name="receiving_patients" if endpoint_key == "clients" else "receiving_plan_list",
+            phase_completed=0, phase_total=0, last_heartbeat_at=_now(),
         )
 
     def _output_dir(self, job_id: str) -> Path:

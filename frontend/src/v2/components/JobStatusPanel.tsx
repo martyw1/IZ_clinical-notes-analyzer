@@ -11,6 +11,7 @@ type JobStatusPanelProps = {
 
 export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobStatusPanelProps) {
   if (!job && !message && !error) return null
+  const determinate = job?.status === 'completed' || job?.status === 'completed_with_warnings' || job?.progressDeterminate === true
   const failure = error || (job?.status === 'failed'
     ? job.message || 'The sync failed. Check Forensic Logs for the cause, then resume the sync safely.'
     : '')
@@ -19,12 +20,15 @@ export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobSt
       {job && (
         <>
           <div className='compact-job-status__heading'>
-            <strong>{phaseLabel(job)}</strong>
-            <span>{job.progressPercent}%</span>
+            <strong>{job.stageNumber ? `Stage ${job.stageNumber} of 2 · ` : ''}{phaseLabel(job)}</strong>
+            <span>{determinate ? `${job.progressPercent}%${isActive ? ' of phase' : ''}` : 'Working…'}</span>
           </div>
-          <div className='job-meter' role='progressbar' aria-label='Job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={job.progressPercent}>
-            <span style={{ width: `${job.progressPercent}%` }} />
+          <div className={`job-meter${determinate ? '' : ' job-meter--indeterminate'}`} role='progressbar' aria-label='Job progress' aria-valuemin={0} aria-valuemax={100} aria-valuenow={determinate ? job.progressPercent : undefined}>
+            <span style={{ width: determinate ? `${job.progressPercent}%` : '35%' }} />
           </div>
+          {!!job.phaseTotal && <p role='status'>{job.phaseCompleted ?? 0} of {job.phaseTotal} processed in this phase.</p>}
+          {job.stageNumber === 1 && job.status === 'completed_with_warnings' && <p role='status'>Patient roster results are incomplete. Treatment-plan update was not started. Review warnings and retry.</p>}
+          {job.message && !message && !failure && <p>{job.message}</p>}
           <dl className='compact-job-status__counts'>
             <div><dt>Seen</dt><dd>{job.recordsSeen}</dd></div>
             <div><dt>Updated</dt><dd>{job.recordsWritten}</dd></div>

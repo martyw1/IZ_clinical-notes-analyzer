@@ -22,6 +22,9 @@ def version_eleven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         context.setattr(runner, "MIGRATIONS", MIGRATIONS[:11])
         context.setattr(runner, "LATEST_SCHEMA_VERSION", 11)
         runner.run_migrations(runner.MigrationRequest(database, tmp_path, SYNTHETIC_SECRET, "synthetic-v11"))
+    # Pin this suite to migration 12; later migrations have separate coverage.
+    monkeypatch.setattr(runner, "MIGRATIONS", MIGRATIONS[:12])
+    monkeypatch.setattr(runner, "LATEST_SCHEMA_VERSION", 12)
     return database
 
 

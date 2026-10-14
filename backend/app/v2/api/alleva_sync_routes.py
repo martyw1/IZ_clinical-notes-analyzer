@@ -22,6 +22,30 @@ from app.v2.services.secure_storage import decrypt_api_client_id
 router = APIRouter()
 
 
+@router.post("/api/v2/roster-update/run", response_model=ApiHarnessJob, status_code=202)
+def run_roster_update(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
+    profile = db.execute(select(AppSetting)).scalar_one()
+    blockers = _configuration_blockers(profile)
+    if blockers:
+        _record_blocked_sync(db, actor, blockers)
+        raise HTTPException(status_code=409, detail="Roster update is blocked by the saved Alleva authorization settings")
+    try:
+        contract, _ = ensure_builtin_contract(db, profile, actor.id)
+        if _sync_blockers(profile, contract):
+            raise ValueError("Mapping is not approved")
+        return job_service.create_roster_update_job(actor.id, actor.role, contract)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Roster update is blocked or another import is running") from exc
+
+
+@router.get("/api/v2/roster-update/latest", response_model=ApiHarnessJob)
+def latest_roster_update(_: AdminUser) -> ApiHarnessJob:
+    job = next((job for job in job_service.list_jobs() if job.job_type == "two_stage_roster_update"), None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No roster update is available")
+    return job
+
+
 @router.post("/api/v2/alleva-sync/run", response_model=ApiHarnessJob, status_code=202)
 def run_alleva_sync(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
     profile = db.execute(select(AppSetting)).scalar_one()

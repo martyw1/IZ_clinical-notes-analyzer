@@ -3,8 +3,15 @@ import { getDashboard } from '../api/client'
 import { ApiRequestError } from '../api/json'
 import type { DashboardData } from '../api/types'
 import { formatDateTime24Hour } from '../components/treatmentPlanFormatting'
+import { RosterUpdateCard } from '../components/RosterUpdateCard'
 
-type DashboardPageProps = { readonly token: string }
+type DashboardPageProps = { readonly token: string; readonly isAdmin?: boolean; readonly onNavigate?: (view: string) => void }
+
+const metricGroups = [
+  { label: 'Timeliness', keys: ['overdue_plans', 'urgent_plans', 'due_soon_plans'] },
+  { label: 'Review and data quality', keys: ['needs_review', 'missing_data', 'conflicting', 'unable'] },
+  { label: 'Workload', keys: ['active_patient_ids', 'returned'] },
+]
 
 const metricLabels: Record<string, string> = {
   active_patient_ids: 'Patient records with plans',
@@ -24,7 +31,7 @@ function messageForError(error: unknown): string {
   return 'Unable to load dashboard data.'
 }
 
-export function DashboardPage({ token }: DashboardPageProps) {
+export function DashboardPage({ token, isAdmin = false, onNavigate }: DashboardPageProps) {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [refreshNumber, setRefreshNumber] = useState(0)
@@ -54,7 +61,7 @@ export function DashboardPage({ token }: DashboardPageProps) {
         <div>
           <h2>Status dashboard</h2>
           <p className='muted'>Treatment-plan priorities and source readiness.</p>
-          {dashboard && <time dateTime={dashboard.refreshedAt}>Refreshed {formatDateTime24Hour(dashboard.refreshedAt)}</time>}
+          {dashboard && <time dateTime={dashboard.refreshedAt}>Counts calculated {formatDateTime24Hour(dashboard.refreshedAt)}</time>}
         </div>
         <button type='button' disabled={isRefreshing} onClick={() => setRefreshNumber((current) => current + 1)}>
           {isRefreshing ? 'Refreshing dashboard...' : 'Refresh dashboard'}
@@ -67,21 +74,25 @@ export function DashboardPage({ token }: DashboardPageProps) {
       {!dashboard && isRefreshing && <p className='muted' role='status'>Loading source readiness...</p>}
       {dashboard && <>
         <section className='panel dashboard-metrics' aria-busy={isRefreshing}>
-          <h2>Risk metrics</h2>
+          <h2>At a glance</h2>
+          {metricGroups.map((group) => <section className='metric-group' key={group.label} aria-label={group.label}>
+          <h3>{group.label}</h3>
           <dl className='metric-grid'>
-            {Object.entries(dashboard.metrics).map(([key, value]) => (
+            {group.keys.map((key) => (
               <div key={key} className='metric-tile' data-metric={key}>
                 <dt>{metricLabels[key] ?? key}</dt>
-                <dd>{value}</dd>
+                <dd>{dashboard.metrics[key] ?? 0}</dd>
               </div>
             ))}
           </dl>
+          </section>)}
           <details className='metric-explanation'>
             <summary>How these counts are calculated</summary>
             <p className='muted'>Authorized patient records with plans, not active-client lifecycle counts. Plan statuses and Missing Data criteria use the latest version of each source plan for each patient record.</p>
             <p className='muted'>Open correction items include authorized, linked items on historical versions. These patient, plan, criterion, and correction-item counts are not a partition and should not be added together.</p>
           </details>
         </section>
+        {isAdmin && <RosterUpdateCard token={token} onNavigate={onNavigate} onCompleted={() => setRefreshNumber((current) => current + 1)} />}
         <section className='panel'>
           <h2>Source readiness</h2>
           <div className='source-card-grid'>

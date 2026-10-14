@@ -96,7 +96,7 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
     if (path === '/api/audit/verify') return jsonResponse(auditVerificationPayload)
     if (path === '/api/v2/api-harness/jobs' && method === 'GET') return jsonResponse([])
     if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload('queued'))
-    if (path === '/api/v2/api-harness/jobs/job-812') { harnessPolls += 1; return jsonResponse(jobPayload(harnessPolls > 20 ? (state.harnessFails ? 'failed' : 'completed') : 'running')) }
+    if (path === '/api/v2/api-harness/jobs/job-812') { harnessPolls += 1; return jsonResponse(jobPayload(harnessPolls > 1 ? (state.harnessFails ? 'failed' : 'completed') : 'running')) }
     if (path === '/api/v2/api-harness/jobs/job-812/artifacts') return jsonResponse(state.harnessFails ? [{ artifact_id: 'all-treatment-plans.error-log.jsonl', name: 'all-treatment-plans.error-log.jsonl', media_type: 'application/json', size_bytes: 180, redaction_mode: 'redacted' }] : jobPayload().artifacts)
     if (path === '/api/v2/api-harness/jobs/job-812/preview') return jsonResponse({ job_id: 'job-812', max_records: 25, max_fields: 50, records: [{ job_id: 'job-812', record_index: 1, record_id: 'TP-SYNTHETIC-1', source_endpoint: 'GET /treatment-plans', redaction_status: 'redacted' }], message: 'Preview is bounded to 25 records and 50 fields; full output is local artifact files.' })
     return jsonResponse({ detail: `Unexpected test route ${method} ${path}` }, 404)

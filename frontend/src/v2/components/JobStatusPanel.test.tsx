@@ -12,6 +12,20 @@ const completed: ApiHarnessJob = {
   lastHeartbeatAt: '', artifacts: [],
 }
 
+test('uses an indeterminate bar until the total is known', () => {
+  render(<JobStatusPanel job={{ ...completed, status: 'running', progressPercent: 0 }} isActive message='' error='' />)
+  expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')
+  expect(screen.getByText('Working…')).toBeVisible()
+})
+
+test('shows phase counts and stage alongside measured progress', () => {
+  render(<JobStatusPanel job={{ ...completed, status: 'running', phase: 'fetching_plan_details',
+    stageNumber: 2, progressDeterminate: true, progressPercent: 40, phaseCompleted: 4, phaseTotal: 10 }} isActive message='' error='' />)
+  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40')
+  expect(screen.getByText(/Stage 2 of 2/)).toBeVisible()
+  expect(screen.getByText('4 of 10 processed in this phase.')).toBeVisible()
+})
+
 test('keeps a persisted UTC completion time unchanged in a non-UTC browser environment', () => {
   render(<JobStatusPanel job={completed} isActive={false} message='' error='' />)
   expect(screen.getByText(/Last run completed/)).toHaveTextContent('2026-09-10 21:20 UTC')

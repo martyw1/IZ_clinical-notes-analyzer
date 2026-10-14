@@ -27,7 +27,7 @@ export function PatientRosterPullCard({ config, token, onNavigate, onCompleted }
     void getLatestActivePatientRosterJob(token).then((job) => {
       if (active) action.setLastJob(job)
     }).catch((error: unknown) => {
-      if (!(error instanceof ApiRequestError && error.status === 404)) throw error
+      if (!(error instanceof ApiRequestError && error.status === 404) && active) action.setLastJob(null)
     })
     return () => { active = false }
   }, [action.setLastJob, token])

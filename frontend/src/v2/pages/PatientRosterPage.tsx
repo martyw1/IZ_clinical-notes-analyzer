@@ -34,6 +34,9 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
   const [error, setError] = useState('')
   const [refreshNumber, setRefreshNumber] = useState(0)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [page, setPage] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const pageSize = 75
   const sourceMode = sourceFilter === 'all' ? undefined : sourceFilter
   const capture = useRequestGeneration(`${token}:${sourceFilter}:${refreshNumber}`, isSessionCurrent)
   const visibleItems = useMemo(() => {
@@ -46,16 +49,17 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
       || item.treatmentPlans.some((plan) => [plan.treatmentPlanId, plan.originalPlanReference, plan.serviceDate].some((value) => value.toLowerCase().includes(normalizedQuery))))
     ))
   }, [query, roster?.items, sourceMode])
+  useEffect(() => { setPage(0) }, [query, sourceMode, roster])
 
   useEffect(() => {
     const isCurrent = capture()
-    setRoster(null)
+    setIsLoading(true)
     setError('')
     void getPatientRoster(token, sourceMode).then((result) => {
       if (isCurrent()) setRoster(result)
     }).catch((loadError: unknown) => {
       if (isCurrent()) setError(messageForError(loadError))
-    })
+    }).finally(() => { if (isCurrent()) setIsLoading(false) })
   }, [refreshNumber, token, sourceMode, capture, isSessionCurrent])
 
   useEffect(() => {
@@ -81,6 +85,7 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
           onCompleted={() => setRefreshNumber((current) => current + 1)}
         />
       )}
+      {roster && isLoading && <p className='muted'>Loading patient roster...</p>}
       {!roster ? <section className='panel muted'>Loading patient roster...</section> : <section className='panel table-panel'>
         <div className='section-heading'>
           <div>
@@ -98,7 +103,7 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
         <table>
           <thead><tr role='row'><th id='patient-roster-mrn' role='columnheader'>MRN</th><th id='patient-roster-plans' role='columnheader'>Treatment Plans</th><th id='patient-roster-lifecycle' role='columnheader'>Lifecycle</th><th id='patient-roster-loc' role='columnheader'>LOC</th><th id='patient-roster-source' role='columnheader'>Source</th><th id='patient-roster-last-seen' role='columnheader'>Last seen</th></tr></thead>
           <tbody>
-            {visibleItems.map((item) => (
+            {visibleItems.slice(page * pageSize, (page + 1) * pageSize).map((item) => (
               <tr key={patientIdentityKey(item)} data-patient-record-id={item.patientRecordId} data-source-mode={item.sourceMode} role='row'>
                 <td role='cell' data-label='MRN' headers='patient-roster-mrn'>
                   <span className='patient-identity'>
@@ -148,6 +153,11 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
             {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current source and search filters.</td></tr>}
           </tbody>
         </table>
+        {visibleItems.length > pageSize && <nav className='button-row' aria-label='Patient roster pages'>
+          <button type='button' disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Previous</button>
+          <span>Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, visibleItems.length)} of {visibleItems.length}</span>
+          <button type='button' disabled={(page + 1) * pageSize >= visibleItems.length} onClick={() => setPage((value) => value + 1)}>Next</button>
+        </nav>}
       </section>}
     </div>
   )

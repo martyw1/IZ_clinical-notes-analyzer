@@ -7,7 +7,7 @@ import json
 
 from fastapi import HTTPException
 from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.v2.services.alleva_contracts import SyncImportProvenance
@@ -160,6 +160,27 @@ def patient_source_snapshot_for_record(
         {"patient_record_id": patient_record_id, "source_system": source_system},
     ).first()
     return _snapshot_from_row(row) if row is not None else None
+
+
+def patient_source_snapshots_for_records(db: Session, record_ids: Sequence[int]) -> dict[int, PatientSourceSnapshot]:
+    """Batch exact, already-authorized identities; never decrypt another patient's snapshot."""
+    result: dict[int, PatientSourceSnapshot] = {}
+    ids = tuple(set(record_ids))
+    for start in range(0, len(ids), 400):
+        rows = db.execute(text(
+            "SELECT s.id,s.version_ordinal,p.canonical_client_id,s.source_system,s.snapshot_encrypted,"
+            "s.content_sha256,s.source_last_updated,p.id FROM patient_snapshot_versions s "
+            "JOIN patients p ON p.id=s.patient_id "
+            "WHERE p.id IN :ids AND p.source_system=s.source_system "
+            "AND (p.source_patient_id IS NULL OR p.source_patient_id='' OR p.source_patient_id=s.source_record_id) "
+            "AND NOT EXISTS (SELECT 1 FROM patient_snapshot_versions newer "
+            "WHERE newer.patient_id=s.patient_id AND newer.source_system=s.source_system "
+            "AND (p.source_patient_id IS NULL OR p.source_patient_id='' OR p.source_patient_id=newer.source_record_id) "
+            "AND (newer.version_ordinal>s.version_ordinal OR (newer.version_ordinal=s.version_ordinal AND newer.id>s.id)))"
+        ).bindparams(bindparam("ids", expanding=True)), {"ids": ids[start:start + 400]}).all()
+        for row in rows:
+            result[int(row[7])] = _snapshot_from_row(row[:7])
+    return result
 
 
 def patient_full_name(record: Mapping[str, object]) -> str:

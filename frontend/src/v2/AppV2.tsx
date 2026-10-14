@@ -59,7 +59,7 @@ function pageFor(
 ) {
   switch (view) {
     case 'Status Dashboard':
-      return <DashboardPage token={token} />
+      return <DashboardPage token={token} isAdmin={user.role === 'admin'} onNavigate={onNavigate} />
     case 'Patient Roster':
       return <PatientRosterPage isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Patient Record Detail':
@@ -83,7 +83,7 @@ function pageFor(
     case 'Help':
       return <HelpPage />
     default:
-      return <DashboardPage token={token} />
+      return <DashboardPage token={token} isAdmin={user.role === 'admin'} onNavigate={onNavigate} />
   }
 }
 

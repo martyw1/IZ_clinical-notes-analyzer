@@ -15,9 +15,13 @@ def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...], failure_mess
         warnings_count=job.warnings_count, errors_count=job.errors_count, output_dir=job.output_dir,
         redaction_mode=job.redaction_mode, raw_sensitive_mode_used=job.raw_sensitive_mode_used,
         cancel_requested=job.cancel_requested, last_heartbeat_at=job.last_heartbeat_at,
-        phase=_phase(job.status, job.current_endpoint),
+        phase=(_phase(job.status, job.current_endpoint) if job.status in {"completed", "completed_with_warnings", "failed", "cancelled", "stale_or_interrupted"}
+               else job.phase_name or _phase(job.status, job.current_endpoint)),
         message=failure_message or _message(job.job_type, job.status),
         artifacts=artifacts,
+        phase_completed=job.phase_completed, phase_total=job.phase_total,
+        progress_determinate=job.phase_total > 0 or job.status in {"completed", "completed_with_warnings"},
+        stage_number=job.stage_number, child_job_id=job.child_job_id,
     )
 
 
@@ -37,6 +41,7 @@ def _message(job_type: str, status: str) -> str:
         "active_patient_roster_pull": "Patient roster pull",
         "approved_treatment_plan_sync": "Treatment-plan sync",
         "pull_all_treatment_plans_all_fields": "Treatment-plan diagnostic preview",
+        "two_stage_roster_update": "Patient and treatment-plan update",
     }.get(job_type, "Job")
     if status == "completed":
         return f"{label} completed."

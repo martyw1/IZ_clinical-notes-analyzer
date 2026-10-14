@@ -143,6 +143,10 @@ def save_treatment_plan_aggregate_with_disposition(
     ).first()
     if prior_same_plan is not None and str(prior_same_plan[1]) == content_sha256:
         identity = PlanVersionIdentity(int(prior_same_plan[0]), patient_id, aggregate.patient_id, aggregate.source_mode, aggregate.content_snapshot.plan_id)
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return TreatmentPlanSaveResult(stored_plan(aggregate, identity=identity, last_updated=now), TreatmentPlanSaveDisposition.UNCHANGED)
     supersedes_version_id = int(prior_same_plan[0]) if prior_same_plan else None
     disposition = (

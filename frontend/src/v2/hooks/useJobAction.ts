@@ -21,46 +21,90 @@ type JobActionState = {
 }
 
 export function useJobAction(options: JobActionOptions): JobActionState {
-  const mounted = useRef(true)
+  const latest = useRef(options)
+  latest.current = options
   const activeRef = useRef(false)
+  const mounted = useRef(true)
   const [job, setJob] = useState<ApiHarnessJob | null>(null)
   const [isActive, setIsActive] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [monitorAttempt, setMonitorAttempt] = useState(0)
+  const setLastJob = useCallback((saved: ApiHarnessJob | null) => {
+    // A delayed history response must not replace a job started on this page.
+    setJob((current) => current && current.jobId !== saved?.jobId ? current : saved)
+  }, [])
 
-  useEffect(() => () => { mounted.current = false }, [])
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  useEffect(() => {
+    if (!job || isTerminalJobStatus(job.status)) return
+    let stopped = false
+    activeRef.current = true
+    setIsActive(true)
+    setError('')
+    const started = Date.now()
+    async function monitor() {
+      try {
+        let current = job!
+        while (!stopped && !isTerminalJobStatus(current.status)) {
+          current = await latest.current.poll(current.jobId)
+          if (stopped) return
+          setJob(current)
+          if (!isTerminalJobStatus(current.status)) {
+            if (Date.now() - started >= 60_000) setMessage('The job is still running. You can continue using the app while it updates.')
+            await delay(document.hidden ? 5_000 : 1_000)
+          }
+        }
+        if (stopped) return
+        if (isSuccessfulJobStatus(current.status)) {
+          await latest.current.onCompleted?.(current)
+          if (!stopped) setMessage(latest.current.successMessage?.(current) ?? completionMessage(current))
+        } else setError(terminalFailureMessage(current.status))
+      } catch (caught) {
+        if (!stopped) setError(safeErrorMessage(caught, 'Unable to check progress. The backend job may still be running. Try again to reconnect.'))
+      } finally {
+        if (!stopped) { activeRef.current = false; setIsActive(false) }
+      }
+    }
+    void monitor()
+    return () => { stopped = true; activeRef.current = false }
+    // Status changes update the panel without restarting the monitor.
+  }, [job?.jobId, monitorAttempt])
 
   const run = useCallback(async () => {
     if (activeRef.current) return
+    setError('')
+    setMessage('')
+    if (job && !isTerminalJobStatus(job.status)) {
+      setMonitorAttempt((value) => value + 1)
+      return
+    }
     activeRef.current = true
     setIsActive(true)
-    setMessage('')
-    setError('')
     try {
-      let current = await options.start()
-      if (mounted.current) setJob(current)
-      for (let attempt = 0; attempt < 240 && !isTerminalJobStatus(current.status); attempt += 1) {
-        current = await options.poll(current.jobId)
-        if (mounted.current) setJob(current)
-        if (!isTerminalJobStatus(current.status)) await delay(250)
-      }
-      if (!isTerminalJobStatus(current.status)) {
-        if (mounted.current) setMessage('The job is still running. Return to this page to review its latest status.')
-      } else if (isSuccessfulJobStatus(current.status)) {
-        await options.onCompleted?.(current)
-        if (mounted.current) setMessage(options.successMessage?.(current) ?? completionMessage(current))
-      } else if (mounted.current) {
-        setError(terminalFailureMessage(current.status))
+      const started = await latest.current.start()
+      if (mounted.current) {
+        setJob(started)
+        if (isTerminalJobStatus(started.status)) {
+          activeRef.current = false
+          setIsActive(false)
+          if (isSuccessfulJobStatus(started.status)) {
+            await latest.current.onCompleted?.(started)
+            if (mounted.current) setMessage(latest.current.successMessage?.(started) ?? completionMessage(started))
+          } else setError(terminalFailureMessage(started.status))
+        }
       }
     } catch (caught) {
-      if (mounted.current) setError(safeErrorMessage(caught, options.failureMessage))
-    } finally {
       activeRef.current = false
-      if (mounted.current) setIsActive(false)
+      if (mounted.current) { setIsActive(false); setError(safeErrorMessage(caught, latest.current.failureMessage)) }
     }
-  }, [options])
+  }, [job])
 
-  return { job, isActive, message, error, run, setLastJob: setJob }
+  return { job, isActive, message, error, run, setLastJob }
 }
 
 function completionMessage(job: ApiHarnessJob): string {

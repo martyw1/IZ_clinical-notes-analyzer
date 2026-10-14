@@ -42,6 +42,9 @@ export function TreatmentPlansRosterPage({
   const [refreshNumber, setRefreshNumber] = useState(0)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [isExporting, setIsExporting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const pageSize = 75
   const sourceMode = sourceFilter === 'all' ? undefined : sourceFilter
   const capture = useRequestGeneration(`${token}:${sourceFilter}:${refreshNumber}`, isSessionCurrent)
   const visibleItems = useMemo(() => {
@@ -58,17 +61,18 @@ export function TreatmentPlansRosterPage({
       || (!item.linkedToMrn && 'not linked to an mrn'.includes(normalized)))
     ))
   }, [query, roster?.items, sourceMode])
+  useEffect(() => { setPage(0) }, [query, sourceMode, roster])
 
   useEffect(() => {
     const isCurrent = capture()
-    setRoster(null)
+    setIsLoading(true)
     setError('')
     setIsExporting(false)
     void getTreatmentPlanRoster(token, sourceMode).then((result) => {
       if (isCurrent()) setRoster(result)
     }).catch((loadError: unknown) => {
       if (isCurrent()) setError(messageForError(loadError))
-    })
+    }).finally(() => { if (isCurrent()) setIsLoading(false) })
   }, [refreshNumber, token, sourceMode, capture, isSessionCurrent])
 
   useEffect(() => {
@@ -141,7 +145,7 @@ export function TreatmentPlansRosterPage({
             </tr>
           </thead>
           <tbody>
-            {visibleItems.map((item) => (
+            {visibleItems.slice(page * pageSize, (page + 1) * pageSize).map((item) => (
               <tr key={item.planVersionId} role='row' data-plan-version-id={item.planVersionId} data-patient-record-id={item.patientRecordId} data-source-mode={item.sourceMode}>
                 <td role='cell' data-label='Treatment Plan ID' headers='plan-roster-id'>
                   <button
@@ -188,6 +192,12 @@ export function TreatmentPlansRosterPage({
             {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={5} className='muted'>No treatment plans match the current source and search filters.</td></tr>}
           </tbody>
         </table>
+        {isLoading && <p className='muted'>Loading treatment plans roster...</p>}
+        {visibleItems.length > pageSize && <nav className='button-row' aria-label='Treatment plan roster pages'>
+          <button type='button' disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Previous</button>
+          <span>Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, visibleItems.length)} of {visibleItems.length}</span>
+          <button type='button' disabled={(page + 1) * pageSize >= visibleItems.length} onClick={() => setPage((value) => value + 1)}>Next</button>
+        </nav>}
       </section>}
     </div>
   )

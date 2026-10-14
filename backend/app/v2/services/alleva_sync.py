@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -196,6 +196,7 @@ def run_treatment_plan_sync(
     on_page: Callable[[str, int, str, str, tuple[dict[str, object], ...]], None] | None = None,
     sync_job_id: str | None = None,
     resumed_from_job_id: str | None = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> AllevaSyncResult:
     if is_cancelled():
         raise AllevaSyncCancelled(
@@ -248,7 +249,7 @@ def run_treatment_plan_sync(
             )
             db.commit()
             summary = _save_client_aggregates(
-                db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter,
+                db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter, on_progress,
             )
     except (httpx.HTTPError, ValueError) as exc:
         raise AllevaSyncError("Alleva read-only treatment-plan sync did not complete successfully.") from exc
@@ -508,6 +509,7 @@ def _save_client_aggregates(
     is_cancelled: Callable[[], bool],
     sync_provenance: SyncImportProvenance | None,
     rate_limiter: ApprovedRequestRateLimiter,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> SyncImportSummary:
     created = 0
     updated = 0
@@ -574,13 +576,20 @@ def _save_client_aggregates(
         )
 
     details: list[dict[str, object] | None] = [None] * len(candidates)
+    if on_progress:
+        on_progress("fetching_plan_details", 0, len(candidates))
     if candidates:
         worker_count = min(MAX_SYNC_HTTP_WORKERS, len(candidates))
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="alleva-plan-detail") as executor:
-            futures = tuple(executor.submit(fetch_detail, candidate) for candidate in candidates)
-            for index, future in enumerate(futures):
+            futures = {executor.submit(fetch_detail, candidate): index for index, candidate in enumerate(candidates)}
+            for completed_count, future in enumerate(as_completed(futures), 1):
+                index = futures[future]
                 try:
                     details[index] = future.result()
+                except AllevaSyncCancelled:
+                    for pending in futures:
+                        pending.cancel()
+                    raise
                 except AllevaSyncError as exc:
                     failed_details += 1
                     detail_failure_diagnostics.append(exc.audit_details())
@@ -593,8 +602,14 @@ def _save_client_aggregates(
                             "endpoint_key": "treatment_plan_detail",
                         }
                     )
+                if on_progress:
+                    on_progress("fetching_plan_details", completed_count, len(candidates))
 
-    for candidate, detail in zip(candidates, details, strict=True):
+    if on_progress:
+        on_progress("saving_and_evaluating", 0, len(candidates))
+    for processed_count, (candidate, detail) in enumerate(zip(candidates, details, strict=True), 1):
+        if is_cancelled():
+            raise AllevaSyncCancelled("Alleva treatment-plan sync was cancelled while saving.")
         if detail is None:
             detail = candidate.plan_payload
         detail_plan_id = _mapped_text(detail, contract, "treatment_plans", "plan_id")
@@ -674,6 +689,8 @@ def _save_client_aggregates(
                 unchanged += 1
             case unreachable:
                 assert_never(unreachable)
+        if on_progress:
+            on_progress("saving_and_evaluating", processed_count, len(candidates))
     return SyncImportSummary(
         created,
         updated,

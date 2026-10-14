@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.v2.domain.schemas import SourceMode, TreatmentPlanAggregate
 from app.v2.services.evaluation_store import evaluated_plan_version
 from app.v2.services.manual_source_file_store import source_documents_for_version
-from app.v2.services.patient_snapshot_store import patient_source_snapshot_for_record
+from app.v2.services.patient_snapshot_store import PatientSourceSnapshot, patient_source_snapshot_for_record, patient_source_snapshots_for_records
 from app.v2.services.treatment_plan_types import PlanVersionIdentity, StoredTreatmentPlan, TreatmentPlanQueueItem, stored_plan
 
 
@@ -44,6 +44,7 @@ class PlanVersionHeader(BaseModel):
 def list_treatment_plan_imports(
     db: Session, allowed_patient_record_ids: frozenset[int] | None = None,
     query: TreatmentPlanQuery = TreatmentPlanQuery(),
+    snapshot_cache: dict[int, PatientSourceSnapshot] | None = None,
 ) -> tuple[StoredTreatmentPlan, ...]:
     rows = db.execute(text(
         "SELECT p.canonical_client_id AS patient_id,v.source_record_id AS treatment_plan_id,"
@@ -55,9 +56,15 @@ def list_treatment_plan_imports(
         "WHERE (:source IS NULL OR v.source_system=:source) AND (:patient IS NULL OR p.id=:patient) "
         "AND (:plan IS NULL OR v.source_record_id=:plan) ORDER BY v.imported_at DESC,v.id DESC"
     ), {"source": query.source_mode, "patient": query.patient_record_id, "plan": query.treatment_plan_id}).all()
+    headers = tuple(PlanVersionHeader.model_validate(row._mapping) for row in rows)
+    authorized = tuple(header for header in headers if
+                       (allowed_patient_record_ids is None or header.patient_record_id in allowed_patient_record_ids)
+                       and (query.plan_version_ids is None or header.plan_version_id in query.plan_version_ids)
+                       and (query.include_history or header.is_current))
+    snapshots = snapshot_cache if snapshot_cache is not None else patient_source_snapshots_for_records(
+        db, tuple(header.patient_record_id for header in authorized))
     result: list[StoredTreatmentPlan] = []
-    for row in rows:
-        header = PlanVersionHeader.model_validate(row._mapping)
+    for header in authorized:
         if allowed_patient_record_ids is not None and header.patient_record_id not in allowed_patient_record_ids:
             continue
         if query.plan_version_ids is not None and header.plan_version_id not in query.plan_version_ids:
@@ -66,7 +73,7 @@ def list_treatment_plan_imports(
             continue
         aggregate = evaluated_plan_version(db, header.plan_version_id)
         if aggregate is not None:
-            snapshot = patient_source_snapshot_for_record(db, header.patient_record_id, header.source_mode)
+            snapshot = snapshots.get(header.patient_record_id)
             result.append(replace(stored_plan(aggregate, identity=header.identity(), plan_date=header.plan_date or ""),
                                   version_ordinal=header.version_ordinal, is_current=header.is_current,
                                   full_name=snapshot.full_name if snapshot is not None else ""))

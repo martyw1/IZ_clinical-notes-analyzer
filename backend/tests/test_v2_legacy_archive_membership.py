@@ -6,7 +6,7 @@ from pathlib import Path
 from test_v2_plan_version_actions import IdentityRuntime, _import, runtime
 
 
-def test_legacy_archive_helper_retains_contract_and_valid_v12_state(runtime: IdentityRuntime, tmp_path: Path) -> None:
+def test_legacy_archive_helper_retains_contract_and_valid_current_state(runtime: IdentityRuntime, tmp_path: Path) -> None:
     # Given: a single unambiguous exact manual plan used by the retained standalone helper.
     _import(runtime)
     from app.v2.db import SessionLocal
@@ -23,9 +23,9 @@ def test_legacy_archive_helper_retains_contract_and_valid_v12_state(runtime: Ide
     root = tmp_path / "app-data"
     archive = root / saved.encrypted_relative_path
     ciphertext = hashlib.sha256(archive.read_bytes()).hexdigest()
-    # Then: v12 verification accepts the committed original pair without changing archive bytes.
+    # Then: Current-schema verification accepts the committed original pair without changing archive bytes.
     try:
-        verify_database(root / "clinical-notes-analyzer-v2.sqlite3", 12)
+        verify_database(root / "clinical-notes-analyzer-v2.sqlite3", 13)
     except MigrationStateError as error:
-        raise AssertionError(f"Committed legacy archive violates v12: {error}") from None
+        raise AssertionError(f"Committed legacy archive violates the current schema: {error}") from None
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == ciphertext

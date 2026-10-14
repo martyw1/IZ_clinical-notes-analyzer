@@ -51,6 +51,7 @@ def run_roster_pull(
     *,
     is_cancelled: Callable[[], bool] = lambda: False,
     on_page: Callable[[int, int, tuple[dict[str, object], ...]], None] | None = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> RosterPullResult:
     token = _oauth_token(profile, contract, is_cancelled)
     protocol = AllevaReadProtocol(profile.alleva_api_version, profile.alleva_treatment_plan_start_date)
@@ -132,6 +133,10 @@ def run_roster_pull(
     if not complete_snapshot:
         warning_count = 1
     observations = _client_observations(tuple(records), contract)
+    if is_cancelled():
+        raise AllevaSyncCancelled("Alleva patient-roster pull was cancelled before saving.")
+    if on_progress:
+        on_progress("saving_patients", 0, len(records))
     source_patient_ids = _client_source_ids(tuple(records), contract)
     if len(observations) < len(source_patient_ids):
         warning_count = 1
@@ -149,6 +154,8 @@ def run_roster_pull(
         reconciled_at,
     )
     db.commit()
+    if on_progress:
+        on_progress("saving_patients", len(records), len(records))
     return RosterPullResult(
         status="completed" if complete_snapshot and warning_count == 0 else "completed_with_warnings",
         observed_count=len(records),

@@ -1,7 +1,20 @@
-import { readRecordListPayload, readRecordPayload } from './json'
+import { ApiRequestError, readRecordListPayload, readRecordPayload } from './json'
 import { mapJob } from './jobMapper'
 import { request } from './request'
 import type { ApiHarnessJob } from './jobTypes'
+
+export async function runRosterUpdate(token: string): Promise<ApiHarnessJob> {
+  return mapJob(await readRecordPayload(await request('/api/v2/roster-update/run', { token, method: 'POST' })))
+}
+
+export async function getLatestRosterUpdate(token: string): Promise<ApiHarnessJob | null> {
+  try {
+    return mapJob(await readRecordPayload(await request('/api/v2/roster-update/latest', { token })))
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null
+    throw error
+  }
+}
 
 export async function runApprovedAllevaTreatmentPlanSync(token: string): Promise<ApiHarnessJob> {
   return mapJob(await readRecordPayload(await request('/api/v2/alleva-sync/run', { token, method: 'POST' })))

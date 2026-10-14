@@ -1,5 +1,15 @@
 # Release Notes
 
+## Unreleased source maintenance — October 13, 2026
+
+The Status Dashboard retains its nine counts and groups them into Timeliness, Review and data quality, and Workload. Responsive grids adapt to narrow windows. Administrators can update patients and treatment plans with one background two-stage action below the counts. Patient-roster completion is required before treatment-plan retrieval; partial results and warnings remain visible. Navigation does not stop the update. Existing live-import permissions and mapping gates remain required and are checked again before each stage.
+
+Progress now reports named phases and actual completed/total counts. Unknown collection sizes use a moving indicator rather than an estimated completion percentage. The still-running message remains, active jobs keep polling, and returning to an operational page reconnects to the saved job. Local cancellation stops subsequent stages and is checked between plan writes; it does not reset Alleva. No officially documented remote reset/cancel operation was found in the vendor's published API definition.
+
+Schema migration 13 adds saved phase/stage history through the existing encrypted-backup and atomic-migration workflow. Credentials continue using the persistent encrypted local settings store. Completed history survives restart; interrupted jobs remain explicitly interrupted and require a retry. Patient snapshots are read in authorized batches, roster rendering is paged, and an unchanged-plan transaction now commits consistently before status writes.
+
+This is source maintenance, not publication or qualification of a new installer. Release identity remains 1.0.1 / build 2026.10.12.1 pending a separately reviewed release. Historical packages are unchanged. Clinical LOC-change timing remains configurable and unvalidated. See [October 13 validation](validation/roster-update-2026-10-13.md).
+
 ## 1.0.1 — build 2026.10.12.1 — October 12, 2026
 
 Source patch, installer revision 1, channel stable-local-desktop. Current browser name is R3 Treatment Plan Audit Application; IZ storage/shortcut names stay compatible. Version metadata and release assertions align with the source patch. Detailed privacy-safe audit logging remains part of the runtime contract.

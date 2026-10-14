@@ -1362,12 +1362,24 @@ a:focus-visible,
   font-weight: 600;
 }
 
-.dashboard-page { display: grid; gap: var(--space-5); }
+.dashboard-page { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-5); }
 .dashboard-heading h2 { margin: 0; font-size: var(--font-title); font-weight: 600; }
 .dashboard-heading p { margin: var(--space-1) 0 var(--space-2); }
 .dashboard-heading time { color: var(--text-muted); font-size: var(--font-small); }
 .dashboard-page .panel h2 { font-size: var(--font-section); font-weight: 600; }
 .dashboard-page .metric-grid { margin: var(--space-4) 0; }
+.metric-group { min-width: 0; }
+.metric-group h3 { margin: var(--space-4) 0 var(--space-2); color: var(--text-muted); font-size: 1rem; font-weight: 600; }
+.dashboard-page .metric-group .metric-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); margin-top: 0; }
+.dashboard-page .metric-tile { min-width: 0; overflow-wrap: anywhere; }
+.roster-update-card { min-width: 0; }
+.roster-update-card .button-row { flex-wrap: wrap; }
+.job-meter--indeterminate span { animation: job-working 1.6s ease-in-out infinite alternate; }
+@keyframes job-working { from { transform: translateX(0); } to { transform: translateX(180%); } }
+@media (max-width: 480px) {
+  .dashboard-page .metric-group .metric-grid { grid-template-columns: 1fr; }
+  .roster-update-card .button-row button { width: 100%; }
+}
 .dashboard-page .metric-tile {
   border-radius: 0;
   border: 0;
@@ -1400,5 +1412,6 @@ a:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .job-meter--indeterminate span { animation: none; }
   button, .job-meter span { transition: none; }
 }

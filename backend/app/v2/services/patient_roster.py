@@ -15,6 +15,7 @@ from app.v2.services.patient_snapshot_store import (
     PatientSourceSnapshot,
     patient_source_snapshot_for_record,
     patient_current_level_of_care,
+    patient_source_snapshots_for_records,
 )
 
 UNLINKED_PATIENT_KEY_PREFIX: Final = "unlinked-plan-"
@@ -81,14 +82,17 @@ def list_patient_roster(
     db: Session, allowed_patient_record_ids: frozenset[int] | None = None,
     source_mode: SourceMode | None = None,
 ) -> tuple[PatientRosterItem, ...]:
-    plans_by_patient: dict[int, list[StoredTreatmentPlan]] = {}
-    for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode)):
-        plans_by_patient.setdefault(plan.patient_record_id, []).append(plan)
     rows = db.execute(text(
         "SELECT id,canonical_client_id,source_patient_id,source_system,lifecycle_state,first_seen_at,last_seen_at,reconciled_at "
         "FROM patients WHERE lifecycle_state<>'unlinked' AND (:source IS NULL OR source_system=:source) "
         "ORDER BY lifecycle_state,canonical_client_id,source_system,id"
     ), {"source": source_mode}).all()
+    snapshots = patient_source_snapshots_for_records(db, tuple(
+        int(row[0]) for row in rows if allowed_patient_record_ids is None or int(row[0]) in allowed_patient_record_ids
+    ))
+    plans_by_patient: dict[int, list[StoredTreatmentPlan]] = {}
+    for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode), snapshots):
+        plans_by_patient.setdefault(plan.patient_record_id, []).append(plan)
     result: list[PatientRosterItem] = []
     for raw in rows:
         row = PatientRow.model_validate(raw._mapping)
@@ -100,7 +104,7 @@ def list_patient_roster(
             and row.canonical_client_id.startswith(UNLINKED_PATIENT_KEY_PREFIX)
         ):
             continue
-        snapshot = patient_source_snapshot_for_record(db, row.id, row.source_system)
+        snapshot = snapshots.get(row.id)
         result.append(_roster_item(row, tuple(plans_by_patient.get(row.id, ())), snapshot))
     return tuple(result)
 
