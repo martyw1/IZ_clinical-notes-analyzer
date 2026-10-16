@@ -24,6 +24,8 @@ from app.v2.services.migrated_treatment_plan import (
     assemble_treatment_plan_version,
 )
 from app.v2.services.alleva_contracts import SyncImportProvenance
+from app.v2.services.patient_snapshot_store import patient_current_level_of_care, patient_source_snapshot_for_record
+from app.v2.services.evaluation_evidence import known
 
 EvaluationTrigger = Literal[
     "sync", "import", "correction", "rule_config", "loc_change", "new_review",
@@ -100,6 +102,19 @@ def evaluated_plan_version(
     evidence_sha256 = str(db.execute(text(
         "SELECT evidence_sha256 FROM treatment_plan_versions WHERE id=:id"
     ), {"id": plan_version_id}).scalar_one())
+    identity = db.execute(text(
+        "SELECT v.patient_id,NOT EXISTS (SELECT 1 FROM treatment_plan_versions n "
+        "WHERE n.patient_id=v.patient_id AND n.source_system=v.source_system "
+        "AND n.source_record_id=v.source_record_id AND n.version_ordinal>v.version_ordinal) "
+        "FROM treatment_plan_versions v WHERE v.id=:id"
+    ), {"id": plan_version_id}).one()
+    if identity[1] and aggregate.source_mode == "alleva_rest_api":
+        snapshot = patient_source_snapshot_for_record(db, int(identity[0]), aggregate.source_mode)
+        loc = patient_current_level_of_care(snapshot.record) if snapshot is not None else ""
+        if known(loc) and loc != aggregate.current_level_of_care:
+            aggregate = aggregate.model_copy(update={"current_level_of_care": loc})
+            # Derived evaluation evidence changes; the original encrypted plan remains immutable.
+            evidence_sha256 = hashlib.sha256(f"{evidence_sha256}:patient-loc:{loc}".encode()).hexdigest()
     return persist_plan_evaluation(db, aggregate, PlanEvaluationTarget(plan_version_id, evidence_sha256), trigger)
 
 
@@ -117,29 +132,12 @@ def refresh_plan_version(
 def reevaluate_all_plan_versions(db: Session, trigger: EvaluationTrigger) -> EvaluationRefreshResult:
     package = load_rule_package()
     app_settings = db.execute(select(AppSetting)).scalar_one()
-    rows = db.execute(text(
-        "SELECT v.id,p.canonical_client_id,v.source_system,v.source_record_id,v.version_ordinal,"
-        "v.admission_date,v.source_next_review_due,v.normalized_snapshot_encrypted,v.evidence_sha256 "
-        "FROM treatment_plan_versions v JOIN patients p ON p.id=v.patient_id ORDER BY v.id"
-    )).all()
-    codec = ClinicalSnapshotCodec(settings.effective_data_encryption_secret)
+    rows = db.execute(text("SELECT id FROM treatment_plan_versions ORDER BY id")).all()
     evaluation_date = ""
     for row in rows:
-        snapshot = codec.decode_plan(row[7])
-        match snapshot:
-            case AggregateSnapshot(aggregate=aggregate):
-                version_aggregate = project_patient_identity(aggregate, str(row[1]))
-            case PlanRecordSnapshot(record=record):
-                version_row = PlanVersionRow(
-                    str(row[2]), str(row[3]), int(row[4]), str(row[5] or "Unknown"), str(row[6] or "Unknown"), row[7],
-                )
-                version_aggregate = record_aggregate(RecordAggregateSource(str(row[1]), version_row, (record,), ()))
-            case unreachable:
-                assert_never(unreachable)
-        evaluated = persist_plan_evaluation(
-            db, version_aggregate, PlanEvaluationTarget(int(row[0]), str(row[8])), trigger, package=package,
-        )
-        evaluation_date = evaluated.evaluation_date
+        evaluated = evaluated_plan_version(db, int(row[0]), trigger)
+        if evaluated is not None:
+            evaluation_date = evaluated.evaluation_date
     db.commit()
     return EvaluationRefreshResult(
         versions_evaluated=len(rows), evaluation_date=evaluation_date,

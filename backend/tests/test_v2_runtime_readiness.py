@@ -46,7 +46,8 @@ def test_dashboard_and_readiness_reflect_persisted_configuration_and_imports(tmp
     configured_dashboard = client.get("/api/v2/dashboard", headers=headers).json()
     assert _card_status(configured_dashboard, "Manual upload readiness") == "ready"
     assert _card_status(configured_dashboard, "API readiness") == "configured for testing"
-    assert configured_dashboard["metrics"]["active_patient_ids"] == 1
+    assert configured_dashboard["metrics"] == {"overdue_plans": 0, "due_soon_plans": 0}
+    assert any("excluded from deadline counts" in message for message in configured_dashboard["blockers"])
     assert client.get("/api/readiness").json()["status"] == "warn"
 
 

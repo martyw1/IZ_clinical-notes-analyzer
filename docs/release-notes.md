@@ -1,5 +1,11 @@
 # Release Notes
 
+## 1.0.2 build 2026.10.16.1
+
+Recurring next update due now uses the latest treatment plan last updated date plus its LOC interval. Dashboard Overdue and Due Soon counts use computed deadlines; Due Soon spans ten Monday-Friday business days. Workload, Review and data quality, and Urgent dashboard counts are removed. Prior-version comments remain visible for the same source plan without transferring historical approvals to changed content.
+
+See [release details and rollback](releases/1.0.2-loc-deadlines.md) and [current validation](validation/current-work-2026-10-16.md). The LOC-change update window remains unvalidated and live Alleva approval gates remain open. No existing administrator password or local data is reset.
+
 ## Unreleased source maintenance — October 13, 2026
 
 The Status Dashboard retains its nine counts and groups them into Timeliness, Review and data quality, and Workload. Responsive grids adapt to narrow windows. Administrators can update patients and treatment plans with one background two-stage action below the counts. Patient-roster completion is required before treatment-plan retrieval; partial results and warnings remain visible. Navigation does not stop the update. Existing live-import permissions and mapping gates remain required and are checked again before each stage.

@@ -120,7 +120,7 @@ describe('V2 active app shell', () => {
     setupFetch()
     await signIn()
 
-    expect(await screen.findByText('Patient records with plans')).toBeInTheDocument()
+    expect(await screen.findByText('Overdue plans')).toBeInTheDocument()
     expect(screen.getByText('Counts calculated 2026-07-11 12:00 UTC')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/LOC-change update window is unvalidated/i)).toBeInTheDocument()

@@ -18,7 +18,7 @@ test('recovers in place after the initial dashboard request fails', async () => 
   // When
   fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
   // Then
-  expect(await screen.findByText('Patient records with plans')).toBeInTheDocument()
+  expect(await screen.findByText('Overdue plans')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(fetch).toHaveBeenCalledTimes(2)
 })
@@ -30,12 +30,12 @@ test('keeps the last dashboard visible and recoverable when refresh fails', asyn
     .mockResolvedValueOnce(new Response(JSON.stringify(payload)))
     .mockResolvedValueOnce(new Response('{}', { status: 503 })))
   render(<DashboardPage token='synthetic-test-token' />)
-  await screen.findByText('Patient records with plans')
+  await screen.findByText('Overdue plans')
   // When
   fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' }))
   // Then
   await screen.findByRole('alert')
-  expect(screen.getByText('Patient records with plans')).toBeInTheDocument()
+  expect(screen.getByText('Overdue plans')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Refresh dashboard' })).toBeEnabled()
 })
 
@@ -48,15 +48,16 @@ test('associates every value with an explicit population unit and refreshes', as
   // When
   render(<DashboardPage token='synthetic-test-token' />)
   // Then
-  const expected = [['Patient records with plans', 5], ['Overdue plans', 1], ['Urgent plans', 2],
-    ['Due soon plans', 3], ['Plans needing review', 4], ['Missing Data criteria', 77],
-    ['Open correction items', 6], ['Plans with conflicting evidence', 7], ['Plans unable to evaluate', 8]] as const
+  const expected = [['Overdue plans', 1], ['Due soon plans', 3]] as const
   for (const [label, value] of expected) {
     const term = await screen.findByText(label, { selector: 'dt' })
     expect(term.nextElementSibling).toHaveTextContent(String(value))
   }
-  expect(screen.getByText(/latest version of each source plan/i)).toBeInTheDocument()
-  expect(screen.getByText(/not a partition/i)).toBeInTheDocument()
+  expect(screen.getByText(/one most recent treatment plan/i)).toBeInTheDocument()
+  expect(screen.getByText(/10 business days/i)).toBeInTheDocument()
+  for (const removed of ['Workload', 'Review and data quality', 'Urgent plans', 'Patient records with plans', 'Open correction items']) {
+    expect(screen.queryByText(removed)).not.toBeInTheDocument()
+  }
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh dashboard' })) })
   expect(fetch).toHaveBeenCalledTimes(2)
 })

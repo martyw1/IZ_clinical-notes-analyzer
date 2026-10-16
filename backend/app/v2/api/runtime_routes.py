@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -20,6 +21,7 @@ from app.v2.domain.schemas import ApiHarnessJob, JobPreview
 from app.v2.models import AppSetting
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
+from app.v2.services.deterministic_evaluator import facility_local_date
 from app.v2.services.jobs import HarnessConnection, job_service
 from app.v2.services.manager_action_store import (
     CorrectionAssignmentError,
@@ -103,7 +105,7 @@ def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
         sync_enabled=profile.alleva_treatment_plan_sync_enabled,
         sync_authorized=profile.alleva_treatment_plan_sync_approved,
         loc_change_window_validated=False,
-        returned_count=sum(1 for correction in open_correction_dicts(db) if correction["patient_record_id"] in allowed_ids),
+        evaluation_date=facility_local_date(datetime.now(timezone.utc), profile.facility_timezone),
     )
 
 

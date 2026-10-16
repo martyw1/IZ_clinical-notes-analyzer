@@ -82,6 +82,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
       managerReviewIdentity,
     ),
     unassignedManagerReviews: readRecordList(record, 'unassigned_manager_reviews').map((review) => mapManagerReview(review)),
+    planCommentHistory: readRecordList(record, 'plan_comment_history').map((review) => mapManagerReview(review)),
     overrides: uniqueBy(
       readRecordList(record, 'overrides').map((review) => mapManagerReview(review, 'override', 'Override')),
       managerReviewIdentity,
@@ -126,6 +127,7 @@ function displayLocChangeDueDate(value: string): string {
 
 function mapManagerReview(record: JsonRecord, actionFallback = 'comment', statusFallback = 'Comment') {
   return {
+    planVersionId: readNumber(record, 'plan_version_id'),
     criterionId: readString(record, 'criterion_id'),
     action: readString(record, 'action', actionFallback),
     managerStatus: readString(record, 'manager_status', statusFallback),

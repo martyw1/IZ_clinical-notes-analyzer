@@ -41,11 +41,12 @@ def test_dashboard_reports_the_real_refresh_timestamp(tmp_path, monkeypatch) -> 
     # Then: counts are scoped to the accessible patient and the response says when it was built.
     assert dashboard.status_code == 200
     payload = dashboard.json()
-    assert payload["metrics"]["active_patient_ids"] == 1
+    assert payload["metrics"] == {"overdue_plans": 0, "due_soon_plans": 0}
+    assert any("excluded from deadline counts" in message for message in payload["blockers"])
     assert payload["refreshed_at"].endswith("+00:00")
 
 
-def test_dashboard_counts_unique_mrns_instead_of_treatment_plans(tmp_path, monkeypatch) -> None:
+def test_dashboard_counts_latest_plan_once_per_patient_record(tmp_path, monkeypatch) -> None:
     client = _fresh_client(tmp_path, monkeypatch)
     headers = _auth_headers(client)
     aggregate = _aggregate("975")
@@ -62,7 +63,7 @@ def test_dashboard_counts_unique_mrns_instead_of_treatment_plans(tmp_path, monke
     dashboard = client.get("/api/v2/dashboard", headers=headers)
 
     assert dashboard.status_code == 200
-    assert dashboard.json()["metrics"]["active_patient_ids"] == 1
+    assert dashboard.json()["metrics"] == {"overdue_plans": 0, "due_soon_plans": 1}
 
 
 def test_manager_action_rolls_back_when_its_audit_event_cannot_be_written(tmp_path, monkeypatch) -> None:

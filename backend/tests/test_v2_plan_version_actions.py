@@ -157,6 +157,54 @@ def test_manager_action_affects_only_selected_version(runtime, action):
     newer_detail = client.get("/api/v2/treatment-plans/IDENTITY-001", params=newer, headers=headers).json()
     assert [review["action"] for review in older_detail["manager_reviews"]] == [action]
     assert newer_detail["manager_reviews"] == []
+    assert [review["comment"] for review in newer_detail["plan_comment_history"]] == ["Synthetic selected comment"]
+    assert newer_detail["plan_comment_history"][0]["plan_version_id"] == first["plan_version_id"]
+    assert newer_detail["overrides"] == []
+
+
+def test_comments_survive_alleva_replacement_but_never_move_to_other_plans_or_sources(runtime):
+    first = _import(runtime, source="alleva_rest_api", marker="2026-09-08")
+    client, headers = runtime
+    saved = client.post("/api/v2/treatment-plans/IDENTITY-001/manager-actions", headers=headers,
+                        json=first | {"criterion_id": "confirm_current_loc", "action": "comment",
+                                      "comment": "Synthetic persistent plan comment"})
+    assert saved.status_code == 200
+    newer = _import(runtime, source="alleva_rest_api", marker="2026-10-16")
+    unchanged = _import(runtime, source="alleva_rest_api", marker="2026-10-16")
+    assert unchanged["plan_version_id"] == newer["plan_version_id"]
+    sibling = _import(runtime, source="alleva_rest_api", plan_id="plan-b")
+    other_source = _import(runtime, source="manual_upload")
+    detail = client.get("/api/v2/treatment-plans/IDENTITY-001", headers=headers, params=newer).json()
+    assert len(detail["plan_comment_history"]) == 1
+    assert detail["plan_comment_history"][0]["comment"] == "Synthetic persistent plan comment"
+    assert detail["manager_reviews"] == []
+    assert detail["overrides"] == []
+    for selected in (sibling, other_source):
+        assert client.get("/api/v2/treatment-plans/IDENTITY-001", headers=headers, params=selected).json()["plan_comment_history"] == []
+    original = client.get("/api/v2/treatment-plans/IDENTITY-001", headers=headers, params=first).json()
+    assert original["plan_comment_history"] == []
+    assert original["manager_reviews"][0]["comment"] == "Synthetic persistent plan comment"
+
+
+def test_saved_alleva_plan_uses_current_patient_loc_without_rewriting_history(runtime):
+    first = _import(runtime, source="alleva_rest_api", marker="2026-09-01")
+    latest = _import(runtime, source="alleva_rest_api", marker="2026-09-08")
+    from app.v2.db import SessionLocal
+    from app.v2.services.patient_snapshot_store import PatientSourceSnapshotInput, persist_patient_source_snapshots
+    with SessionLocal() as db:
+        persist_patient_source_snapshots(db, (PatientSourceSnapshotInput(
+            mrn="IDENTITY-001", source_patient_id="IDENTITY-001", source_system="alleva_rest_api",
+            source_last_updated="2026-10-16", record={"levelOfCare": {"name": "Outpatient"}},
+            patient_record_id=latest["patient_record_id"],
+        ),), "2026-10-16T12:00:00+00:00")
+        db.commit()
+    client, headers = runtime
+    current = client.get("/api/v2/treatment-plans/IDENTITY-001", headers=headers, params=latest).json()
+    assert current["current_level_of_care"] == "Outpatient"
+    assert current["date_clock_due_date"] == "2026-11-07"
+    original = client.get("/api/v2/treatment-plans/IDENTITY-001", headers=headers, params=first).json()
+    assert original["current_level_of_care"] == "PHP"
+    assert original["source_last_updated"] == "2026-09-01"
 
 
 def test_selected_refresh_rolls_back_evaluation_on_audit_failure(runtime, monkeypatch):

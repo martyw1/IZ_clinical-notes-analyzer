@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 from app.v2.security import verify_password
@@ -38,6 +39,8 @@ def test_powershell_local_recovery_is_effective_audited_and_write_only(tmp_path:
             temporary_password,
             "-AppDataRoot",
             str(app_data),
+            "-PythonExe",
+            sys.executable,
         ],
         cwd=root,
         capture_output=True,

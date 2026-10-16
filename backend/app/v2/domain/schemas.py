@@ -195,6 +195,7 @@ class TreatmentPlanAggregate(V2Model):
     content_sections_missing: tuple[str, ...]
     criteria_results: tuple[TreatmentPlanCriterionResult, ...] = Field(min_length=42, max_length=42)
     manager_reviews: tuple[dict[str, JsonValue], ...]
+    plan_comment_history: tuple[dict[str, JsonValue], ...] = ()
     overrides: tuple[dict[str, JsonValue], ...]
     audit_refs: tuple[str, ...]
     evidence_coverage_summary: TreatmentPlanEvidenceCoverage

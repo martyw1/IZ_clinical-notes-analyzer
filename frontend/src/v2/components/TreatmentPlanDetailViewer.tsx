@@ -188,10 +188,11 @@ export function TreatmentPlanDetailViewer({
         </ol>
         <dl className='source-comparison-grid'>
           <div><dt>Source due date</dt><dd>{displayDate(plan.sourceDueDate)}</dd></div>
-          <div><dt>Computed due date</dt><dd>{displayDate(plan.dueDate)}</dd></div>
+          <div><dt>Next update due (computed)</dt><dd>{displayDate(plan.dueDate)}</dd></div>
           <div><dt>LOC-change clock</dt><dd>{plan.locChangeDueDate}</dd></div>
           <div><dt>Checklist / rules</dt><dd>{plan.checklistVersion} / {plan.rulesVersion}</dd></div>
         </dl>
+        <p className='muted'>Next update due uses this saved plan’s last updated date plus the patient LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days. Admission and review dates do not replace a missing update date. Historical versions retain their own dates.</p>
       </section>
 
       <TreatmentPlanClinicalSections plan={plan} />

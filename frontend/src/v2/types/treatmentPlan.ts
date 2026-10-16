@@ -44,6 +44,7 @@ export type ContentProblem = {
 }
 
 export type ManagerReview = {
+  readonly planVersionId?: number
   readonly criterionId: string
   readonly action: string
   readonly managerStatus: string
@@ -105,6 +106,7 @@ export type TreatmentPlanAggregate = PlanIdentity & {
   readonly dataQualityWarnings: readonly string[]
   readonly criteria: readonly CriterionResult[]
   readonly managerReviews: readonly ManagerReview[]
+  readonly planCommentHistory?: readonly ManagerReview[]
   readonly unassignedManagerReviews: readonly ManagerReview[]
   readonly overrides: readonly ManagerReview[]
   readonly planHistory: readonly TreatmentPlanHistoryItem[]

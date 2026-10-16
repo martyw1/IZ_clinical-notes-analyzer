@@ -90,6 +90,7 @@ def source_fixture(case: CaseName) -> TreatmentPlanAggregate:
     plans = ({"plan_id": "source-plan", "plan_kind": "initial_plan", "plan_date": "2026-01-01"},) if full else ()
     signatures = (signature("initial_plan", "2026-01-01"), signature("master_plan", "2026-01-01")) if full else ()
     return aggregate.model_copy(update={
+        "source_last_updated": "2026-01-01" if supplied else "",
         "source_mode": "synthetic_fixture", "treatment_plans": plans, "active_treatment_plans": plans,
         "loc_history": ({"level_of_care": "PHP", "effective_date": "2026-01-01"},) if full else (),
         "source_evidence": (), "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),

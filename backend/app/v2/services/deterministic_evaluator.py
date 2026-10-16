@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
-from typing import Literal
+from typing import Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
 from app.v2.services.criterion_source_support import ObservedSource, criterion_source_support
 from app.v2.services.evaluation_evidence import EvaluationEvidence, collect_evidence, known
 from app.v2.services.rule_package import MASTER_PLAN_DUE_DAYS, ChecklistStep, DeterministicRulePackage
+from app.v2.services.deadline_calendar import deadline_status
 
 EvaluationStatus = Literal[
     "Present", "Missing Data", "Needs Review", "Conflicting Evidence", "Unable to Evaluate",
@@ -68,7 +69,7 @@ def evaluate_plan_version(
     evaluation_date: date,
     facility_timezone: str,
 ) -> EvaluationBundle:
-    evidence = collect_evidence(aggregate, package, evaluation_date)
+    evidence = collect_evidence(aggregate, package, evaluation_date, facility_timezone)
     context = EvaluationContext(evidence, _timing_status(evidence.calculated_due, evaluation_date))
     overall, explanation = _overall(context)
     criteria = tuple(_criterion(step, context, overall) for step in package.checklist.steps)
@@ -104,6 +105,10 @@ def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
         return "Conflicting Evidence", "Signature or level-of-care evidence is malformed or internally inconsistent."
     if context.future_review:
         return "Needs Review", "A signed review is future-dated relative to the facility evaluation date."
+    if context.anchor is None:
+        return ("Unable to Evaluate" if known(context.aggregate.source_last_updated) else "Missing Data"), "The treatment-plan last updated date is missing or invalid; admission and review dates are not substituted."
+    if context.calculated_due is None and context.interval_days is not None:
+        return "Needs Review", "The treatment-plan last updated date is in the future; an update deadline cannot be determined."
     if (context.admission is None or context.initial_signature is None or context.master_signature is None
             or context.source_due_missing or context.plans_missing):
         return "Missing Data", "Required typed plan, signature, admission, or due-date evidence is missing."
@@ -112,7 +117,7 @@ def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
     if not context.mapped_loc or context.calculated_due is None:
         return "Unable to Evaluate", "The level of care or recurrence anchor is not configured; compliance was not inferred."
     if context.due_conflict:
-        return "Conflicting Evidence", "Source Next Review Due disagrees with the calculated signed-review recurrence."
+        return "Conflicting Evidence", "Source Next Review Due disagrees with the deadline calculated from the treatment-plan last updated date."
     if context.initial_signature != context.admission:
         return "Needs Review", "Initial treatment-plan signature evidence is not on admission Day 1."
     if context.loc_changed:
@@ -181,14 +186,14 @@ def _master(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluat
 
 
 def _anchor(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    return _presence(step, "treatment_reviews[*].review_date/signature_date or admission_date", context.anchor or "")
+    return _presence(step, "source_last_updated", context.anchor or "")
 
 
 def _due(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
     status: EvaluationStatus = "Conflicting Evidence" if context.due_conflict else context.timing_status
     if context.calculated_due is None:
         status = "Unable to Evaluate"
-    return CriterionEvaluation(step.key, step.title, status, "signed_review_anchor + configured_interval_days",
+    return CriterionEvaluation(step.key, step.title, status, "source_last_updated + configured_interval_days",
                                _iso(context.calculated_due) or "unavailable", "Calculated due date is compared with source Next Review Due.")
 
 
@@ -217,16 +222,7 @@ def _loc_change(step: ChecklistStep, context: EvaluationContext) -> CriterionEva
 
 
 def _timing_status(due: date | None, today: date) -> EvaluationStatus:
-    if due is None:
-        return "Unable to Evaluate"
-    days = (due - today).days
-    if days < 0:
-        return "Overdue"
-    if days <= 1:
-        return "Urgent"
-    if days <= 7:
-        return "Due Soon"
-    return "Current/Compliant"
+    return cast(EvaluationStatus, deadline_status(due, today))
 
 
 def _iso(value: date | None) -> str:

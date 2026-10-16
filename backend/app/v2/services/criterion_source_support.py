@@ -20,7 +20,7 @@ def criterion_source_support(key: str, aggregate: TreatmentPlanAggregate) -> tup
     loc = _observed("current_level_of_care", aggregate.current_level_of_care)
     initial = _signatures(aggregate, "initial_plan")
     master = _signatures(aggregate, "master_plan")
-    anchors = admission + _records(aggregate.treatment_reviews, "treatment_reviews", REVIEW_FIELDS)
+    anchors = _observed("source_last_updated", aggregate.source_last_updated)
     match key:
         case "confirm_admission_date":
             return admission

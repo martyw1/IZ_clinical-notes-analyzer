@@ -185,7 +185,7 @@ export function AppV2() {
     return (
       <main className='login-page'>
         <section className='login-card'>
-          <p className='eyebrow'>Production 1.0.1</p>
+          <p className='eyebrow'>Production 1.0.2</p>
           <h1>R3 Treatment Plan Audit Application</h1>
           <p>Review treatment plans, track deadlines, and follow up on corrections.</p>
           {authMessage && <p role='status'>{authMessage}</p>}

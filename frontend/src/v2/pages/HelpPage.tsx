@@ -27,7 +27,7 @@ export function HelpPage() {
           <li>At Protect your account, enter your current password to create a recovery code. Save it privately, select <strong>I have saved my recovery code in a secure place.</strong>, then continue. The code is shown once and works once.</li>
           <li>Open Status Dashboard to see saved records, attention counts, source readiness, and unresolved blockers.</li>
         </ol>
-        <p>The current source candidate is 1.0.1 · build 2026.10.12.1 · stable-local-desktop. The footer identifies the version actually running. After an approved update, refresh the browser and check it before reporting a problem. Full production qualification remains pending.</p>
+        <p>The current source candidate is 1.0.2 · build 2026.10.16.1 · stable-local-desktop. The footer identifies the version actually running. After an approved update, refresh the browser and check it before reporting a problem. Full production qualification remains pending.</p>
         <p>Normal daily use needs the app and OneDrive only. ChatGPT, Codex, and development tools do not need to run. OneDrive does not replace an approved backup of the app’s local patient data.</p>
       </section>
 
@@ -47,7 +47,7 @@ export function HelpPage() {
         <p>The versioned rules check an initial plan on admission Day 1, a signed master plan within 30 calendar days of admission, recurring PHP reviews every 30 calendar days, and recurring IOP/OP reviews every 60 calendar days. The recurring clock starts from the latest valid signed review, or admission if none exists. Plan detail compares its calculated date with the source Next Review Due date.</p>
         <dl>
           <div><dt>Overdue</dt><dd>A confirmed deadline has passed, including a late master-plan signature. Open the checklist to see which requirement caused it.</dd></div>
-          <div><dt>Urgent or Due Soon</dt><dd>The recurring due date is today or tomorrow, or within the next two to seven days.</dd></div>
+          <div><dt>Due Soon</dt><dd>The next update deadline is today or within 10 business days (Monday–Friday, no holiday exclusions). The deadline uses the latest plan’s last updated date plus its LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days.</dd></div>
           <div><dt>Current/Compliant</dt><dd>Evaluated timing evidence is currently in window. This does not replace review of every checklist criterion and source document.</dd></div>
           <div><dt>Missing Data</dt><dd>Required dates, typed signatures, or plan evidence are absent.</dd></div>
           <div><dt>Conflicting Evidence</dt><dd>Source dates or other required evidence disagree with the calculation.</dd></div>

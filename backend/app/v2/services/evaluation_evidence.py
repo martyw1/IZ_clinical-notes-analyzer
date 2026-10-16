@@ -6,6 +6,7 @@ from typing import Final
 
 from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
 from app.v2.services.rule_package import DeterministicRulePackage
+from app.v2.services.deadline_calendar import plan_update_date
 
 UNKNOWN_VALUES: Final = frozenset({"", "unknown", "unavailable", "unvalidated_configurable", "none", "null"})
 
@@ -40,6 +41,7 @@ def collect_evidence(
     aggregate: TreatmentPlanAggregate,
     package: DeterministicRulePackage,
     today: date,
+    facility_timezone: str = "",
 ) -> EvaluationEvidence:
     admission = parse_date(aggregate.admission_date)
     initial, initial_path, initial_malformed = _role_signature(aggregate, "initial_plan")
@@ -48,20 +50,20 @@ def collect_evidence(
         known(item.signature_datetime) and parse_date(item.signature_datetime) is None
         for item in aggregate.content_snapshot.signatures
     )
-    review_anchor, future_review = _latest_signed_review(aggregate, today)
-    anchor = review_anchor or admission
+    _, future_review = _latest_signed_review(aggregate, today)
+    anchor = plan_update_date(aggregate.source_last_updated, facility_timezone)
     mapped_loc, interval = _map_loc(aggregate.current_level_of_care, package)
-    calculated_due = anchor + timedelta(days=interval) if anchor is not None and interval is not None else None
+    calculated_due = anchor + timedelta(days=interval) if anchor is not None and anchor <= today and interval is not None else None
     source_due = parse_date(aggregate.source_due_date)
     source_due_missing = not known(aggregate.source_due_date)
     source_due_invalid = not source_due_missing and source_due is None
     due_conflict = calculated_due is not None and source_due is not None and calculated_due != source_due
     loc_values = {
-        _text(row, "level_of_care", "loc_code").strip().casefold()
+        (_map_loc(_text(row, "level_of_care", "loc_code"), package)[0] or _text(row, "level_of_care", "loc_code")).strip().casefold()
         for row in aggregate.loc_history
-        if _text(row, "level_of_care", "loc_code").strip()
+        if known(_text(row, "level_of_care", "loc_code"))
     }
-    current_loc = aggregate.current_level_of_care.strip().casefold()
+    current_loc = (mapped_loc or aggregate.current_level_of_care).strip().casefold()
     loc_conflict = bool(loc_values) and current_loc not in loc_values
     loc_changed = len(loc_values) > 1
     effective_dates = tuple(parse_date(_text(row, "effective_date")) for row in aggregate.loc_history)

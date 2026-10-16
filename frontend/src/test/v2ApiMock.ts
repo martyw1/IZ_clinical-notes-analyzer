@@ -185,7 +185,7 @@ function dashboardPayload() {
       { label: 'API readiness', status: 'configured for testing', detail: 'Alleva harness is bounded.' },
       { label: 'Alleva treatment-plan sync readiness', status: 'blocked', detail: 'Live sync remains gated.' },
     ],
-    metrics: { active_patient_ids: 2, needs_review: 4, missing_data: 5, conflicting: 1, unable: 0 },
+    metrics: { overdue_plans: 2, due_soon_plans: 1 },
     blockers: ['LOC-change update window is unvalidated and configurable.'],
   }
 }

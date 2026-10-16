@@ -53,6 +53,7 @@ from app.v2.services.alleva_protocol import (
 from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
 from app.v2.services.patient_snapshot_store import (
     PatientSourceSnapshotInput,
+    patient_current_level_of_care,
     persist_patient_source_snapshots,
 )
 from app.v2.services.treatment_plan_store import (
@@ -1352,7 +1353,7 @@ def _aggregate_from_payload(
     parsed = ParsedManualFields(
         patient_id=patient_id,
         patient_id_correction_applied=False,
-        level_of_care=_mapped_text(client, contract, "clients", "level_of_care") or "Unknown",
+        level_of_care=_mapped_text(client, contract, "clients", "level_of_care") or patient_current_level_of_care(client) or "Unknown",
         admission_date=_mapped_text(client, contract, "clients", "admission_date") or "Unknown",
         due_date=_mapped_text(plan, contract, "treatment_plans", "due_date") or "Unknown",
         reason_for_admission=_mapped_text(detail, contract, "treatment_plan_detail", "reason_for_admission"),

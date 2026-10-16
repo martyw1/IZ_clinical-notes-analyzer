@@ -17,6 +17,16 @@ function countCriteriaByStatus(criteria: readonly CriterionResult[], status: Cri
 
 export function TreatmentPlanReviewPanels({ plan, canManage, onExportChecklistEvidence }: Props) {
   return <>
+      {!!plan.planCommentHistory?.length && <section className='panel'>
+        <h2>Comments from earlier versions of this plan</h2>
+        <p className='muted'>Saved comments stay with this treatment plan when Alleva updates it. Each comment retains its original saved version. Earlier approvals and overrides do not apply to the updated content.</p>
+        <ul className='artifact-list'>
+          {plan.planCommentHistory.map((review, index) => <li key={managerReviewKey(review, index)}>
+            <strong>Saved version #{review.planVersionId}</strong> · {review.actorUsername} · {formatUtcEventDateTime(review.createdAt)}
+            <span> Criterion: {review.criterionId}</span><span> Comment: {review.comment}</span>
+          </li>)}
+        </ul>
+      </section>}
       <section className='panel'>
         <div className='section-heading'>
           <div>

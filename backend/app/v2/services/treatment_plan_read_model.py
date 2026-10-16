@@ -110,7 +110,7 @@ def treatment_plan_aggregate_for_patient(
 
 
 def treatment_plan_aggregate_for_version(db: Session, plan_version_id: int) -> TreatmentPlanAggregate | None:
-    from app.v2.services.manager_action_store import manager_override_dicts_for_version, manager_review_dicts_for_version
+    from app.v2.services.manager_action_store import manager_override_dicts_for_version, manager_review_dicts_for_version, prior_plan_comments
     from app.v2.services.patient_snapshot_store import patient_source_snapshot_for_record
     aggregate = evaluated_plan_version(db, plan_version_id)
     if aggregate is None:
@@ -124,6 +124,7 @@ def treatment_plan_aggregate_for_version(db: Session, plan_version_id: int) -> T
     return aggregate.model_copy(
         update={
             "manager_reviews": aggregate.manager_reviews + persisted_reviews,
+            "plan_comment_history": prior_plan_comments(db, plan_version_id),
             "overrides": aggregate.overrides + manager_override_dicts_for_version(db, plan_version_id),
             "source_documents": source_documents,
         }

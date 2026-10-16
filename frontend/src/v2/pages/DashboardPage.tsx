@@ -8,21 +8,12 @@ import { RosterUpdateCard } from '../components/RosterUpdateCard'
 type DashboardPageProps = { readonly token: string; readonly isAdmin?: boolean; readonly onNavigate?: (view: string) => void }
 
 const metricGroups = [
-  { label: 'Timeliness', keys: ['overdue_plans', 'urgent_plans', 'due_soon_plans'] },
-  { label: 'Review and data quality', keys: ['needs_review', 'missing_data', 'conflicting', 'unable'] },
-  { label: 'Workload', keys: ['active_patient_ids', 'returned'] },
+  { label: 'Timeliness', keys: ['overdue_plans', 'due_soon_plans'] },
 ]
 
 const metricLabels: Record<string, string> = {
-  active_patient_ids: 'Patient records with plans',
   overdue_plans: 'Overdue plans',
-  urgent_plans: 'Urgent plans',
   due_soon_plans: 'Due soon plans',
-  needs_review: 'Plans needing review',
-  missing_data: 'Missing Data criteria',
-  returned: 'Open correction items',
-  conflicting: 'Plans with conflicting evidence',
-  unable: 'Plans unable to evaluate',
 }
 
 function messageForError(error: unknown): string {
@@ -88,8 +79,8 @@ export function DashboardPage({ token, isAdmin = false, onNavigate }: DashboardP
           </section>)}
           <details className='metric-explanation'>
             <summary>How these counts are calculated</summary>
-            <p className='muted'>Authorized patient records with plans, not active-client lifecycle counts. Plan statuses and Missing Data criteria use the latest version of each source plan for each patient record.</p>
-            <p className='muted'>Open correction items include authorized, linked items on historical versions. These patient, plan, criterion, and correction-item counts are not a partition and should not be added together.</p>
+            <p className='muted'>One most recent treatment plan per authorized patient record, selected by its last updated date. Next update due is last updated plus the LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days.</p>
+            <p className='muted'>Overdue means the computed deadline is before today. Due soon includes today through 10 business days after today, using Monday–Friday with no holiday exclusions. Dates use the facility timezone. Missing or ambiguous dates are explained below and are not guessed. Counts reflect saved Alleva data; pull updates to include newer changes.</p>
           </details>
         </section>
         {isAdmin && <RosterUpdateCard token={token} onNavigate={onNavigate} onCompleted={() => setRefreshNumber((current) => current + 1)} />}

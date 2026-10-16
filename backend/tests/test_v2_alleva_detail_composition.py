@@ -94,7 +94,7 @@ def test_alleva_detail_preserves_every_nested_clinical_piece_and_signature(tmp_p
 
     aggregate = _aggregate_from_payload(
         "MRN-SYNTHETIC-1",
-        {"id": "source-complete", "mrn": "MRN-SYNTHETIC-1"},
+        {"id": "source-complete", "mrn": "MRN-SYNTHETIC-1", "levelOfCare": {"name": "Outpatient"}},
         {"id": "plan-complete", "client": {"id": "source-complete", "route": "/clients/source-complete"}},
         detail,
         "plan-complete",
@@ -117,4 +117,5 @@ def test_alleva_detail_preserves_every_nested_clinical_piece_and_signature(tmp_p
     ]
     assert all(signature.has_signature_data for signature in aggregate.content_snapshot.signatures)
     assert aggregate.source_last_updated == "2026-02-04T17:30:00Z"
+    assert aggregate.current_level_of_care == "Outpatient"
     assert aggregate.treatment_plans[0]["plan_date"] == "2026-01-03T09:00:00Z"

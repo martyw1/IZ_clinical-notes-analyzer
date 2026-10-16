@@ -1,8 +1,8 @@
 # Open Blockers
 
-Updated: 2026-10-12
+Updated: 2026-10-16
 
-Applies to current source **R3 Treatment Plan Audit Application 1.0.1 / build 2026.10.12.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-12.md) records this patch. September 21 exact-ZIP acceptance remains historical and does not qualify the new release.
+Applies to current source **R3 Treatment Plan Audit Application 1.0.2 / build 2026.10.16.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-16.md) records this patch. September 21 exact-ZIP acceptance remains historical and does not qualify the new release.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -13,7 +13,7 @@ Status: **open external gates; no production claim.**
 - R3 and Alleva must approve and supervise a live contract and end-to-end sync validation using approved non-PHI/test records.
 - The exposed credential must be rotated, all downstream copies inventoried, and the required history-remediation procedure explicitly approved before any destructive rewrite or force push.
 - R3 IT/records owners must decide whether code signing is required and define retention/legal-hold handling for release, diagnostic, backup, and incident records.
-- Every new release must pass isolated synthetic source and exact-package validation. The current evidence ledger is [October 12 validation](validation/current-work-2026-10-12.md); beta release reports retain historical scope.
+- Every new release must pass isolated synthetic source and exact-package validation. The current evidence ledger is [October 16 validation](validation/current-work-2026-10-16.md); beta release reports retain historical scope.
 - R3 IT must verify whole-device encryption/recovery-key escrow, intended Windows account/sign-in and automatic lock, reliable clock and protected backup restoration. October 12 unelevated checks did not establish encryption state.
 - R3 must confirm OneDrive business agreement/BAA and tenant sharing/access/retention controls before cloud storage of regulated data.
 - Replacement-device/account recovery is not established by the CurrentUser-DPAPI same-account backup; R3 must test the device-loss recovery plan.

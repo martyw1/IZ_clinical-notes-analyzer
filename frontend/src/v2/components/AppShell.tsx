@@ -41,7 +41,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
         ))}
       </nav>
       <main id='main-content' tabIndex={-1}>{children}</main>
-      <footer className='v2-footer'>Production 1.0.1 | 1.0.1 | build 2026.10.12.1 | stable-local-desktop</footer>
+      <footer className='v2-footer'>Production 1.0.2 | 1.0.2 | build 2026.10.16.1 | stable-local-desktop</footer>
     </div>
   )
 }

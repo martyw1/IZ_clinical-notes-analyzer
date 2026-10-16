@@ -15,6 +15,8 @@ test('renders one readable selected-plan document with timeline, full clinical h
     admission_date: '2026-01-01T08:00:00Z',
     date_clock_due_date: '2026-02-15T08:00:00Z',
     source_due_date: '2026-02-14T08:00:00Z',
+    plan_comment_history: [{ plan_version_id: 90, criterion_id: 'confirm_current_loc', action: 'comment',
+      comment: 'Synthetic comment retained after Alleva update', actor_username: 'synthetic-manager', created_at: '2026-02-01T12:00:00Z' }],
     overall_status: 'Needs Review',
     treatment_plans: [
       { plan_id: 'plan-complete', plan_date: '2026-01-03T09:00:00Z', last_modified: '2026-02-04T17:30:00Z' },
@@ -86,6 +88,9 @@ test('renders one readable selected-plan document with timeline, full clinical h
 
   expect(screen.getByRole('heading', { name: 'Treatment Plan ID plan-complete' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Plan timeline' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Comments from earlier versions of this plan' })).toBeInTheDocument()
+  expect(screen.getByText('Saved version #90')).toBeInTheDocument()
+  expect(screen.getByText('Comment: Synthetic comment retained after Alleva update')).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Clinical overview' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Clinical review history' })).toBeInTheDocument()
   expect(screen.getByText('Synthetic diagnosis one.')).toBeInTheDocument()

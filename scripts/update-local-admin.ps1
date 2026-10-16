@@ -1,13 +1,14 @@
 [CmdletBinding()]
 param(
     [string]$Value = '',
-    [string]$AppDataRoot = (Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer')
+    [string]$AppDataRoot = (Join-Path $env:LOCALAPPDATA 'IZ Clinical Notes Analyzer'),
+    [string]$PythonExe = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $EnvFile = Join-Path $AppDataRoot '.env'
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$PythonExe = Join-Path $RootDir 'backend\.venv\Scripts\python.exe'
+if (-not $PythonExe) { $PythonExe = Join-Path $RootDir 'backend\.venv\Scripts\python.exe' }
 
 if (!(Test-Path $EnvFile)) {
     throw "Local settings file was not found at $EnvFile. Start the app once to create local settings, then run this utility again."

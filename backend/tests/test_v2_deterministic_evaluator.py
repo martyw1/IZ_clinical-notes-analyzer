@@ -27,6 +27,7 @@ def _aggregate(*, loc: str = "PHP", admission: str = "2026-01-01", signature: st
         _signature("master_plan", signature, "treatment_plans.master.signatures[0]"),
     )
     return aggregate.model_copy(update={
+        "source_last_updated": admission,
         "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),
     })
 
@@ -45,8 +46,8 @@ def _signature(role: str, signed_on: str, path: str) -> TreatmentPlanSignatureMe
 
 @pytest.mark.parametrize(
     ("evaluation_date", "expected"),
-    ((date(2026, 2, 1), "Overdue"), (date(2026, 1, 31), "Urgent"), (date(2026, 1, 30), "Urgent"),
-     (date(2026, 1, 29), "Due Soon"), (date(2026, 1, 24), "Due Soon"), (date(2026, 1, 23), "Current/Compliant")),
+    ((date(2026, 2, 1), "Overdue"), (date(2026, 1, 31), "Due Soon"), (date(2026, 1, 30), "Due Soon"),
+     (date(2026, 1, 29), "Due Soon"), (date(2026, 1, 24), "Due Soon"), (date(2026, 1, 16), "Current/Compliant")),
 )
 def test_exact_status_boundary_when_facility_date_changes(evaluation_date: date, expected: str) -> None:
     # Given
@@ -104,13 +105,14 @@ def test_configured_non_php_category_uses_sixty_day_recurrence() -> None:
     assert bundle.calculated_due_date == "2026-03-02"
 
 
-def test_latest_valid_signed_review_replaces_admission_anchor() -> None:
+def test_plan_last_updated_is_anchor_regardless_of_review_or_admission_dates() -> None:
     # Given
     package = load_rule_package()
     aggregate = _aggregate(due="2026-03-16").model_copy(update={
+        "source_last_updated": "2026-02-14T09:00:00Z",
         "treatment_reviews": (
             {"review_date": "2026-01-20", "signature_date": ""},
-            {"review_date": "2026-02-14", "signature_date": "2026-02-14"},
+            {"review_date": "2026-02-10", "signature_date": "2026-02-10"},
         )
     })
 
@@ -122,16 +124,18 @@ def test_latest_valid_signed_review_replaces_admission_anchor() -> None:
     assert bundle.calculated_due_date == "2026-03-16"
 
 
-def test_admission_is_anchor_when_no_valid_signed_review_exists() -> None:
+def test_admission_is_not_substituted_when_last_updated_is_missing() -> None:
     # Given
     package = load_rule_package()
-    aggregate = _aggregate().model_copy(update={"treatment_reviews": ({"review_date": "2026-01-20", "signature_date": ""},)})
+    aggregate = _aggregate().model_copy(update={"source_last_updated": "", "treatment_reviews": ({"review_date": "2026-01-20", "signature_date": ""},)})
 
     # When
     bundle = evaluate_plan_version(aggregate, package, date(2026, 1, 2), "America/New_York")
 
     # Then
-    assert bundle.recurring_anchor == "2026-01-01"
+    assert bundle.recurring_anchor == ""
+    assert bundle.calculated_due_date == ""
+    assert bundle.overall_status == "Missing Data"
 
 
 @pytest.mark.parametrize(
@@ -192,6 +196,7 @@ def test_late_master_signature_prevents_overall_compliance() -> None:
         _signature("master_plan", "2026-02-01", "treatment_plans.master.signatures[0]"),
     )
     aggregate = aggregate.model_copy(update={
+        "source_last_updated": "2026-02-01",
         "content_snapshot": aggregate.content_snapshot.model_copy(update={"signatures": signatures}),
         "treatment_reviews": ({"review_date": "2026-02-01", "signature_date": "2026-02-01"},),
     })
@@ -308,8 +313,8 @@ def test_canonical_count_versions_paths_and_privacy_are_preserved() -> None:
 
     # Then
     assert len(bundle.criteria) == 42
-    assert bundle.checklist_version == "1.2.0"
-    assert bundle.rules_version == "1.2.0"
+    assert bundle.checklist_version == "1.2.1"
+    assert bundle.rules_version == "1.2.1"
     assert all(item.normalized_path and item.explanation for item in bundle.criteria)
     assert "PRIVACY-CANARY-NAME" not in repr(bundle)
 

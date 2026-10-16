@@ -19,7 +19,7 @@ def _aggregate(patient_id: str = "942"):
     return build_manual_aggregate(_parsed_fields(
         admission_date=admission.isoformat(), signature_datetime=admission.isoformat(),
         due_date=(admission + timedelta(days=30)).isoformat(),
-    )).model_copy(update={"patient_id": patient_id, "patient_display_label": PRIVACY_CANARY})
+    )).model_copy(update={"patient_id": patient_id, "patient_display_label": PRIVACY_CANARY, "source_last_updated": admission.isoformat()})
 
 
 def _with_typed_plan_signatures(aggregate):
@@ -52,8 +52,8 @@ def test_authorized_refresh_appends_distinct_run_and_preserves_import_provenance
     assert detail.status_code == 200
     payload = detail.json()
     assert len(payload["criteria_results"]) == 42
-    assert payload["checklist_version"] == "1.2.0"
-    assert payload["rules_version"] == "1.2.0"
+    assert payload["checklist_version"] == "1.2.1"
+    assert payload["rules_version"] == "1.2.1"
     assert payload["evaluation_date"] == date.today().isoformat()
     assert all(item["source_json_paths"] and item["finding_message"] for item in payload["criteria_results"])
     assert refreshed.status_code == 200

@@ -1,6 +1,6 @@
 # Operator help: current local desktop app
 
-Applies to the `1.0.1` / `2026.10.12.1` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
+Applies to the `1.0.2` / `2026.10.16.1` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
 
 [Open the complete offline HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html). It includes installation, first-use recovery, daily work, backup and troubleshooting.
 
@@ -28,13 +28,12 @@ Missing names, original references, and service dates remain unavailable or not 
 
 ## Interpret clinical timing
 
-The 42-step checklist and versioned rule package are the active clinical timing source. The initial plan is checked for an admission Day-1 signature. A signed master plan is due within **30 calendar days after admission**. Recurring PHP reviews use **30 calendar days**; IOP variants and OP/Outpatient use **60 calendar days**. The recurring clock uses the latest valid signed review, or admission when there is no valid signed review. The calculated due date is compared with the source Next Review Due date.
+The 42-step checklist and versioned rule package are the active clinical timing source. The initial plan is checked for an admission Day-1 signature. A signed master plan is due within **30 calendar days after admission**. Recurring PHP reviews use **30 calendar days**; IOP variants and OP/Outpatient use **60 calendar days**. The recurring clock uses the treatment plan last updated date. Admission, creation and signed-review dates do not replace a missing update date. The calculated due date is compared with the source Next Review Due date.
 
 | Overall status | What to inspect |
 | --- | --- |
 | Overdue | A confirmed deadline has passed. Inspect the master-plan and recurring-review criteria separately. |
-| Urgent | Recurring review is due today or tomorrow. |
-| Due Soon | Recurring review is two through seven days away. |
+| Due Soon | The computed update deadline is today or within ten Monday-Friday business days, with no holiday exclusions. |
 | Current/Compliant | Evaluated timing is in window. Still inspect source evidence and checklist findings before a clinical conclusion. |
 | Missing Data | A required plan, signature, or date is absent. |
 | Conflicting Evidence | Source and calculated dates, or other required evidence, disagree. |
@@ -81,3 +80,9 @@ Sign out, then use **(2) Stop IZ Clinical Notes Analyzer** when a full stop is n
 The numbered desktop tools retain their established names. **(1) Start IZ Clinical Notes Analyzer**, **(2) Stop IZ Clinical Notes Analyzer**, **(3) Collect IZ Diagnostics**, **(4) Quick Assist - R3 Support**, **(5) Short Intro Video**, and **(6) IZ Clinical Notes Analyzer User Guide** are the handoff naming convention. Shortcuts are machine-specific; the handoff checklist verifies which ones exist on the client laptop.
 
 For ordinary appliance use, the application, its localhost browser window and OneDrive are the expected workload. ChatGPT is not required and is excluded from steady-state performance estimates. Windows security and update services still run normally. Keep the laptop plugged in for large imports, wait for a job to finish before starting another, and lock Windows with **Windows+L** when stepping away.
+
+## Dashboard deadlines and comments in 1.0.2
+
+At a glance shows Overdue plans and Due Soon plans only. It selects the most recently updated plan per authorized patient record and uses its computed deadline independently of overall checklist status. Missing or ambiguous dates are explained below the counts. Pull authorized Alleva updates to include new vendor changes; dashboard refresh reads saved local data.
+
+Comments on an earlier saved version remain visible in Comments from earlier versions of this plan after Alleva updates that same plan. The original author, date and saved version are retained. Historical approvals and overrides do not approve changed content.

@@ -152,6 +152,7 @@ def record_aggregate(source: RecordAggregateSource) -> TreatmentPlanAggregate:
         update={
             "patient_display_label": f"MRN {source.patient_id}",
             "source_mode": _source_mode(source.latest.source_system),
+            "source_last_updated": _record_text(latest_record, "last_modified", "lastModified", "source_last_updated", "updatedAt", "lastUpdated"),
             "treatment_plans": source.plans,
             "treatment_reviews": source.reviews,
             "active_treatment_plans": (latest_record,),

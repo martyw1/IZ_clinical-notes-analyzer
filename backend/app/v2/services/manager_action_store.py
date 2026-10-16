@@ -110,6 +110,20 @@ def manager_review_dicts_for_version(db: Session, plan_version_id: int) -> tuple
     return _manager_reviews(db, _ACTION_LINKS.c.plan_version_id == plan_version_id)
 
 
+def prior_plan_comments(db: Session, plan_version_id: int) -> tuple[ManagerReview, ...]:
+    """Display-only comments from earlier versions of the exact same source plan."""
+    versions = db.execute(text(
+        "SELECT earlier.id FROM treatment_plan_versions selected JOIN treatment_plan_versions earlier "
+        "ON earlier.patient_id=selected.patient_id AND earlier.source_system=selected.source_system "
+        "AND earlier.source_record_id=selected.source_record_id "
+        "AND earlier.version_ordinal<selected.version_ordinal WHERE selected.id=:id"
+    ), {"id": plan_version_id}).scalars().all()
+    if not versions:
+        return ()
+    return tuple(review for review in _manager_reviews(db, _ACTION_LINKS.c.plan_version_id.in_(versions))
+                 if review["comment"].strip())
+
+
 def manager_override_dicts_for_patient(db: Session, patient_id: str) -> tuple[ManagerOverride, ...]:
     return _manager_overrides(manager_review_dicts_for_patient(db, patient_id))
 

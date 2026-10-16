@@ -32,7 +32,7 @@ def _parsed_fields(*, due_date: str, signature_datetime: str = "2026-06-02", adm
 
 def test_timing_is_overdue_when_required_evidence_exists_and_due_date_has_passed() -> None:
     # Given
-    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10"))
+    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10")).model_copy(update={"source_last_updated": "2026-05-11"})
 
     # When
     evaluation = evaluate_treatment_plan_timing(aggregate, TimelinessRules(), date(2026, 6, 11))
@@ -44,13 +44,13 @@ def test_timing_is_overdue_when_required_evidence_exists_and_due_date_has_passed
 
 def test_timing_is_within_window_when_required_evidence_exists_and_due_date_has_not_passed() -> None:
     # Given
-    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10"))
+    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10")).model_copy(update={"source_last_updated": "2026-05-11"})
 
     # When
     evaluation = evaluate_treatment_plan_timing(aggregate, TimelinessRules(), date(2026, 6, 10))
 
     # Then
-    assert evaluation.status == "Urgent"
+    assert evaluation.status == "Due Soon"
 
 
 def test_timing_is_missing_data_when_signature_or_due_date_is_not_available() -> None:
@@ -62,12 +62,12 @@ def test_timing_is_missing_data_when_signature_or_due_date_is_not_available() ->
 
     # Then
     assert evaluation.status == "Missing Data"
-    assert set(evaluation.missing_fields) == {"date_clock_due_date", "signature_datetime"}
+    assert set(evaluation.missing_fields) == {"source_last_updated", "signature_datetime"}
 
 
 def test_timing_needs_review_for_loc_change_while_window_is_unvalidated() -> None:
     # Given
-    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10")).model_copy(
+    aggregate = build_manual_aggregate(_parsed_fields(due_date="2026-06-10")).model_copy(update={"source_last_updated": "2026-05-11"}).model_copy(
         update={
             "loc_history": (
                 {"level_of_care": "PHP", "effective_date": "2026-06-01", "source": "manual_upload_file"},
