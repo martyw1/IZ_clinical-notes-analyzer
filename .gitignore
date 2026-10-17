@@ -75,3 +75,6 @@ api-connectivity-reports/
 /.tmp/
 /.debug-journal.md
 /.codegraph/
+
+# Laptop-only credential notes
+/Local Login Info*.txt

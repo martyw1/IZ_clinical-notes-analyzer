@@ -1,6 +1,6 @@
 # Client handoff checklist
 
-Current source: **1.0.1 / build 2026.10.12.1 / installer revision 1 / stable-local-desktop**. Product: **R3 Treatment Plan Audit Application**. Legacy IZ shortcut and storage names remain intentional.
+Current source: **1.0.2 / build 2026.10.16.1 / installer revision 1 / stable-local-desktop**. Product: **R3 Treatment Plan Audit Application**. Legacy IZ shortcut and storage names remain intentional.
 
 ## Release and installation
 

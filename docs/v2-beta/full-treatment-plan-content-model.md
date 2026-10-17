@@ -1,6 +1,6 @@
 # Full Treatment-Plan Content Model
 
-> Current source: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
+> Current source: `1.0.2` / build `2026.10.16.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
 
 V2 models treatment-plan content as a normalized snapshot with plan ID, patient ID, source mode, source paths, reason for admission, initial client needs, family education needs, problems, diagnoses, behavioral definitions, goals, objectives, interventions, signature metadata, observed fields, evidence refs, content quality warnings, redaction status, and content hash.
 

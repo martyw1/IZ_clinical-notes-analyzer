@@ -1,6 +1,6 @@
 # Documentation inventory
 
-Updated October 12, 2026 for source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Every tracked or newly authored nonignored file under `docs/` is classified below. Ignored generation intermediates and private working outputs are excluded. Current instructions are in [the current index](current-documentation-state.md); historical content is retained for its original scope, not silently rewritten as a new qualification.
+Updated October 17, 2026 for source **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. Every tracked or newly authored nonignored file under `docs/` is classified below. Ignored generation intermediates and private working outputs are excluded. Current instructions are in [the current index](current-documentation-state.md); historical content is retained for its original scope, not silently rewritten as a new qualification.
 
 Current written instructions supersede old binary PRDs, Version 1/beta handoffs, screenshots and video version labels. Historical result bodies and exact package/incident evidence retain their original facts; older reference-page banners point to the current index. App version, checklist content version and structural schema version are separate. Tests and documentation examples must remain synthetic; never publish runtime data/secrets.
 
@@ -177,3 +177,5 @@ Current written instructions supersede old binary PRDs, Version 1/beta handoffs,
 ## Maintenance rule
 
 Update current written guides and source Help together with a release. Record new tests/packages in a new dated validation ledger, preserve exact older ZIP hashes/receipts, and retain dated PRDs/incident evidence. When an old reference conflicts with current source, follow the current index and record the discrepancy instead of changing historical results. Machine-specific shortcuts are verified on the target laptop and are not repository-installed automatically.
+
+October 17 additions: [local laptop/source integration validation](validation/local-laptop-test-2026-10-17.md) and the repository-root [offline architecture guide](../architecture/index.html). The untracked Word-guide draft remains local and is not current release authority.

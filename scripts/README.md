@@ -54,7 +54,7 @@ The guided Alleva tool retains its settings, `logs` and `exports` next to its sc
 
 ## Build inputs and immutability
 
-The active source candidate is `1.0.1`, build `2026.10.12.1`, installer revision `1`, channel `stable-local-desktop`. Normal stable upgrade ordering accepts the verified `1.0.0` source; the explicitly bounded beta-to-production bridge also accepts the previously supported beta.3/beta.4 builds through `2026.09.15.2`. The database schema remains `12`; unknown schemas are rejected. Historical ZIPs and their pinned hashes are unchanged.
+The active source candidate is `1.0.2`, build `2026.10.16.1`, installer revision `1`, channel `stable-local-desktop`. Normal stable upgrade ordering accepts the verified `1.0.0` source; the explicitly bounded beta-to-production bridge also accepts the previously supported beta.3/beta.4 builds through `2026.09.15.2`. The active runtime schema is `13`; the installer compatibility contract still targets schema `12`, so exact 1.0.2 installer qualification remains blocked pending reconciliation and package tests. Historical ZIPs and their pinned hashes are unchanged.
 
 The package includes the current offline guide at `app/docs/guides/current/Marleigh-Setup-Install-and-User-Guide.html`. Local `tmp/` evidence is excluded from the package and rejected by release safety validation.
 

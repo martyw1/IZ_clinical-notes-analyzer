@@ -1,6 +1,6 @@
 # QA Plan & Matrix
 
-> Current source reference: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). Dated examples and beta test results retain their original scope. See the [current documentation index](current-documentation-state.md).
+> Current source reference: `1.0.2` / build `2026.10.16.1` (`stable-local-desktop`). Dated examples and beta test results retain their original scope. See the [current documentation index](current-documentation-state.md).
 
 ## Coverage targets
 - Unit/API tests for auth, health, role checks.

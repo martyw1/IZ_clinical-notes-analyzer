@@ -1,6 +1,6 @@
 # Windows CMD Maintenance
 
-> Current source: **1.0.1 / build 2026.10.12.1 / installer revision 1**. See [current verification](validation/current-work-2026-10-12.md). The September 21 1.0.0 package and its [799-test portability evidence](validation/installer-portability-2026-09-21.md) remain historical, exact-package evidence; see [package index](client-release-packages.md).
+> Current source: **1.0.2 / build 2026.10.16.1 / installer revision 1**. See [current verification](validation/current-work-2026-10-16.md). The September 21 1.0.0 package and its [799-test portability evidence](validation/installer-portability-2026-09-21.md) remain historical, exact-package evidence; see [package index](client-release-packages.md).
 
 This page describes the Windows CMD contract implemented for Task 17. It is the operator contract for the production build. It does not certify a package, a target laptop, or a client deployment.
 

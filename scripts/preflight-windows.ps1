@@ -418,8 +418,11 @@ if actual_steps != expected_steps:
     raise SystemExit("Treatment Plan Checklist steps must be numbered 1 through 42.")
 
 version = build_version_payload()
-if version.get("version") != "1.0.1" or version.get("build") != "2026.10.12.1" or version.get("release_channel") != "stable-local-desktop":
-    raise SystemExit("Active version metadata is not production 1.0.1 build 2026.10.12.1.")
+expected_version = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
+if any(version.get(key) != expected_version.get(key) for key in ("version", "build", "release_channel")):
+    raise SystemExit("Active version metadata does not match this checkout's VERSION.json.")
+if version.get("release_channel") != "stable-local-desktop":
+    raise SystemExit("Active version metadata must use the stable-local-desktop channel.")
 if not v2_router.routes:
     raise SystemExit("V2 router has no active routes.")
 print("backend configuration ok")

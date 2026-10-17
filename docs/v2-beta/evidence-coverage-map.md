@@ -1,6 +1,6 @@
 # Evidence Coverage Map
 
-> Current source: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
+> Current source: `1.0.2` / build `2026.10.16.1` (`stable-local-desktop`); V2 is the internal architecture name. Dated beta results retain their original scope. See the [current documentation index](../current-documentation-state.md).
 
 The V2 evidence coverage map shows:
 

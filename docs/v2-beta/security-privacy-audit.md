@@ -1,6 +1,6 @@
 # Security, privacy and audit contract
 
-Current source 1.0.1 / build 2026.10.12.1 / stable-local-desktop. This is an implementation contract, not certification. See the [current assessment](../security/appliance-assessment-2026-10-12.md).
+Current source 1.0.2 / build 2026.10.16.1 / stable-local-desktop. This is an implementation contract, not certification. See the [current assessment](../security/appliance-assessment-2026-10-12.md).
 
 Runtime data remains under `%LOCALAPPDATA%\IZ Clinical Notes Analyzer`, outside the repository. Uploaded sources and saved API configuration use encrypted envelopes. SQLite identity/date/status metadata is not fully encrypted by application storage; disk encryption, Windows access controls and approved backups remain necessary safeguards.
 

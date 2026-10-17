@@ -1,6 +1,6 @@
 # Example clinical-note intake bundle for Alleva-style downloads
 
-> Current source reference: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). Dated examples and beta test results retain their original scope. See the [current documentation index](current-documentation-state.md).
+> Current source reference: `1.0.2` / build `2026.10.16.1` (`stable-local-desktop`). Dated examples and beta test results retain their original scope. See the [current documentation index](current-documentation-state.md).
 
 This is a synthetic example for development and testing only. It is based on the app's existing upload model, the R3 Recovery Services workflow discussion, and screenshots showing an Alleva-style **Document Manager** with tabs such as **Custom Forms**, **Uploaded Documents**, and **Portal Documents**. It is not official Alleva documentation and must not be treated as a confirmed vendor API contract.
 

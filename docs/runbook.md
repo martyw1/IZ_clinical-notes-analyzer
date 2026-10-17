@@ -1,6 +1,6 @@
 # Operations runbook
 
-Current source: **1.0.1**, build **2026.10.12.1**, revision **1**, `stable-local-desktop`; reviewed October 12, 2026. [Operator help](operator-help-current.md) and [HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) are client instructions. [Current validation](validation/current-work-2026-10-12.md) is separate from historical package receipts.
+Current source: **1.0.2**, build **2026.10.16.1**, revision **1**, `stable-local-desktop`; reviewed October 17, 2026. [Operator help](operator-help-current.md) and [HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) are client instructions. [Current validation](validation/current-work-2026-10-16.md) is separate from historical package receipts.
 
 ## Safe support sequence
 

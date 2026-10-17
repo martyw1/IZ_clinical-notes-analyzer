@@ -243,7 +243,7 @@ function Read-IzHarnessBuildReceipt {
     catch { throw (New-IzHarnessSafetyError 'BUILD_RECEIPT_INVALID') }
     Assert-IzSafetyExactKeys $receipt $script:BuildReceiptKeys 'BUILD_RECEIPT_KEYS_INVALID'
     if ($receipt.schema -cne 'iz-cna-build-receipt-v1' -or $receipt.product_id -cne $script:ProductId -or
-        $receipt.version -cnotin @('2.0.0-beta.4','1.0.0','1.0.1') -or $receipt.build -cnotmatch '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' -or
+        $receipt.version -cnotin @('2.0.0-beta.4','1.0.0','1.0.1','1.0.2') -or $receipt.build -cnotmatch '^20[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' -or
         $receipt.installer_revision -ne 1 -or $receipt.source_revision -cne $ExpectedSourceRevision -or
         $receipt.manifest_sha256 -cnotmatch '^[a-f0-9]{64}$' -or $receipt.payload_identity -cnotmatch '^[a-f0-9]{64}$') {
         throw (New-IzHarnessSafetyError 'BUILD_RECEIPT_VALUE_INVALID')

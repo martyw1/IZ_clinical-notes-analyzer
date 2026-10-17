@@ -1,6 +1,6 @@
 # Current documentation state
 
-Updated October 12, 2026 for source **1.0.1**, build **2026.10.12.1**, installer revision **1**, channel **stable-local-desktop**. This identifies current source; it does not relabel an older installer or certify a new package. The footer and `/api/version` identify the app actually running.
+Updated October 17, 2026 for source **1.0.2**, build **2026.10.16.1**, installer revision **1**, channel **stable-local-desktop**. This identifies current source; it does not relabel an older installer or certify a new package. The footer and `/api/version` identify the app actually running.
 
 The browser product name is **R3 Treatment Plan Audit Application**. Existing shortcuts, packages and `%LOCALAPPDATA%\IZ Clinical Notes Analyzer` retain the established IZ name for compatibility.
 
@@ -24,12 +24,12 @@ The browser product name is **R3 Treatment Plan Audit Application**. Existing sh
 
 One localhost service serves the built browser UI and uses local SQLite, encrypted uploads, encrypted saved API settings, role-scoped access, password/recovery workflows, immutable saved plan versions, deterministic timing and a 42-step checklist. Administrators also have connection settings, API harness, users and forensic audit views. Office-manager permissions do not include administrator-only connection or log controls. Optional LLM configuration stays disabled by default and is unnecessary for clinical timing decisions.
 
-Initial signatures are checked on admission Day 1, the master signature within 30 calendar days, recurring PHP reviews at 30 calendar days and IOP/OP at 60 calendar days. Settings displays clinical intervals read-only. The LOC-change seven-day value is an unvalidated review candidate; cases remain Needs Review pending R3 policy. Source ambiguity or unavailable evidence must remain unresolved rather than guessed.
+Initial signatures are checked on admission Day 1, the master signature within 30 calendar days, recurring PHP updates at 30 calendar days and IOP/OP at 60 calendar days from the latest saved plan last-updated date. Dashboard counts select one latest plan per patient; Due Soon spans ten Monday-Friday business days. Updated versions display earlier comments from the same source plan without transferring approvals. Settings displays clinical intervals read-only. The LOC-change seven-day value is an unvalidated review candidate; cases remain Needs Review pending R3 policy. Source ambiguity or unavailable evidence must remain unresolved rather than guessed.
 
 Live Alleva use remains conditional on official tenant credentials, approved mapping/read-only authorization, pagination/rate-limit validation and compliance approval. A connectivity test is not import acceptance. No startup import is authorized by this documentation.
 
 ## Evidence and archives
 
-September 21 build `2026.09.21.2` and its 799-test receipt remain immutable historical package evidence. October 3 video/screenshots demonstrate that source workflow and branding; they do not prove a new installer. [October 12 verification](validation/current-work-2026-10-12.md) records new evidence separately.
+September 21 build `2026.09.21.2` and its 799-test receipt remain immutable historical package evidence. October 3 video/screenshots demonstrate that source workflow and branding; they do not prove a new installer. [October 16 verification](validation/current-work-2026-10-16.md) and [October 17 laptop checks](validation/local-laptop-test-2026-10-17.md) record source evidence separately.
 
 Dated validation, beta release notes, old PRDs, Version 1 guides and historical screenshots remain evidence of their original scope. The documentation inventory labels these explicitly. Follow current instructions above when they conflict. No older binary document or video substitutes for the current written guide or running version.

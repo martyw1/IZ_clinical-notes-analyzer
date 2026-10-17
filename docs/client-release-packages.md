@@ -1,6 +1,6 @@
 # Client release packages
 
-Current source candidate: **1.0.1**, build **2026.10.12.1**, installer revision **1**. New source validation/package status is recorded in [October 12 validation](validation/current-work-2026-10-12.md). Do not rename the older ZIP or transfer its acceptance results to a new package.
+Current source candidate: **1.0.2**, build **2026.10.16.1**, installer revision **1**. New source validation/package status is recorded in [October 16 validation](validation/current-work-2026-10-16.md). Do not rename the older ZIP or transfer its acceptance results to a new package.
 
 Most recent historical verified package listed below: **1.0.0**, build **2026.09.21.2**, revision **1**.
 

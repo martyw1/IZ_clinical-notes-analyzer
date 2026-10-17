@@ -1,6 +1,6 @@
 # Administrator access recovery
 
-Current source: **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. First use, password changes and one-time recovery are in the app; see [password management](password-management-beta4.md). Use Forgot password with the saved code first. Historical beta.3 standalone recovery below is compatible only with its original validated package, not a universal current reset tool.
+Current source: **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. First use, password changes and one-time recovery are in the app; see [password management](password-management-beta4.md). Use Forgot password with the saved code first. Historical beta.3 standalone recovery below is compatible only with its original validated package, not a universal current reset tool.
 
 ## Purpose
 

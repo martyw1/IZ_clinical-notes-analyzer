@@ -1,6 +1,6 @@
 # Password management and recovery
 
-Applies to current source 1.0.1 / build 2026.10.12.1 / stable-local-desktop, retaining the recovery workflow introduced in beta.4. Verify the actual delivered package/version.
+Applies to current source 1.0.2 / build 2026.10.16.1 / stable-local-desktop, retaining the recovery workflow introduced in beta.4. Verify the actual delivered package/version.
 
 ## First use
 

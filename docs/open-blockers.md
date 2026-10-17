@@ -1,10 +1,14 @@
 # Open Blockers
 
-Updated: 2026-10-16
+Updated: 2026-10-17
 
 Applies to current source **R3 Treatment Plan Audit Application 1.0.2 / build 2026.10.16.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-16.md) records this patch. September 21 exact-ZIP acceptance remains historical and does not qualify the new release.
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
+
+## Installer compatibility follow-up
+
+The source runtime is schema 13, while the existing package compatibility contract targets schema 12 and bounds accepted source builds to September 21. Reconcile and test this contract before qualifying a 1.0.2 installer or claiming upgrade acceptance from 1.0.1. No installer was built or published in the October 17 source push.
 
 ## Production Release Gates
 

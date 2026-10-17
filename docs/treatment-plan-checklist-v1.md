@@ -1,6 +1,6 @@
 # Treatment Plan Checklist Version 1
 
-> Current source: `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). Checklist content version remains independent of app version. The ordered criteria below remain the canonical reference; legacy routes/workflow-authoring descriptions retain historical scope. Use [current rules](v2-beta/rules-contract.md) and [operator help](operator-help-current.md) for active V2 evaluation.
+> Current source: `1.0.2` / build `2026.10.16.1` (`stable-local-desktop`). Checklist content version remains independent of app version. The ordered criteria below remain the canonical reference; legacy routes/workflow-authoring descriptions retain historical scope. Use [current rules](v2-beta/rules-contract.md) and [operator help](operator-help-current.md) for active V2 evaluation.
 
 Source of truth: `config/checklists/treatment-plan-v1.json`
 

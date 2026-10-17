@@ -68,15 +68,19 @@ describe('Treatment Plan Detail selection', () => {
 
     await act(async () => { fireEvent.click(admissionDate) })
 
-    expect(currentLoc).toHaveAttribute('aria-pressed', 'false')
-    expect(admissionDate).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('heading', { name: 'Confirm admission date' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(currentLoc).toHaveAttribute('aria-pressed', 'false')
+      expect(admissionDate).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('heading', { name: 'Confirm admission date' })).toBeInTheDocument()
+    })
 
     await act(async () => { fireEvent.click(currentLoc) })
 
-    expect(currentLoc).toHaveAttribute('aria-pressed', 'true')
-    expect(admissionDate).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('heading', { name: 'Confirm current LOC' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(currentLoc).toHaveAttribute('aria-pressed', 'true')
+      expect(admissionDate).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByRole('heading', { name: 'Confirm current LOC' })).toBeInTheDocument()
+    })
   })
 
   it('keeps Return for correction neutral until clicked and submits the selected criterion', async () => {

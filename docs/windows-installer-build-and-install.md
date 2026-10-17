@@ -6,7 +6,7 @@ administrator rights.
 
 ## Current source and package boundary
 
-Current source is **1.0.1 / build 2026.10.12.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-12.md) records source and exact-package results. September 21 `1.0.0` build `2026.09.21.2` and September 15 receipts remain immutable historical evidence; their passing results do not qualify the new source. Use [package index](client-release-packages.md), [current HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) and [handoff checklist](client-handoff-checklist.md).
+Current source is **1.0.2 / build 2026.10.16.1 / installer revision 1 / stable-local-desktop**. [Current validation](validation/current-work-2026-10-16.md) records source and exact-package results. September 21 `1.0.0` build `2026.09.21.2` and September 15 receipts remain immutable historical evidence; their passing results do not qualify the new source. Use [package index](client-release-packages.md), [current HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html) and [handoff checklist](client-handoff-checklist.md).
 
 The maintenance contract is in [Windows CMD maintenance](windows-cmd-maintenance.md). It recognizes beta.3 and earlier beta.4 builds for smart upgrade in place, preserves current-user data and existing account passwords on successful upgrade and normal uninstall, and keeps complete purge as a separate exact-phrase action. Package-root `Launch-IZ-Clinical-Notes-Analyzer.cmd` delegates to the installed current-user launcher; when no install exists it prints `Run Install-IZ-Clinical-Notes-Analyzer.cmd first.` and exits with code `20` (`PREFLIGHT_FAILED`).
 
