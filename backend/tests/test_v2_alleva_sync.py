@@ -371,7 +371,9 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
         assert ledger[0].startswith("alleva-rest-v1-built-in-")
         assert len(ledger[1]) == 64
         synced = started
-        for _ in range(40):
+        # Allow bounded completion time on slower Windows laptops.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
             synced = client.get(f"/api/v2/alleva-sync/jobs/{job_id}", headers=headers)
             if synced.json()["status"] in {"completed", "failed", "cancelled"}:
                 break
@@ -1111,7 +1113,9 @@ def test_sync_reconciles_active_inactive_discharged_deleted_and_missing_clients(
         assert started.status_code == 202
         job_id = started.json()["job_id"]
         synced = started
-        for _ in range(40):
+        # Allow bounded completion time on slower Windows laptops.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
             synced = client.get(f"/api/v2/alleva-sync/jobs/{job_id}", headers=headers)
             if synced.json()["status"] in {"completed", "failed", "cancelled"}:
                 break

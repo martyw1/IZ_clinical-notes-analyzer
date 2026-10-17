@@ -360,3 +360,8 @@ S0: inspected current dirty working tree, existing backup/restore, configuration
 ## October 12 source/desktop handoff follow-up
 
 Current guide now documents tools (1)–(9), portable ZIP account portability and shortcut/task recreation. Shipping PDF and clinical staff wallpaper retained under docs; reproducible source shortcut helper added. Generated-only USB relocation and final source/GitHub synchronization evidence: docs/validation/repo-usb-handoff-2026-10-12.md. Existing release version and clinical/live-import gates are unchanged.
+
+
+## October 17, 2026 — 1.0.2 laptop stop and main integration
+
+Stopped the owner laptop app and confirmed localhost port 8765 closed. Corrected stale Windows preflight/builder version references, updated active operator documentation, refreshed the offline architecture guide and integrated the 1.0.2 branch into main without conflicts. Kept credentials, runtime files and an unrelated Word-guide draft local. Final frontend 192 tests, TypeScript/build, 117 Windows maintenance assertions, backup round-trip/negative checks and 28-page architecture verification passed. Backend full run had 656 passes and two mocked-job polling timeouts; after bounded test-only timing corrections, all 25 sync/version/readiness follow-up tests passed. Full details and limits: [October 17 validation](validation/local-laptop-test-2026-10-17.md). Installer compatibility/schema qualification and LOC-change/live-vendor owner gates remain open. Source integration does not certify an installer.

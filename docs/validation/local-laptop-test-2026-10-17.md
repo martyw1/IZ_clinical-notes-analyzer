@@ -29,3 +29,15 @@ Dashboard and clinical workflow tests have not yet been performed. Backend/front
 - Final frontend suite: 192 passed in 31 files; TypeScript noEmit passed; production build passed.
 - Windows builder metadata guard accepted 1.0.2 and rejected stale 1.0.1 identity. Changed PowerShell scripts parsed without errors.
 - Staged-path safety scan and diff whitespace checks passed; staged text scan found no supplied-login-password or API-key patterns.
+
+- Full Windows maintenance contracts passed: 117 assertions; backup round-trip 9 assertions; backup negative cases 30 assertions. All fixtures were synthetic.
+- Local main fast-forwarded without conflicts to include the 1.0.2 implementation and laptop follow-up; no remote history rewrite.
+
+
+## S2 — final regression and remote preparation
+
+- Full backend run: 656 passed, two failed, five Starlette deprecation warnings, 791.29 seconds. Both failures were mocked Alleva job completion assertions after a roughly two-second polling budget. An isolated unchanged rerun reproduced both timeouts.
+- Changed only those two test polling budgets to a monotonic 30-second deadline, retaining terminal-status and persisted-data assertions. Application sync behavior and vendor gates are unchanged.
+- Follow-up entire Alleva-sync test module plus release-version consistency and runtime-readiness checks: 25 passed, five deprecation warnings, 54.60 seconds. Both earlier failures passed. The full 658-test suite was not repeated after this test-only correction; the full-run and follow-up results are reported separately.
+- Final frontend: 192 passed; TypeScript noEmit and production build passed. Windows maintenance and architecture results are recorded above.
+- Source commit prepared on main for normal non-force push. Version remains 1.0.2 / build 2026.10.16.1 / stable-local-desktop. No installer, live tenant validation, local credentials, clinical data or unrelated Word-guide draft is included.
