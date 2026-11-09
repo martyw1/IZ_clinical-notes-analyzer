@@ -6,9 +6,9 @@ Source of truth: `config/checklists/treatment-plan-v1.json`
 
 Checklist ID: `treatment-plan-v1`
 
-Checklist content version: `1.2.0`
+Checklist content version: `1.2.1`
 
-Current app version using this checklist: `1.0.1`
+Current app version using this checklist: `1.0.2`
 
 Current app metadata is aligned in `VERSION`, `VERSION.json`, `frontend/package.json`, and `frontend/package-lock.json`.
 
@@ -16,7 +16,7 @@ Checklist documentation baseline: `2026-06-30`; release scope aligned: `2026-09-
 
 ## Purpose
 
-This checklist is the canonical Version 1 treatment-plan workflow used by the local Windows app, backend readiness checks, `/api/treatment-plan-checklist`, selected-client Treatment Plans detail evaluations, CSV/JSON workflow-step exports, saved manager criterion notes, and the default workflow profile seed. The checklist content version remains `1.2.0`; app version `1.0.1` is tracked separately in `VERSION` and `VERSION.json`.
+This is the canonical ordered checklist for current plan evaluation. Its JSON source is [treatment-plan-v1.json](../config/checklists/treatment-plan-v1.json). Current plan detail uses versioned rules to display checklist findings alongside the computed recurring schedule. See [the current rules contract](v2-beta/rules-contract.md). The workflow-profile authoring notes below describe legacy behavior.
 
 The current implementation map for how patient treatment-plan evidence reaches this checklist is `docs/patient-treatment-plan-handling.md`. That reference names the manual-upload sync, gated Alleva REST sync, local database tables, aggregate payloads, timeliness evaluator, and Treatment Plans UI files.
 
@@ -89,9 +89,7 @@ Do not hard-code a final LOC-change update window until `docs/open-blockers.md` 
 
 ## Date Clock and Source Evidence
 
-The timeliness date clock uses the laptop/facility-local current date every time the app starts and while it is running. It calculates the next update date from the admission date when no valid later treatment-plan review/update exists, otherwise from the latest valid treatment-plan review/update date.
-
-Configured PHP levels use 30 calendar days. Other configured treatment levels use 60 calendar days. LOC changes use the separate configurable LOC-change window described above. Due today and one day before due are `Urgent`, two through seven days before due are `Due Soon`, eight or more days before due are `Compliant`, and only due dates before the evaluation date are `Overdue`.
+The timeliness clock uses the facility date. Recurrence starts from the selected plan last updated or, if unavailable, an unambiguous first-created date for that same plan. PHP and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60. Due Soon includes today through ten calendar days ahead. An earlier deadline is Overdue. The computed schedule is separate from the checklist result. See the [rules contract](v2-beta/rules-contract.md) for unresolved evidence and the LOC-change policy.
 
 Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API evidence should include source identifiers supplied by approved REST/OpenAPI payloads, such as source document ID, attachment URL, endpoint name, or response field path.
 

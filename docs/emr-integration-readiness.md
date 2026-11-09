@@ -44,3 +44,9 @@ Until that gate is complete, the app remains local-first and upload-first. Readi
 
 
 For current acceptance evidence and troubleshooting use [the runbook](runbook.md) and [October 12 validation](validation/current-work-2026-10-12.md). Connectivity tests and periodic checks do not authorize live PHI import. Use approved HTTPS vendor endpoints; do not disable TLS validation. Local HTTP is for localhost/synthetic harness testing. Preserve redacted detailed logs and inspect the safe failing phase rather than raw vendor responses.
+
+## Clinician directory readiness
+
+When live access is approved and enabled, administrators can use Update patients and treatment plans on Status Dashboard. It refreshes patients first, then evaluates plans and imports staff and primary clinician relationships. An incomplete patient pull stops the sequence. The separate Pull clinicians action reads staff and patient relationship context without updating treatment plans. Review job results and counts before relying on the refresh. Alleva uses an explicit primary clinician reference when supplied. Without one, a single source full name can be matched to a unique staff entry when the directory pull did not reach its record limit. Multiple names, duplicate matches and unresolved references stay unassigned. Missing or unmapped staff facilities are labeled. Imported staff and app login accounts are separate.
+
+See [current operator help](operator-help-current.md) and [patient handling](patient-treatment-plan-handling.md).

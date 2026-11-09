@@ -1,6 +1,6 @@
 # Patient treatment-plan handling
 
-Version 1.0.2 recurrence uses the plan last updated date plus the LOC interval. Dashboard counts use one most recently updated plan per authorized patient record. Earlier-version comments remain visible on updates of that same source plan, separately from current-version actions. See [current changes](releases/1.0.2-loc-deadlines.md) and [validation](validation/current-work-2026-10-16.md). The LOC-change window remains unvalidated.
+Current source selects the latest eligible plan per authorized patient for deadline worklists. Recurrence uses the exact plan last updated or its unambiguous first created date plus the mapped interval. Due Soon includes today through day ten. The plan roster and detail show the effective clinician from the patient record. Overdue acknowledgements are version-specific. Earlier comments remain visible across versions of the same source plan. See [rules](v2-beta/rules-contract.md), [operator help](operator-help-current.md) and the November implementation notes below. The LOC-change window remains unvalidated.
 
 Current source **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. V2 denotes the internal architecture. This is the active source/API/storage map; dated evolution notes at the end retain historical scope. Automated fixtures and screenshots use synthetic data. Owner-authorized live read-only verification is recorded separately with counts/status only. Live vendor approval, retention and LOC policy remain external gates.
 
@@ -43,7 +43,7 @@ Structural v12 membership backfill accepts only valid original source-document/p
 
 The aggregate contains MRN/source, authorized display fields, LOC/admission/history, source update time, plan/review/signature content, due-date evidence, warnings, exactly 42 criterion results, manager reviews/overrides, audit references, evidence coverage, source-document references and checklist/rules/evaluation/timezone provenance. The detail API adds exact saved identity fields. Frontend types are `frontend/src/v2/types/treatmentPlan.ts` and `identity.ts`.
 
-Initial signatures are checked on admission Day 1; master signatures within 30 calendar days of admission. Recurring PHP reviews use 30 calendar days and IOP/OP 60, anchored to the selected plan last updated date. Source Next Review Due is compared with computed due date. Late master signatures affect overall status. Settings clinical intervals are read-only. The seven-calendar-day LOC candidate is unvalidated; LOC cases remain Needs Review. Missing Data, Conflicting Evidence and Unable to Evaluate must not silently become compliance. [Current rules](v2-beta/rules-contract.md).
+Initial signatures are checked on admission Day 1; master signatures within 30 calendar days of admission. Recurring PHP/GOP reviews use 30 calendar days and IOP/OP 60. The clock starts with the selected plan last updated, then falls back to an unambiguous first-created date from that plan. Source Next Review Due is compared with computed due date. Late master signatures affect overall status. Settings clinical intervals are read-only. The seven-calendar-day LOC candidate is unvalidated; LOC cases remain Needs Review. Missing Data, Conflicting Evidence and Unable to Evaluate must not silently become compliance. [Current rules](v2-beta/rules-contract.md).
 
 ## Active API and UI map
 

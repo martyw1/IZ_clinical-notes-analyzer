@@ -3,6 +3,7 @@
 The V2 operational roster and treatment-plan importer uses:
 
 - `GET /clients`
+- Bounded pages of `GET /users` for staff during the approved full-plan and clinician-only pulls
 - bounded pages of `GET /treatment-plans` without a patient filter
 
 `/clients.mrn` is the canonical local patient key and the value displayed as MRN. `/clients.id` is retained separately as `source_patient_id` only for validating each treatment plan's Alleva relationship. Treatment-plan ownership from `client.id`, `client.route`, or a string `/clients/{id}` must resolve to one source patient ID, which is then mapped to that client's MRN.
@@ -11,7 +12,7 @@ The app must not substitute `/clients.id`, `source_id`, `chartId`, `externalId`,
 
 Live Alleva sync is disabled by default. It requires a saved client ID and encrypted secret, API and sync enablement, and explicit administrator authorization for live read-only import on the tenant.
 
-For current source `1.0.1` / build `2026.10.12.1`, live validation remains an external gate: R3/Alleva must approve and supervise a contract and end-to-end sync using approved non-PHI/test records. Synthetic local contract fixtures validate the implementation boundary but do not establish live production readiness.
+For current source `1.0.2` / build `2026.10.16.1`, live validation remains an external gate: R3/Alleva must approve and supervise a contract and end-to-end sync using approved non-PHI/test records. Synthetic local contract fixtures validate the implementation boundary but do not establish live production readiness.
 
 ## Automatic published mapping
 
@@ -25,3 +26,7 @@ The public v1 treatment-review list does not document a trustworthy plan/client 
 
 
 October 12 current boundary: [operator help](../operator-help-current.md), [rules contract](rules-contract.md), [runbook](../runbook.md) and [current validation](../validation/current-work-2026-10-12.md) govern current instructions. Clinical intervals are read-only in Settings; LOC timing remains unvalidated. Live Alleva use requires explicit external approval. Historical beta results do not qualify a new package.
+
+## November tracker and clinician scope
+
+The combined job runs patients first and imports staff and primary relationships during the plan stage. The independent clinician job reads staff and client relationship context. See the [clinician contract](../alleva-patient-treatment-plan-data-contract.md#clinician-relationships) for explicit staff IDs, the bounded unique-name fallback and local precedence.

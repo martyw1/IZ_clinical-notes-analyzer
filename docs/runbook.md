@@ -46,7 +46,7 @@ Use [password management](password-management-beta4.md) and [admin recovery](adm
 
 Office managers review authorized exact saved plans. Administrator controls include connection settings, Users and Forensic Logs. Follow actual role behavior rather than historical screenshots. Optional LLM stays disabled and is unnecessary for deterministic decisions.
 
-The 42-step checklist and versioned rules govern Day-1 initial signatures, 30-calendar-day master signatures, PHP 30-day and IOP/OP 60-day recurring reviews. Settings shows intervals read-only. The LOC seven-day candidate cannot establish compliance; [R3 policy remains open](open-blockers.md). Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate remain valid results.
+The 42-step checklist and versioned rules govern Day-1 initial signatures, 30-calendar-day master signatures, PHP/GOP 30-calendar-day and IOP/OP 60-calendar-day recurring reviews. Use the [rules contract](v2-beta/rules-contract.md) for the same-plan creation fallback and the ten-calendar-day warning window. Settings shows intervals read-only. The LOC seven-day candidate cannot establish compliance; [R3 policy remains open](open-blockers.md). Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate remain valid results.
 
 ## Integration boundary
 
@@ -71,3 +71,9 @@ Use the existing environment; avoid reinstalling dependencies on a client profil
 ## Configured source laptop: portable OneDrive ZIP workflow (October 12, 2026)
 
 At the owner's explicit request, `scripts/backup-onedrive-zip.ps1` and `scripts/restore-onedrive-zip.ps1` provide a separate unencrypted portable profile ZIP workflow. Do not feed these ZIPs to the encrypted `.izcnabackup` restore tool. Full create/check/restore/rollback and replacement-device instructions are in the current HTML guide, Backup section, and the app Help page. The archive includes `.env` and encryption material; possession gives access to sensitive records and settings. Keep it private in R3 OneDrive. No physical replacement-device or cloud-upload validation is implied by local verification. Backup directories, diagnostics and transient SQLite journals are excluded. App code/runtime must be prepared separately.
+
+## Tracker and clinician troubleshooting
+
+Compare the dashboard with the matching authorized worklist and expand Reviewed overdue before reconciling counts. Confirm lifecycle, LOC and exact saved version. Clinicians lists saved Alleva staff with their source role and facility status, including staff without a caseload. Select a clinician or Unassigned to see the authorized active caseload, including patients without a plan. Treatment Plans Roster shows Primary clinician and Treatment Plan Detail shows Current clinician. Refresh clinicians reloads saved local data. Loading and failure messages mean counts are unavailable. Check the last pull and sanitized counts in Forensic Logs before retrying. Alleva uses an explicit primary clinician reference when supplied. Without one, a single source full name can be matched to a unique staff entry when the directory pull did not reach its record limit. Multiple names, duplicate matches and unresolved references stay unassigned. Missing or unmapped staff facilities are labeled. Imported staff and app login accounts are separate.
+
+See [current operator help](operator-help-current.md) and [patient handling](patient-treatment-plan-handling.md).

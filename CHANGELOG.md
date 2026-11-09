@@ -1,3 +1,7 @@
+## November 2026 source maintenance
+
+Added clinician directory, caseloads, local patient links and clinician mapping on plan rows and detail. Added dashboard worklists and version-scoped overdue review. Updated recurring deadlines, the 10-calendar-day warning window and Eastern event timestamps. See [current source changes](docs/release-notes.md#november-2026-source-maintenance).
+
 ## Unreleased source changes — clinical timing and operator help
 
 - Include a late signed master plan in the overall overdue result when required evidence is otherwise resolved.

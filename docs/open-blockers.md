@@ -166,3 +166,7 @@ Required resolution evidence:
 
 - Keep `npm test -- --run` passing locally and in CI.
 - Keep `npm run build` passing locally and in CI.
+
+## November tracker and clinician scope
+
+The current source can import and display clinician relationships through the existing approved gate, and compute and track deadlines locally. Tenant mapping and compliance approval are still required. A weekly clinician digest and historical completion reporting remain outside the implemented workflow. See [source maintenance](release-notes.md#november-2026-source-maintenance).

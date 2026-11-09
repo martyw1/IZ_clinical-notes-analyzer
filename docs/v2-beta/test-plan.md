@@ -1,6 +1,6 @@
 # Current V2 test and acceptance plan
 
-Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Use isolated synthetic profiles/users/records only. Never reuse a client's AppData, `.env`, database, upload, saved credential or vendor payload. [Current validation](../validation/current-work-2026-10-12.md) records actual results; beta `validation-report.md` and task coverage are historical evidence.
+Source **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. Use isolated synthetic profiles/users/records only. Never reuse a client's AppData, `.env`, database, upload, saved credential or vendor payload. [Current validation](../validation/current-work-2026-10-12.md) records actual results; beta `validation-report.md` and task coverage are historical evidence.
 
 ## Automated boundaries
 
@@ -20,3 +20,7 @@ Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Use isolated synth
 7. Test backup/restore and install/upgrade/reinstall only in isolated disposable synthetic profiles; preserve real client data. Device-loss and power-loss qualification require separate appropriate environments.
 
 Expected appliance workload is app/browser plus OneDrive and normal Windows services; ChatGPT is excluded. Small-fixture latency is not capacity acceptance. Test realistic synthetic volumes/largest accepted documents before promising throughput. Preserve Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate outcomes and unresolved external gates.
+
+## November tracker and clinician scope
+
+Current tracker regression coverage includes deadline boundaries, active scope and exact-version acknowledgement, clinician-only pull isolation, effective clinician projection, local links and ambiguous staff matches. See the [current evidence index](../current-documentation-state.md#evidence-and-archives).

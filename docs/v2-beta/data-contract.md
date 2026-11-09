@@ -1,6 +1,6 @@
 # Current V2 data contract
 
-Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Backend contracts: `backend/app/v2/domain/schemas.py` and `backend/app/v2/api/models.py`; frontend: `frontend/src/v2/types/treatmentPlan.ts` and `identity.ts`.
+Source **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. Backend contracts: `backend/app/v2/domain/schemas.py` and `backend/app/v2/api/models.py`; frontend: `frontend/src/v2/types/treatmentPlan.ts` and `identity.ts`.
 
 `TreatmentPlanAggregate` retains MRN in compatibility field `patient_id`, source mode, display label and authorized full-name field, lifecycle/status/LOC/admission/history, plan/review/signature content, source update time, source/computed/LOC candidate dates, warnings, exactly 42 criterion results, manager reviews/overrides, audit references, evidence coverage, content snapshot, source-document references and checklist/rules/evaluation/timezone provenance. Missing names, references and dates remain unavailable; values are not invented.
 
@@ -13,3 +13,7 @@ Full patient source objects are encrypted snapshots; authorized displays may der
 Changed imports preserve immutable prior plan versions; identical replays avoid duplicate versions. Source-document memberships attach exact saved versions. Persisted evaluations retain rule/checklist/date/timezone provenance; corrections and manager decisions must preserve their exact plan context. Structural storage/migrations are documented in [patient handling](../patient-treatment-plan-handling.md).
 
 All release fixtures/screenshots use isolated synthetic data. Current rules have read-only Settings intervals and an unvalidated LOC candidate. Live vendor use requires external approval. [Current validation](../validation/current-work-2026-10-12.md) supersedes historical beta reports for current acceptance.
+
+## November tracker and clinician scope
+
+Roster items expose the effective primary clinician. Plan detail adds current clinician, computed deadline status and explanation. The clinician directory and caseload preserve patient scope. A local clinician link is revision-checked and independent of app account access. The overdue review timestamp belongs to the selected plan version. See the [implementation map](../patient-treatment-plan-handling.md).

@@ -146,3 +146,9 @@ Redacted live route proof from the local API Configuration page on 2026-07-02. T
 
 
 For current operational behavior and release acceptance use [operator help](operator-help-current.md), [rules contract](v2-beta/rules-contract.md), [runbook](runbook.md) and [current validation](validation/current-work-2026-10-12.md). Live vendor approval remains external and all test records must be synthetic.
+
+## Clinician relationships
+
+Alleva uses an explicit primary clinician reference when supplied. Without one, a single source full name can be matched to a unique staff entry when the directory pull did not reach its record limit. Multiple names, duplicate matches and unresolved references stay unassigned. Missing or unmapped staff facilities are labeled. Imported staff and app login accounts are separate. The explicit relationship joins Client.primaryClinician.id to User.id. A supplied staff route must agree with that ID. Staff identity is connection and tenant scoped. The verified relationship projects onto plans through their exact patient-record association. A local clinician override takes precedence.
+
+See [current operator help](operator-help-current.md) and [patient handling](patient-treatment-plan-handling.md).

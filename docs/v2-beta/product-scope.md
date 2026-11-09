@@ -1,6 +1,6 @@
 # Current V2 product scope
 
-Source **1.0.1 / build 2026.10.12.1 / stable-local-desktop**. Browser product: R3 Treatment Plan Audit Application. V2 names internal architecture, not an active beta release.
+Source **1.0.2 / build 2026.10.16.1 / stable-local-desktop**. Browser product: R3 Treatment Plan Audit Application. V2 names internal architecture, not an active beta release.
 
 The single-user local Windows workflow starts with Dashboard and Patient Roster, then Patient Record Detail and an exact saved Treatment Plan Detail. Treatment Plans Roster browses latest saved Manual and Alleva plans. Features include encrypted point-in-time manual sources, bounded extraction/warnings, saved immutable plan history, 42-step checklist/evidence coverage, authorized manager actions/corrections/exports, password/recovery setup and safe forensic audit metadata.
 
@@ -11,3 +11,7 @@ Authorized names may appear from encrypted patient snapshots. Names do not deter
 Clinical decisions remain deterministic and require no LLM; optional LLM is disabled by default. Settings clinical intervals are read-only. LOC-change seven-day date is an unvalidated candidate and cases remain Needs Review pending a reviewed R3 policy/rule release. The app does not certify HIPAA compliance, authorize live imports or establish whole-device protection/device-loss recovery by software alone.
 
 See [current operator help](../operator-help-current.md), [rules](rules-contract.md), [data contract](data-contract.md), [assessment](../security/appliance-assessment-2026-10-12.md) and [current validation](../validation/current-work-2026-10-12.md). Older beta scope/results retain their dated evidence limits.
+
+## November tracker and clinician scope
+
+Current tracking includes dashboard deadline drill-downs, overdue acknowledgements, clinician caseloads, local links and gated clinician-only pulls. [UI workflows](ui-workflows.md).

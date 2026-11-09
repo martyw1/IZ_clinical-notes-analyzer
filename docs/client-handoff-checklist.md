@@ -49,3 +49,9 @@ The client workload is the app and its browser plus OneDrive; ChatGPT will not r
 ## Shipping insert and source desktop tools — October 12, 2026
 
 Include `docs/guides/current/Getting-Started-Guide.pdf` in the shipping box; it is the existing one-page approved-layout local insert, now retained in source. Credentials are provided separately. The current HTML guide describes tools (1)–(9), including authorized admin recovery and portable OneDrive ZIP backup/restore. Source shortcut recreation is available in `scripts/create-source-desktop-shortcuts.ps1`; task registration remains a separate support action. The clinical staff wallpaper is in `docs/desktop/`.
+
+## Tracker and clinician acceptance checks
+
+Use synthetic records to compare the dashboard to each worklist, open an exact plan, verify the computed deadline explanation, and confirm reviewed rows are collapsible. Confirm the Clinicians directory, caseload and local assignment controls under the appropriate roles. Review live pull outcomes only under the existing approval gate.
+
+See [current operator help](operator-help-current.md) and [patient handling](patient-treatment-plan-handling.md).

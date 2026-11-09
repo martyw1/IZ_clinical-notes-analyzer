@@ -12,3 +12,7 @@ Browser endpoints expose compact job state, artifact metadata, and bounded previ
 
 
 October 12 current boundary: [operator help](../operator-help-current.md), [rules contract](rules-contract.md), [runbook](../runbook.md) and [current validation](../validation/current-work-2026-10-12.md) govern current instructions. Clinical intervals are read-only in Settings; LOC timing remains unvalidated. Live Alleva use requires explicit external approval. Historical beta results do not qualify a new package.
+
+## November tracker and clinician scope
+
+The combined dashboard job persists patient and plan stages, with staff and clinician mapping in the plan stage. The clinician-only job shares the operational concurrency and approval gates. See [current implementation](../patient-treatment-plan-handling.md#direct-clinician-pull).

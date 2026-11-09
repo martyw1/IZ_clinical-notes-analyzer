@@ -1,12 +1,12 @@
 # Operator help: current local desktop app
 
-Applies to the `1.0.2` / `2026.10.16.1` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. This guide describes the current V2 interface; older beta screenshots and Version 1 guides are historical.
+Applies to the `1.0.2` / `2026.10.16.1` source candidate on `stable-local-desktop`. The running footer and `/api/version` identify the build actually open on the laptop. Reviewed November 9, 2026 for the current checkout. Older screenshots and Version 1 guides are historical.
 
 [Open the complete offline HTML guide](guides/current/Marleigh-Setup-Install-and-User-Guide.html). It includes installation, first-use recovery, daily work, backup and troubleshooting.
 
 ## Video introduction
 
-[Watch the administrator introduction and help video](help/R3-Treatment-Plan-Audit-Quick-Start.mp4) (6 minutes 13 seconds). It uses example records and shows all administrator tabs and numbered desktop tools. [Video help and transcript](help/README.md).
+[Watch the administrator introduction and help video](help/R3-Treatment-Plan-Audit-Quick-Start.mp4) (6 minutes 13 seconds). The October 3 recording uses synthetic records and shows the administrator tabs and tools available at the time. [Video help and transcript](help/README.md).
 
 ## Start and sign in
 
@@ -19,21 +19,39 @@ The normal prepared desktop release does not require Windows administrator acces
 
 ## Find an exact patient and plan
 
-1. In Patient Roster, search by MRN, authorized name, plan ID, original reference, or service date. Use the Source filter when needed. A patient may appear without a treatment plan.
+1. In Patient Roster, search by MRN, authorized name, plan ID, original reference, or service date. Use Source, patient status, level of care and Primary clinician filters together. A patient may appear without a treatment plan.
 2. Open the MRN to see Patient Record Detail. Open a saved plan using its selector, or start in Treatment Plans Roster and filter by source/status.
 3. Confirm the source, patient record number, external plan ID, and immutable saved version ID. MRNs and external IDs may repeat across sources or facilities. A name alone is not a match key.
 4. On Treatment Plan Detail, inspect the selected saved version and its history. Importing another version does not silently change an existing selection.
 
 Missing names, original references, and service dates remain unavailable or not supplied; the app does not invent them. An empty roster may mean a filter is active, the source has not been pulled, or the pull failed. Clear filters and inspect the last job before concluding that records are absent.
 
+## Worklists and clinicians
+
+Open Overdue or Due Soon from Status Dashboard to see the matching worklist. These counts use the latest saved plan for each authorized patient eligible for current tracking. Inactive, discharged, deleted, unlinked and Case Management records stay outside these worklists. All plans keeps saved records available. Use Overdue by clinician to find clinician groups, including Unassigned, with the most overdue plans first in each group.
+
+Administrators and office managers can open an eligible overdue plan and select Mark overdue plan reviewed. The acknowledgement records the reviewer and time for that exact saved version. Reviewed overdue collapses these rows until expanded. Acknowledgement leaves the plan overdue and counted on the dashboard.
+
+Clinicians lists saved Alleva staff with their source role and facility status, including staff without a caseload. Select a clinician or Unassigned to see the authorized active caseload, including patients without a plan. Treatment Plans Roster shows Primary clinician and Treatment Plan Detail shows Current clinician. Refresh clinicians reloads saved local data. Loading and failure messages mean counts are unavailable.
+
+Administrators and office managers can use Link clinician to patient. Search by name or MRN, confirm the exact patient record, then choose the clinician or explicitly unassign. A local link takes precedence and survives later pulls. Use Alleva assignment restores the saved source relationship. Local links leave Alleva and app account permissions separate.
+
+Alleva uses an explicit primary clinician reference when supplied. Without one, a single source full name can be matched to a unique staff entry when the directory pull did not reach its record limit. Multiple names, duplicate matches and unresolved references stay unassigned. Missing or unmapped staff facilities are labeled. Imported staff and app login accounts are separate.
+
+When live access is approved and enabled, administrators can use Update patients and treatment plans on Status Dashboard. It refreshes patients first, then evaluates plans and imports staff and primary clinician relationships. An incomplete patient pull stops the sequence. The separate Pull clinicians action reads staff and patient relationship context without updating treatment plans. Review job results and counts before relying on the refresh.
+
 ## Interpret clinical timing
 
-The 42-step checklist and versioned rule package are the active clinical timing source. The initial plan is checked for an admission Day-1 signature. A signed master plan is due within **30 calendar days after admission**. Recurring PHP reviews use **30 calendar days**; IOP variants and OP/Outpatient use **60 calendar days**. The recurring clock uses the treatment plan last updated date. Admission, creation and signed-review dates do not replace a missing update date. The calculated due date is compared with the source Next Review Due date.
+The 42-step checklist checks an initial signature on admission Day 1 and a signed master plan within 30 calendar days after admission. The recurring deadline uses the selected plan’s last-updated date plus its level-of-care interval. If last updated is unavailable, the app uses an unambiguous first-created date for that same plan. PHP (including PHP-5) and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60. A LOC containing more than one of PHP, IOP or GOP is conflicting. Missing or future clock dates and unknown LOC remain unresolved. In Treatment Plan Detail, find **Next update due (computed)** and read the calculation explanation. Compare it with the source Next Review Due and the separate checklist outcome.
+
+For example, a PHP plan last updated November 1 has a computed deadline of December 1. On November 21 it enters Due Soon. The source Next Review Due can differ, so review the checklist for a conflict.
+
+Event timestamps display in Eastern time (EST or EDT). Calendar-only dates keep their day, and the facility timezone still governs the date used for evaluation.
 
 | Overall status | What to inspect |
 | --- | --- |
 | Overdue | A confirmed deadline has passed. Inspect the master-plan and recurring-review criteria separately. |
-| Due Soon | The computed update deadline is today or within ten Monday-Friday business days, with no holiday exclusions. |
+| Due Soon | The computed update deadline is today through 10 calendar days ahead, inclusive. |
 | Current/Compliant | Evaluated timing is in window. Still inspect source evidence and checklist findings before a clinical conclusion. |
 | Missing Data | A required plan, signature, or date is absent. |
 | Conflicting Evidence | Source and calculated dates, or other required evidence, disagree. |
