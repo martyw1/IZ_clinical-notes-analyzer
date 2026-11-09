@@ -39,6 +39,7 @@ class _MockAllevaState:
             {"id": "plan-912", "client": {"id": "912", "route": "/clients/912"}, "nextReviewDue": "2026-07-01"}
         ]
     )
+    staff_items: list[dict[str, JsonValue]] = field(default_factory=list)
     detail_problem: list[str] = field(default_factory=lambda: ["Synthetic clinical problem."])
     published_shape: bool = True
     plan_delay_seconds: float = 0.0
@@ -69,6 +70,12 @@ class _MockAllevaHandler(BaseHTTPRequestHandler):
             "x_version": self.headers.get("x-version", ""),
         })
         path = urlparse(self.path).path
+        if path == "/users":
+            query = parse_qs(urlparse(self.path).query)
+            offset = int(query.get("Cursor", ["0"])[0])
+            limit = int(query.get("Limit", ["100"])[0])
+            self._respond({"items": type(self).state.staff_items[offset:offset + limit]})
+            return
         if path == "/clients":
             type(self).state.clients_started.set()
             if type(self).state.block_clients:
@@ -164,6 +171,7 @@ def _mock_alleva_server(
     block_clients: bool = False,
     client_items: list[dict[str, JsonValue]] | None = None,
     plan_items: list[dict[str, JsonValue]] | None = None,
+    staff_items: list[dict[str, JsonValue]] | None = None,
     published_shape: bool = True,
     plan_delay_seconds: float = 0.0,
     global_plan_collection: bool = True,
@@ -174,6 +182,7 @@ def _mock_alleva_server(
     resolved_clients = client_items or defaults.client_items
     state = _MockAllevaState(
         block_clients=block_clients,
+        staff_items=staff_items or [],
         client_items=[_with_synthetic_mrn(item) for item in resolved_clients],
         plan_items=plan_items or defaults.plan_items,
         published_shape=published_shape,
@@ -416,18 +425,22 @@ def test_approved_alleva_sync_reads_mocked_http_and_persists_normalized_aggregat
             "/token",
                 "/clients?Limit=5000&Cursor=0&api-version=1.0",
                 "/treatment-plans?Limit=5000&Cursor=0&api-version=1.0&StartDate=2000-01-01T16%3A03",
+                "/users?Limit=5000&Cursor=0&api-version=1.0",
             "/treatment-plans/plan-912?api-version=1.0",
             "/treatment-plans/plan-912/diagnosis?api-version=1.0",
         ]
         assert state.request_metadata == [
             {"accept": "application/json", "authorization_scheme": "Bearer", "x_version": "1.0"}
-        ] * 4
+        ] * 5
 
     audit = client.get("/api/audit/logs", headers=headers).json()["items"]
     completed = next(item for item in audit if item["action"] == "alleva.treatment_plan_sync.completed")
     completed_details = completed["details"]
     assert completed_details.pop("job_correlation_id") == job_id
     assert completed_details.pop("duration_ms") >= 0
+    clinician_summary = completed_details.pop("clinician_summary")
+    assert clinician_summary["staff_returned"] == 0
+    assert clinician_summary["staff_imported"] == 0
     assert completed_details == {
         "created_treatment_plan_count": 1,
         "imported_patient_count": 1,

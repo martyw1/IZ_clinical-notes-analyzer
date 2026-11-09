@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from typing import Protocol
-from app.v2.services.deadline_calendar import business_day_horizon
+from app.v2.services.deadline_calendar import deadline_status
 from app.v2.services.evaluation_evidence import parse_date
 
 
@@ -27,6 +27,7 @@ def dashboard_payload(
     sync_authorized: bool,
     loc_change_window_validated: bool,
     evaluation_date: date,
+    excluded_patient_ids: frozenset[int] = frozenset(),
 ) -> dict[str, JsonValue]:
     has_imports = bool(treatment_plans)
     api_status, api_detail = _api_readiness(api_configured, api_enabled)
@@ -45,14 +46,14 @@ def dashboard_payload(
         blockers.append("Live read-only treatment-plan import is not authorized for this tenant.")
     if not loc_change_window_validated:
         blockers.append("LOC-change update window is unvalidated and configurable.")
-    latest, uncertain = latest_patient_plans(treatment_plans)
+    latest, uncertain = latest_patient_plans([plan for plan in treatment_plans if plan.patient_record_id not in excluded_patient_ids])
     if uncertain:
         blockers.append(f"{uncertain} patient record(s) excluded from deadline counts because the latest plan cannot be determined from valid last updated dates.")
     due_dates = tuple(parse_date(row.next_due_date) for row in latest)
     unavailable = sum(due is None for due in due_dates)
     if unavailable:
         blockers.append(f"{unavailable} latest plan(s) have no computable update deadline; review the plan dates and LOC.")
-    horizon = business_day_horizon(evaluation_date)
+    statuses = tuple(deadline_status(due, evaluation_date) for due in due_dates)
     return {
         "refreshed_at": datetime.now(timezone.utc).isoformat(),
         "source_cards": [
@@ -69,8 +70,8 @@ def dashboard_payload(
             },
         ],
         "metrics": {
-            "overdue_plans": sum(due is not None and due < evaluation_date for due in due_dates),
-            "due_soon_plans": sum(due is not None and evaluation_date <= due <= horizon for due in due_dates),
+            "overdue_plans": statuses.count("Overdue"),
+            "due_soon_plans": statuses.count("Due Soon"),
         },
         "blockers": blockers,
     }
@@ -85,7 +86,7 @@ def latest_patient_plans(rows: Sequence[DashboardTreatmentPlan]) -> tuple[tuple[
     uncertain = 0
     for plans in grouped.values():
         try:
-            dates = [datetime.fromisoformat(row.last_updated.strip().replace("Z", "+00:00")) for row in plans]
+            dates = [datetime.fromisoformat((getattr(row, "tracking_timestamp", "") or row.last_updated).strip().replace("Z", "+00:00")) for row in plans]
             dates = [value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc) for value in dates]
         except ValueError:
             uncertain += 1

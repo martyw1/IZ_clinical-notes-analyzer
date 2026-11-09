@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { getPatientRecordDetail, getPatientRoster, getTreatmentPlanRoster } from './client'
 import { readPlanIdentity } from './identity'
@@ -77,7 +77,7 @@ test('All shows stored synthetic rows while controls remain All Manual and Allev
   render(<TreatmentPlansRosterPage token='token' user={manager} onNavigate={vi.fn()} onSelectPatient={vi.fn()} onSelectTreatmentPlan={vi.fn()} />)
   // Then: source labeling is accurate without adding an intake/filter mode.
   expect(await screen.findByText(/Synthetic fixture · record 31/)).toBeInTheDocument()
-  expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['All sources', 'Manual', 'Alleva'])
+  expect(within(screen.getByLabelText('Source filter')).getAllByRole('option').map(option => option.textContent)).toEqual(['All sources', 'Manual', 'Alleva'])
   expect(screen.getByLabelText('Source filter')).toHaveValue('all')
 })
 

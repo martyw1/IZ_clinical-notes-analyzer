@@ -19,6 +19,7 @@ class PlanFixture:
     last_updated: str = "2026-09-08"
     next_due_date: str = "2026-11-07"
     plan_version_id: int = 1
+    tracking_timestamp: str = ""
 
 
 def test_metrics_use_latest_plan_deadlines_independently_of_review_status() -> None:
@@ -35,7 +36,7 @@ def test_metrics_use_latest_plan_deadlines_independently_of_review_status() -> N
     result = dashboard_payload(rows, api_configured=False, api_client_id_configured=False, api_enabled=False,
                                sync_enabled=False, sync_authorized=False, loc_change_window_validated=False, evaluation_date=date(2026, 10, 16))
     # Then
-    assert result["metrics"] == {"overdue_plans": 1, "due_soon_plans": 2}
+    assert result["metrics"] == {"overdue_plans": 1, "due_soon_plans": 1}
     assert any("excluded from deadline counts" in value for value in result["blockers"])
 
 
@@ -98,3 +99,17 @@ def test_ambiguous_latest_or_missing_deadline_is_explained_and_not_counted():
     assert result["metrics"] == {"overdue_plans": 0, "due_soon_plans": 0}
     assert any("latest plan cannot be determined" in item for item in result["blockers"])
     assert any("no computable update deadline" in item for item in result["blockers"])
+
+
+
+def test_creation_fallback_remains_in_current_worklists_and_latest_plan_selection():
+    from app.v2.services.dashboard_data import latest_patient_plans
+    older = PlanFixture(101, "SYNTHETIC-FALLBACK", "Missing Data", 0, "2026-08-01", "2026-09-30", 1)
+    fallback = PlanFixture(101, "SYNTHETIC-FALLBACK", "Missing Data", 0, "", "2026-10-01", 2, "2026-09-01T12:00:00Z")
+    current, uncertain = latest_patient_plans((older, fallback))
+    assert current == (fallback,)
+    assert uncertain == 0
+    assert fallback.last_updated == ""
+    result = dashboard_payload((older, fallback), api_configured=False, api_client_id_configured=False, api_enabled=False,
+        sync_enabled=False, sync_authorized=False, loc_change_window_validated=False, evaluation_date=date(2026, 10, 16))
+    assert result["metrics"]["overdue_plans"] == 1

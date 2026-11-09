@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
+import { acknowledgeOverduePlan, getTreatmentPlanDetail, getTreatmentPlans, saveManagerAction } from '../api/client'
 import {
   deleteTreatmentPlanSourceDocument,
   downloadChecklistEvidenceExport,
@@ -32,6 +32,8 @@ function messageForError(error: unknown): string {
 export function TreatmentPlanDetailPage({ token, user, selection, onNavigate, onSelectTreatmentPlan, isSessionCurrent }: TreatmentPlanDetailPageProps) {
   const [plan, setPlan] = useState<TreatmentPlanAggregate | null>(null)
   const [error, setError] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewError, setReviewError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [versions, setVersions] = useState<readonly TreatmentPlanListItem[]>([])
   const [versionRefresh, setVersionRefresh] = useState(0)
@@ -45,6 +47,8 @@ export function TreatmentPlanDetailPage({ token, user, selection, onNavigate, on
       return
     }
     const isCurrent = capture()
+    setReviewing(false)
+    setReviewError('')
     setIsLoading(true)
     setPlan(null)
     setError('')
@@ -75,6 +79,21 @@ export function TreatmentPlanDetailPage({ token, user, selection, onNavigate, on
     const refreshed = await loadSelectedPlan(token, selection)
     if (isCurrent()) setPlan(refreshed)
     return refreshed
+  }
+
+  async function handleOverdueReview() {
+    if (!selection || reviewing) return
+    const isCurrent = capture()
+    setReviewing(true)
+    setReviewError('')
+    try {
+      await acknowledgeOverduePlan(token, selection)
+      if (isCurrent()) await refreshPlan()
+    } catch (saveError) {
+      if (isCurrent()) setReviewError(messageForError(saveError))
+    } finally {
+      if (isCurrent()) setReviewing(false)
+    }
   }
 
   async function handleManagerAction(payload: ManagerActionPayload) {
@@ -139,6 +158,12 @@ export function TreatmentPlanDetailPage({ token, user, selection, onNavigate, on
           </select>
         </label>
         <button type='button' className='secondary-button' onClick={() => setVersionRefresh((value) => value + 1)}>Refresh saved versions</button>
+        {plan.reviewedAtUtc ? <p>Reviewed on {formatDateTime24Hour(plan.reviewedAtUtc)}</p> :
+          plan.deadlineStatus === 'Overdue' && (user.role === 'admin' || user.role === 'office_manager') &&
+          <button type='button' disabled={reviewing} onClick={() => void handleOverdueReview()}>
+            Mark overdue plan reviewed
+          </button>}
+        {reviewError && <p role='alert'>{reviewError}</p>}
         <p className='muted'>New imports do not change the selected saved version.</p>
       </section>
       <TreatmentPlanDetailViewer

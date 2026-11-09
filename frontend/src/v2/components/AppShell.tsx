@@ -21,7 +21,7 @@ export function AppShell({ activeView, navigationItems, user, onNavigate, onSign
         </div>
         <div className='topbar-actions'>
           <button type='button' className='secondary-button' aria-pressed={activeView === 'Account'} onClick={() => onNavigate('Account')}>Account</button>
-          <p className='session-role' aria-label='Signed-in role'>{user.role.replace(/_/g, ' ')}</p>
+          <p className='session-role' aria-label='Signed-in role'>{user.role === 'counselor' ? 'Clinician' : user.role.replace(/_/g, ' ')}</p>
           <button type='button' className='secondary-button' onClick={onSignOut}>
             Sign out
           </button>

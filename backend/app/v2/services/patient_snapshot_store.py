@@ -11,6 +11,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.v2.services.alleva_contracts import SyncImportProvenance
+from app.v2.services.imported_counselors import PrimaryCounselorEvidence, save_primary_counselor
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 
@@ -25,6 +26,7 @@ class PatientSourceSnapshotInput:
     source_last_updated: str
     record: dict[str, object]
     patient_record_id: int | None = None
+    primary_counselor: PrimaryCounselorEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +64,8 @@ def persist_patient_source_snapshots(
         canonical = _canonical_record(snapshot.record)
         content_sha256 = hashlib.sha256(canonical).hexdigest()
         patient_row_id = int(patient_row[0])
+        if snapshot.primary_counselor is not None:
+            save_primary_counselor(db, patient_row_id, snapshot.primary_counselor, snapshot.source_last_updated)
         existing = db.execute(
             text(
                 "SELECT id FROM patient_snapshot_versions "

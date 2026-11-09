@@ -5,7 +5,7 @@ from typing import Any
 from app.v2.domain.schemas import ApiHarnessArtifact, ApiHarnessJob
 
 
-def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...], failure_message: str | None = None) -> ApiHarnessJob:
+def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...], failure_message: str | None = None, completion_message: str | None = None) -> ApiHarnessJob:
     return ApiHarnessJob(
         job_id=job.job_id, job_type=job.job_type, created_at=job.created_at, started_at=job.started_at,
         updated_at=job.updated_at, completed_at=job.completed_at, cancelled_at=job.cancelled_at, failed_at=job.failed_at,
@@ -17,7 +17,7 @@ def public_job(job: Any, artifacts: tuple[ApiHarnessArtifact, ...], failure_mess
         cancel_requested=job.cancel_requested, last_heartbeat_at=job.last_heartbeat_at,
         phase=(_phase(job.status, job.current_endpoint) if job.status in {"completed", "completed_with_warnings", "failed", "cancelled", "stale_or_interrupted"}
                else job.phase_name or _phase(job.status, job.current_endpoint)),
-        message=failure_message or _message(job.job_type, job.status),
+        message=failure_message or completion_message or _message(job.job_type, job.status),
         artifacts=artifacts,
         phase_completed=job.phase_completed, phase_total=job.phase_total,
         progress_determinate=job.phase_total > 0 or job.status in {"completed", "completed_with_warnings"},
@@ -40,6 +40,7 @@ def _message(job_type: str, status: str) -> str:
     label = {
         "active_patient_roster_pull": "Patient roster pull",
         "approved_treatment_plan_sync": "Treatment-plan sync",
+        "approved_clinician_sync": "Clinician pull",
         "pull_all_treatment_plans_all_fields": "Treatment-plan diagnostic preview",
         "two_stage_roster_update": "Patient and treatment-plan update",
     }.get(job_type, "Job")

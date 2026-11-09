@@ -39,15 +39,18 @@ export function HelpPage() {
           <li>Check source, patient record number, plan ID, and saved version ID. MRNs and external IDs can repeat across sources or facilities.</li>
           <li>On Treatment Plan Detail, use the saved-version selector to inspect history. A new import does not silently replace your selection.</li>
         </ol>
+        <p>Clinicians lists imported Alleva staff with their source roles, active caseloads and overdue counts. An administrator’s approved full pull on Treatment Plans Roster imports the staff directory and explicit primaryClinician relationships. Imported staff are separate from app login accounts. Unassigned means the saved evidence has no verified current clinician relationship.</p>
+        <p>Select Worklist → Overdue by clinician on Treatment Plans Roster to group by clinician, then sort from most overdue to least overdue. Search and source filters still apply. Reviewed overdue plans are collapsed until you expand them.</p>
         <p>Missing names, references, and service dates are shown as unavailable or not supplied. Do not infer identity from a name alone.</p>
       </section>
 
       <section className='panel' id='help-dates'>
         <h2>Deadlines and statuses</h2>
-        <p>The versioned rules check an initial plan on admission Day 1, a signed master plan within 30 calendar days of admission, recurring PHP reviews every 30 calendar days, and recurring IOP/OP reviews every 60 calendar days. The recurring clock starts from the latest valid signed review, or admission if none exists. Plan detail compares its calculated date with the source Next Review Due date.</p>
+        <p>Screen timestamps use Eastern time (EST or EDT automatically, including daylight saving changes). Stored timestamps remain UTC. Calendar-only dates, including computed due dates, keep their original day.</p>
+        <p>The versioned rules check an initial plan on admission Day 1, a signed master plan within 30 calendar days of admission, recurring PHP/GOP reviews every 30 calendar days, and recurring IOP/OP reviews every 60 calendar days. The recurring clock starts from the plan’s last updated date, falling back to its first created date if unavailable. Any LOC containing IOP uses the configured IOP interval; any containing PHP uses PHP; GOP uses 30 calendar days. A LOC containing both categories requires review. Missing LOC or both missing clock dates remain unresolved. Admission, review dates and manually entered Next Review Due do not replace this calculation. Plan detail displays the schedule status at the top and beside the computed date, with a calculation explanation.</p>
         <dl>
           <div><dt>Overdue</dt><dd>A confirmed deadline has passed, including a late master-plan signature. Open the checklist to see which requirement caused it.</dd></div>
-          <div><dt>Due Soon</dt><dd>The next update deadline is today or within 10 business days (Monday–Friday, no holiday exclusions). The deadline uses the latest plan’s last updated date plus its LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days.</dd></div>
+          <div><dt>Due Soon</dt><dd>The next update deadline is today or within 10 calendar days. The deadline uses the latest plan’s last updated date plus its LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days.</dd></div>
           <div><dt>Current/Compliant</dt><dd>Evaluated timing evidence is currently in window. This does not replace review of every checklist criterion and source document.</dd></div>
           <div><dt>Missing Data</dt><dd>Required dates, typed signatures, or plan evidence are absent.</dd></div>
           <div><dt>Conflicting Evidence</dt><dd>Source dates or other required evidence disagree with the calculation.</dd></div>

@@ -5,6 +5,7 @@ import { beginRequestSession, endRequestSession } from './api/request'
 import type { PatientSelection, TreatmentPlanSelection, UserProfile } from './api/types'
 import { AppShell } from './components/AppShell'
 import { ApiHarnessPage } from './pages/ApiHarnessPage'
+import { CounselorsPage } from './pages/CounselorsPage'
 import { CorrectionsPage } from './pages/CorrectionsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ForensicLogsPage } from './pages/ForensicLogsPage'
@@ -60,6 +61,9 @@ function pageFor(
   switch (view) {
     case 'Status Dashboard':
       return <DashboardPage token={token} isAdmin={user.role === 'admin'} onNavigate={onNavigate} />
+    case 'Counselors':
+    case 'Clinicians':
+      return <CounselorsPage canManageAssignments={user.role === 'admin' || user.role === 'office_manager'} isAdmin={user.role === 'admin'} onNavigate={onNavigate} token={token} isSessionCurrent={isSessionCurrent} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Patient Roster':
       return <PatientRosterPage isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Patient Record Detail':
@@ -68,8 +72,10 @@ function pageFor(
       return <ManualUploadPage token={token} onNavigate={onNavigate} />
     case 'Treatment Plan Detail':
       return <TreatmentPlanDetailPage token={token} user={user} selection={selection} onNavigate={onNavigate} onSelectTreatmentPlan={onSelectTreatmentPlan} isSessionCurrent={isSessionCurrent} />
+    case 'Overdue plans':
+    case 'Due soon plans':
     case 'Treatment Plans Roster':
-      return <TreatmentPlansRosterPage isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
+      return <TreatmentPlansRosterPage key={view} initialMode={view === 'Overdue plans' ? 'Overdue' : view === 'Due soon plans' ? 'Due Soon' : 'All plans'} isSessionCurrent={isSessionCurrent} token={token} user={user} onNavigate={onNavigate} onSelectPatient={onSelectPatient} onSelectTreatmentPlan={onSelectTreatmentPlan} />
     case 'Corrections':
       return <CorrectionsPage token={token} isSessionCurrent={isSessionCurrent} />
     case 'API Testing Harness':
@@ -234,7 +240,7 @@ export function AppV2() {
 
   return (
     <AppShell
-      activeView={activeView}
+      activeView={activeView === 'Overdue plans' || activeView === 'Due soon plans' ? 'Treatment Plans Roster' : activeView}
       navigationItems={session.navigationItems}
       user={session.user}
       onNavigate={setActiveView}

@@ -6,7 +6,7 @@ from typing import Final
 
 from app.v2.domain.schemas import JsonValue, ReviewStatus, TreatmentPlanAggregate
 from app.v2.services.rule_package import DeterministicRulePackage
-from app.v2.services.deadline_calendar import plan_update_date
+from app.v2.services.deadline_calendar import plan_update_date, recurring_plan_anchor
 
 UNKNOWN_VALUES: Final = frozenset({"", "unknown", "unavailable", "unvalidated_configurable", "none", "null"})
 
@@ -20,6 +20,7 @@ class EvaluationEvidence:
     master_signature: date | None
     master_signature_path: str
     anchor: date | None
+    anchor_source: str
     calculated_due: date | None
     source_due: date | None
     source_due_missing: bool
@@ -51,7 +52,7 @@ def collect_evidence(
         for item in aggregate.content_snapshot.signatures
     )
     _, future_review = _latest_signed_review(aggregate, today)
-    anchor = plan_update_date(aggregate.source_last_updated, facility_timezone)
+    anchor, anchor_source = recurring_plan_anchor(aggregate, facility_timezone)
     mapped_loc, interval = _map_loc(aggregate.current_level_of_care, package)
     calculated_due = anchor + timedelta(days=interval) if anchor is not None and anchor <= today and interval is not None else None
     source_due = parse_date(aggregate.source_due_date)
@@ -64,7 +65,7 @@ def collect_evidence(
         if known(_text(row, "level_of_care", "loc_code"))
     }
     current_loc = (mapped_loc or aggregate.current_level_of_care).strip().casefold()
-    loc_conflict = bool(loc_values) and current_loc not in loc_values
+    loc_conflict = (bool(loc_values) and current_loc not in loc_values) or (sum(family in _loc_key(aggregate.current_level_of_care) for family in ("php","iop","gop")) > 1)
     loc_changed = len(loc_values) > 1
     effective_dates = tuple(parse_date(_text(row, "effective_date")) for row in aggregate.loc_history)
     latest_loc = max((item for item in effective_dates if item is not None), default=None)
@@ -73,8 +74,10 @@ def collect_evidence(
         if loc_changed and latest_loc else None
     )
     source_uncertainty, source_uncertainty_reason = _manual_source_uncertainty(aggregate)
+    if anchor_source == "conflicting first created dates":
+        source_uncertainty, source_uncertainty_reason = "Conflicting Evidence", "Conflicting first created dates exist for the selected plan."
     return EvaluationEvidence(
-        aggregate, admission, initial, initial_path, master, master_path, anchor, calculated_due,
+        aggregate, admission, initial, initial_path, master, master_path, anchor, anchor_source, calculated_due,
         source_due, source_due_missing, source_due_invalid, mapped_loc, interval, due_conflict,
         any_malformed, future_review, not bool(aggregate.treatment_plans), loc_changed,
         loc_conflict, loc_candidate, source_uncertainty, source_uncertainty_reason,
@@ -138,9 +141,16 @@ def _latest_signed_review(aggregate: TreatmentPlanAggregate, today: date) -> tup
 
 
 def _map_loc(raw: str, package: DeterministicRulePackage) -> tuple[str, int | None]:
-    normalized = raw.strip().casefold()
+    normalized = _loc_key(raw)
+    families = [family for family in ("PHP", "IOP", "GOP") if family.casefold() in normalized]
+    if len(families) > 1:
+        return "", None
+    if families:
+        family = families[0]
+        rule = package.rules.levels_of_care.get(family)
+        return (family, rule.treatment_plan_update_interval_days) if rule else ("", None)
     for name, rule in package.rules.levels_of_care.items():
-        aliases = {alias.strip().casefold() for alias in rule.aliases} | {name.casefold()}
+        aliases = {_loc_key(alias) for alias in rule.aliases} | {_loc_key(name)}
         if normalized in aliases:
             return name, rule.treatment_plan_update_interval_days
     return "", None
@@ -152,3 +162,11 @@ def _text(record: dict[str, JsonValue], *keys: str) -> str:
         if isinstance(value, (str, int, float, bool)):
             return str(value)
     return ""
+
+
+def _loc_key(raw: str) -> str:
+    import re
+    import unicodedata
+    value = unicodedata.normalize("NFKC", raw).strip().casefold()
+    value = re.sub(r"[\u2010-\u2015\u2212]", "-", value)
+    return re.sub(r"\s*-\s*", "-", " ".join(value.split()))

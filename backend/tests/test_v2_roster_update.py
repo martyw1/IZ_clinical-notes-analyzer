@@ -149,3 +149,47 @@ def test_interrupted_parent_is_retained_and_retry_uses_saved_credentials(tmp_pat
         completed = _wait(restarted, restarted_headers, f"/api/v2/api-harness/jobs/{retry.json()['job_id']}")
         assert completed['status'] == 'completed'
         assert completed['job_id'] != original['job_id']
+
+
+def test_combined_update_links_api_clinician_to_plan_detail(tmp_path, monkeypatch):
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    relationships = {
+        912: {"primaryClinicians": "  synthetic   Mapped  "},
+        913: {"primaryClinicians": "Synthetic Mapped, Synthetic Other"},
+        914: {"primaryClinicians": "Synthetic Duplicate"},
+        915: {"primaryClinicians": "Synthetic Map"},
+        916: {"primaryClinician": {"id": 502}, "primaryClinicians": "Synthetic Mapped"},
+        917: {"primaryClinician": {"id": 502, "route": "/users/999"}, "primaryClinicians": "Synthetic Mapped"},
+    }
+    with _mock_alleva_server(
+        client_items=[{"id": str(number), "mrn": f"SYNTHETIC-{number}", "status": "Active",
+                       "facilityId": 10, "levelOfCare": "IOP 4", **relationship}
+                      for number, relationship in relationships.items()],
+        plan_items=[{"id": f"plan-{number}", "client": f"/clients/{number}",
+                     "createdDate": "2026-08-01", "isActive": True} for number in relationships],
+        staff_items=[{"id": number, "name": {"first": "Synthetic", "last": name}, "tenant": "synthetic"}
+                     for number, name in [(501, "Mapped"), (502, "Other"), (503, "Duplicate"), (504, "Duplicate")]],
+    ) as (base, state):
+        _configure(client, headers, base)
+        started = client.post('/api/v2/roster-update/run', headers=headers)
+        assert started.status_code == 202
+        result = _wait(client, headers, f"/api/v2/api-harness/jobs/{started.json()['job_id']}")
+        assert result['status'] == 'completed'
+    assert any(path.startswith('/users?') for path in state.paths)
+    roster = client.get('/api/v2/treatment-plan-roster', headers=headers).json()['items']
+    assert {plan['treatment_plan_id']: plan['primary_counselor_name'] for plan in roster} == {
+        'plan-912': 'Synthetic Mapped', 'plan-913': '', 'plan-914': '',
+        'plan-915': '', 'plan-916': 'Synthetic Other', 'plan-917': '',
+    }
+    summary = client.get('/api/v2/clinicians', headers=headers).json()['last_import']['summary']
+    assert summary['assignments_linked_by_name'] == 1
+    assert summary['clients_with_multiple_clinician_names'] == 1
+    assert summary['assignments_unresolved'] == 4
+    plan = next(row for row in roster if row['treatment_plan_id'] == 'plan-912')
+    assert plan['primary_counselor_name'] == 'Synthetic Mapped'
+    detail = client.get('/api/v2/treatment-plans/SYNTHETIC-912/plan-912', headers=headers,
+        params={'plan_version_id': plan['plan_version_id']})
+    assert detail.status_code == 200
+    assert detail.json()['primary_counselor_name'] == 'Synthetic Mapped'
+    assert detail.json()['primary_counselor_id'] == plan['primary_counselor_id']

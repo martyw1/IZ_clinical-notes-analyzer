@@ -17,7 +17,7 @@ from app.v2.models import AppSetting
 from app.v2.services.secure_storage import decrypt_bytes, encrypt_bytes
 
 REQUIRED_ENDPOINTS: Final = frozenset(("clients", "treatment_plans", "treatment_plan_detail", "diagnoses", "reviews", "review_detail"))
-BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-08-11-unpaged-complete-mrn-plans"
+BUILT_IN_MAPPING_VERSION: Final = "alleva-rest-v1-built-in-2026-11-06-clinicians"
 BUILT_IN_MAX_RESPONSE_BYTES: Final = 16 * 1024 * 1024
 DEFAULT_ALLEVA_SCOPE: Final = "https://authorization.allevasoft.com/api:read"
 _BUILTIN_CONTRACT_LOCK: Final = Lock()
@@ -132,6 +132,11 @@ def _builtin_contract_payload(
             },
             "attachments": {"mode": "disabled", "download_allowed": False},
             "endpoints": {
+                "clinicians": {
+                    "path": "/users",
+                    "parameters": {"limit": "Limit", "offset": "Cursor"},
+                    "field_mappings": {"staff_id": "id", "first_name": "name.first", "last_name": "name.last", "facility_id": "facility.id", "tenant": "tenant", "role": "role"},
+                },
                 "clients": {
                     "path": "/clients",
                     "parameters": {"limit": "Limit", "offset": "Cursor"},
@@ -476,8 +481,10 @@ def _counter_values(raw: str | None) -> dict[str, object]:
 
 
 def _validate_contract(payload: AllevaContractApprovalIn) -> None:
-    if set(payload.endpoints) != REQUIRED_ENDPOINTS:
-        raise ValueError("The approval record must map exactly the six required Alleva endpoints.")
+    if not REQUIRED_ENDPOINTS <= set(payload.endpoints) or set(payload.endpoints) - REQUIRED_ENDPOINTS - {"clinicians"}:
+        raise ValueError("The approval record must map the six required Alleva endpoints and may include the clinician directory.")
+    if "clinicians" in payload.endpoints and payload.endpoints["clinicians"].path != "/users":
+        raise ValueError("The approved clinician directory must use the published /users endpoint.")
     for endpoint in payload.endpoints.values():
         decoded_path = unquote(endpoint.path)
         parsed_path = urlsplit(decoded_path)

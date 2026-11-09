@@ -36,6 +36,9 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/facilities"),
             ("PUT", "/api/users/{user_id}/facilities/{facility_id}"),
             ("PUT", "/api/patient-assignments/{patient_id}/{counselor_username}"),
+            ("POST", "/api/v2/clinician-assignment/patients/search"),
+            ("GET", "/api/v2/patient-records/{patient_record_id}/clinician-assignment"),
+            ("PUT", "/api/v2/patient-records/{patient_record_id}/clinician-assignment"),
         }
     ),
     "admin_configuration": frozenset(
@@ -55,6 +58,9 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/api-harness/jobs/{job_id}/artifacts/{artifact_id}"),
             ("GET", "/api/v2/api-harness/jobs/{job_id}/preview"),
             ("POST", "/api/v2/alleva-sync/run"),
+            ("POST", "/api/v2/clinicians/pull"),
+            ("GET", "/api/v2/clinicians/pull/latest"),
+            ("GET", "/api/v2/clinicians/pull/jobs/{job_id}"),
             ("POST", "/api/v2/roster-update/run"),
             ("GET", "/api/v2/roster-update/latest"),
             ("GET", "/api/v2/alleva-sync/jobs/{job_id}"),
@@ -82,12 +88,14 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/treatment-plans/{patient_id}/{treatment_plan_id}"),
             ("GET", "/api/v2/patients/{patient_id}"),
             ("GET", "/api/v2/patient-roster"),
+            ("GET", "/api/v2/clinicians"),
             ("GET", "/api/v2/treatment-plan-roster"),
         }
     ),
     "patient_manager": frozenset(
         {
             ("POST", "/api/v2/treatment-plans/{patient_id}/manager-actions"),
+            ("POST", "/api/v2/treatment-plans/{patient_id}/{treatment_plan_id}/overdue-review"),
             ("POST", "/api/v2/treatment-plans/{patient_id}/evaluations/refresh"),
             ("POST", "/api/v2/manual-uploads/treatment-plan-aggregate"),
             ("POST", "/api/v2/manual-uploads/treatment-plan-file"),

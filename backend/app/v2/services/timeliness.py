@@ -51,15 +51,15 @@ def evaluate_treatment_plan_timing(
         )
     evidence = collect_evidence(aggregate, load_rule_package(), evaluation_date)
     if evidence.anchor is None or not evidence.mapped_loc:
-        return TimelinessEvaluation("Unable to Evaluate", "Unknown", "The plan last updated date or LOC is invalid.", ())
+        return TimelinessEvaluation("Unable to Evaluate", "Unknown", "No usable last updated/first created date or configured LOC is available.", ())
     if evidence.anchor > evaluation_date:
-        return TimelinessEvaluation("Needs Review", "Unknown", "The plan last updated date is in the future.", ())
-    interval = rules.php_review_interval_days if evidence.mapped_loc == "PHP" else rules.iop_op_review_interval_days
+        return TimelinessEvaluation("Needs Review", "Unknown", "The selected plan clock anchor is in the future.", ())
+    interval = evidence.interval_days if evidence.mapped_loc == "GOP" else rules.php_review_interval_days if evidence.mapped_loc == "PHP" else rules.iop_op_review_interval_days
     due_date = evidence.anchor + timedelta(days=interval)
     return TimelinessEvaluation(
         status=cast(ReviewStatus, deadline_status(due_date, evaluation_date)),
         due_date=due_date.isoformat(),
-        reason="Next update due uses the plan last updated date plus the LOC calendar-day interval; Due Soon uses 10 business days.",
+        reason=f"Next update due uses {evidence.anchor_source} plus the LOC calendar-day interval; Due Soon uses 10 calendar days.",
         missing_fields=(),
     )
 
@@ -68,7 +68,7 @@ def _missing_fields(aggregate: TreatmentPlanAggregate) -> tuple[str, ...]:
     candidates = (
         ("admission_date", aggregate.admission_date),
         ("current_level_of_care", aggregate.current_level_of_care),
-        ("source_last_updated", aggregate.source_last_updated),
+        ("source_last_updated", "available" if collect_evidence(aggregate, load_rule_package(), date.max).anchor is not None else ""),
         ("signature_datetime", next((item.signature_datetime for item in aggregate.content_snapshot.signatures if item.signature_datetime.strip()), "")),
     )
     return tuple(name for name, value in candidates if value.strip().lower() in UNKNOWN_VALUES)

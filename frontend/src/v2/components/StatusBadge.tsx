@@ -1,7 +1,5 @@
-import type { TreatmentPlanStatus } from '../types/treatmentPlan'
-
 type StatusBadgeProps = {
-  readonly status: TreatmentPlanStatus
+  readonly status: string
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {

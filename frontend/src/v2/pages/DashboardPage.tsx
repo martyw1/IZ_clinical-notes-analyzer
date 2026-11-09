@@ -8,10 +8,11 @@ import { RosterUpdateCard } from '../components/RosterUpdateCard'
 type DashboardPageProps = { readonly token: string; readonly isAdmin?: boolean; readonly onNavigate?: (view: string) => void }
 
 const metricGroups = [
-  { label: 'Timeliness', keys: ['overdue_plans', 'due_soon_plans'] },
+  { label: 'Timeliness', keys: ['active_clients', 'overdue_plans', 'due_soon_plans'] },
 ]
 
 const metricLabels: Record<string, string> = {
+  active_clients: 'Active clients',
   overdue_plans: 'Overdue plans',
   due_soon_plans: 'Due soon plans',
 }
@@ -72,7 +73,12 @@ export function DashboardPage({ token, isAdmin = false, onNavigate }: DashboardP
             {group.keys.map((key) => (
               <div key={key} className='metric-tile' data-metric={key}>
                 <dt>{metricLabels[key] ?? key}</dt>
-                <dd>{dashboard.metrics[key] ?? 0}</dd>
+                <dd>{key === 'active_clients' ? dashboard.activeClients ?? 0 : onNavigate ? (
+                  <button type='button' className='link-button' aria-label={metricLabels[key]}
+                    onClick={() => onNavigate(key === 'overdue_plans' ? 'Overdue plans' : 'Due soon plans')}>
+                    {dashboard.metrics[key] ?? 0}
+                  </button>
+                ) : dashboard.metrics[key] ?? 0}</dd>
               </div>
             ))}
           </dl>
@@ -80,7 +86,7 @@ export function DashboardPage({ token, isAdmin = false, onNavigate }: DashboardP
           <details className='metric-explanation'>
             <summary>How these counts are calculated</summary>
             <p className='muted'>One most recent treatment plan per authorized patient record, selected by its last updated date. Next update due is last updated plus the LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days.</p>
-            <p className='muted'>Overdue means the computed deadline is before today. Due soon includes today through 10 business days after today, using Monday–Friday with no holiday exclusions. Dates use the facility timezone. Missing or ambiguous dates are explained below and are not guessed. Counts reflect saved Alleva data; pull updates to include newer changes.</p>
+            <p className='muted'>Overdue means the computed deadline is before today. Due soon includes today through 10 calendar days after today. Dates use the facility timezone. Missing or ambiguous dates are explained below and are not guessed. Counts reflect saved Alleva data; pull updates to include newer changes.</p>
           </details>
         </section>
         {isAdmin && <RosterUpdateCard token={token} onNavigate={onNavigate} onCompleted={() => setRefreshNumber((current) => current + 1)} />}

@@ -1,34 +1,24 @@
 import { expect, test } from 'vitest'
 import { formatDateTime24Hour, formatUtcEventDateTime } from './treatmentPlanFormatting'
 
-test('formats history timestamps explicitly in UTC', () => {
-  expect(formatDateTime24Hour('2026-08-01T12:34:00-04:00')).toBe('2026-08-01 16:34 UTC')
-})
-
-test('uses a readable fallback when a timestamp is absent or invalid', () => {
-  expect(formatDateTime24Hour('')).toBe('Unknown')
-  expect(formatDateTime24Hour('not-a-timestamp')).toBe('not-a-timestamp')
-})
-
 test.each([
-  ['2026-09-04 04:30:00', '2026-09-04 04:30 UTC'],
-  ['2026-09-04T04:30:00', '2026-09-04 04:30 UTC'],
-  ['2026-09-04 04:30:00.5', '2026-09-04 04:30 UTC'],
-  ['2026-09-04T04:30:00.123456', '2026-09-04 04:30 UTC'],
-  ['2026-09-04T04:30:00Z', '2026-09-04 04:30 UTC'],
-  ['2026-09-04T04:30:00-04:00', '2026-09-04 08:30 UTC'],
-  ['2026-09-04T04:30:00+05:30', '2026-09-03 23:00 UTC'],
+  ['2026-08-01T12:34:00-04:00', '2026-08-01 12:34 EDT'],
+  ['2026-01-01T02:30:00Z', '2025-12-31 21:30 EST'],
+  ['2026-09-04 04:30:00', '2026-09-04 00:30 EDT'],
+  ['2026-09-04T04:30:00.123456', '2026-09-04 00:30 EDT'],
+  ['2026-09-04T04:30', '2026-09-04 00:30 EDT'],
+  ['2026-09-04T04:30:00+05:30', '2026-09-03 19:00 EDT'],
+  ['2026-03-08T06:59:00Z', '2026-03-08 01:59 EST'],
+  ['2026-03-08T07:00:00Z', '2026-03-08 03:00 EDT'],
+  ['2026-11-01T05:30:00Z', '2026-11-01 01:30 EDT'],
+  ['2026-11-01T06:30:00Z', '2026-11-01 01:30 EST'],
+  ['2026-11-06', '2026-11-06'],
   ['', 'Unknown'],
   ['not-a-timestamp', 'not-a-timestamp'],
   ['2026-99-99 99:30:00', '2026-99-99 99:30:00'],
-])('formats the known-UTC event contract without a browser-local shift: %s', (input, expected) => {
+])('displays %s in Eastern time while preserving calendar dates and wire input', (input, expected) => {
+  const original = input
+  expect(formatDateTime24Hour(input)).toBe(expected)
   expect(formatUtcEventDateTime(input)).toBe(expected)
-})
-
-test('does not reinterpret general clinical timestamps or widen naive UTC event shapes', () => {
-  const clinical = '2026-09-04T04:30:00'
-  expect(formatDateTime24Hour(clinical)).toBe(formatDateTime24Hour(new Date(clinical).toISOString()))
-  for (const nonWire of ['2026-09-04T04:30', '2026-09-04', 'September 4, 2026 04:30:00']) {
-    expect(formatUtcEventDateTime(nonWire)).toBe(formatDateTime24Hour(nonWire))
-  }
+  expect(input).toBe(original)
 })

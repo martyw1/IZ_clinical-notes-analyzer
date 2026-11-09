@@ -106,9 +106,9 @@ def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
     if context.future_review:
         return "Needs Review", "A signed review is future-dated relative to the facility evaluation date."
     if context.anchor is None:
-        return ("Unable to Evaluate" if known(context.aggregate.source_last_updated) else "Missing Data"), "The treatment-plan last updated date is missing or invalid; admission and review dates are not substituted."
+        return ("Unable to Evaluate" if known(context.aggregate.source_last_updated) else "Missing Data"), "No usable last updated or unambiguous first created date is available for the selected plan; admission and review dates are not substituted."
     if context.calculated_due is None and context.interval_days is not None:
-        return "Needs Review", "The treatment-plan last updated date is in the future; an update deadline cannot be determined."
+        return "Needs Review", "The selected plan clock anchor is in the future; an update deadline cannot be determined."
     if (context.admission is None or context.initial_signature is None or context.master_signature is None
             or context.source_due_missing or context.plans_missing):
         return "Missing Data", "Required typed plan, signature, admission, or due-date evidence is missing."
@@ -117,7 +117,7 @@ def _overall(context: EvaluationContext) -> tuple[ReviewStatus, str]:
     if not context.mapped_loc or context.calculated_due is None:
         return "Unable to Evaluate", "The level of care or recurrence anchor is not configured; compliance was not inferred."
     if context.due_conflict:
-        return "Conflicting Evidence", "Source Next Review Due disagrees with the deadline calculated from the treatment-plan last updated date."
+        return "Conflicting Evidence", "Source Next Review Due disagrees with the deadline calculated from the selected plan clock anchor."
     if context.initial_signature != context.admission:
         return "Needs Review", "Initial treatment-plan signature evidence is not on admission Day 1."
     if context.loc_changed:
@@ -186,19 +186,19 @@ def _master(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluat
 
 
 def _anchor(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
-    return _presence(step, "source_last_updated", context.anchor or "")
+    return _presence(step, "source_last_updated" if context.anchor_source == "last updated" else "treatment_plans.created_date", context.anchor or "")
 
 
 def _due(step: ChecklistStep, context: EvaluationContext) -> CriterionEvaluation:
     status: EvaluationStatus = "Conflicting Evidence" if context.due_conflict else context.timing_status
     if context.calculated_due is None:
         status = "Unable to Evaluate"
-    return CriterionEvaluation(step.key, step.title, status, "source_last_updated + configured_interval_days",
+    return CriterionEvaluation(step.key, step.title, status, f"{context.anchor_source} + configured_interval_days",
                                _iso(context.calculated_due) or "unavailable", "Calculated due date is compared with source Next Review Due.")
 
 
 def _interval(step: ChecklistStep, context: EvaluationContext, category: str) -> CriterionEvaluation:
-    applies = context.mapped_loc == "PHP" if category == "PHP" else bool(context.mapped_loc and context.mapped_loc != "PHP")
+    applies = context.mapped_loc == "PHP" if category == "PHP" else bool(context.mapped_loc and context.mapped_loc not in {"PHP", "GOP"})
     return CriterionEvaluation(step.key, step.title, context.timing_status if applies else "Not Applicable", "levels_of_care.*.treatment_plan_update_interval_days",
                                str(context.interval_days or "unavailable"), "Configured interval applied." if applies else "Rule is not applicable to this LOC.")
 

@@ -121,7 +121,7 @@ describe('V2 active app shell', () => {
     await signIn()
 
     expect(await screen.findByText('Overdue plans')).toBeInTheDocument()
-    expect(screen.getByText('Counts calculated 2026-07-11 12:00 UTC')).toBeInTheDocument()
+    expect(screen.getByText('Counts calculated 2026-07-11 08:00 EDT')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/LOC-change update window is unvalidated/i)).toBeInTheDocument()
 
@@ -230,9 +230,9 @@ describe('V2 active app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Assign facility' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Facility assigned.')
     fireEvent.change(screen.getByLabelText('Patient record assignment'), { target: { value: '12:alleva_rest_api' } })
-    fireEvent.change(screen.getByLabelText('Counselor assignment'), { target: { value: 'counselor' } })
+    fireEvent.change(screen.getByLabelText('Clinician assignment'), { target: { value: 'counselor' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
-    expect(await screen.findByText('Patient assigned to counselor.')).toHaveAttribute('role', 'status')
+    expect(await screen.findByText('Patient assigned to clinician.')).toHaveAttribute('role', 'status')
 
     fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
     expect(await screen.findByText('settings.api_profile.saved')).toBeInTheDocument()
@@ -364,7 +364,7 @@ describe('V2 active app shell', () => {
     expect(await screen.findByRole('heading', { name: 'Patient roster' })).toBeInTheDocument()
     expect(screen.getByText('812')).toBeInTheDocument()
     expect(screen.getByText('Alex Example')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'plan-812 · Alleva · record 12 · version 1 (#18) · 2026-07-12 10:00 UTC' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'plan-812 · Alleva · record 12 · version 1 (#18) · 2026-07-12 06:00 EDT' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v2/patient-roster', expect.objectContaining({ headers: expect.any(Headers) }))
     fireEvent.click(screen.getByRole('button', { name: 'Open patient record for Alex Example, MRN 812' }))

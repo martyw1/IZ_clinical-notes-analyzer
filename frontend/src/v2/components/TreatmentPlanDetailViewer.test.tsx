@@ -7,6 +7,7 @@ import { TreatmentPlanDetailViewer } from './TreatmentPlanDetailViewer'
 test('renders one readable selected-plan document with timeline, full clinical hierarchy, and review history', () => {
   const plan = mapTreatmentPlanAggregate({
     patient_record_id: 31, plan_version_id: 91, treatment_plan_id: 'plan-complete',
+    primary_counselor_name: 'Synthetic API Clinician',
     patient_id: 'MRN-SYNTHETIC-1',
     patient_display_label: 'MRN MRN-SYNTHETIC-1',
     source_mode: 'alleva_rest_api',
@@ -86,6 +87,7 @@ test('renders one readable selected-plan document with timeline, full clinical h
     />,
   )
 
+  expect(screen.getByText('Synthetic API Clinician', { exact: true })).toBeVisible()
   expect(screen.getByRole('heading', { name: 'Treatment Plan ID plan-complete' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Plan timeline' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Comments from earlier versions of this plan' })).toBeInTheDocument()
@@ -198,7 +200,7 @@ test('separates signature metadata and renders absent overview values as Not sup
   expect(screen.getByText('Signer role or type').tagName).toBe('DT')
   expect(screen.getByText('Signature date').tagName).toBe('DT')
   expect(screen.getByText('Explanation').tagName).toBe('DT')
-  expect(screen.getByText('2026-08-01 12:34 UTC')).toBeInTheDocument()
+  expect(screen.getByText('2026-08-01 08:34 EDT')).toBeInTheDocument()
   expect(screen.getByText('Signature bytes are not returned in the browser payload.')).toBeInTheDocument()
   const overview = screen.getByRole('heading', { name: 'Clinical overview' }).closest('section')
   if (!overview) throw new Error('Clinical overview missing')
@@ -285,3 +287,29 @@ function presentationPlan(overrides: Record<string, unknown> = {}) {
     ...overrides,
   })
 }
+
+
+test.each(['Overdue', 'Due Soon', 'Current/Compliant'])('shows %s schedule in header and computed date even with blank tracking value', (status) => {
+  const plan = mapTreatmentPlanAggregate({
+    patient_record_id: 1, plan_version_id: 1, treatment_plan_id: 'synthetic-schedule', source_mode: 'manual_upload',
+    date_clock_due_date: '2026-11-01', tracking_due_date: '', computed_deadline_status: status,
+    overall_status: 'Missing Data', deadline_explanation: 'PHP: synthetic calculation explanation.',
+  })
+  const view = render(<TreatmentPlanDetailViewer plan={plan} canManage={false} onManagerAction={vi.fn()} onExportChecklistEvidence={vi.fn()} onDownloadSourceDocument={vi.fn()} onDeleteSourceDocument={vi.fn()} />)
+  const badges = view.container.querySelectorAll('.deadline-indicator .status-badge')
+  expect(badges).toHaveLength(2)
+  badges.forEach((badge) => expect(badge).toHaveTextContent(status))
+  expect(view.getByText('PHP: synthetic calculation explanation.')).toBeVisible()
+  view.unmount()
+})
+
+
+test('Plan created shows the actual creation timestamp rather than the plan start date', () => {
+  const plan = mapTreatmentPlanAggregate({ patient_record_id: 1, plan_version_id: 1, treatment_plan_id: 'synthetic-creation',
+    source_mode: 'alleva_rest_api', treatment_plans: [{ plan_id: 'synthetic-creation', plan_date: '2026-07-01T12:00:00Z', created_date: '2026-08-08T12:00:00Z' }] })
+  const view = render(<TreatmentPlanDetailViewer plan={plan} canManage={false} onManagerAction={vi.fn()} onExportChecklistEvidence={vi.fn()} onDownloadSourceDocument={vi.fn()} onDeleteSourceDocument={vi.fn()} />)
+  const created = view.container.querySelector('.plan-timeline li:nth-child(2) time')
+  expect(created).toHaveAttribute('datetime', '2026-08-08T12:00:00Z')
+  expect(created).toHaveTextContent('2026-08-08 08:00 EDT')
+  view.unmount()
+})

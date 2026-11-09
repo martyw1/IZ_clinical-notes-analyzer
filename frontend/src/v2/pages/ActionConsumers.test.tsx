@@ -32,7 +32,7 @@ test('patient assignment selects exact authorized row and never grants facility 
   await waitFor(() => expect(screen.getByRole('option', { name: /Synthetic Manual/ })).toBeInTheDocument())
   fireEvent.change(selector, { target: { value: '31:manual_upload' } })
   fireEvent.click(screen.getByRole('button', { name: 'Assign patient' }))
-  await screen.findByText('Patient assigned to counselor.')
+  await screen.findByText('Patient assigned to clinician.')
   expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/patient-assignments/MRN-SHARED/counselor?patient_record_id=31&source_mode=manual_upload' && init?.method === 'PUT')).toBe(true)
   expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/facilities/') && init?.method === 'PUT')).toBe(false)
 })

@@ -40,7 +40,7 @@ export function RosterUpdateCard({ token, onCompleted, onNavigate }: Props) {
   }
   return <section className='panel roster-update-card' aria-label='Update patients and treatment plans'>
     <h2>Bring records up to date</h2>
-    <p>First update the patient roster, then pull and evaluate treatment plans. You can continue using the app during the update.</p>
+    <p>First update the patient roster, then pull and evaluate treatment plans. Verified clinician mappings returned by Alleva are linked to the patient and their treatment plans automatically; local clinician assignments are retained. You can continue using the app during the update.</p>
     <div className='button-row'>
       <button type='button' disabled={action.isActive || running || blockers.length > 0 || !!loadError} onClick={() => void action.run()}>
         {running ? 'Updating records…' : 'Update patients and treatment plans'}

@@ -82,6 +82,7 @@ export type SourceDocument = {
 }
 
 export type TreatmentPlanAggregate = PlanIdentity & {
+  primaryClinicianName?: string
   readonly patientId: string
   readonly patientDisplayLabel: string
   readonly patientFullName: string
@@ -91,6 +92,11 @@ export type TreatmentPlanAggregate = PlanIdentity & {
   readonly currentLevelOfCare: string
   readonly admissionDate: string
   readonly dueDate: string
+  readonly computedDeadlineStatus?: string
+  readonly deadlineExplanation?: string
+  readonly trackingDueDate?: string
+  readonly deadlineStatus?: string
+  readonly reviewedAtUtc?: string
   readonly sourceDueDate: string
   readonly locChangeDueDate: string
   readonly checklistVersion: string

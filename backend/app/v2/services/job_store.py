@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -87,3 +88,17 @@ def sync_failure_message(job_id: str) -> str | None:
     if error_class in {"ReadTimeout", "ConnectTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException"}:
         return "Treatment-plan sync timed out waiting for Alleva. You can resume the sync to try again."
     return None
+
+
+def clinician_pull_message(job_id: str) -> str | None:
+    from app.v2.models import AuditLog
+    from sqlalchemy import select
+    with SessionLocal() as db:
+        event = db.scalar(select(AuditLog).where(AuditLog.action == "alleva.clinicians.pull.completed", AuditLog.target_entity_id == job_id).order_by(AuditLog.id.desc()).limit(1))
+        if event is None:
+            return None
+        summary = json.loads(event.details_json)
+        return (f"Clinician pull: {summary.get('staff_returned', 0)} returned; "
+                f"{summary.get('staff_imported', 0)} saved; "
+                f"{summary.get('staff_unmapped_facility', 0)} without a mapped facility; "
+                f"{summary.get('assignments_linked', 0)} primary assignments linked.")

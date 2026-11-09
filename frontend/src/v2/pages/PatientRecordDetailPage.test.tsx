@@ -33,8 +33,8 @@ describe('Patient Record Detail selection', () => {
     const selector = screen.getByRole('combobox', { name: 'Treatment plans for MRN MRN-812' })
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Select a treatment plan',
-      'plan-813 · Alleva · record 31 · version 2 (#813) · 2026-07-09 17:45 UTC',
-      'plan-812 · Alleva · record 31 · version 1 (#812) · 2026-07-01 08:15 UTC',
+      'plan-813 · Alleva · record 31 · version 2 (#813) · 2026-07-09 13:45 EDT',
+      'plan-812 · Alleva · record 31 · version 1 (#812) · 2026-07-01 04:15 EDT',
     ])
     fireEvent.change(selector, { target: { value: '812' } })
     expect(onSelectTreatmentPlan).toHaveBeenCalledWith({

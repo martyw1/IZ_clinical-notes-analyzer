@@ -1,3 +1,4 @@
+import { formatUtcEventDateTime } from '../components/treatmentPlanFormatting'
 import { useEffect, useState } from 'react'
 import { getCorrectionQueue, submitCorrection } from '../api/correctionsClient'
 import { ApiRequestError } from '../api/json'
@@ -70,9 +71,9 @@ export function CorrectionsPage({ token, isSessionCurrent }: CorrectionsPageProp
   return (
     <section className='page-grid'>
       <div className='panel'>
-        <p className='eyebrow'>Counselor workflow</p>
+        <p className='eyebrow'>Clinician workflow</p>
         <h2>Corrections</h2>
-        <p className='muted'>Returns stay open until a counselor submits a resolution note for manager review.</p>
+        <p className='muted'>Returns stay open until a clinician submits a resolution note for manager review.</p>
       </div>
       <div className='panel'>
         <h2>Open Returns</h2>
@@ -82,7 +83,7 @@ export function CorrectionsPage({ token, isSessionCurrent }: CorrectionsPageProp
             return <li key={key} data-plan-version-id={item.planVersionId} data-patient-record-id={item.patientRecordId} data-source-mode={item.sourceMode}>
               <strong>MRN {item.patientId}</strong> <span>on {item.criterionTitle}</span>
               <p>{sourceLabel(item.sourceMode)} · record {item.patientRecordId} · saved version #{item.planVersionId} · plan {item.treatmentPlanId}</p>
-              <span> Returned by {item.returnedByUsername} at {item.returnedAt}</span>
+              <span> Returned by {item.returnedByUsername} at {formatUtcEventDateTime(item.returnedAt)}</span>
               <p>Manager note: {item.returnComment}</p>
               <label>
                 Resolution note
@@ -91,7 +92,7 @@ export function CorrectionsPage({ token, isSessionCurrent }: CorrectionsPageProp
               <button type='button' onClick={() => void submit(item)} disabled={Boolean(savingKey)}>Submit correction</button>
             </li>
           })}
-        </ul> : <p className='muted'>No correction returns are assigned to the local counselor queue.</p>}
+        </ul> : <p className='muted'>No correction returns are assigned to the local clinician queue.</p>}
         {message && <p role={message.startsWith('Correction submitted') ? 'status' : 'alert'}>{message}</p>}
       </div>
     </section>

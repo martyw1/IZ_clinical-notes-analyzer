@@ -58,7 +58,7 @@ test('dashboard recovers after failed initial load and failed refresh @edge', as
   await capture(page, 'ui-dashboard-initial-error.png')
   failRequest = false
   await page.getByRole('button', { name: 'Refresh dashboard', exact: true }).click()
-  await expect(page.locator('.metric-tile')).toHaveCount(9)
+  await expect(page.locator('.metric-tile dt')).toHaveText(['Active clients', 'Overdue plans', 'Due soon plans'])
   await expect(page.getByRole('alert')).toHaveCount(0)
   const previousCounts = await page.locator('.metric-tile dd').allTextContents()
   failRequest = true
@@ -71,7 +71,7 @@ test('dashboard recovers after failed initial load and failed refresh @edge', as
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Refresh dashboard', exact: true })).toBeEnabled()
   await page.getByText('How these counts are calculated', { exact: true }).click()
-  await expect(page.getByText(/not a partition/)).toBeVisible()
+  await expect(page.getByText(/today through 10 calendar days/)).toBeVisible()
   await capture(page, 'ui-dashboard-recovered.png')
   writeEvidence('ui-dashboard-recovery.json', { simulated503: true, actualBackendRecovery: true, initialRetry: true, refreshRetry: true, previousCountsRetained: true })
 })

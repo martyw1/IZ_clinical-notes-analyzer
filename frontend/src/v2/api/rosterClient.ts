@@ -8,6 +8,13 @@ export function sourceFilterQuery(sourceMode?: SourceMode): string {
   return sourceMode ? `?source_mode=${sourceMode}` : ''
 }
 
+function rosterFilterQuery(sourceMode?: SourceMode, clinicianId?: number): string {
+  const params = new URLSearchParams()
+  if (sourceMode) params.set('source_mode', sourceMode)
+  if (clinicianId !== undefined) params.set('primary_clinician_id', String(clinicianId))
+  return params.size ? `?${params}` : ''
+}
+
 function mapPatientPlan(record: JsonRecord): PatientRosterTreatmentPlan {
   return {
     ...readPlanIdentity(record),
@@ -18,14 +25,21 @@ function mapPatientPlan(record: JsonRecord): PatientRosterTreatmentPlan {
   }
 }
 
-export async function getPatientRoster(token: string, sourceMode?: SourceMode): Promise<PatientRosterData> {
-  const payload = await readRecordPayload(await request(`/api/v2/patient-roster${sourceFilterQuery(sourceMode)}`, { token }))
+export async function getPatientRoster(token: string, sourceMode?: SourceMode, clinicianId?: number): Promise<PatientRosterData> {
+  const payload = await readRecordPayload(await request(`/api/v2/patient-roster${rosterFilterQuery(sourceMode, clinicianId)}`, { token }))
   return {
+    counselors: readRecordList(payload, 'counselors').map((entry) => ({
+      id: readNumber(entry, 'id'),
+      name: readString(entry, 'name'),
+    })),
     items: readRecordList(payload, 'items').map((item) => ({
       patientRecordId: readPatientRecordId(item),
       mrn: readString(item, 'mrn'),
       fullName: readString(item, 'full_name'),
+      primaryCounselorId: readNumber(item, 'primary_counselor_id') || undefined,
+      primaryCounselorName: readString(item, 'primary_counselor_name'),
       sourceMode: readSourceMode(item),
+      trackingEligible: readBoolean(item, 'tracking_eligible'),
       lifecycleState: readString(item, 'lifecycle_state', 'unknown'),
       currentLevelOfCare: readString(item, 'current_level_of_care', 'Unknown'),
       treatmentPlans: readRecordList(item, 'treatment_plans').map(mapPatientPlan),
@@ -56,18 +70,32 @@ export async function getPatientRecordDetail(token: string, selection: PatientSe
   return detail
 }
 
-export async function getTreatmentPlanRoster(token: string, sourceMode?: SourceMode): Promise<TreatmentPlanRosterData> {
-  const payload = await readRecordPayload(await request(`/api/v2/treatment-plan-roster${sourceFilterQuery(sourceMode)}`, { token }))
+export async function getTreatmentPlanRoster(token: string, sourceMode?: SourceMode, clinicianId?: number): Promise<TreatmentPlanRosterData> {
+  const payload = await readRecordPayload(await request(`/api/v2/treatment-plan-roster${rosterFilterQuery(sourceMode, clinicianId)}`, { token }))
   return {
     items: readRecordList(payload, 'items').map((item) => ({
       ...mapPatientPlan(item),
       mrn: readString(item, 'mrn'),
       patientKey: readString(item, 'patient_key'),
       linkedToMrn: readBoolean(item, 'linked_to_mrn'),
+      nextDueDate: readString(item, 'next_due_date'),
+      deadlineStatus: readString(item, 'deadline_status'),
+      daysOverdue: readNumber(item, 'days_overdue'),
+      reviewedAtUtc: readString(item, 'reviewed_at_utc'),
       fullName: readString(item, 'full_name'),
+      primaryCounselorId: readNumber(item, 'primary_counselor_id') || undefined,
+      primaryCounselorName: readString(item, 'primary_counselor_name'),
       previousTreatmentPlanId: readString(item, 'previous_treatment_plan_id'),
       initialTreatmentPlanId: readString(item, 'initial_treatment_plan_id'),
       initialTreatmentPlanDate: readString(item, 'initial_treatment_plan_date', 'Unknown'),
     })),
   }
+}
+
+
+export async function getClinicianDirectory(token: string): Promise<{ items: readonly { id: number; name: string; sourceRole: string; facilityStatus: string }[]; connected: boolean; lastImport: { at: string; state: string; httpStatus: number; returned: number; imported: number; unmapped: number; linked: number; multipleNames: number } | null }> {
+  const payload = await readRecordPayload(await request('/api/v2/clinicians', { token }))
+  const last = readRecord(payload, 'last_import')
+  const summary = readRecord(last, 'summary')
+  return { lastImport: readString(last, 'at') ? { at: readString(last, 'at'), state: readString(last, 'state'), httpStatus: readNumber(summary, 'http_status'), returned: readNumber(summary, 'staff_returned'), imported: readNumber(summary, 'staff_imported'), unmapped: readNumber(summary, 'staff_unmapped_facility'), linked: readNumber(summary, 'assignments_linked'), multipleNames: readNumber(summary, 'clients_with_multiple_clinician_names') } : null, items: readRecordList(payload, 'items').map((entry) => ({ id: readNumber(entry, 'id'), name: readString(entry, 'name'), sourceRole: readString(entry, 'source_role'), facilityStatus: readString(entry, 'facility_status') })), connected: readBoolean(payload, 'master_directory_connected') }
 }

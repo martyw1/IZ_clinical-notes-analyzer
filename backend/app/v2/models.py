@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -215,3 +215,60 @@ class WorkflowProfileVersion(Base):
     created_by_user_id: Mapped[str] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OverduePlanAcknowledgement(Base):
+    __tablename__ = "overdue_plan_acknowledgements"
+
+    plan_version_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    reviewer_user_id: Mapped[int] = mapped_column(Integer)
+    reviewed_at_utc: Mapped[str] = mapped_column(String(40))
+
+
+class ImportedCounselor(Base):
+    __tablename__ = "imported_counselors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_scope: Mapped[str] = mapped_column(String(256))
+    staff_id: Mapped[str] = mapped_column(String(256))
+    display_name: Mapped[str] = mapped_column(String(256))
+    __table_args__ = (UniqueConstraint("source_scope", "staff_id"),)
+
+
+class ImportedPrimaryCounselor(Base):
+    __tablename__ = "imported_primary_counselors"
+
+    patient_record_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    counselor_id: Mapped[int | None] = mapped_column(ForeignKey("imported_counselors.id"))
+    source_updated_at: Mapped[str] = mapped_column(String(40))
+
+
+class ImportedCounselorObservation(Base):
+    __tablename__ = "imported_counselor_observations"
+
+    patient_record_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    counselor_id: Mapped[int] = mapped_column(ForeignKey("imported_counselors.id"), primary_key=True)
+
+
+class ImportedClinicianFacility(Base):
+    __tablename__ = "imported_clinician_facilities"
+    counselor_id: Mapped[int] = mapped_column(ForeignKey("imported_counselors.id"), primary_key=True)
+    facility_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_role: Mapped[str] = mapped_column(String(256), default="")
+
+
+class ImportedClinicianDirectoryRecord(Base):
+    __tablename__ = "imported_clinician_directory_records"
+    counselor_id: Mapped[int] = mapped_column(ForeignKey("imported_counselors.id"), primary_key=True)
+    source_role: Mapped[str] = mapped_column(String(256), default="")
+    facility_status: Mapped[str] = mapped_column(String(40), default="unmapped")
+
+
+class LocalClinicianAssignment(Base):
+    __tablename__ = "local_clinician_assignments"
+    patient_record_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    counselor_id: Mapped[int | None] = mapped_column(ForeignKey("imported_counselors.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    assigned_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    assigned_at_utc: Mapped[str] = mapped_column(String(40))

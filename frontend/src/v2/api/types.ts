@@ -47,6 +47,7 @@ export type SourceCard = {
 export type DashboardData = {
   readonly refreshedAt: string
   readonly sourceCards: readonly SourceCard[]
+  readonly activeClients?: number
   readonly metrics: Record<string, number>
   readonly blockers: readonly string[]
 }
@@ -82,6 +83,9 @@ export type PatientRosterTreatmentPlan = PlanIdentity & {
 }
 
 export type PatientRosterItem = PatientIdentity & {
+  readonly primaryCounselorId?: number
+  readonly primaryCounselorName?: string
+  readonly trackingEligible?: boolean
   readonly mrn: string
   readonly fullName: string
   readonly lifecycleState: string
@@ -93,10 +97,17 @@ export type PatientRosterItem = PatientIdentity & {
 }
 
 export type PatientRosterData = {
+  readonly counselors?: readonly { id: number; name: string }[]
   readonly items: readonly PatientRosterItem[]
 }
 
 export type TreatmentPlanRosterItem = PatientRosterTreatmentPlan & {
+  readonly primaryCounselorId?: number
+  readonly primaryCounselorName?: string
+  readonly nextDueDate?: string
+  readonly deadlineStatus?: string
+  readonly daysOverdue?: number
+  readonly reviewedAtUtc?: string
   readonly mrn: string
   readonly patientKey: string
   readonly linkedToMrn: boolean

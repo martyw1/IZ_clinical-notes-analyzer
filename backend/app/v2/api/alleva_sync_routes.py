@@ -252,3 +252,39 @@ def _record_blocked_sync(db: DbSession, actor: AdminUser, blockers: tuple[str, .
         outcome_status="blocked",
         details={"blocker_count": len(blockers)},
     )
+
+
+@router.post("/api/v2/clinicians/pull", response_model=ApiHarnessJob, status_code=202)
+def pull_clinicians(actor: AdminUser, db: DbSession) -> ApiHarnessJob:
+    profile = db.execute(select(AppSetting)).scalar_one()
+    blockers = _configuration_blockers(profile)
+    if blockers:
+        record_audit_event(db, action="alleva.clinicians.pull.blocked", actor=actor,
+            target_entity_type="integration_sync", details={"blocker_count": len(blockers)}, outcome_status="blocked")
+        raise HTTPException(status_code=409, detail="Clinician pull is blocked by the saved Alleva authorization settings.")
+    try:
+        contract, _ = ensure_builtin_contract(db, profile, actor.id)
+        if _sync_blockers(profile, contract):
+            raise ValueError("Mapping is not approved")
+        return job_service.create_clinician_sync_job(actor.id, actor.role, contract)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Clinician pull is blocked or another import is running.") from exc
+
+
+@router.get("/api/v2/clinicians/pull/latest", response_model=ApiHarnessJob)
+def latest_clinician_pull(_: AdminUser) -> ApiHarnessJob:
+    job = next((job for job in job_service.list_jobs() if job.job_type == "approved_clinician_sync"), None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No clinician pull is available.")
+    return job
+
+
+@router.get("/api/v2/clinicians/pull/jobs/{job_id}", response_model=ApiHarnessJob)
+def clinician_pull_job(job_id: str, _: AdminUser) -> ApiHarnessJob:
+    try:
+        job = job_service.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Clinician pull not found.") from exc
+    if job.job_type != "approved_clinician_sync":
+        raise HTTPException(status_code=404, detail="Clinician pull not found.")
+    return job

@@ -46,6 +46,13 @@ class TreatmentPlanListOut(PlanModel):
 
 
 class TreatmentPlanDetailOut(TreatmentPlanAggregate):
+    primary_counselor_id: int | None = None
+    primary_counselor_name: str = ""
+    computed_deadline_status: str = ""
+    deadline_explanation: str = ""
+    tracking_due_date: str = ""
+    deadline_status: str = ""
+    reviewed_at_utc: str = ""
     plan_version_id: int = Field(gt=0)
     patient_record_id: int = Field(gt=0)
     treatment_plan_id: str
@@ -64,6 +71,9 @@ class PatientRosterTreatmentPlanOut(PlanModel):
 
 
 class PatientRosterItemOut(PlanModel):
+    primary_counselor_id: int | None = None
+    primary_counselor_name: str = ""
+    tracking_eligible: bool = False
     patient_record_id: int = Field(gt=0)
     mrn: str
     full_name: str
@@ -76,11 +86,19 @@ class PatientRosterItemOut(PlanModel):
     reconciled_at: str
 
 
+class CounselorDirectoryItemOut(PlanModel):
+    id: int
+    name: str
+
+
 class PatientRosterOut(PlanModel):
+    counselors: tuple[CounselorDirectoryItemOut, ...] = ()
     items: tuple[PatientRosterItemOut, ...]
 
 
 class TreatmentPlanRosterItemOut(PlanModel):
+    primary_counselor_id: int | None = None
+    primary_counselor_name: str = ""
     patient_record_id: int = Field(gt=0)
     plan_version_id: int = Field(gt=0)
     source_mode: SourceMode
@@ -96,6 +114,10 @@ class TreatmentPlanRosterItemOut(PlanModel):
     previous_treatment_plan_id: str
     initial_treatment_plan_id: str
     initial_treatment_plan_date: str
+    next_due_date: str
+    deadline_status: str
+    days_overdue: int | None
+    reviewed_at_utc: str
 
 
 class TreatmentPlanRosterOut(PlanModel):

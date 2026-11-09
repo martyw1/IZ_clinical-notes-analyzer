@@ -97,6 +97,7 @@ class DashboardSourceCardOut(V2Model):
 
 
 class DashboardOut(V2Model):
+    active_clients: int = 0
     refreshed_at: str
     source_cards: tuple[DashboardSourceCardOut, ...]
     metrics: dict[str, int]
@@ -124,6 +125,7 @@ class AppSettingsUpdate(V2Model):
     organization_name: str | None = None
     facility_timezone: str | None = None
     treatment_plan_master_due_days: int | None = Field(default=None, ge=1, le=365)
+    treatment_plan_gop_review_interval_days: int | None = Field(default=None, ge=1, le=365)
     treatment_plan_php_review_interval_days: int | None = Field(default=None, ge=1, le=365)
     treatment_plan_iop_op_review_interval_days: int | None = Field(default=None, ge=1, le=365)
     treatment_plan_loc_change_window_days: int | None = Field(default=None, ge=0, le=365)
@@ -134,6 +136,7 @@ class AppSettingsOut(V2Model):
     organization_name: str
     facility_timezone: str
     treatment_plan_master_due_days: int
+    treatment_plan_gop_review_interval_days: int
     treatment_plan_php_review_interval_days: int
     treatment_plan_iop_op_review_interval_days: int
     treatment_plan_loc_change_window_days: int | None

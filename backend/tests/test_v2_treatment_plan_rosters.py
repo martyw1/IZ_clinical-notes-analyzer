@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 
 from test_v2_evaluation_persistence import PRIVACY_CANARY, _aggregate
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
@@ -81,6 +82,9 @@ def test_patient_roster_lists_every_plan_for_each_mrn_in_latest_updated_order(tm
             "full_name": "",
             "source_mode": "manual_upload",
             "lifecycle_state": "active",
+            "primary_counselor_id": None,
+            "primary_counselor_name": "",
+            "tracking_eligible": True,
             "current_level_of_care": base.current_level_of_care,
             "treatment_plans": [
                 {"treatment_plan_id": "plan-newer", "last_updated": "2026-07-09T17:45:00+00:00", **identities["plan-newer"]},
@@ -127,12 +131,19 @@ def test_treatment_plan_roster_returns_alleva_lineage_by_mrn(tmp_path, monkeypat
             saved = save_treatment_plan_aggregate(database, TreatmentPlanAggregate.model_validate(payload), actor)
             identities[plan_id] = _plan_metadata(saved.plan_version_id, saved.patient_record_id, "alleva_rest_api", len(identities) + 1)
 
+    monkeypatch.setattr("app.v2.api.roster_routes.facility_local_date", lambda *_: date(2026, 4, 1))
     response = client.get("/api/v2/treatment-plan-roster", headers=headers)
 
     assert response.status_code == 200
     assert response.json()["items"] == [
         {
             "treatment_plan_id": "alleva-followup",
+            "primary_counselor_id": None,
+            "primary_counselor_name": "",
+            "next_due_date": "2026-03-10",
+            "deadline_status": "Overdue",
+            "days_overdue": 22,
+            "reviewed_at_utc": "",
             **identities["alleva-followup"],
             "mrn": "MRN-843",
             "patient_key": "MRN-843",
@@ -145,6 +156,12 @@ def test_treatment_plan_roster_returns_alleva_lineage_by_mrn(tmp_path, monkeypat
         },
         {
             "treatment_plan_id": "alleva-initial",
+            "primary_counselor_id": None,
+            "primary_counselor_name": "",
+            "next_due_date": "2026-02-03",
+            "deadline_status": "Outside current tracking",
+            "days_overdue": None,
+            "reviewed_at_utc": "",
             **identities["alleva-initial"],
             "mrn": "MRN-843",
             "patient_key": "MRN-843",

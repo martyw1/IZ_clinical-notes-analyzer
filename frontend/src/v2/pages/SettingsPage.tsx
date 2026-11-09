@@ -200,6 +200,7 @@ export function SettingsPage({ token }: SettingsPageProps) {
           <p>These values come from the versioned rule package. Changing organization settings does not change treatment-plan deadlines.</p>
           <dl className='plan-fact-grid'>
             <div><dt>Master plan after admission</dt><dd>{settings.treatmentPlanMasterDueDays} calendar days</dd></div>
+            <div><dt>GOP review interval</dt><dd>{settings.treatmentPlanGopReviewIntervalDays ?? 'Not available'} calendar days</dd></div>
             <div><dt>PHP review interval</dt><dd>{settings.treatmentPlanPhpReviewIntervalDays} calendar days</dd></div>
             <div><dt>IOP and outpatient review interval</dt><dd>{settings.treatmentPlanIopOpReviewIntervalDays} calendar days</dd></div>
             <div><dt>LOC-change candidate</dt><dd>{settings.treatmentPlanLocChangeWindowDays === null ? 'Unavailable · unvalidated' : `${settings.treatmentPlanLocChangeWindowDays} calendar days · unvalidated`}</dd></div>

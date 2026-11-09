@@ -2,6 +2,7 @@ export type AppSettings = {
   readonly organizationName: string
   readonly facilityTimezone: string
   readonly treatmentPlanMasterDueDays: number
+  readonly treatmentPlanGopReviewIntervalDays?: number
   readonly treatmentPlanPhpReviewIntervalDays: number
   readonly treatmentPlanIopOpReviewIntervalDays: number
   readonly treatmentPlanLocChangeWindowDays: number | null

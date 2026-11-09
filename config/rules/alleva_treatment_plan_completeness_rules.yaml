@@ -1,7 +1,7 @@
-config_version: "1.2.1"
+config_version: "1.2.3"
 config_status: "version_1_ready_with_42_step_checklist_date_clock"
 organization: "R3 Recovery Services"
-last_updated: "2026-10-16"
+last_updated: "2026-11-06"
 source_of_truth: "config/checklists/treatment-plan-v1.json"
 checklist_version: "1.2.1"
 review_source_modes:
@@ -42,9 +42,13 @@ workflow:
     exclude_client_statuses: ["discharged", "inactive"]
 
 levels_of_care:
+  GOP:
+    display_name: "GOP"
+    aliases: ["GOP"]
+    treatment_plan_update_interval_days: 30
   PHP:
     display_name: "Partial Hospitalization Program"
-    aliases: ["PHP", "Partial Hospitalization", "Partial Hospitalization Program"]
+    aliases: ["PHP", "PHP-5", "PHP 5", "PHP5", "Partial Hospitalization", "Partial Hospitalization Program"]
     treatment_plan_update_interval_days: 30
     required_individual_sessions_per_week: 2
     required_group_sessions_per_week: 5
@@ -128,7 +132,8 @@ rules:
       type: "lookup_required"
       field: "current_level_of_care"
       lookup_table: "levels_of_care"
-      match_against: "aliases"
+      match_against: "aliases_and_php_iop_substrings"
+      conflicting_families: "needs_review"
     pass_message: "Level of care {current_level_of_care} mapped to {mapped_level_of_care}."
     fail_message: "Unable to evaluate because level of care {current_level_of_care} is not configured."
     output_status_on_fail: "unable_to_evaluate"
@@ -148,15 +153,15 @@ rules:
 
   - id: "TP-021"
     workflow_id: "treatment_plan_tracking"
-    name: "Treatment plan must have a last updated date"
+    name: "Treatment plan must have a last updated or first created date"
     enabled: true
     severity: "critical"
     category: "treatment_plan_date"
     logic:
       type: "at_least_one_field_required"
-      fields: ["treatment_plan.last_updated_date"]
+      fields: ["treatment_plan.last_updated_date", "treatment_plan.created_date"]
     pass_message: "Treatment plan date found: {treatment_plan_effective_date}."
-    fail_message: "Treatment plan exists but no completed/updated date was found."
+    fail_message: "Treatment plan exists but neither last updated nor first created date was found."
     output_status_on_fail: "unable_to_evaluate"
 
   - id: "TP-030"
@@ -168,6 +173,7 @@ rules:
     logic:
       type: "date_add"
       source_date_field: "treatment_plan.last_updated_date"
+      fallback_date_field: "treatment_plan.created_date"
       interval_days_from: "levels_of_care.{mapped_level_of_care}.treatment_plan_update_interval_days"
       output_field: "treatment_plan.calculated_due_date"
     pass_message: "Treatment plan due date calculated as {treatment_plan.calculated_due_date}."

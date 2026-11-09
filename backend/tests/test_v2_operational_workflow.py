@@ -9,7 +9,7 @@ from pypdf import PdfWriter
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from test_v2_evaluation_persistence import _aggregate
+from test_v2_evaluation_persistence import _aggregate, _database_path
 from test_v2_manual_patient_correction import _auth_headers, _fresh_client
 
 
@@ -64,6 +64,55 @@ def test_dashboard_counts_latest_plan_once_per_patient_record(tmp_path, monkeypa
 
     assert dashboard.status_code == 200
     assert dashboard.json()["metrics"] == {"overdue_plans": 0, "due_soon_plans": 1}
+    assert dashboard.json()["active_clients"] == 1
+
+    roster = client.get("/api/v2/treatment-plan-roster", headers=headers)
+    assert roster.status_code == 200
+    rows = roster.json()["items"]
+    assert len(rows) == 2
+    due_soon = [row for row in rows if row["deadline_status"] == "Due Soon"]
+    assert len(due_soon) == dashboard.json()["metrics"]["due_soon_plans"]
+    selected = due_soon[0]
+    detail = client.get(
+        f"/api/v2/treatment-plans/975/{selected['treatment_plan_id']}",
+        headers=headers,
+        params={key: selected[key] for key in ("plan_version_id", "patient_record_id", "source_mode")},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["plan_version_id"] == selected["plan_version_id"]
+
+    with create_engine(f"sqlite:///{_database_path(tmp_path)}").begin() as connection:
+        connection.execute(text("UPDATE patients SET lifecycle_state='discharged' WHERE id=:id"), {
+            "id": selected["patient_record_id"],
+        })
+    discharged_dashboard = client.get("/api/v2/dashboard", headers=headers).json()
+    assert discharged_dashboard["active_clients"] == 0
+    assert discharged_dashboard["metrics"] == {"overdue_plans": 0, "due_soon_plans": 0}
+    retained = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
+    assert {row["plan_version_id"] for row in retained} == {row["plan_version_id"] for row in rows}
+    assert all(row["deadline_status"] == "Outside current tracking" for row in retained)
+
+    from app.v2.db import SessionLocal
+    from app.v2.services.patient_snapshot_store import PatientSourceSnapshotInput, persist_patient_source_snapshots
+
+    with SessionLocal() as db:
+        db.execute(text("UPDATE patients SET lifecycle_state='active' WHERE id=:id"), {"id": selected["patient_record_id"]})
+        db.execute(text(
+            "INSERT INTO patients(facility_id,canonical_client_id,source_system,lifecycle_state,first_seen_at,last_seen_at) "
+            "SELECT facility_id,'SYNTHETIC-NO-PLAN',source_system,'active',first_seen_at,last_seen_at FROM patients WHERE id=:id"
+        ), {"id": selected["patient_record_id"]})
+        persist_patient_source_snapshots(db, (PatientSourceSnapshotInput(
+            mrn="975", source_patient_id="SYNTHETIC-975", source_system="manual_upload",
+            source_last_updated="2026-09-04T12:00:00Z", record={"currentLevelOfCare": "Case Management"},
+            patient_record_id=selected["patient_record_id"],
+        ),), "2026-09-04T12:00:00Z")
+        db.commit()
+    case_management_dashboard = client.get("/api/v2/dashboard", headers=headers).json()
+    assert case_management_dashboard["active_clients"] == 1
+    assert case_management_dashboard["metrics"] == {"overdue_plans": 0, "due_soon_plans": 0}
+    patients = client.get("/api/v2/patient-roster", headers=headers).json()["items"]
+    assert next(row for row in patients if row["mrn"] == "975")["current_level_of_care"] == "Case Management"
+    assert next(row for row in patients if row["mrn"] == "SYNTHETIC-NO-PLAN")["treatment_plans"] == []
 
 
 def test_manager_action_rolls_back_when_its_audit_event_cannot_be_written(tmp_path, monkeypatch) -> None:
@@ -177,3 +226,59 @@ def test_audit_event_writes_to_established_details_column(tmp_path) -> None:
     # Then: the event is stored through the established physical column.
     with engine.connect() as connection:
         assert connection.execute(text("SELECT details FROM audit_logs")).scalar_one() == "{}"
+
+
+def test_synthetic_primary_counselors_preserve_identity_and_unresolved_assignments(tmp_path, monkeypatch):
+    client = _fresh_client(tmp_path, monkeypatch)
+    from app.v2.db import SessionLocal
+    from app.v2.models import ImportedCounselor
+    from app.v2.services.imported_counselors import PrimaryCounselorEvidence, save_primary_counselor
+    from sqlalchemy import func, select
+
+    headers = _auth_headers(client)
+    for patient in ("SYNTHETIC-STAFF-A", "SYNTHETIC-STAFF-B"):
+        response = client.post("/api/v2/manual-uploads/treatment-plan-aggregate", headers=headers,
+                               json=_aggregate(patient).model_dump(mode="json"))
+        assert response.status_code == 201
+
+    def roster():
+        response = client.get("/api/v2/patient-roster", headers=headers)
+        assert response.status_code == 200
+        return {row["mrn"]: row for row in response.json()["items"]}
+
+    patient_a = roster()["SYNTHETIC-STAFF-A"]["patient_record_id"]
+    patient_b = roster()["SYNTHETIC-STAFF-B"]["patient_record_id"]
+    stamp = "2026-10-01T12:00:00Z"
+    first = PrimaryCounselorEvidence("synthetic:facility", "staff-a", "Synthetic Counselor")
+    second = PrimaryCounselorEvidence("synthetic:facility", "staff-b", "Synthetic Counselor")
+    with SessionLocal() as db:
+        save_primary_counselor(db, patient_a, first, stamp)
+        save_primary_counselor(db, patient_a, first, stamp)
+        save_primary_counselor(db, patient_b, second, stamp)
+        db.commit()
+        assert db.scalar(select(func.count()).select_from(ImportedCounselor)) == 2
+
+    rows = roster()
+    a, b = rows["SYNTHETIC-STAFF-A"], rows["SYNTHETIC-STAFF-B"]
+    assert a["primary_counselor_name"] == b["primary_counselor_name"] == "Synthetic Counselor"
+    assert a["primary_counselor_id"] != b["primary_counselor_id"]
+    assert a["tracking_eligible"] and b["tracking_eligible"]
+
+    with SessionLocal() as db:
+        save_primary_counselor(db, patient_a, PrimaryCounselorEvidence(first.source_scope, "", ""), "2026-10-02T12:00:00Z")
+        save_primary_counselor(db, patient_a, first, stamp)
+        db.commit()
+        assert db.scalar(select(func.count()).select_from(ImportedCounselor)) == 2
+    assert roster()["SYNTHETIC-STAFF-A"]["primary_counselor_id"] is None
+    directory = client.get("/api/v2/patient-roster", headers=headers).json()["counselors"]
+    assert {row["id"] for row in directory} == {a["primary_counselor_id"], b["primary_counselor_id"]}
+    # A lightweight directory must not evaluate every saved plan or bypass patient access.
+    from app.v2.api import roster_routes
+    monkeypatch.setattr(roster_routes, "list_patient_roster", lambda *args: (_ for _ in ()).throw(AssertionError("heavy roster called")))
+    response = client.get("/api/v2/clinicians", headers=headers)
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()["items"]} == {a["primary_counselor_id"], b["primary_counselor_id"]}
+    assert response.json()["master_directory_connected"] is False
+    assert client.get("/api/v2/clinicians").status_code == 401
+    monkeypatch.setattr(roster_routes, "accessible_patient_record_ids", lambda *args: frozenset())
+    assert client.get("/api/v2/clinicians", headers=headers).json()["items"] == []

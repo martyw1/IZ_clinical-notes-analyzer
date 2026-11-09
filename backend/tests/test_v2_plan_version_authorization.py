@@ -172,3 +172,29 @@ def test_counselor_assignment_cannot_authorize_same_mrn_other_source(runtime, mo
     denied = client.get("/api/v2/treatment-plans/IDENTITY-001", params=other, headers=counselor_headers)
     # Then: source collision does not carry the assignment across rows.
     assert denied.status_code == 403
+
+
+def test_overdue_acknowledgement_is_scoped_idempotent_and_version_specific(runtime):
+    from datetime import date, timedelta
+    from app.v2.db import SessionLocal
+    from app.v2.models import OverduePlanAcknowledgement
+    from sqlalchemy import select, func
+
+    older = _import(runtime, marker=(date.today() - timedelta(days=45)).isoformat())
+    _, viewer = _user(runtime, "viewer")
+    _, manager = _user(runtime, "office_manager")
+    client, admin = runtime
+    path = "/api/v2/treatment-plans/IDENTITY-001/plan-a"
+    assert client.post(f"{path}/overdue-review", params=older, headers=viewer).status_code == 403
+    saved = client.post(f"{path}/overdue-review", params=older, headers=manager)
+    assert saved.status_code == 200, saved.text
+    assert client.post(f"{path}/overdue-review", params=older, headers=admin).json() == saved.json()
+    assert client.get(path, params=older, headers=admin).json()["reviewed_at_utc"] == saved.json()["reviewed_at_utc"]
+    replay = _import(runtime, marker=(date.today() - timedelta(days=45)).isoformat())
+    assert replay == older
+    newer = _import(runtime, marker=(date.today() - timedelta(days=40)).isoformat())
+    assert newer != older
+    assert client.get(path, params=newer, headers=admin).json()["reviewed_at_utc"] == ""
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(OverduePlanAcknowledgement)) == 1
+        assert db.execute(text("SELECT COUNT(*) FROM audit_logs WHERE action='treatment_plan.overdue_acknowledged'")).scalar_one() == 1

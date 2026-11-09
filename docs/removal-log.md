@@ -132,3 +132,17 @@ S1 scope: move only generated repo `tmp`, `output`, `.tmp`, `.pytest_cache`, `.o
 Per-file SHA-256 manifest and verified relocation results reside with the USB archive. This records evidence paths only, never data contents. Machine-local sensitive artifacts are excluded from Git and the source ZIP.
 
 Additional S1 items: moved the unreferenced local credential-reference note to the timestamped IZ subfolder under D:/10 Credentials without displaying its contents. Its bytes were SHA-256 verified. Moved the unused ChatGPT installer and local debug journal to the USB archive's local-only folder; both hashes verified. Fresh release-safety evidence (26 files) and shortcut validation links are retained with the USB archive. The ignored .alleva.local.ps1 remains local because the diagnostic harness explicitly uses it; no vendor settings or client profile were changed. Source dependency directories remain available for development and checkout launch.
+
+## November 7, 2026 — local diagnostic export removal
+
+S0 scoped inventory verified the resolved diagnostic output directory was inside this working tree and that all 23 reviewed files were ignored, untracked, and had no individual references in tracked application code, configuration, or scripts. The diagnostic tool creates the directory for generated output. CSV and JSON schema markers and Excel sheet structure identified roster and treatment-plan exports. The historical S0 pass is recorded above. A fresh run of the historical verifier stopped at its clean-checkout requirement because the working tree contains in-progress changes.
+
+S1 sent 9 CSV files (26,761,815 bytes), 9 JSON files (32,251,653 bytes), and 5 Excel files (32,900,153 bytes) to the Windows Recycle Bin. All 23 reviewed paths were checked for absence after the operation. This was recoverable removal from the active export directory. Patient values and export filenames are omitted.
+
+A second scoped check identified one ignored, untracked workbook under docs with populated patient-name and admission-date columns, and no individual reference in tracked files. S1 used the same recoverable Windows deletion mode for this workbook (71,443 bytes) and verified that the original path was absent.
+
+A separate check of Windows temporary storage identified two identical diagnostic JSON copies in temporary Codex review directories (67,394,538 bytes total). The scoped preflight matched the reviewed byte lengths and file digests, checked directory boundaries, and found no individual references in tracked application code, configuration, or scripts. S1 used recoverable Windows deletion and verified both original paths were absent.
+
+The same temporary-storage check identified one treatment-plan workbook (1,080,215 bytes) with patient-field and diagnosis markers. The scoped preflight matched the reviewed digest, checked directory boundaries, and found no references in tracked files. S1 used recoverable Windows deletion and verified the original path was absent.
+
+The temporary-storage check also found three identical JSON-formatted text extracts with populated clinical fields and blank patient and client ID fields (1,179,933 bytes total). The scoped preflight matched the reviewed digest, checked directory boundaries, and found no references in tracked files. S1 used recoverable Windows deletion and verified all three original paths were absent.

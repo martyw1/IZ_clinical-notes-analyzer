@@ -16,10 +16,16 @@ async function openPlan(page) {
   await row.getByRole('button', { name: `Open treatment plan ${plan.plan_id} for MRN ${plan.patient_id}`, exact: true }).click()
   await expect(page.locator('.criterion-row')).toHaveCount(42)
 }
-function expectedUtc(wire) {
-  return new Date(wire.replace(' ', 'T') + (/(?:Z|[+-]\d{2}:\d{2})$/.test(wire) ? '' : 'Z'))
-    .toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+function expectedEastern(wire) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(wire)) return wire
+  const instant = new Date(wire.replace(' ', 'T') + (/(?:Z|[+-]\d{2}:\d{2})$/.test(wire) ? '' : 'Z'))
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
+  }).formatToParts(instant).map(({ type, value }) => [type, value]))
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`
 }
+
 async function tabAudit(page) {
   const targets = page.locator('button:visible:enabled, input:visible:enabled, textarea:visible:enabled, select:visible:enabled, a[href]:visible, summary:visible')
   const eligible = await targets.count()
@@ -74,7 +80,7 @@ test('populated Users cells retain readable labels at every width @happy @edge',
   }
 })
 
-test('real audit timestamps retain their UTC clock values @happy @edge', async ({ page }) => {
+test('real audit timestamps display Eastern time with original UTC attributes @happy @edge', async ({ page }) => {
   await login(page, 'admin')
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/audit/logs')
   await page.getByRole('button', { name: 'Forensic Logs', exact: true }).click()
@@ -83,8 +89,8 @@ test('real audit timestamps retain their UTC clock values @happy @edge', async (
   const displayed = await page.locator('.forensic-table time').first().innerText()
   const states = await surfaces(page, 'logs')
   writeEvidence('task-5-audit-utc.json', { realBackend: true, wire, offsetPresent: /(?:Z|[+-]\d{2}:\d{2})$/.test(wire),
-    displayed, expected: expectedUtc(wire), matches: displayed === expectedUtc(wire), timezone: 'America/New_York', states })
-  expect(displayed === expectedUtc(wire), 'Audit UTC value matches actual wire').toBe(true)
+    displayed, expected: expectedEastern(wire), matches: displayed === expectedEastern(wire), timezone: 'America/New_York', states })
+  expect(displayed === expectedEastern(wire), 'Audit Eastern display matches actual UTC wire').toBe(true)
 })
 
 test('Settings loads directly with reachable controls at every width @happy @edge', async ({ page }) => {
@@ -94,7 +100,7 @@ test('Settings loads directly with reachable controls at every width @happy @edg
   writeEvidence('task-5-settings.json', { realBackend: true, configurationMutations: 0, states: await surfaces(page, 'settings') })
 })
 
-test('real persisted manager history retains its UTC clock value @happy @edge', async ({ page }) => {
+test('real persisted manager history displays Eastern time @happy @edge', async ({ page }) => {
   const api = await apiFor()
   let wire
   try {
@@ -117,11 +123,11 @@ test('real persisted manager history retains its UTC clock value @happy @edge', 
   await openPlan(page)
   const history = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Persisted manager actions', exact: true }) })
   await expect(history.locator('.artifact-list li')).toHaveCount(1)
-  const displayed = (await history.locator('.artifact-list li').innerText()).match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/)?.[0] ?? ''
+  const displayed = (await history.locator('.artifact-list li').innerText()).match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} E[DS]T/)?.[0] ?? ''
   await capture(page, 'task-5-manager-utc.png')
-  writeEvidence('task-5-manager-utc.json', { realBackend: true, wire, displayed, expected: expectedUtc(wire),
-    matches: displayed === expectedUtc(wire), offsetPresent: /(?:Z|[+-]\d{2}:\d{2})$/.test(wire), planVersionId: plan.plan_version_id })
-  expect(displayed === expectedUtc(wire), 'Manager history UTC value matches freshly loaded wire').toBe(true)
+  writeEvidence('task-5-manager-utc.json', { realBackend: true, wire, displayed, expected: expectedEastern(wire),
+    matches: displayed === expectedEastern(wire), offsetPresent: /(?:Z|[+-]\d{2}:\d{2})$/.test(wire), planVersionId: plan.plan_version_id })
+  expect(displayed === expectedEastern(wire), 'Manager Eastern display matches freshly loaded UTC wire').toBe(true)
 })
 
 test('real detail exposes 42 criteria and only four safe search fields @happy @edge', async ({ page }) => {
@@ -161,7 +167,7 @@ test('real detail exposes 42 criteria and only four safe search fields @happy @e
   await expect(page.locator('.clinical-overview-grid').getByText('Not supplied', { exact: true }).first()).toBeVisible()
   const time = metadata.locator('time')
   const signatureWire = await time.getAttribute('datetime')
-  expect(await time.innerText()).toBe(new Date(signatureWire).toISOString().slice(0, 16).replace('T', ' ') + ' UTC')
+  expect(await time.innerText()).toBe(expectedEastern(signatureWire))
   writeEvidence('task-5-detail.json', { realBackend: true, criteriaClicked: fields.length, results,
     actualClinicalOverviewExcluded: true, selectionRestored: true, signatureSemanticFields: 4, signatureWire,
     states: await surfaces(page, 'detail') })

@@ -61,6 +61,7 @@ function mapSettings(record: JsonRecord): AppSettings {
     organizationName: readString(record, 'organization_name'),
     facilityTimezone: readString(record, 'facility_timezone'),
     treatmentPlanMasterDueDays: readNumber(record, 'treatment_plan_master_due_days'),
+    treatmentPlanGopReviewIntervalDays: readNumber(record, 'treatment_plan_gop_review_interval_days'),
     treatmentPlanPhpReviewIntervalDays: readNumber(record, 'treatment_plan_php_review_interval_days'),
     treatmentPlanIopOpReviewIntervalDays: readNumber(record, 'treatment_plan_iop_op_review_interval_days'),
     treatmentPlanLocChangeWindowDays: typeof locWindow === 'number' ? locWindow : null,

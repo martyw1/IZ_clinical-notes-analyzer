@@ -42,19 +42,23 @@ test('keeps the last dashboard visible and recoverable when refresh fails', asyn
 test('associates every value with an explicit population unit and refreshes', async () => {
   // Given
   const fetch = vi.fn(async () => new Response(JSON.stringify({ refreshed_at: '2026-01-02T12:00:00Z',
-    metrics, source_cards: [], blockers: ['LOC-change update window is unvalidated and configurable.'] }),
+    metrics, active_clients: 5, source_cards: [], blockers: ['LOC-change update window is unvalidated and configurable.'] }),
   { headers: { 'content-type': 'application/json' } }))
   vi.stubGlobal('fetch', fetch)
   // When
-  render(<DashboardPage token='synthetic-test-token' />)
+  const navigate = vi.fn()
+  render(<DashboardPage token='synthetic-test-token' onNavigate={navigate} />)
   // Then
-  const expected = [['Overdue plans', 1], ['Due soon plans', 3]] as const
+  const expected = [['Active clients', 5], ['Overdue plans', 1], ['Due soon plans', 3]] as const
   for (const [label, value] of expected) {
     const term = await screen.findByText(label, { selector: 'dt' })
     expect(term.nextElementSibling).toHaveTextContent(String(value))
   }
+  fireEvent.click(screen.getByRole('button', { name: 'Overdue plans' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Due soon plans' }))
+  expect(navigate.mock.calls).toEqual([['Overdue plans'], ['Due soon plans']])
   expect(screen.getByText(/one most recent treatment plan/i)).toBeInTheDocument()
-  expect(screen.getByText(/10 business days/i)).toBeInTheDocument()
+  expect(screen.getByText(/10 calendar days/i)).toBeInTheDocument()
   for (const removed of ['Workload', 'Review and data quality', 'Urgent plans', 'Patient records with plans', 'Open correction items']) {
     expect(screen.queryByText(removed)).not.toBeInTheDocument()
   }

@@ -53,7 +53,7 @@ def test_authorized_refresh_appends_distinct_run_and_preserves_import_provenance
     payload = detail.json()
     assert len(payload["criteria_results"]) == 42
     assert payload["checklist_version"] == "1.2.1"
-    assert payload["rules_version"] == "1.2.1"
+    assert payload["rules_version"] == "1.2.3"
     assert payload["evaluation_date"] == date.today().isoformat()
     assert all(item["source_json_paths"] and item["finding_message"] for item in payload["criteria_results"])
     assert refreshed.status_code == 200

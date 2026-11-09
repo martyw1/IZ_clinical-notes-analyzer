@@ -128,6 +128,13 @@ def main() -> None:
             "VALUES(:patient,:counselor,:admin,:now,1)"
         ), {"patient": plans["primaryV1"].patient_record_id, "counselor": users["counselor"].id,
             "admin": admin.id, "now": utc_now().isoformat()})
+        if os.environ.get("IZ_OM_SCENARIO") in {"tracker", "all"}:
+            from app.v2.services.imported_counselors import PrimaryCounselorEvidence, save_primary_counselor
+
+            for key, staff in (("primaryV2", "staff-a"), ("patientTwo", "staff-b")):
+                save_primary_counselor(db, plans[key].patient_record_id, PrimaryCounselorEvidence(
+                    "synthetic:office-manager", staff, "Synthetic Tracker Counselor",
+                ), "2026-10-01T12:00:00Z")
         db.commit()
         files = SeedFiles(aggregate=str(runtime_dir / "synthetic-aggregate.json"), binder=str(runtime_dir / "synthetic-binder.txt"))
         Path(files.aggregate).write_text(aggregate.model_dump_json(), encoding="utf-8")

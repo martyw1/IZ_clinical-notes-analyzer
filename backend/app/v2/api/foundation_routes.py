@@ -31,6 +31,7 @@ CLINICAL_RULE_SETTING_FIELDS = frozenset(
     {
         "treatment_plan_master_due_days",
         "treatment_plan_php_review_interval_days",
+        "treatment_plan_gop_review_interval_days",
         "treatment_plan_iop_op_review_interval_days",
         "treatment_plan_loc_change_window_days",
         "treatment_plan_loc_change_window_validated",
@@ -109,6 +110,7 @@ def _settings_out(row: AppSetting) -> AppSettingsOut:
         organization_name=row.organization_name,
         facility_timezone=row.facility_timezone,
         treatment_plan_master_due_days=MASTER_PLAN_DUE_DAYS,
+        treatment_plan_gop_review_interval_days=rules.levels_of_care["GOP"].treatment_plan_update_interval_days,
         treatment_plan_php_review_interval_days=rules.levels_of_care["PHP"].treatment_plan_update_interval_days,
         treatment_plan_iop_op_review_interval_days=rules.levels_of_care["IOP"].treatment_plan_update_interval_days,
         treatment_plan_loc_change_window_days=rules.loc_change_blocker.default_preset_calendar_days,

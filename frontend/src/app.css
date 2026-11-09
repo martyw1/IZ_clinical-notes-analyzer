@@ -425,8 +425,8 @@ dd,
 }
 
 .status-badge--due-soon {
-  background: #fef3c7;
-  color: #7c5800;
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .status-badge--returned {
@@ -1414,4 +1414,25 @@ a:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .job-meter--indeterminate span { animation: none; }
   button, .job-meter span { transition: none; }
+}
+
+.deadline-indicator .status-badge::before {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-inline-end: 0.4em;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.deadline-indicator time {
+  font-weight: 700;
+}
+
+.clinician-group-heading th {
+  background: #e6f1ec;
+  text-align: left;
+  padding: 0.85rem;
+  font-weight: 700;
 }

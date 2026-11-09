@@ -28,7 +28,7 @@ export function JobStatusPanel({ job, isActive, message, error, onRetry }: JobSt
           </div>
           {!!job.phaseTotal && <p role='status'>{job.phaseCompleted ?? 0} of {job.phaseTotal} processed in this phase.</p>}
           {job.stageNumber === 1 && job.status === 'completed_with_warnings' && <p role='status'>Patient roster results are incomplete. Treatment-plan update was not started. Review warnings and retry.</p>}
-          {job.message && !message && !failure && <p>{job.message}</p>}
+          {job.message && !failure && <p>{job.message}</p>}
           <dl className='compact-job-status__counts'>
             <div><dt>Seen</dt><dd>{job.recordsSeen}</dd></div>
             <div><dt>Updated</dt><dd>{job.recordsWritten}</dd></div>

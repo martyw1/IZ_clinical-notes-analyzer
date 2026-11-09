@@ -44,3 +44,15 @@ export async function getActivePatientRosterJob(token: string, jobId: string): P
 export async function getLatestActivePatientRosterJob(token: string): Promise<ApiHarnessJob> {
   return mapJob(await readRecordPayload(await request('/api/v2/patient-roster/jobs/latest', { token })))
 }
+
+
+export async function pullClinicians(token: string): Promise<ApiHarnessJob> {
+  return mapJob(await readRecordPayload(await request('/api/v2/clinicians/pull', { token, method: 'POST' })))
+}
+export async function getClinicianPull(token: string, jobId: string): Promise<ApiHarnessJob> {
+  return mapJob(await readRecordPayload(await request(`/api/v2/clinicians/pull/jobs/${encodeURIComponent(jobId)}`, { token })))
+}
+export async function getLatestClinicianPull(token: string): Promise<ApiHarnessJob | null> {
+  try { return mapJob(await readRecordPayload(await request('/api/v2/clinicians/pull/latest', { token }))) }
+  catch (error) { if (error instanceof ApiRequestError && error.status === 404) return null; throw error }
+}

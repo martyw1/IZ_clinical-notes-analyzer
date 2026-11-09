@@ -120,7 +120,7 @@ test('same MRN source and facility rows stay distinct and assignment never grant
     const selector = page.getByRole('combobox', { name: 'Patient record assignment', exact: true })
     await expect(selector.locator('option[value="' + forbidden.patient_record_id + ':manual_upload"]')).toContainText('record ' + forbidden.patient_record_id)
     await selector.selectOption(forbidden.patient_record_id + ':manual_upload')
-    await page.getByRole('combobox', { name: 'Counselor assignment', exact: true }).selectOption(fixture.users.counselor.username)
+    await page.getByRole('combobox', { name: 'Clinician assignment', exact: true }).selectOption(fixture.users.counselor.username)
     let facilityGrants = 0
     const observe = request => { if (request.method() === 'PUT' && new URL(request.url()).pathname.includes('/facilities/')) facilityGrants += 1 }
     page.on('request', observe)
@@ -138,7 +138,7 @@ test('same MRN source and facility rows stay distinct and assignment never grant
     const allowed = page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/patient-assignments/') && response.request().method() === 'PUT')
     await page.getByRole('button', { name: 'Assign patient', exact: true }).click()
     expect((await allowed).status()).toBe(200)
-    await expect(page.getByRole('status')).toHaveText('Patient assigned to counselor.')
+    await expect(page.getByRole('status')).toHaveText('Patient assigned to clinician.')
     page.off('request', observe)
     await capture(page, 'task-7-assignment-exact.png')
     phase = 'help'

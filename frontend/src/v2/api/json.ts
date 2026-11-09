@@ -11,6 +11,10 @@ export class ApiRequestError extends Error {
 }
 
 const safeDetails = new Set([
+  'This assignment changed. Refresh the patient selection before saving.',
+  'This assignment changed. Refresh before saving.',
+  'This clinician is not available in your directory.',
+  'Use Alleva assignment does not accept a local clinician.',
   'Access denied', 'Invalid credentials', 'Account inactive', 'Account locked', 'Account temporarily locked',
   'Password change is required before accessing the workspace', 'Current password is incorrect',
   'New password must differ from the current password', 'Password cannot be the same as the username.',

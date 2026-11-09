@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Final
 from pydantic import BaseModel, ConfigDict
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+
+from app.v2.models import OverduePlanAcknowledgement
 from sqlalchemy.orm import Session
 
+from app.v2.services.imported_counselors import primary_counselors_for_records
+from app.v2.services.dashboard_data import latest_patient_plans
+from app.v2.services.deadline_calendar import deadline_status
+from app.v2.services.evaluation_evidence import parse_date
 from app.v2.services.treatment_plan_store import StoredTreatmentPlan, list_treatment_plan_imports
 from app.v2.services.treatment_plan_read_model import TreatmentPlanQuery
 from app.v2.domain.schemas import SourceMode
@@ -45,6 +51,9 @@ class PatientRosterItem:
     first_seen_at: str
     last_seen_at: str
     reconciled_at: str
+    primary_counselor_id: int | None
+    primary_counselor_name: str
+    tracking_eligible: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +73,12 @@ class TreatmentPlanRosterItem:
     previous_treatment_plan_id: str
     initial_treatment_plan_id: str
     initial_treatment_plan_date: str
+    next_due_date: str
+    deadline_status: str
+    days_overdue: int | None
+    reviewed_at_utc: str
+    primary_counselor_id: int | None
+    primary_counselor_name: str
 
 
 class PatientRow(BaseModel):
@@ -90,6 +105,9 @@ def list_patient_roster(
     snapshots = patient_source_snapshots_for_records(db, tuple(
         int(row[0]) for row in rows if allowed_patient_record_ids is None or int(row[0]) in allowed_patient_record_ids
     ))
+    counselors = primary_counselors_for_records(db, tuple(
+        int(row[0]) for row in rows if allowed_patient_record_ids is None or int(row[0]) in allowed_patient_record_ids
+    ))
     plans_by_patient: dict[int, list[StoredTreatmentPlan]] = {}
     for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode), snapshots):
         plans_by_patient.setdefault(plan.patient_record_id, []).append(plan)
@@ -105,7 +123,7 @@ def list_patient_roster(
         ):
             continue
         snapshot = snapshots.get(row.id)
-        result.append(_roster_item(row, tuple(plans_by_patient.get(row.id, ())), snapshot))
+        result.append(_roster_item(row, tuple(plans_by_patient.get(row.id, ())), snapshot, counselors.get(row.id)))
     return tuple(result)
 
 
@@ -113,9 +131,11 @@ def _roster_item(
     row: PatientRow,
     plans: tuple[StoredTreatmentPlan, ...],
     snapshot: PatientSourceSnapshot | None,
+    counselor: tuple[int, str] | None,
 ) -> PatientRosterItem:
     ordered_plans = plans_by_source_update(plans)
     newest_plan = ordered_plans[0] if ordered_plans else None
+    snapshot_loc = patient_current_level_of_care(snapshot.record) if snapshot is not None else ""
     return PatientRosterItem(
         patient_record_id=row.id,
         mrn=row.canonical_client_id,
@@ -123,10 +143,8 @@ def _roster_item(
         source_mode=row.source_system,
         lifecycle_state=row.lifecycle_state,
         current_level_of_care=(
-            newest_plan.current_level_of_care
-            if newest_plan
-            else patient_current_level_of_care(snapshot.record) if snapshot is not None else "Unknown"
-        ) or "Unknown",
+            snapshot_loc or (newest_plan.current_level_of_care if newest_plan else "") or "Unknown"
+        ),
         treatment_plans=tuple(
             roster_plan(plan)
             for plan in ordered_plans
@@ -134,15 +152,47 @@ def _roster_item(
         first_seen_at=row.first_seen_at,
         last_seen_at=row.last_seen_at,
         reconciled_at=row.reconciled_at or "",
+        primary_counselor_id=counselor[0] if counselor else None,
+        primary_counselor_name=counselor[1] if counselor else "",
+        tracking_eligible=row.lifecycle_state == "active" and not _outside_current_tracking(row.lifecycle_state, snapshot),
     )
+
+
+def _outside_current_tracking(lifecycle: str, snapshot: PatientSourceSnapshot | None) -> bool:
+    return lifecycle in {"discharged", "deleted", "inactive", "unlinked"} or (
+        snapshot is not None and patient_current_level_of_care(snapshot.record).strip().casefold() == "case management"
+    )
+
+
+def current_tracking_patients(
+    db: Session, allowed_patient_record_ids: frozenset[int] | None,
+) -> tuple[frozenset[int], int]:
+    rows = {
+        int(row.id): row.lifecycle_state
+        for row in db.execute(text("SELECT id, lifecycle_state FROM patients"))
+        if allowed_patient_record_ids is None or int(row.id) in allowed_patient_record_ids
+    }
+    snapshots = patient_source_snapshots_for_records(db, tuple(rows))
+    excluded = frozenset(
+        patient_id for patient_id, lifecycle in rows.items()
+        if _outside_current_tracking(lifecycle, snapshots.get(patient_id))
+    )
+    return excluded, sum(rows[patient_id] == "active" for patient_id in rows.keys() - excluded)
 
 
 def list_treatment_plan_roster(
     db: Session, allowed_patient_record_ids: frozenset[int] | None = None,
     source_mode: SourceMode | None = None,
+    evaluation_date: date | None = None,
 ) -> tuple[TreatmentPlanRosterItem, ...]:
     plans_by_patient: dict[tuple[int, str], list[StoredTreatmentPlan]] = {}
-    for plan in list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode)):
+    imports = list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode))
+    current_versions: set[int] = set()
+    if evaluation_date is not None:
+        excluded, _ = current_tracking_patients(db, allowed_patient_record_ids)
+        current, _ = latest_patient_plans([plan for plan in imports if plan.patient_record_id not in excluded])
+        current_versions = {plan.plan_version_id for plan in current}
+    for plan in imports:
         plans_by_patient.setdefault((plan.patient_record_id, plan.source_mode), []).append(plan)
     placeholder_patient_record_ids = frozenset(
         int(row[0])
@@ -158,6 +208,14 @@ def list_treatment_plan_roster(
             },
         ).all()
     )
+    counselors = primary_counselors_for_records(db, tuple({plan.patient_record_id for plan in imports}))
+    reviewed = {}
+    version_ids = tuple(plan.plan_version_id for plan in imports)
+    for start in range(0, len(version_ids), 400):
+        reviewed.update(db.execute(select(
+            OverduePlanAcknowledgement.plan_version_id,
+            OverduePlanAcknowledgement.reviewed_at_utc,
+        ).where(OverduePlanAcknowledgement.plan_version_id.in_(version_ids[start:start + 400]))).all())
     items: list[TreatmentPlanRosterItem] = []
     for plans in plans_by_patient.values():
         mrn = plans[0].patient_id
@@ -165,6 +223,14 @@ def list_treatment_plan_roster(
         ordered = tuple(sorted(plans, key=_lineage_sort_key))
         initial = ordered[0]
         for index, plan in enumerate(ordered):
+            due = parse_date(plan.next_due_date)
+            status = (
+                deadline_status(due, evaluation_date)
+                if evaluation_date is not None and plan.plan_version_id in current_versions
+                else "Outside current tracking"
+            )
+            age = (evaluation_date - due).days if evaluation_date is not None and due is not None and status == "Overdue" else None
+            counselor = counselors.get(plan.patient_record_id)
             items.append(TreatmentPlanRosterItem(
                 patient_record_id=plan.patient_record_id,
                 plan_version_id=plan.plan_version_id,
@@ -181,6 +247,12 @@ def list_treatment_plan_roster(
                 previous_treatment_plan_id=ordered[index - 1].plan_id if index else "",
                 initial_treatment_plan_id=initial.plan_id,
                 initial_treatment_plan_date=initial.plan_date or initial.last_updated,
+                next_due_date=due.isoformat() if due is not None else "",
+                deadline_status=status,
+                days_overdue=age,
+                reviewed_at_utc=reviewed.get(plan.plan_version_id, ""),
+                primary_counselor_id=counselor[0] if counselor else None,
+                primary_counselor_name=counselor[1] if counselor else "",
             ))
     return tuple(
         sorted(

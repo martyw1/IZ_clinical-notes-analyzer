@@ -224,6 +224,45 @@ class ApiHarnessJobService:
         threading.Thread(target=self._run_job, args=(job_id,), daemon=True).start()
         return self.get_job(job_id)
 
+    def create_clinician_sync_job(self, actor_id: int, actor_role: str, contract: ApprovedAllevaContract) -> ApiHarnessJob:
+        job_id = f"clinicians-{uuid4().hex[:12]}"
+        created = _now()
+        output_dir = settings.api_harness_runs_dir / job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        job = MutableJob(job_id=job_id, job_type="approved_clinician_sync", created_at=created, started_at=None,
+            updated_at=created, completed_at=None, cancelled_at=None, failed_at=None, actor_id=str(actor_id), actor_role=actor_role,
+            status="queued", progress_percent=0, current_endpoint="GET /users", current_page=0, current_cursor="",
+            records_seen=0, records_written=0, records_failed=0, warnings_count=0, errors_count=0,
+            output_dir=str(output_dir), redaction_mode="redacted", raw_sensitive_mode_used=False,
+            cancel_requested=False, last_heartbeat_at=created)
+        with self._lock:
+            self._assert_import_available()
+            self._jobs[job_id] = job
+        save_job(job)
+        with SessionLocal() as db:
+            create_sync_ledger(db, job_id, actor_id, contract, created, None)
+        threading.Thread(target=self._run_clinician_sync_job, args=(job_id, actor_id, contract), daemon=True).start()
+        return self.get_job(job_id)
+
+    def _run_clinician_sync_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract) -> None:
+        from app.v2.services.alleva_sync import run_clinician_sync, AllevaSyncCancelled
+        self._set(job_id, status="running", started_at=_now())
+        try:
+            with SessionLocal() as db:
+                actor = db.get(User, actor_id)
+                if actor is None or not actor.is_active or actor.role != "admin":
+                    raise ValueError("Clinician pull requires an active administrator.")
+                profile = db.execute(select(AppSetting)).scalar_one()
+                counts = run_clinician_sync(db, profile, actor, contract, job_id, lambda: self.get_job(job_id).cancel_requested)
+            skipped = counts['staff_unmapped_facility'] + counts['staff_missing_display_fields'] + counts['staff_ambiguous_id']
+            self._set(job_id, status="completed_with_warnings" if skipped else "completed", completed_at=_now(),
+                progress_percent=100, current_endpoint="completed", records_seen=counts['staff_returned'],
+                records_written=counts['staff_imported'], warnings_count=skipped)
+        except AllevaSyncCancelled:
+            self._set(job_id, status="cancelled", cancelled_at=_now())
+        except Exception:
+            self._set(job_id, status="failed", failed_at=_now(), errors_count=1)
+
     def create_roster_pull_job(
         self,
         actor_id: int,
@@ -260,7 +299,7 @@ class ApiHarnessJobService:
 
     def _assert_import_available(self, parent_job_id: str | None = None) -> None:
         if any(job.job_id != parent_job_id and job.job_type in {
-            "two_stage_roster_update", "approved_treatment_plan_sync", "active_patient_roster_pull"
+            "two_stage_roster_update", "approved_treatment_plan_sync", "active_patient_roster_pull", "approved_clinician_sync"
         } and job.status in {"queued", "running", "writing"} for job in self._jobs.values()):
             raise ValueError("A roster update is already running.")
 
@@ -681,6 +720,7 @@ class ApiHarnessJobService:
                 self._set(job_id, status="failed", failed_at=_now(), errors_count=1, progress_percent=100)
                 return
             audit_details: dict[str, JsonValue] = {
+                "clinician_summary": result.clinician_summary,
                 "imported_patient_count": result.imported_patient_count,
                 "skipped_plan_count": result.skipped_plan_count,
                 "created_treatment_plan_count": result.created_treatment_plan_count,
@@ -718,6 +758,7 @@ class ApiHarnessJobService:
             records_failed=result.failed_detail_count,
             warnings_count=result.failed_detail_count,
             current_endpoint="completed",
+
         )
 
     def _run_roster_pull_job(self, job_id: str, actor_id: int, contract: ApprovedAllevaContract) -> None:
@@ -813,7 +854,7 @@ class ApiHarnessJobService:
             updated = replace(job, updated_at=_now(), **changes)
             self._jobs[job_id] = updated
         save_job(updated)
-        if updated.job_type == "approved_treatment_plan_sync":
+        if updated.job_type in {"approved_treatment_plan_sync", "approved_clinician_sync"}:
             counters = json.dumps({"records_seen": updated.records_seen, "records_written": updated.records_written, "records_failed": updated.records_failed, "warnings_count": updated.warnings_count, "errors_count": updated.errors_count}, sort_keys=True)
             terminal = updated.completed_at or updated.cancelled_at or updated.failed_at
             with SessionLocal() as db:
@@ -846,7 +887,9 @@ class ApiHarnessJobService:
 
     def _public_job(self, job: MutableJob) -> ApiHarnessJob:
         failure_message = sync_failure_message(job.job_id) if job.status == "failed" and job.job_type == "approved_treatment_plan_sync" else None
-        return public_job(job, self.artifacts(job.job_id), failure_message)
+        from app.v2.services.job_store import clinician_pull_message
+        completion_message = clinician_pull_message(job.job_id) if job.job_type in {"approved_treatment_plan_sync", "approved_clinician_sync"} and job.status in {"completed", "completed_with_warnings"} else None
+        return public_job(job, self.artifacts(job.job_id), failure_message, completion_message)
 
     def _connection(self, job_id: str) -> HarnessConnection:
         with self._lock:

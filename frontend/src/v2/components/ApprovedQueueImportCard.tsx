@@ -50,7 +50,7 @@ export function ApprovedQueueImportCard({
           <button type='button' className='secondary-button' onClick={() => onNavigate('Settings')}>Open Settings</button>
         </>
       ) : (
-        <p>The built-in Alleva v1 mapping is applied automatically when the pull starts. Every returned treatment plan is normalized, evaluated, and added to the roster.</p>
+        <p>The built-in Alleva v1 mapping is applied automatically when the pull starts. The pull also imports the Alleva staff directory and explicit primary clinician assignments. Every returned treatment plan is normalized, evaluated, and added to the roster.</p>
       )}
       <button type='button' onClick={() => void action.run()} disabled={action.isActive || blockers.length > 0}>
         {action.isActive ? 'Pulling full treatment plans...' : buttonLabel}

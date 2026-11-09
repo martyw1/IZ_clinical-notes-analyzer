@@ -67,6 +67,7 @@ export async function getDashboard(token: string): Promise<DashboardData> {
       status: readString(card, 'status'),
       detail: readString(card, 'detail'),
     })),
+    activeClients: readNumber(payload, 'active_clients'),
     metrics: mapNumberRecord(metrics),
     blockers: readStringList(payload, 'blockers'),
   }
@@ -105,6 +106,15 @@ export async function getTreatmentPlanDetail(
 
 export { importTreatmentPlanAggregate, importTreatmentPlanFile } from './manualImportClient'
 
+
+export async function acknowledgeOverduePlan(token: string, selection: TreatmentPlanSelection): Promise<void> {
+  const patient = encodeURIComponent(selection.patientKey)
+  const plan = encodeURIComponent(selection.treatmentPlanId)
+  await request(`/api/v2/treatment-plans/${patient}/${plan}/overdue-review?${planSelectionQuery(selection)}`, {
+    token,
+    method: 'POST',
+  })
+}
 
 export async function saveManagerAction(token: string, selection: TreatmentPlanSelection, payload: ManagerActionPayload): Promise<void> {
   await request(`/api/v2/treatment-plans/${encodeURIComponent(selection.patientKey)}/manager-actions`, {

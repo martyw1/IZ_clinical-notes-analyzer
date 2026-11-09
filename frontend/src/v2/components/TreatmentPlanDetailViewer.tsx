@@ -1,3 +1,4 @@
+import { DeadlineIndicator } from './DeadlineIndicator'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ManagerActionPayload } from '../api/types'
 import { EvidencePanel } from './EvidencePanel'
@@ -160,11 +161,16 @@ export function TreatmentPlanDetailViewer({
             {plan.patientFullName && <p className='patient-full-name'>{plan.patientFullName}</p>}
             <p className='muted'>{plan.patientDisplayLabel}</p>
           </div>
-          <StatusBadge status={plan.status} />
+          <div>
+            <p>Update schedule</p>
+            <DeadlineIndicator dueDate={plan.dueDate} status={plan.computedDeadlineStatus || plan.deadlineStatus || 'Unable to Evaluate'} />
+            <p>Checklist result: <StatusBadge status={plan.status} /></p>
+          </div>
         </div>
         <dl className='plan-fact-grid'>
           <div><dt>Level of care</dt><dd>{plan.currentLevelOfCare}</dd></div>
           <div><dt>Source</dt><dd>{sourceLabel(plan.sourceMode)}</dd></div>
+          <div><dt>Current clinician</dt><dd>{plan.primaryClinicianName || 'Unassigned'}</dd></div>
           <div><dt>Patient record</dt><dd>{plan.patientRecordId}</dd></div>
           <div><dt>Saved version ID</dt><dd>{plan.planVersionId}</dd></div>
           <div><dt>Original plan reference</dt><dd>{plan.originalPlanReference || 'Not supplied'}</dd></div>
@@ -183,16 +189,17 @@ export function TreatmentPlanDetailViewer({
         <h2>Plan timeline</h2>
         <ol className='plan-timeline'>
           <li><span>Admission</span><time dateTime={plan.admissionDate}>{displayDate(plan.admissionDate)}</time></li>
-          <li><span>Plan created</span><time dateTime={selectedPlanHistory?.planDate || selectedPlanHistory?.createdDate}>{displayDate(selectedPlanHistory?.planDate || selectedPlanHistory?.createdDate || 'Unknown')}</time></li>
+          <li><span>Plan created</span><time dateTime={selectedPlanHistory?.createdDate}>{displayDate(selectedPlanHistory?.createdDate || 'Unknown')}</time></li>
           <li><span>Source last updated</span><time dateTime={plan.lastUpdated}>{displayDate(plan.lastUpdated)}</time></li>
         </ol>
         <dl className='source-comparison-grid'>
           <div><dt>Source due date</dt><dd>{displayDate(plan.sourceDueDate)}</dd></div>
-          <div><dt>Next update due (computed)</dt><dd>{displayDate(plan.dueDate)}</dd></div>
+          <div><dt>Next update due (computed)</dt><dd><DeadlineIndicator dueDate={plan.dueDate} status={plan.computedDeadlineStatus || plan.deadlineStatus || 'Unable to Evaluate'} /></dd></div>
           <div><dt>LOC-change clock</dt><dd>{plan.locChangeDueDate}</dd></div>
           <div><dt>Checklist / rules</dt><dd>{plan.checklistVersion} / {plan.rulesVersion}</dd></div>
         </dl>
-        <p className='muted'>Next update due uses this saved plan’s last updated date plus the patient LOC interval: PHP 30 calendar days; IOP/Outpatient 60 calendar days. Admission and review dates do not replace a missing update date. Historical versions retain their own dates.</p>
+        {plan.deadlineExplanation && <p role='note'>{plan.deadlineExplanation}</p>}
+        <p className='muted'>Next update due uses this saved plan’s last updated date, falling back to its first created date when unavailable, plus the LOC interval. Any LOC containing PHP or GOP uses 30 calendar days; any containing IOP uses 60; configured OP/Outpatient aliases use 60. A LOC containing conflicting timing categories requires review. Admission and review dates are not substituted. Historical versions retain their own dates.</p>
       </section>
 
       <TreatmentPlanClinicalSections plan={plan} />

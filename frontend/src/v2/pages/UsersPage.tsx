@@ -103,7 +103,7 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
       <form onSubmit={create} className='settings-form'>
         <label>Username<input name='username' autoComplete='username' /></label>
         <label>Full name<input name='fullName' /></label>
-        <label>Role<select name='role' defaultValue='counselor'><option value='counselor'>Counselor</option><option value='office_manager'>Office manager</option><option value='viewer'>Viewer</option></select></label>
+        <label>Role<select name='role' defaultValue='counselor'><option value='counselor'>Clinician</option><option value='office_manager'>Office manager</option><option value='viewer'>Viewer</option></select></label>
         <label>Temporary password<input name='password' type='password' autoComplete='new-password' /></label>
         <div className='button-row settings-actions'>
           <button type='submit'>Create user</button>
@@ -136,7 +136,7 @@ export function UsersPage({ token, isSessionCurrent }: UsersPageProps) {
           {users.map((user) => (
             <tr key={user.id}>
               <td data-label='User'>{user.fullName}</td>
-              <td data-label='Role'>{user.role}</td>
+              <td data-label='Role'>{user.role === 'counselor' ? 'Clinician' : user.role}</td>
               <td data-label='Status'>{authStateLabels[user.authState]}</td>
               <td data-label='Password reset'>{user.mustResetPassword ? 'required' : 'not required'}</td>
               <td data-label='Action'><button type='button' className='secondary-button' onClick={() => { setResetUser(user); setResetError('') }} disabled={user.username === 'admin' || resetting}>Reset password</button></td>

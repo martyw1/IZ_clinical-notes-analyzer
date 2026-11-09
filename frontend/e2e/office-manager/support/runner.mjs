@@ -76,7 +76,7 @@ async function runSmoke() {
   const target = validateTarget({
     ownedRoot, dataDir: values['local-app-data-dir'] || path.join(ownedRoot, `run-${id}`),
     baseUrl: values['base-url'], runtimeMode: values['runtime-mode'], preparedExecutable: values['prepared-executable'],
-    pythonExecutable: path.join(repoRoot, 'backend/.venv/Scripts/python.exe'),
+    pythonExecutable: process.env.IZ_OM_PYTHON_EXECUTABLE || path.join(repoRoot, 'backend/.venv/Scripts/python.exe'),
     browserExecutable: installedBrowser(values['browser-channel']),
   })
   if (!['msedge', 'chrome'].includes(values['browser-channel']) || !['happy', 'edge', 'all'].includes(values.case)

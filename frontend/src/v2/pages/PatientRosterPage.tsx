@@ -34,29 +34,40 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
   const [error, setError] = useState('')
   const [refreshNumber, setRefreshNumber] = useState(0)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [counselorFilter, setCounselorFilter] = useState('')
+  const [locFilter, setLocFilter] = useState('')
   const [page, setPage] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const pageSize = 75
   const sourceMode = sourceFilter === 'all' ? undefined : sourceFilter
   const capture = useRequestGeneration(`${token}:${sourceFilter}:${refreshNumber}`, isSessionCurrent)
+  const counselorOptions = new Map((roster?.items ?? []).flatMap((item) =>
+    item.primaryCounselorId ? [[item.primaryCounselorId, item.primaryCounselorName] as const] : [],
+  ))
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     return (roster?.items ?? []).filter((item) => (
       (!sourceMode || item.sourceMode === sourceMode)
+      && (!statusFilter || item.lifecycleState === statusFilter)
+      && (!counselorFilter || String(item.primaryCounselorId ?? 0) === counselorFilter)
+      && (!locFilter || item.currentLevelOfCare.trim().toLowerCase() === locFilter.toLowerCase())
       && (!normalizedQuery
       || item.mrn.toLowerCase().includes(normalizedQuery)
       || item.fullName.toLowerCase().includes(normalizedQuery)
       || item.treatmentPlans.some((plan) => [plan.treatmentPlanId, plan.originalPlanReference, plan.serviceDate].some((value) => value.toLowerCase().includes(normalizedQuery))))
     ))
-  }, [query, roster?.items, sourceMode])
-  useEffect(() => { setPage(0) }, [query, sourceMode, roster])
+  }, [query, roster?.items, sourceMode, statusFilter, locFilter, counselorFilter])
 
   useEffect(() => {
     const isCurrent = capture()
     setIsLoading(true)
     setError('')
     void getPatientRoster(token, sourceMode).then((result) => {
-      if (isCurrent()) setRoster(result)
+      if (isCurrent()) {
+        setRoster(result)
+        setPage(0)
+      }
     }).catch((loadError: unknown) => {
       if (isCurrent()) setError(messageForError(loadError))
     }).finally(() => { if (isCurrent()) setIsLoading(false) })
@@ -97,9 +108,31 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
         </div>
         <label>
           Search MRN, patient name, plan ID, reference, or service date
-          <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder='MRN, patient name, or treatment plan ID' />
+          <input value={query} onChange={(event) => { setQuery(event.currentTarget.value); setPage(0) }} placeholder='MRN, patient name, or treatment plan ID' />
         </label>
-        <SourceFilterControl value={sourceFilter} onChange={setSourceFilter} />
+        <SourceFilterControl value={sourceFilter} onChange={(value) => { setSourceFilter(value); setPage(0) }} />
+        <label>Status
+          <select value={statusFilter} onChange={(event) => { setStatusFilter(event.currentTarget.value); setPage(0) }}>
+            <option value=''>All statuses</option>
+            <option value='active'>Active</option>
+            <option value='discharged'>Discharged</option>
+          </select>
+        </label>
+        <label>Level of care
+          <select value={locFilter} onChange={(event) => { setLocFilter(event.currentTarget.value); setPage(0) }}>
+            <option value=''>All levels of care</option>
+            {['PHP-5', 'IOP-19', 'IOP-5', 'IOP-3', 'OP', 'Case Management'].map((loc) => (
+              <option key={loc} value={loc}>{loc}</option>
+            ))}
+          </select>
+        </label>
+        <label>Primary clinician
+          <select value={counselorFilter} onChange={(event) => { setCounselorFilter(event.currentTarget.value); setPage(0) }}>
+            <option value=''>All clinicians</option>
+            <option value='0'>Unmapped</option>
+            {[...counselorOptions].map(([id, name]) => <option key={id} value={id}>{name} (#{id})</option>)}
+          </select>
+        </label>
         <table>
           <thead><tr role='row'><th id='patient-roster-mrn' role='columnheader'>MRN</th><th id='patient-roster-plans' role='columnheader'>Treatment Plans</th><th id='patient-roster-lifecycle' role='columnheader'>Lifecycle</th><th id='patient-roster-loc' role='columnheader'>LOC</th><th id='patient-roster-source' role='columnheader'>Source</th><th id='patient-roster-last-seen' role='columnheader'>Last seen</th></tr></thead>
           <tbody>
@@ -150,7 +183,7 @@ export function PatientRosterPage({ token, user, onNavigate, onSelectPatient, on
                 <td role='cell' data-label='Last seen' headers='patient-roster-last-seen'><time dateTime={item.lastSeenAt}>{formatDateTime24Hour(item.lastSeenAt)}</time></td>
               </tr>
             ))}
-            {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current source and search filters.</td></tr>}
+            {visibleItems.length === 0 && <tr role='row'><td role='cell' colSpan={6} className='muted'>No roster entries match the current filters.</td></tr>}
           </tbody>
         </table>
         {visibleItems.length > pageSize && <nav className='button-row' aria-label='Patient roster pages'>

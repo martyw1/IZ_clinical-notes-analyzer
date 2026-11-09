@@ -19,6 +19,7 @@ from app.v2.api.models import (
 )
 from app.v2.domain.schemas import ApiHarnessJob, JobPreview
 from app.v2.models import AppSetting
+from app.v2.services.patient_roster import current_tracking_patients
 from app.v2.services.audit_store import record_audit_event
 from app.v2.services.dashboard_data import dashboard_payload
 from app.v2.services.deterministic_evaluator import facility_local_date
@@ -81,6 +82,7 @@ def navigation(user: CurrentUser) -> dict[str, JsonValue]:
         "Patient Record Detail",
         "Treatment Plan Detail",
         "Treatment Plans Roster",
+        "Clinicians",
         "Manual Upload",
     ]
     if user.role == "counselor":
@@ -97,7 +99,8 @@ def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
     client_id = decrypt_api_client_id(profile.api_client_id)
     allowed_ids = accessible_patient_record_ids(db, user)
     imports = list_treatment_plan_imports(db, allowed_ids)
-    return dashboard_payload(
+    excluded, active_clients = current_tracking_patients(db, allowed_ids)
+    payload = dashboard_payload(
         imports,
         api_configured=bool(profile.api_client_secret),
         api_client_id_configured=bool(client_id.strip()),
@@ -106,7 +109,11 @@ def dashboard(user: CurrentUser, db: DbSession) -> dict[str, JsonValue]:
         sync_authorized=profile.alleva_treatment_plan_sync_approved,
         loc_change_window_validated=False,
         evaluation_date=facility_local_date(datetime.now(timezone.utc), profile.facility_timezone),
+        excluded_patient_ids=excluded,
     )
+
+    payload["active_clients"] = active_clients
+    return payload
 
 
 def _app_setting(db: DbSession) -> AppSetting:

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from app.v2.domain.schemas import TreatmentPlanAggregate
+from app.v2.services.deadline_calendar import plan_tracking_timestamp
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class StoredTreatmentPlan:
     service_date: str = ""
     version_ordinal: int = 0
     is_current: bool = True
+    tracking_timestamp: str = ""
 
 
 class TreatmentPlanSaveDisposition(StrEnum):
@@ -97,6 +99,7 @@ def stored_plan(
         admission_date=aggregate.admission_date,
         plan_date=plan_date or aggregate.date_clock_anchor,
         last_updated=aggregate.source_last_updated,
+        tracking_timestamp=plan_tracking_timestamp(aggregate),
         next_due_date=aggregate.date_clock_due_date,
         overall_status=aggregate.overall_status,
         missing_criteria_count=aggregate.evidence_coverage_summary.criteria_missing_evidence,

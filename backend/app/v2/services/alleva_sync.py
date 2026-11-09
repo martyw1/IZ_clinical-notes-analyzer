@@ -51,6 +51,8 @@ from app.v2.services.alleva_protocol import (
     read_headers,
 )
 from app.v2.services.secure_storage import decrypt_api_client_id, decrypt_text_secret
+from app.v2.services.imported_counselors import PrimaryCounselorEvidence
+from app.v2.services.audit_store import record_audit_event
 from app.v2.services.patient_snapshot_store import (
     PatientSourceSnapshotInput,
     patient_current_level_of_care,
@@ -165,6 +167,7 @@ class AllevaSyncResult:
     failed_detail_count: int
     updated_treatment_plan_ids: tuple[str, ...]
     detail_failure_diagnostics: tuple[dict[str, str | int], ...] = ()
+    clinician_summary: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +208,7 @@ def run_treatment_plan_sync(
             failure_stage="job_start",
             retry_outcome="cancelled",
         )
+    clinician_summary = {}
     token = _oauth_token(profile, contract, is_cancelled)
     protocol = AllevaReadProtocol(
         profile.alleva_api_version,
@@ -248,6 +252,25 @@ def run_treatment_plan_sync(
                 reconciled_at,
                 provenance,
             )
+            if "clinicians" in contract.payload.endpoints:
+                from app.v2.services.alleva_clinicians import persist_alleva_clinicians
+                record_audit_event(db, action="alleva.clinicians.pull.started", actor=actor,
+                    target_entity_type="integration_sync", target_entity_id=sync_job_id or "", details={"endpoint_key": "clinicians"})
+                try:
+                    staff = _paged_records(client, profile, contract, "clinicians", headers, is_cancelled, None, (), rate_limiter)
+                    connection_identity = profile.api_base_url.rstrip("/") + ":" + decrypt_api_client_id(profile.api_client_id)
+                    clinician_summary = persist_alleva_clinicians(
+                        db, staff, clients, reconciled_at, connection_identity,
+                        staff_complete=len(staff) < min(contract.payload.pagination.maximum_records, MAX_SYNC_ROWS),
+                    )
+                except Exception as exc:
+                    db.rollback()
+                    safe_details = exc.audit_details() if isinstance(exc, AllevaSyncError) else {"error_class": type(exc).__name__}
+                    record_audit_event(db, action="alleva.clinicians.pull.failed", actor=actor,
+                        target_entity_type="integration_sync", target_entity_id=sync_job_id or "", outcome_status="failure", details=safe_details)
+                    raise
+                record_audit_event(db, action="alleva.clinicians.pull.completed", actor=actor,
+                    target_entity_type="integration_sync", target_entity_id=sync_job_id or "", details=clinician_summary, commit=False)
             db.commit()
             summary = _save_client_aggregates(
                 db, client, profile, actor, contract, clients, plans, headers, is_cancelled, provenance, rate_limiter, on_progress,
@@ -263,6 +286,7 @@ def run_treatment_plan_sync(
         failed_detail_count=summary.failed_detail_count,
         updated_treatment_plan_ids=summary.updated_plan_ids,
         detail_failure_diagnostics=summary.detail_failure_diagnostics,
+        clinician_summary=clinician_summary,
     )
 
 
@@ -720,6 +744,15 @@ def _client_observations(
     )
 
 
+def _mapped_primary_counselor(payload: dict[str, object], contract: ApprovedAllevaContract) -> PrimaryCounselorEvidence | None:
+    fields = contract.payload.endpoints["clients"].field_mappings
+    required = ("counselor_identity_scope", "primary_counselor_staff_id", "primary_counselor_display_name")
+    if not all(fields.get(key) for key in required):
+        return None
+    scope, staff_id, name = (_mapped_text(payload, contract, "clients", key) for key in required)
+    return PrimaryCounselorEvidence(f"alleva_rest_api:{scope}", staff_id, name) if scope else None
+
+
 def _client_snapshot_inputs(
     clients: tuple[dict[str, object], ...],
     contract: ApprovedAllevaContract,
@@ -731,6 +764,7 @@ def _client_snapshot_inputs(
             source_system="alleva_rest_api",
             source_last_updated=_record_last_updated(payload),
             record=payload,
+            primary_counselor=_mapped_primary_counselor(payload, contract),
         )
         for payload in clients
         if (source_patient_id := _mapped_text(payload, contract, "clients", "client_id"))
@@ -1448,3 +1482,32 @@ def _nested_text(payload: dict[str, object], collection: str, *keys: str) -> str
                 return text
     return ""
 from app.v2.services.bounded_http import get_bounded
+
+
+def run_clinician_sync(db: Session, profile: AppSetting, actor: User, contract: ApprovedAllevaContract,
+                       job_id: str, is_cancelled=lambda: False) -> dict[str, int]:
+    """Read staff and client relationship context only; never fetch or write plans."""
+    record_audit_event(db, action="alleva.clinicians.pull.started", actor=actor,
+        target_entity_type="integration_sync", target_entity_id=job_id, details={"endpoint_key": "clinicians", "mode": "clinician_only"})
+    try:
+        token = _oauth_token(profile, contract, is_cancelled)
+        headers = read_headers(bearer_token=token, protocol=AllevaReadProtocol(profile.alleva_api_version))
+        with httpx.Client(timeout=max(1, min(profile.emr_api_timeout_seconds, 60)), follow_redirects=False) as client:
+            limiter = ApprovedRequestRateLimiter(contract.payload.rate_limit.maximum_requests_per_minute)
+            clients = _paged_records(client, profile, contract, "clients", headers, is_cancelled, None, (), limiter)
+            staff = _paged_records(client, profile, contract, "clinicians", headers, is_cancelled, None, (), limiter)
+            if is_cancelled():
+                raise AllevaSyncCancelled("Clinician pull cancelled before saving.")
+            from app.v2.services.alleva_clinicians import persist_alleva_clinicians
+            summary = persist_alleva_clinicians(db, staff, clients, datetime.now(timezone.utc).isoformat(),
+                profile.api_base_url.rstrip("/") + ":" + decrypt_api_client_id(profile.api_client_id),
+                staff_complete=len(staff) < min(contract.payload.pagination.maximum_records, MAX_SYNC_ROWS))
+        record_audit_event(db, action="alleva.clinicians.pull.completed", actor=actor,
+            target_entity_type="integration_sync", target_entity_id=job_id, details=summary)
+        return summary
+    except Exception as exc:
+        db.rollback()
+        details = exc.audit_details() if isinstance(exc, AllevaSyncError) else {"error_class": type(exc).__name__}
+        record_audit_event(db, action="alleva.clinicians.pull.failed", actor=actor,
+            target_entity_type="integration_sync", target_entity_id=job_id, outcome_status="failure", details=details)
+        raise

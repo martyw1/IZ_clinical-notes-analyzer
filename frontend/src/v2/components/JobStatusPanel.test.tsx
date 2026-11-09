@@ -26,9 +26,9 @@ test('shows phase counts and stage alongside measured progress', () => {
   expect(screen.getByText('4 of 10 processed in this phase.')).toBeVisible()
 })
 
-test('keeps a persisted UTC completion time unchanged in a non-UTC browser environment', () => {
+test('displays a persisted UTC completion time in Eastern time', () => {
   render(<JobStatusPanel job={completed} isActive={false} message='' error='' />)
-  expect(screen.getByText(/Last run completed/)).toHaveTextContent('2026-09-10 21:20 UTC')
+  expect(screen.getByText(/Last run completed/)).toHaveTextContent('2026-09-10 17:20 EDT')
 })
 
 test('shows a reloaded job failure reason even without a local request error', () => {
