@@ -257,7 +257,7 @@ export function TreatmentPlansRosterPage({
                 <td role='cell' data-label='Primary clinician' headers='plan-roster-counselor'>{item.primaryCounselorName || 'Unassigned'}</td>
                 <td role='cell' data-label='Last Updated' headers='plan-roster-last-updated'><time dateTime={item.lastUpdated}>{formatDateTime24Hour(item.lastUpdated)}</time></td>
                 <td role='cell' data-label='Next due date' headers='plan-roster-due'>
-                  <DeadlineIndicator dueDate={item.nextDueDate} status={item.deadlineStatus} />
+                  {item.trackingExclusionReason || <DeadlineIndicator dueDate={item.nextDueDate} status={item.deadlineStatus} />}
                 </td>
                 <td role='cell' data-label='Days overdue' headers='plan-roster-overdue'>{item.daysOverdue || '—'}</td>
                 <td role='cell' data-label='Reviewed' headers='plan-roster-reviewed'>{item.reviewedAtUtc ? 'Yes' : 'No'}</td>

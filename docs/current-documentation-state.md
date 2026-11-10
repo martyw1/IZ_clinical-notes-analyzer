@@ -46,3 +46,7 @@ Dated validation, beta release notes, old PRDs, Version 1 guides and historical 
 Compared the current guides and in-app copy with local commit `a79355e` and confirmed that the checkout matched remote main at review time. Refreshed the operator guide, current workflow and data contracts, and source-generated architecture. Verified all 243 inventory entries exist. Edge rendered the operator guide with 24 valid references and the 29-page architecture guide with 1,051 valid references. The architecture search and narrow viewport checks passed.
 
 The frontend passed 205 tests and the production build. The targeted backend run passed 52 tests for deadline, clinician import, local assignment and operational workflows. The copied virtual environment pointed at a Python installation on another laptop. The backend run used local Python with the checkout's installed test dependencies. This station covers documentation and source checks. Package qualification and live tenant acceptance are tracked separately.
+
+## November 9 tracking reason and Case Management display
+
+The Treatment Plans Roster and Treatment Plan Detail display the discharge reason directly. Case Management schedules display **Patient in Case Management, no next due date** on both screens. The targeted roster, dashboard and operational workflow backend tests passed (20 tests). All 206 frontend tests and the production frontend build passed.

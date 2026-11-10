@@ -78,23 +78,30 @@ def dashboard_payload(
 
 
 def latest_patient_plans(rows: Sequence[DashboardTreatmentPlan]) -> tuple[tuple[DashboardTreatmentPlan, ...], int]:
+    selected, uncertain = select_latest_patient_plans(rows)
+    return selected, len(uncertain)
+
+
+def select_latest_patient_plans(
+    rows: Sequence[DashboardTreatmentPlan],
+) -> tuple[tuple[DashboardTreatmentPlan, ...], dict[int, str]]:
     """One latest clinical update per authorized patient record, never import order."""
     grouped: dict[int, list[DashboardTreatmentPlan]] = {}
     for row in rows:
         grouped.setdefault(row.patient_record_id, []).append(row)
     selected = []
-    uncertain = 0
-    for plans in grouped.values():
+    uncertain: dict[int, str] = {}
+    for patient_id, plans in grouped.items():
         try:
             dates = [datetime.fromisoformat((getattr(row, "tracking_timestamp", "") or row.last_updated).strip().replace("Z", "+00:00")) for row in plans]
             dates = [value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc) for value in dates]
         except ValueError:
-            uncertain += 1
+            uncertain[patient_id] = "A saved plan lacks a usable update or creation timestamp, so the latest plan cannot be determined."
             continue
         newest = max(dates)
         candidates = [row for row, updated in zip(plans, dates, strict=True) if updated == newest]
         if len({row.next_due_date for row in candidates}) > 1:
-            uncertain += 1
+            uncertain[patient_id] = "Saved plans share the latest timestamp and disagree on the update deadline."
             continue
         selected.append(max(candidates, key=lambda row: row.plan_version_id))
     return tuple(selected), uncertain

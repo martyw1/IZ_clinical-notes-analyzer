@@ -3,6 +3,13 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+CASE_MANAGEMENT_SCHEDULE_STATUS = "Patient in Case Management, no next due date"
+
+
+def is_case_management(level_of_care: str) -> bool:
+    return level_of_care.strip().casefold() == "case management"
+
+
 def plan_update_date(raw: str, facility_timezone: str = "") -> date | None:
     try:
         value = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
@@ -23,8 +30,12 @@ def deadline_status(due: date | None, today: date) -> str:
     return "Current/Compliant"
 
 
-def computed_deadline_details(aggregate, package, today: date, facility_timezone: str) -> tuple[str, str]:
+def computed_deadline_details(
+    aggregate, package, today: date, facility_timezone: str, *, patient_in_case_management: bool = False,
+) -> tuple[str, str]:
     """Explain the recurring schedule independently of checklist and worklist eligibility."""
+    if patient_in_case_management or is_case_management(aggregate.current_level_of_care):
+        return CASE_MANAGEMENT_SCHEDULE_STATUS, "Recurring treatment plan update deadlines do not apply to Case Management."
     from app.v2.services.evaluation_evidence import collect_evidence
     evidence = collect_evidence(aggregate, package, today, facility_timezone)
     if sum(family in aggregate.current_level_of_care.casefold() for family in ("iop","php","gop")) > 1:

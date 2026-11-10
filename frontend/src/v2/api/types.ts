@@ -106,6 +106,7 @@ export type TreatmentPlanRosterItem = PatientRosterTreatmentPlan & {
   readonly primaryCounselorName?: string
   readonly nextDueDate?: string
   readonly deadlineStatus?: string
+  readonly trackingExclusionReason?: string
   readonly daysOverdue?: number
   readonly reviewedAtUtc?: string
   readonly mrn: string

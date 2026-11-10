@@ -11,8 +11,8 @@ from app.v2.models import OverduePlanAcknowledgement
 from sqlalchemy.orm import Session
 
 from app.v2.services.imported_counselors import primary_counselors_for_records
-from app.v2.services.dashboard_data import latest_patient_plans
-from app.v2.services.deadline_calendar import deadline_status
+from app.v2.services.dashboard_data import select_latest_patient_plans
+from app.v2.services.deadline_calendar import CASE_MANAGEMENT_SCHEDULE_STATUS, deadline_status, is_case_management
 from app.v2.services.evaluation_evidence import parse_date
 from app.v2.services.treatment_plan_store import StoredTreatmentPlan, list_treatment_plan_imports
 from app.v2.services.treatment_plan_read_model import TreatmentPlanQuery
@@ -79,6 +79,7 @@ class TreatmentPlanRosterItem:
     reviewed_at_utc: str
     primary_counselor_id: int | None
     primary_counselor_name: str
+    tracking_exclusion_reason: str = ""
 
 
 class PatientRow(BaseModel):
@@ -154,29 +155,40 @@ def _roster_item(
         reconciled_at=row.reconciled_at or "",
         primary_counselor_id=counselor[0] if counselor else None,
         primary_counselor_name=counselor[1] if counselor else "",
-        tracking_eligible=row.lifecycle_state == "active" and not _outside_current_tracking(row.lifecycle_state, snapshot),
+        tracking_eligible=row.lifecycle_state == "active" and not _patient_tracking_exclusion(row.lifecycle_state, snapshot),
     )
 
 
-def _outside_current_tracking(lifecycle: str, snapshot: PatientSourceSnapshot | None) -> bool:
-    return lifecycle in {"discharged", "deleted", "inactive", "unlinked"} or (
-        snapshot is not None and patient_current_level_of_care(snapshot.record).strip().casefold() == "case management"
-    )
+def _patient_tracking_exclusion(lifecycle: str, snapshot: PatientSourceSnapshot | None) -> str:
+    if lifecycle in {"discharged", "deleted", "inactive"}:
+        return f"The patient record is marked {lifecycle}."
+    if lifecycle == "unlinked":
+        return "This plan is not linked to a patient record in the source."
+    if snapshot is not None and is_case_management(patient_current_level_of_care(snapshot.record)):
+        return CASE_MANAGEMENT_SCHEDULE_STATUS
+    return ""
 
 
 def current_tracking_patients(
     db: Session, allowed_patient_record_ids: frozenset[int] | None,
 ) -> tuple[frozenset[int], int]:
+    excluded, active_count = _patient_tracking_exclusions(db, allowed_patient_record_ids)
+    return frozenset(excluded), active_count
+
+
+def _patient_tracking_exclusions(
+    db: Session, allowed_patient_record_ids: frozenset[int] | None,
+) -> tuple[dict[int, str], int]:
     rows = {
         int(row.id): row.lifecycle_state
         for row in db.execute(text("SELECT id, lifecycle_state FROM patients"))
         if allowed_patient_record_ids is None or int(row.id) in allowed_patient_record_ids
     }
     snapshots = patient_source_snapshots_for_records(db, tuple(rows))
-    excluded = frozenset(
-        patient_id for patient_id, lifecycle in rows.items()
-        if _outside_current_tracking(lifecycle, snapshots.get(patient_id))
-    )
+    excluded = {
+        patient_id: reason for patient_id, lifecycle in rows.items()
+        if (reason := _patient_tracking_exclusion(lifecycle, snapshots.get(patient_id)))
+    }
     return excluded, sum(rows[patient_id] == "active" for patient_id in rows.keys() - excluded)
 
 
@@ -188,9 +200,11 @@ def list_treatment_plan_roster(
     plans_by_patient: dict[tuple[int, str], list[StoredTreatmentPlan]] = {}
     imports = list_treatment_plan_imports(db, allowed_patient_record_ids, TreatmentPlanQuery(source_mode=source_mode))
     current_versions: set[int] = set()
+    excluded: dict[int, str] = {}
+    uncertain: dict[int, str] = {}
     if evaluation_date is not None:
-        excluded, _ = current_tracking_patients(db, allowed_patient_record_ids)
-        current, _ = latest_patient_plans([plan for plan in imports if plan.patient_record_id not in excluded])
+        excluded, _ = _patient_tracking_exclusions(db, allowed_patient_record_ids)
+        current, uncertain = select_latest_patient_plans([plan for plan in imports if plan.patient_record_id not in excluded])
         current_versions = {plan.plan_version_id for plan in current}
     for plan in imports:
         plans_by_patient.setdefault((plan.patient_record_id, plan.source_mode), []).append(plan)
@@ -224,11 +238,18 @@ def list_treatment_plan_roster(
         initial = ordered[0]
         for index, plan in enumerate(ordered):
             due = parse_date(plan.next_due_date)
-            status = (
-                deadline_status(due, evaluation_date)
-                if evaluation_date is not None and plan.plan_version_id in current_versions
-                else "Outside current tracking"
-            )
+            in_case_management = is_case_management(plan.current_level_of_care)
+            reason = ""
+            if evaluation_date is not None and plan.plan_version_id in current_versions:
+                status = (CASE_MANAGEMENT_SCHEDULE_STATUS if in_case_management
+                          else deadline_status(due, evaluation_date))
+            else:
+                status = "Outside current tracking"
+                if evaluation_date is not None:
+                    fallback = CASE_MANAGEMENT_SCHEDULE_STATUS if in_case_management else uncertain.get(
+                        plan.patient_record_id, "A different saved plan was selected for current tracking.",
+                    )
+                    reason = excluded.get(plan.patient_record_id, fallback)
             age = (evaluation_date - due).days if evaluation_date is not None and due is not None and status == "Overdue" else None
             counselor = counselors.get(plan.patient_record_id)
             items.append(TreatmentPlanRosterItem(
@@ -253,6 +274,7 @@ def list_treatment_plan_roster(
                 reviewed_at_utc=reviewed.get(plan.plan_version_id, ""),
                 primary_counselor_id=counselor[0] if counselor else None,
                 primary_counselor_name=counselor[1] if counselor else "",
+                tracking_exclusion_reason=reason,
             ))
     return tuple(
         sorted(

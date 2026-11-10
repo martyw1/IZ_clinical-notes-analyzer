@@ -2,6 +2,8 @@
 
 ## November 2026 source maintenance
 
+The Treatment Plans Roster and Treatment Plan Detail show the discharge reason directly. Both screens display **Patient in Case Management, no next due date** for Case Management. The checklist continues to report its separate evidence result.
+
 Open Overdue or Due Soon from Status Dashboard to see the matching worklist. These counts use the latest saved plan for each authorized patient eligible for current tracking. Inactive, discharged, deleted, unlinked and Case Management records stay outside these worklists. All plans keeps saved records available. Use Overdue by clinician to find clinician groups, including Unassigned, with the most overdue plans first in each group. Administrators and office managers can open an eligible overdue plan and select Mark overdue plan reviewed. The acknowledgement records the reviewer and time for that exact saved version. Reviewed overdue collapses these rows until expanded. Acknowledgement leaves the plan overdue and counted on the dashboard.
 
 The recurring deadline uses the selected plan’s last-updated date plus its level-of-care interval. If last updated is unavailable, the app uses an unambiguous first-created date for that same plan. PHP (including PHP-5) and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60. A LOC containing more than one of PHP, IOP or GOP is conflicting. Missing or future clock dates and unknown LOC remain unresolved. Due Soon includes today through 10 calendar days ahead. Overdue starts the day after the computed due date. Worklists use the facility date. Event timestamps display in Eastern time (EST or EDT). Calendar-only dates keep their day, and the facility timezone still governs the date used for evaluation.

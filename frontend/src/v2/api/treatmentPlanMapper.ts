@@ -66,6 +66,7 @@ export function mapTreatmentPlanAggregate(record: JsonRecord): TreatmentPlanAggr
     computedDeadlineStatus: readString(record, 'computed_deadline_status'),
     deadlineExplanation: readString(record, 'deadline_explanation'),
     trackingDueDate: typeof record.tracking_due_date === 'string' ? record.tracking_due_date : undefined,
+    trackingExclusionReason: readString(record, 'tracking_exclusion_reason'),
     deadlineStatus: readString(record, 'deadline_status'),
     reviewedAtUtc: readString(record, 'reviewed_at_utc'),
     dueDate: readString(record, 'date_clock_due_date', readString(record, 'source_due_date', 'Unknown')),

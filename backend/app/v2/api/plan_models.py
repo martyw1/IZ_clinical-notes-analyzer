@@ -51,6 +51,7 @@ class TreatmentPlanDetailOut(TreatmentPlanAggregate):
     computed_deadline_status: str = ""
     deadline_explanation: str = ""
     tracking_due_date: str = ""
+    tracking_exclusion_reason: str = ""
     deadline_status: str = ""
     reviewed_at_utc: str = ""
     plan_version_id: int = Field(gt=0)
@@ -116,6 +117,7 @@ class TreatmentPlanRosterItemOut(PlanModel):
     initial_treatment_plan_date: str
     next_due_date: str
     deadline_status: str
+    tracking_exclusion_reason: str = ""
     days_overdue: int | None
     reviewed_at_utc: str
 

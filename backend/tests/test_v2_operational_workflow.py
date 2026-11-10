@@ -80,6 +80,15 @@ def test_dashboard_counts_latest_plan_once_per_patient_record(tmp_path, monkeypa
     )
     assert detail.status_code == 200
     assert detail.json()["plan_version_id"] == selected["plan_version_id"]
+    assert detail.json()["tracking_exclusion_reason"] == ""
+
+    older = next(row for row in rows if row["plan_version_id"] != selected["plan_version_id"])
+    older_detail = client.get(
+        f"/api/v2/treatment-plans/975/{older['treatment_plan_id']}",
+        headers=headers,
+        params={key: older[key] for key in ("plan_version_id", "patient_record_id", "source_mode")},
+    )
+    assert older_detail.json()["tracking_exclusion_reason"] == "A different saved plan was selected for current tracking."
 
     with create_engine(f"sqlite:///{_database_path(tmp_path)}").begin() as connection:
         connection.execute(text("UPDATE patients SET lifecycle_state='discharged' WHERE id=:id"), {
@@ -91,6 +100,15 @@ def test_dashboard_counts_latest_plan_once_per_patient_record(tmp_path, monkeypa
     retained = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
     assert {row["plan_version_id"] for row in retained} == {row["plan_version_id"] for row in rows}
     assert all(row["deadline_status"] == "Outside current tracking" for row in retained)
+    assert all(row["tracking_exclusion_reason"] == "The patient record is marked discharged." for row in retained)
+    discharged_detail = client.get(
+        f"/api/v2/treatment-plans/975/{selected['treatment_plan_id']}",
+        headers=headers,
+        params={key: selected[key] for key in ("plan_version_id", "patient_record_id", "source_mode")},
+    ).json()
+    assert discharged_detail["deadline_status"] == "Outside current tracking"
+    assert discharged_detail["tracking_exclusion_reason"] == "The patient record is marked discharged."
+    assert discharged_detail["computed_deadline_status"] == detail.json()["computed_deadline_status"]
 
     from app.v2.db import SessionLocal
     from app.v2.services.patient_snapshot_store import PatientSourceSnapshotInput, persist_patient_source_snapshots
@@ -113,6 +131,32 @@ def test_dashboard_counts_latest_plan_once_per_patient_record(tmp_path, monkeypa
     patients = client.get("/api/v2/patient-roster", headers=headers).json()["items"]
     assert next(row for row in patients if row["mrn"] == "975")["current_level_of_care"] == "Case Management"
     assert next(row for row in patients if row["mrn"] == "SYNTHETIC-NO-PLAN")["treatment_plans"] == []
+    case_management_roster = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
+    assert all(row["tracking_exclusion_reason"] == "Patient in Case Management, no next due date" for row in case_management_roster)
+    case_management_detail = client.get(
+        f"/api/v2/treatment-plans/975/{selected['treatment_plan_id']}",
+        headers=headers,
+        params={key: selected[key] for key in ("plan_version_id", "patient_record_id", "source_mode")},
+    ).json()
+    assert case_management_detail["computed_deadline_status"] == "Patient in Case Management, no next due date"
+
+
+def test_case_management_has_no_recurring_schedule(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    payload = _aggregate("SYNTHETIC-CM").model_dump(mode="json")
+    payload["current_level_of_care"] = "Case Management"
+    imported = client.post("/api/v2/manual-uploads/treatment-plan-aggregate", headers=headers, json=payload)
+    assert imported.status_code == 201
+    row, = client.get("/api/v2/treatment-plan-roster", headers=headers).json()["items"]
+    assert row["deadline_status"] == "Patient in Case Management, no next due date"
+    detail = client.get(
+        f"/api/v2/treatment-plans/SYNTHETIC-CM/{row['treatment_plan_id']}",
+        headers=headers,
+        params={key: row[key] for key in ("plan_version_id", "patient_record_id", "source_mode")},
+    ).json()
+    assert detail["computed_deadline_status"] == "Patient in Case Management, no next due date"
+    assert detail["date_clock_due_date"] == "Unknown"
 
 
 def test_manager_action_rolls_back_when_its_audit_event_cannot_be_written(tmp_path, monkeypatch) -> None:

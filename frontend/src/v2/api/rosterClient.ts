@@ -80,6 +80,7 @@ export async function getTreatmentPlanRoster(token: string, sourceMode?: SourceM
       linkedToMrn: readBoolean(item, 'linked_to_mrn'),
       nextDueDate: readString(item, 'next_due_date'),
       deadlineStatus: readString(item, 'deadline_status'),
+      trackingExclusionReason: readString(item, 'tracking_exclusion_reason'),
       daysOverdue: readNumber(item, 'days_overdue'),
       reviewedAtUtc: readString(item, 'reviewed_at_utc'),
       fullName: readString(item, 'full_name'),

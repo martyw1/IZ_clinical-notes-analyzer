@@ -96,6 +96,19 @@ describe('MRN-centered roster pages', () => {
         previous_treatment_plan_id: 'plan-812',
         initial_treatment_plan_id: 'plan-800',
         initial_treatment_plan_date: '2026-01-03',
+        next_due_date: '2026-12-09',
+        deadline_status: 'Outside current tracking',
+        tracking_exclusion_reason: 'The patient record is marked discharged.',
+      }, {
+        plan_version_id: 814,
+        source_mode: 'alleva_rest_api',
+        treatment_plan_id: 'plan-814',
+        patient_record_id: 32,
+        mrn: 'MRN-814',
+        patient_key: 'MRN-814',
+        linked_to_mrn: true,
+        deadline_status: 'Outside current tracking',
+        tracking_exclusion_reason: 'Patient in Case Management, no next due date',
       }],
     })))
     render(
@@ -109,6 +122,10 @@ describe('MRN-centered roster pages', () => {
     )
 
     const table = await screen.findByRole('table')
+    expect(within(table).getByText('The patient record is marked discharged.')).toBeVisible()
+    expect(within(table).getByText('Patient in Case Management, no next due date')).toBeVisible()
+    expect(within(table).queryByText('Outside current tracking')).not.toBeInTheDocument()
+    expect(within(table).queryByText('2026-12-09')).not.toBeInTheDocument()
     expect(within(table).getByText('MRN-812')).toBeInTheDocument()
     expect(within(table).getByText('MRN-812').closest('td')).toHaveAttribute('headers', 'plan-roster-mrn')
     expect(within(table).getByText('Alex Example')).toBeInTheDocument()

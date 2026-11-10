@@ -164,6 +164,8 @@ export function TreatmentPlanDetailViewer({
           <div>
             <p>Update schedule</p>
             <DeadlineIndicator dueDate={plan.dueDate} status={plan.computedDeadlineStatus || plan.deadlineStatus || 'Unable to Evaluate'} />
+            {plan.trackingExclusionReason && plan.trackingExclusionReason !== plan.computedDeadlineStatus
+              && <p>{plan.trackingExclusionReason}</p>}
             <p>Checklist result: <StatusBadge status={plan.status} /></p>
           </div>
         </div>

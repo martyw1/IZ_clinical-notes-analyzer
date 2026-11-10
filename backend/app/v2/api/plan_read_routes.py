@@ -119,13 +119,15 @@ def _selected_detail(db: Session, user: CurrentUser, identity: PlanVersionIdenti
         target_entity_id=str(identity.plan_version_id),
         details={"patient_row_id": identity.patient_record_id},
     )
-    from app.v2.services.deadline_calendar import computed_deadline_details
+    from app.v2.services.deadline_calendar import CASE_MANAGEMENT_SCHEDULE_STATUS, computed_deadline_details
     from app.v2.services.rule_package import load_rule_package
     from datetime import date
+    item = _tracking_item(db, identity)
+    tracking_reason = item.tracking_exclusion_reason if item else "This is a historical saved version of the plan."
     computed_status, explanation = computed_deadline_details(
         aggregate, load_rule_package(), date.fromisoformat(aggregate.evaluation_date), aggregate.facility_timezone,
+        patient_in_case_management=tracking_reason == CASE_MANAGEMENT_SCHEDULE_STATUS,
     )
-    item = _tracking_item(db, identity)
     acknowledgement = db.get(OverduePlanAcknowledgement, identity.plan_version_id)
     from app.v2.services.imported_counselors import primary_counselors_for_records
     clinician = primary_counselors_for_records(db, (identity.patient_record_id,)).get(identity.patient_record_id)
@@ -136,6 +138,7 @@ def _selected_detail(db: Session, user: CurrentUser, identity: PlanVersionIdenti
         computed_deadline_status=computed_status,
         deadline_explanation=explanation,
         tracking_due_date=item.next_due_date if item else "",
+        tracking_exclusion_reason=tracking_reason,
         deadline_status=item.deadline_status if item else "Outside current tracking",
         reviewed_at_utc=acknowledgement.reviewed_at_utc if acknowledgement else "",
         plan_version_id=identity.plan_version_id,

@@ -293,6 +293,7 @@ test.each(['Overdue', 'Due Soon', 'Current/Compliant'])('shows %s schedule in he
   const plan = mapTreatmentPlanAggregate({
     patient_record_id: 1, plan_version_id: 1, treatment_plan_id: 'synthetic-schedule', source_mode: 'manual_upload',
     date_clock_due_date: '2026-11-01', tracking_due_date: '', computed_deadline_status: status,
+    tracking_exclusion_reason: 'The patient record is marked discharged.',
     overall_status: 'Missing Data', deadline_explanation: 'PHP: synthetic calculation explanation.',
   })
   const view = render(<TreatmentPlanDetailViewer plan={plan} canManage={false} onManagerAction={vi.fn()} onExportChecklistEvidence={vi.fn()} onDownloadSourceDocument={vi.fn()} onDeleteSourceDocument={vi.fn()} />)
@@ -300,7 +301,23 @@ test.each(['Overdue', 'Due Soon', 'Current/Compliant'])('shows %s schedule in he
   expect(badges).toHaveLength(2)
   badges.forEach((badge) => expect(badge).toHaveTextContent(status))
   expect(view.getByText('PHP: synthetic calculation explanation.')).toBeVisible()
+  expect(view.queryByText('Outside current tracking')).not.toBeInTheDocument()
+  expect(view.getByText('The patient record is marked discharged.')).toBeVisible()
   view.unmount()
+})
+
+test('shows Case Management as not applicable without a missing due date', () => {
+  const plan = mapTreatmentPlanAggregate({
+    patient_record_id: 1, plan_version_id: 1, treatment_plan_id: 'synthetic-cm', source_mode: 'manual_upload',
+    date_clock_due_date: '2026-11-01', computed_deadline_status: 'Patient in Case Management, no next due date',
+    tracking_exclusion_reason: 'Patient in Case Management, no next due date',
+    overall_status: 'Conflicting Evidence',
+  })
+  const view = render(<TreatmentPlanDetailViewer plan={plan} canManage={false} onManagerAction={vi.fn()} onExportChecklistEvidence={vi.fn()} onDownloadSourceDocument={vi.fn()} onDeleteSourceDocument={vi.fn()} />)
+  expect(view.getAllByText('Patient in Case Management, no next due date')).toHaveLength(2)
+  expect(view.queryByText('2026-11-01')).not.toBeInTheDocument()
+  expect(view.queryByText('Due date unavailable')).not.toBeInTheDocument()
+  expect(view.getByText('Conflicting Evidence')).toBeVisible()
 })
 
 

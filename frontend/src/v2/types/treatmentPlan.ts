@@ -95,6 +95,7 @@ export type TreatmentPlanAggregate = PlanIdentity & {
   readonly computedDeadlineStatus?: string
   readonly deadlineExplanation?: string
   readonly trackingDueDate?: string
+  readonly trackingExclusionReason?: string
   readonly deadlineStatus?: string
   readonly reviewedAtUtc?: string
   readonly sourceDueDate: string
