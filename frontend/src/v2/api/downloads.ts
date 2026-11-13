@@ -6,6 +6,19 @@ type SelectedDownload = TreatmentPlanSelection & { readonly isCurrent?: () => bo
 const SOURCE_DOWNLOAD_FALLBACK_FILENAME = 'manual-treatment-plan-source.txt'
 const TREATMENT_PLAN_EXPORT_FALLBACK_FILENAME = 'treatment-plans.csv'
 
+export type AuditExportScope = '12h' | '24h' | 'all'
+
+export async function downloadAuditLogs(token: string, scope: AuditExportScope, isSessionCurrent: () => boolean): Promise<void> {
+  if (!isSessionCurrent()) return
+  const response = await request(`/api/audit/logs.csv?scope=${scope}`, { token })
+  const blob = await response.blob()
+  if (!isSessionCurrent()) return
+  triggerBrowserDownload(
+    blob,
+    filenameFromDisposition(response.headers.get('content-disposition'), `forensic-logs-${scope}.csv`),
+  )
+}
+
 export async function downloadTreatmentPlanSourceDocument(token: string, selection: SelectedDownload, sourceFileId: string): Promise<void> {
   if (selection.isCurrent && !selection.isCurrent()) return
   const response = await request(

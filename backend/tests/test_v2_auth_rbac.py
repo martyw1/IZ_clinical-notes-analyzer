@@ -226,6 +226,7 @@ def test_exact_roles_facility_and_patient_assignment_scope_all_route_outcomes(tm
     assert client.get("/api/v2/exports/treatment-plans.csv", headers=viewer_headers).status_code == 403
     assert client.post("/api/v2/api-harness/jobs", headers=manager_headers, json={"job_type": "pull_all_treatment_plans_all_fields"}).status_code == 403
     assert client.get("/api/audit/logs", headers=manager_headers).status_code == 403
+    assert client.get("/api/audit/logs.csv", headers=manager_headers).status_code == 403
     assert client.get("/api/workflow-definitions", headers=manager_headers).status_code == 403
 
     # Then: denied actions are audited without patient names or credentials.

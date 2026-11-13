@@ -83,7 +83,7 @@ function pageFor(
     case 'Users':
       return <UsersPage token={token} isSessionCurrent={isSessionCurrent} />
     case 'Forensic Logs':
-      return <ForensicLogsPage token={token} />
+      return <ForensicLogsPage token={token} isSessionCurrent={isSessionCurrent} />
     case 'Settings':
       return <SettingsPage token={token} />
     case 'Help':

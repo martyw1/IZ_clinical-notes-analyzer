@@ -71,7 +71,7 @@ ROUTE_FAMILIES: Final = {
             ("GET", "/api/v2/patient-roster/jobs/{job_id}"),
         }
     ),
-    "audit": frozenset({("GET", "/api/audit/logs"), ("GET", "/api/audit/verify")}),
+    "audit": frozenset({("GET", "/api/audit/logs"), ("GET", "/api/audit/logs.csv"), ("GET", "/api/audit/verify")}),
     "workflow_definition": frozenset(
         {
             ("GET", "/api/workflow-definitions"),

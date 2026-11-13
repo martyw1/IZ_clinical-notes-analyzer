@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { listAuditLogs, verifyAuditLogs } from '../api/auditClient'
+import { downloadAuditLogs, type AuditExportScope } from '../api/downloads'
 import { ApiRequestError } from '../api/json'
 import { formatUtcEventDateTime } from '../components/treatmentPlanFormatting'
 import type { AuditLogItem } from '../api/types'
 
 type ForensicLogsPageProps = {
   readonly token: string
+  readonly isSessionCurrent: () => boolean
 }
+
+const exportOptions: ReadonlyArray<{ scope: AuditExportScope; label: string }> = [
+  { scope: '12h', label: 'Export last 12 hours (CSV)' },
+  { scope: '24h', label: 'Export last 24 hours (CSV)' },
+  { scope: 'all', label: 'Export all logs (CSV)' },
+]
 
 function messageForError(error: unknown): string {
   if (error instanceof ApiRequestError) return error.message
@@ -14,13 +22,15 @@ function messageForError(error: unknown): string {
   return 'Unable to load audit logs.'
 }
 
-export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
+export function ForensicLogsPage({ token, isSessionCurrent }: ForensicLogsPageProps) {
   const [logs, setLogs] = useState<readonly AuditLogItem[]>([])
   const [error, setError] = useState('')
   const [verification, setVerification] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [exportingScope, setExportingScope] = useState<AuditExportScope | null>(null)
+  const [exportError, setExportError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -60,10 +70,29 @@ export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
     }
   }
 
+  async function exportLogs(scope: AuditExportScope) {
+    setExportingScope(scope)
+    setExportError('')
+    try {
+      await downloadAuditLogs(token, scope, isSessionCurrent)
+    } catch (downloadError) {
+      setExportError(`Unable to export audit logs. ${messageForError(downloadError)}`)
+    } finally {
+      setExportingScope(null)
+    }
+  }
+
   return (
     <section className='panel table-panel'>
       <p className='eyebrow'>Forensic Logs</p>
       <h2>Redacted audit events</h2>
+      <div className='button-row' role='group' aria-label='Export forensic logs'>
+        {exportOptions.map(({ scope, label }) => (
+          <button key={scope} type='button' className='secondary-button' onClick={() => void exportLogs(scope)} disabled={exportingScope !== null}>
+            {exportingScope === scope ? 'Exporting logs...' : label}
+          </button>
+        ))}
+      </div>
       <div className='summary-grid'>
         <span>Hash chain: verify on demand</span>
         <span>Patient names: excluded</span>
@@ -75,6 +104,7 @@ export function ForensicLogsPage({ token }: ForensicLogsPageProps) {
         <button type='button' className='secondary-button' onClick={() => void verifyChain()} disabled={isVerifying}>{isVerifying ? 'Verifying hash chain...' : 'Verify hash chain'}</button>
       </div>
       {error && <p className='error-banner' role='alert'>{error}</p>}
+      {exportError && <p className='error-banner' role='alert'>{exportError}</p>}
       {verification && <p role='status'>{verification}</p>}
       <table className='forensic-table'>
         <thead><tr><th>Action</th><th>Actor</th><th>Entity</th><th>Outcome</th><th>Details</th><th>Timestamp</th></tr></thead>

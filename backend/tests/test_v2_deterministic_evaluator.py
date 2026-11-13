@@ -314,7 +314,7 @@ def test_canonical_count_versions_paths_and_privacy_are_preserved() -> None:
     # Then
     assert len(bundle.criteria) == 42
     assert bundle.checklist_version == "1.2.1"
-    assert bundle.rules_version == "1.2.3"
+    assert bundle.rules_version == "1.2.4"
     assert all(item.normalized_path and item.explanation for item in bundle.criteria)
     assert "PRIVACY-CANARY-NAME" not in repr(bundle)
 

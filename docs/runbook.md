@@ -46,7 +46,7 @@ Use [password management](password-management-beta4.md) and [admin recovery](adm
 
 Office managers review authorized exact saved plans. Administrator controls include connection settings, Users and Forensic Logs. Follow actual role behavior rather than historical screenshots. Optional LLM stays disabled and is unnecessary for deterministic decisions.
 
-The 42-step checklist and versioned rules govern Day-1 initial signatures, 30-calendar-day master signatures, PHP/GOP 30-calendar-day and IOP/OP 60-calendar-day recurring reviews. Use the [rules contract](v2-beta/rules-contract.md) for the same-plan creation fallback and the ten-calendar-day warning window. Settings shows intervals read-only. The LOC seven-day candidate cannot establish compliance; [R3 policy remains open](open-blockers.md). Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate remain valid results.
+The 42-step checklist and versioned rules govern Day-1 initial signatures, 30-calendar-day master signatures, PHP 30-calendar-day and GOP/IOP/OP 60-calendar-day recurring reviews. Use the [rules contract](v2-beta/rules-contract.md) for the same-plan creation fallback and the ten-calendar-day warning window. Settings shows intervals read-only. The LOC seven-day candidate cannot establish compliance; [R3 policy remains open](open-blockers.md). Missing Data, Needs Review, Conflicting Evidence and Unable to Evaluate remain valid results.
 
 ## Integration boundary
 

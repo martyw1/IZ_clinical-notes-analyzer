@@ -191,3 +191,20 @@ def test_alleva_filtered_treatment_plan_roster_excludes_manual_upload_plans(tmp_
 
     assert roster.status_code == 200
     assert roster.json() == {"items": []}
+
+def test_gop_computed_due_matches_detail_and_roster(tmp_path, monkeypatch) -> None:
+    client = _fresh_client(tmp_path, monkeypatch)
+    headers = _auth_headers(client)
+    payload = _aggregate("MRN-GOP-DEADLINE").model_dump(mode="json")
+    payload.update(current_level_of_care="Evening GOP", source_last_updated="2026-02-08T18:30:00Z")
+    saved = client.post("/api/v2/manual-uploads/treatment-plan-aggregate", headers=headers, json=payload)
+    assert saved.status_code == 201
+    version_id = saved.json()["plan_version_id"]
+
+    detail = client.get(f"/api/v2/treatment-plans/MRN-GOP-DEADLINE?plan_version_id={version_id}", headers=headers)
+    roster = client.get("/api/v2/treatment-plan-roster", headers=headers)
+
+    assert detail.status_code == roster.status_code == 200
+    row = next(item for item in roster.json()["items"] if item["plan_version_id"] == version_id)
+    assert detail.json()["date_clock_due_date"] == row["next_due_date"] == "2026-04-09"
+    assert "GOP using last updated: 2026-02-08 + 60 calendar days = 2026-04-09" in detail.json()["deadline_explanation"]

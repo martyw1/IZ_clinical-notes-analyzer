@@ -19,7 +19,7 @@ test('renders forensic history timestamps with an explicit Eastern display', asy
     }],
   })))
 
-  render(<ForensicLogsPage token='token' />)
+  render(<ForensicLogsPage token='token' isSessionCurrent={() => true} />)
 
   const timestamp = await screen.findByText('2026-08-01 12:34 EDT')
   expect(timestamp).toBeInTheDocument()
@@ -41,7 +41,7 @@ test('converts a naive UTC audit timestamp to Eastern while preserving its wire 
     target_entity_type: 'auth', target_entity_id: 'synthetic', outcome_status: 'success', details: {},
   }] })))
   // When: the event is displayed with an explicit Eastern label.
-  render(<ForensicLogsPage token='synthetic-nonworking-token' />)
+  render(<ForensicLogsPage token='synthetic-nonworking-token' isSessionCurrent={() => true} />)
   // Then: Eastern display is converted while the UTC wire attribute remains unchanged.
   expect(await screen.findByText('2026-09-04 00:46 EDT')).toHaveAttribute('dateTime', '2026-09-04 04:46:28.560103')
 })

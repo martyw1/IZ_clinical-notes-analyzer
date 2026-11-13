@@ -89,7 +89,7 @@ Do not hard-code a final LOC-change update window until `docs/open-blockers.md` 
 
 ## Date Clock and Source Evidence
 
-The timeliness clock uses the facility date. Recurrence starts from the selected plan last updated or, if unavailable, an unambiguous first-created date for that same plan. PHP and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60. Due Soon includes today through ten calendar days ahead. An earlier deadline is Overdue. The computed schedule is separate from the checklist result. See the [rules contract](v2-beta/rules-contract.md) for unresolved evidence and the LOC-change policy.
+The timeliness clock uses the facility date. Recurrence starts from the selected plan last updated or, if unavailable, an unambiguous first-created date for that same plan. PHP uses 30 calendar days. GOP, IOP, and configured OP/Outpatient aliases use 60 calendar days. Due Soon includes today through ten calendar days ahead. An earlier deadline is Overdue. The computed schedule is separate from the checklist result. See the [rules contract](v2-beta/rules-contract.md) for unresolved evidence and the LOC-change policy.
 
 Manual-upload evidence should include at least the readable PDF page number when extraction can identify it. API evidence should include source identifiers supplied by approved REST/OpenAPI payloads, such as source document ID, attachment URL, endpoint name, or response field path.
 

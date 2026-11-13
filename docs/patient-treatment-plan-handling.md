@@ -43,7 +43,7 @@ Structural v12 membership backfill accepts only valid original source-document/p
 
 The aggregate contains MRN/source, authorized display fields, LOC/admission/history, source update time, plan/review/signature content, due-date evidence, warnings, exactly 42 criterion results, manager reviews/overrides, audit references, evidence coverage, source-document references and checklist/rules/evaluation/timezone provenance. The detail API adds exact saved identity fields. Frontend types are `frontend/src/v2/types/treatmentPlan.ts` and `identity.ts`.
 
-Initial signatures are checked on admission Day 1; master signatures within 30 calendar days of admission. Recurring PHP/GOP reviews use 30 calendar days and IOP/OP 60. The clock starts with the selected plan last updated, then falls back to an unambiguous first-created date from that plan. Source Next Review Due is compared with computed due date. Late master signatures affect overall status. Settings clinical intervals are read-only. The seven-calendar-day LOC candidate is unvalidated; LOC cases remain Needs Review. Missing Data, Conflicting Evidence and Unable to Evaluate must not silently become compliance. [Current rules](v2-beta/rules-contract.md).
+Initial signatures are checked on admission Day 1; master signatures within 30 calendar days of admission. Recurring PHP reviews use 30 calendar days. GOP and IOP/OP use 60 calendar days. The clock starts with the selected plan last updated, then falls back to an unambiguous first-created date from that plan. Source Next Review Due is compared with computed due date. Late master signatures affect overall status. Settings clinical intervals are read-only. The seven-calendar-day LOC candidate is unvalidated; LOC cases remain Needs Review. Missing Data, Conflicting Evidence and Unable to Evaluate must not silently become compliance. [Current rules](v2-beta/rules-contract.md).
 
 ## Active API and UI map
 
@@ -135,7 +135,7 @@ The owner clarified on November 6 that missing or unmapped staff facilities shou
 ## Local clinician links and GOP rule (November 6)
 Administrators and office managers can use Link clinician to patient on Clinicians, search authorized patient records by name or MRN, choose an exact record, and save a local clinician link. This overrides the source relationship for patient and treatment-plan rosters, clinician caseloads and overdue grouping. Local unassignment is explicit; Use Alleva assignment restores the source relationship. Local links survive later pulls. They do not change Alleva, plan evidence, facility membership or app-account access. Writes require a current revision and produce count/identifier-only audit events; stale saves return 409.
 
-Rule package 1.2.3 adds GOP substring matching with a 30-calendar-day recurring interval, shown in Settings. PHP remains 30, IOP and configured OP/outpatient 60. Multiple recognized LOC families remain conflicting. Last updated is preferred, with the same-plan first-created fallback.
+Rule package 1.2.3 adds GOP substring matching with a 30-calendar-day recurring interval on November 6. Rules package 1.2.4 increased the GOP interval to 60 calendar days on November 11. PHP remains 30, IOP and configured OP/outpatient 60. Multiple recognized LOC families remain conflicting. Last updated is preferred, with the same-plan first-created fallback.
 
 
 ## Combined update clinician projection

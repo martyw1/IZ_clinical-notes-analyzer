@@ -123,18 +123,18 @@ def test_conflicting_created_dates_require_review_without_a_computed_date():
 
 
 @pytest.mark.parametrize("loc",["GOP","gop","GOP 4","Evening GOP program"])
-def test_gop_uses_thirty_days_and_creation_fallback(loc):
+def test_gop_uses_sixty_days_and_creation_fallback(loc):
     from app.v2.services.deadline_calendar import computed_deadline_details
     aggregate=_aggregate(loc=loc).model_copy(update={'source_last_updated':'2026-09-01T12:00:00Z'})
     result=evaluate_plan_version(aggregate,load_rule_package(),date(2026,11,6),'America/New_York')
-    assert result.mapped_level_of_care=='GOP' and result.calculated_due_date=='2026-10-01'
-    assert 'GOP' in computed_deadline_details(aggregate,load_rule_package(),date(2026,11,6),'America/New_York')[1]
+    assert result.mapped_level_of_care=='GOP' and result.calculated_due_date=='2026-10-31'
+    assert 'GOP using last updated: 2026-09-01 + 60 calendar days = 2026-10-31' in computed_deadline_details(aggregate,load_rule_package(),date(2026,11,6),'America/New_York')[1]
     aggregate=aggregate.model_copy(update={'source_last_updated':'','treatment_plans':({'plan_id':aggregate.content_snapshot.plan_id,'created_date':'2026-09-01T12:00:00Z'},)})
-    assert evaluate_plan_version(aggregate,load_rule_package(),date(2026,11,6),'America/New_York').calculated_due_date=='2026-10-01'
+    assert evaluate_plan_version(aggregate,load_rule_package(),date(2026,11,6),'America/New_York').calculated_due_date=='2026-10-31'
 
 
 def test_settings_reports_gop_interval_from_package():
     from app.v2.api.foundation_routes import _settings_out
     from app.v2.models import AppSetting
     settings=_settings_out(AppSetting(organization_name='Synthetic',facility_timezone='America/New_York'))
-    assert settings.treatment_plan_gop_review_interval_days==30
+    assert settings.treatment_plan_gop_review_interval_days==60

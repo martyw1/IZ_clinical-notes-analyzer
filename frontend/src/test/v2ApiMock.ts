@@ -24,7 +24,8 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
   const deletedSourceFileIds = new Set<string>(); let correctionSubmitted = false; let workflowProfileStatus: 'draft' | 'published' = 'draft'; let syncEnabled = false; let apiConfigured = false; let passwordResetRequired = state.mustResetPassword ?? false; let harnessPolls = 0
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    const path = pathFrom(input)
+    const url = urlFrom(input)
+    const path = url.pathname
 
     if (path === '/api/auth/login' && method === 'POST') {
       if (state.failLogin) return jsonResponse({ detail: 'Invalid credentials' }, 401)
@@ -93,6 +94,12 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
       return jsonResponse(workflowProfilePayload(workflowProfileStatus))
     }
     if (path === '/api/audit/logs') return jsonResponse(auditLogsPayload())
+    if (path === '/api/audit/logs.csv') return new Response('event_id,details\r\nsynthetic-1,{}\r\n', {
+      headers: {
+        'content-type': 'text/csv',
+        'content-disposition': `attachment; filename="forensic-logs-${url.searchParams.get('scope')}-synthetic.csv"`,
+      },
+    })
     if (path === '/api/audit/verify') return jsonResponse(auditVerificationPayload)
     if (path === '/api/v2/api-harness/jobs' && method === 'GET') return jsonResponse([])
     if (path === '/api/v2/api-harness/jobs' && method === 'POST') return jsonResponse(jobPayload('queued'))
@@ -106,9 +113,9 @@ export function setupFetch(state: FetchState = { role: 'admin' }) {
   return fetchMock
 }
 
-function pathFrom(input: RequestInfo | URL): string {
+function urlFrom(input: RequestInfo | URL): URL {
   const value = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  return new URL(value, 'http://localhost').pathname
+  return new URL(value, 'http://localhost')
 }
 
 function jsonResponse(payload: unknown, status = 200): Response {

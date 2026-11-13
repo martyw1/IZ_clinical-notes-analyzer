@@ -245,6 +245,37 @@ describe('V2 active app shell', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Hash chain verified across 3 events.')
   })
 
+  it('downloads each forensic CSV scope with the active administrator session', async () => {
+    const fetchMock = setupFetch()
+    const downloadUrl = class extends URL {}
+    Object.defineProperties(downloadUrl, {
+      createObjectURL: { value: vi.fn(() => 'blob:forensic-export') },
+      revokeObjectURL: { value: vi.fn() },
+    })
+    vi.stubGlobal('URL', downloadUrl)
+    const filenames: string[] = []
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      filenames.push(this.download)
+    })
+    try {
+      await signIn()
+      fireEvent.click(screen.getByRole('button', { name: 'Forensic Logs' }))
+      const buttons = within(screen.getByRole('group', { name: 'Export forensic logs' })).getAllByRole('button')
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        'Export last 12 hours (CSV)', 'Export last 24 hours (CSV)', 'Export all logs (CSV)',
+      ])
+      const scopes = ['12h', '24h', 'all']
+      for (const [index, scope] of scopes.entries()) {
+        fireEvent.click(buttons[index])
+        await waitFor(() => expect(filenames[index]).toBe(`forensic-logs-${scope}-synthetic.csv`))
+        const exportCall = fetchMock.mock.calls.find(([path]) => path === `/api/audit/logs.csv?scope=${scope}`)
+        expect(new Headers(exportCall?.[1]?.headers).get('authorization')).toMatch(/^Bearer .+/)
+      }
+    } finally {
+      anchorClick.mockRestore()
+    }
+  })
+
   it('keeps an entered API secret available for retry when saving fails', async () => {
     setupFetch({ role: 'admin', apiSaveFails: true })
     await signIn()

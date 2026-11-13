@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import csv
 import json
-from collections.abc import Mapping
-from datetime import datetime, timezone
+from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta, timezone
+from io import StringIO
+from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from sqlalchemy import select, text
 
 from app.v2.api.deps import AdminUser, DbSession
@@ -16,7 +19,7 @@ from app.v2.api.models import (
     AuditVerificationOut,
 )
 from app.v2.models import AppSetting, AuditLog
-from app.v2.services.audit_store import JsonValue, audit_policy_metadata, record_audit_event, verify_audit_chain_details
+from app.v2.services.audit_store import JsonValue, audit_policy_metadata, record_audit_event, redact_json, verify_audit_chain_details
 from app.v2.services.alleva_contracts import active_contract
 from app.v2.services.secure_storage import encrypt_text_secret
 
@@ -113,19 +116,76 @@ def save_api_configuration(payload: ApiConfigurationUpdate, actor: AdminUser, db
 
 @router.get("/api/audit/logs", response_model=AuditLogListOut)
 def audit_logs(_: AdminUser, db: DbSession, limit: int = 100) -> AuditLogListOut:
+    rows = _audit_rows(db, "", {}, limit=max(1, min(limit, 500)))
+    return AuditLogListOut(items=tuple(_audit_mapping_item(row) for row in rows))
+
+
+def _audit_rows(
+    db: DbSession, where: str, params: dict[str, str], *, limit: int | None = None,
+) -> Iterable[Mapping[str, object]]:
     columns = {str(row[1]) for row in db.execute(text("PRAGMA table_info('audit_logs')")).all()}
     details_column = "details" if "details" in columns else "details_json"
     if details_column not in columns:
-        return AuditLogListOut(items=())
-    rows = db.execute(
+        return ()
+    limit_clause = " LIMIT :limit" if limit is not None else ""
+    return db.execute(
         text(
             "SELECT event_id,timestamp_utc,actor_id,actor_username,actor_role,action,"
             "target_entity_type,target_entity_id,outcome_status,"
-            f"{details_column} AS details_json FROM audit_logs ORDER BY id DESC LIMIT :limit"
+            f"{details_column} AS details_json FROM audit_logs {where} ORDER BY id DESC{limit_clause}"
         ),
-        {"limit": max(1, min(limit, 500))},
-    ).mappings().all()
-    return AuditLogListOut(items=tuple(_audit_mapping_item(row) for row in rows))
+        {**params, **({"limit": limit} if limit is not None else {})},
+    ).mappings()
+
+
+@router.get("/api/audit/logs.csv", response_class=Response)
+def export_audit_logs(_: AdminUser, db: DbSession, scope: Literal["12h", "24h", "all"] = "24h") -> Response:
+    end = datetime.now(timezone.utc)
+    start = None if scope == "all" else end - timedelta(hours=int(scope[:-1]))
+    if start is None:
+        rows = _audit_rows(db, "", {})
+    else:
+        # SQLite handles legacy timestamp formats and offsets, but rounds subsecond values.
+        # Query a padded window and check the exact bounds before writing each event.
+        rows = _audit_rows(
+            db,
+            "WHERE julianday(timestamp_utc) BETWEEN julianday(:start) AND julianday(:end)",
+            {"start": (start - timedelta(seconds=1)).isoformat(), "end": (end + timedelta(seconds=1)).isoformat()},
+        )
+    fields = (
+        "event_id", "timestamp_utc", "actor_id", "actor_username", "actor_role",
+        "action", "target_entity_type", "target_entity_id", "outcome_status", "details",
+    )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(fields)
+    for row in rows:
+        try:
+            timestamp = datetime.fromisoformat(str(row["timestamp_utc"]).replace("Z", "+00:00"))
+            timestamp = timestamp.replace(tzinfo=timezone.utc) if timestamp.tzinfo is None else timestamp.astimezone(timezone.utc)
+        except (ValueError, OverflowError):
+            timestamp = None
+        if start is not None and (timestamp is None or not start <= timestamp <= end):
+            continue
+        values = _audit_mapping_item(row).model_dump()
+        if timestamp is not None:
+            values["timestamp_utc"] = timestamp.isoformat()
+        values["details"] = json.dumps(redact_json(values["details"]), ensure_ascii=False)
+        writer.writerow(_audit_csv_cell(values[field]) for field in fields)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="forensic-logs-{scope}-{end:%Y%m%dT%H%M%SZ}.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _audit_csv_cell(value: str) -> str:
+    if value.startswith(("\t", "\r", "\n")) or value.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
 
 
 @router.get("/api/audit/verify", response_model=AuditVerificationOut)

@@ -1,4 +1,4 @@
-config_version: "1.2.3"
+config_version: "1.2.4"
 config_status: "version_1_ready_with_42_step_checklist_date_clock"
 organization: "R3 Recovery Services"
 last_updated: "2026-11-06"
@@ -45,7 +45,7 @@ levels_of_care:
   GOP:
     display_name: "GOP"
     aliases: ["GOP"]
-    treatment_plan_update_interval_days: 30
+    treatment_plan_update_interval_days: 60
   PHP:
     display_name: "Partial Hospitalization Program"
     aliases: ["PHP", "PHP-5", "PHP 5", "PHP5", "Partial Hospitalization", "Partial Hospitalization Program"]

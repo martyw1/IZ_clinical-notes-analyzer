@@ -85,7 +85,7 @@ export function DashboardPage({ token, isAdmin = false, onNavigate }: DashboardP
           </section>)}
           <details className='metric-explanation'>
             <summary>How these counts are calculated</summary>
-            <p className='muted'>One most recent treatment plan per authorized patient record, within current tracking scope. The recurring clock uses the plan’s last updated date or an unambiguous first created date for that plan. PHP and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60.</p>
+            <p className='muted'>One most recent treatment plan per authorized patient record, within current tracking scope. The recurring clock uses the plan’s last updated date or an unambiguous first created date for that plan. PHP uses 30 calendar days. GOP, IOP, and configured OP/Outpatient aliases use 60 calendar days.</p>
             <p className='muted'>Overdue means the computed deadline is before today. Due soon includes today through 10 calendar days after today. Dates use the facility timezone. Missing or ambiguous dates are explained below and are not guessed. Counts use saved plan data. Reviewing an overdue plan keeps it in the dashboard total.</p>
           </details>
         </section>

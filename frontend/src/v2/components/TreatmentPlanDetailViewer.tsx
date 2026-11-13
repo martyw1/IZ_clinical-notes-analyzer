@@ -201,7 +201,7 @@ export function TreatmentPlanDetailViewer({
           <div><dt>Checklist / rules</dt><dd>{plan.checklistVersion} / {plan.rulesVersion}</dd></div>
         </dl>
         {plan.deadlineExplanation && <p role='note'>{plan.deadlineExplanation}</p>}
-        <p className='muted'>Next update due uses this saved plan’s last updated date, falling back to its first created date when unavailable, plus the LOC interval. Any LOC containing PHP or GOP uses 30 calendar days; any containing IOP uses 60; configured OP/Outpatient aliases use 60. A LOC containing conflicting timing categories requires review. Admission and review dates are not substituted. Historical versions retain their own dates.</p>
+        <p className='muted'>Next update due uses this saved plan’s last updated date, falling back to its first created date when unavailable, plus the LOC interval. Any LOC containing PHP uses 30 calendar days. Any LOC containing GOP or IOP uses 60 calendar days, as do configured OP/Outpatient aliases. A LOC containing conflicting timing categories requires review. Admission and review dates are not substituted. Historical versions retain their own dates.</p>
       </section>
 
       <TreatmentPlanClinicalSections plan={plan} />

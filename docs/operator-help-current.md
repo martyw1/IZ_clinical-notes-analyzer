@@ -44,7 +44,7 @@ When live access is approved and enabled, administrators can use Update patients
 
 ## Interpret clinical timing
 
-The 42-step checklist checks an initial signature on admission Day 1 and a signed master plan within 30 calendar days after admission. The recurring deadline uses the selected plan’s last-updated date plus its level-of-care interval. If last updated is unavailable, the app uses an unambiguous first-created date for that same plan. PHP (including PHP-5) and GOP use 30 calendar days. IOP and configured OP/Outpatient aliases use 60. A LOC containing more than one of PHP, IOP or GOP is conflicting. Missing or future clock dates and unknown LOC remain unresolved. In Treatment Plan Detail, find **Next update due (computed)** and read the calculation explanation. Compare it with the source Next Review Due and the separate checklist outcome.
+The 42-step checklist checks an initial signature on admission Day 1 and a signed master plan within 30 calendar days after admission. The recurring deadline uses the selected plan’s last-updated date plus its level-of-care interval. If last updated is unavailable, the app uses an unambiguous first-created date for that same plan. PHP (including PHP-5) uses 30 calendar days. GOP, IOP, and configured OP/Outpatient aliases use 60 calendar days. A LOC containing more than one of PHP, IOP or GOP is conflicting. Missing or future clock dates and unknown LOC remain unresolved. In Treatment Plan Detail, find **Next update due (computed)** and read the calculation explanation. Compare it with the source Next Review Due and the separate checklist outcome.
 
 For example, a PHP plan last updated November 1 has a computed deadline of December 1. On November 21 it enters Due Soon. The source Next Review Due can differ, so review the checklist for a conflict.
 
@@ -87,6 +87,7 @@ Filtered CSV export includes all matching rows, including those below the visibl
 
 - Open Account to change your password or create a replacement recovery code. The code appears once and works once. Keep it privately. Use Forgot password with your username and saved code, or ask an authorized administrator for a reset.
 - Administrators manage staff accounts in Users and can inspect Forensic Logs. Screens and actions are role-limited. Settings controls organization, timezone, and the authorized API connection.
+- At the top of Forensic Logs, choose **Export last 12 hours (CSV)**, **Export last 24 hours (CSV)**, or **Export all logs (CSV)**. Each download includes redacted events beyond the table's display limit. The CSV has one row per event, with UTC timestamps and structured JSON in the `details` column.
 - If the page does not open, confirm the launcher is running and try `http://localhost:8000`. If a roster looks old, clear filters and inspect the latest pull job. If a plan status looks wrong, open the exact version and compare its source dates and checklist criteria.
 - For support, provide the app version, approximate time, screen, job phase, and a non-PHI error message through an approved R3 channel. Keep patient narratives, passwords, recovery codes, raw logs, and API credentials out of ordinary chat or email.
 

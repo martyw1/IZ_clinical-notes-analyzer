@@ -2,6 +2,20 @@
 
 > Historical reference: current source is `1.0.1` / build `2026.10.12.1` (`stable-local-desktop`). See the [current documentation index](current-documentation-state.md). Versions, procedures, and validation results below describe their original scope; they are not a new validation of the current release.
 
+## 2026-11-11 GOP recurring treatment-plan deadline
+
+- Rules package 1.2.4 changes the GOP recurring interval to 60 calendar days. Detail, Dashboard and Help explain the updated interval.
+- Verified Last Updated and First Created anchors, Settings, and a matching synthetic GOP deadline in Plan Detail and the Treatment Plans Roster. All 207 frontend tests and the production build passed.
+- Completed one stop and restart of the local desktop app. Readiness confirmed the local database and configured Alleva profile, and the served frontend contained the updated explanation.
+- All 93 targeted backend tests passed. The full backend run was stopped after reproducing two desktop maintenance tests blocked by Windows PowerShell execution policy when importing maintenance-common.psm1.
+
+## 2026-11-10 Forensic Logs CSV export
+
+- Added the administrator-only **Export last 24 hours (CSV)** action. The download includes the complete rolling window of redacted audit events, with UTC timestamps and structured JSON details.
+- Added 12-hour and full-history CSV exports and grouped the three buttons from shortest to longest range. Verified the original 24-hour CSV against the local audit store by matching event IDs.
+- All 207 frontend tests, TypeScript checking and the production frontend build passed. All 15 focused backend audit and authorization tests passed in a fresh Python 3.12 environment.
+- Stopped the full backend run after confirming that Windows PowerShell execution policy blocks `maintenance-common.psm1` in both `test_desktop_runtime_host.py` tests.
+
 ## 2026-07-06 1.4.6-beta.1 Beta Client Usability Readiness
 
 - Simplified app-shell navigation around the daily work areas `Status Dashboard`, `Treatment plans`, `Review queue`, and `Manual upload`, with less-frequent support/admin pages as secondary shortcuts.
